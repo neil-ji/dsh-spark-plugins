@@ -17,6 +17,7 @@ import type {
 import type { FinanceAuditState } from './controller.ts'
 import type { FinanceKey } from './locales.ts'
 import { readFinancePrefs } from './persist.ts'
+import { Button } from 'dsh-ui-kit'
 import type { FinancePrefs } from './persist.ts'
 import css from './FinanceAuditSection.module.css'
 
@@ -720,7 +721,7 @@ export function FinanceAuditSection(props: FinanceAuditSectionProps) {
       <div className={css.status}>
         <div>{t('error')}</div>
         <div className={css.statusDetail}>{state.error}</div>
-        <button type="button" className={css.button} onClick={refresh}>{t('refresh')}</button>
+        <Button variant="outline" onClick={refresh}>{t('refresh')}</Button>
       </div>
     )
   }
@@ -807,7 +808,7 @@ function FinanceReady({ overview, peak, t, refresh }: {
           <div className={css.subtitle}>{t('subtitle')}</div>
         </div>
         <div className={css.actions}>
-          <button type="button" className={css.button} onClick={refresh}>{t('refresh')}</button>
+          <Button variant="outline" onClick={refresh}>{t('refresh')}</Button>
         </div>
       </div>
 

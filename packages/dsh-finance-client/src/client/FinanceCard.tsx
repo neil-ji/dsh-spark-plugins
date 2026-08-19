@@ -10,6 +10,7 @@
 
 import { useState } from 'react'
 import type { SnapshotSelectorHook } from '@deepseek-ai/dsh-client-web-react'
+import { Button, Pill } from 'dsh-ui-kit'
 import type {
   FinanceCardFace,
   FinanceCardFieldName,
@@ -47,8 +48,8 @@ function Field({ id, label, hint, state, multiline, disabled, invalidLabel, over
       <div className={css.fieldHead}>
         <label className={css.fieldLabel} htmlFor={id}>{label}</label>
         <span className={css.fieldBadges}>
-          {state.overridden ? <span className={css.badge}>{overriddenLabel}</span> : null}
-          {state.invalid ? <span className={css.badgeError}>{invalidLabel}</span> : null}
+          {state.overridden ? <Pill>{overriddenLabel}</Pill> : null}
+          {state.invalid ? <Pill>{invalidLabel}</Pill> : null}
         </span>
       </div>
       {multiline
@@ -205,18 +206,8 @@ export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, 
 
       <div className={css.footer}>
         {state.failed ? <p className={css.failed} role="status">{t('saveFailed')}</p> : null}
-        <button
-          type="button"
-          className={css.discard}
-          disabled={!state.dirty || state.saving}
-          onClick={onDiscard}
-        >{t('discard')}</button>
-        <button
-          type="button"
-          className={css.save}
-          disabled={blocked}
-          onClick={onSave}
-        >{t(state.saving ? 'saving' : 'save')}</button>
+        <Button variant="outline" disabled={!state.dirty || state.saving} onClick={onDiscard}>{t('discard')}</Button>
+        <Button variant="primary" disabled={blocked} onClick={onSave}>{t(state.saving ? 'saving' : 'save')}</Button>
       </div>
     </div>
   )
