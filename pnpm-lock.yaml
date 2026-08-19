@@ -183,6 +183,10 @@ importers:
   packages/dsh-finance-bundle: {}
 
   packages/dsh-finance-client:
+    dependencies:
+      dsh-ui-kit:
+        specifier: workspace:*
+        version: link:../dsh-ui-kit
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: ^4.0.1
@@ -272,6 +276,9 @@ importers:
       dsh-connector-wire:
         specifier: workspace:^
         version: link:../dsh-github-wire
+      dsh-ui-kit:
+        specifier: workspace:*
+        version: link:../dsh-ui-kit
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: ^4.0.1
@@ -348,6 +355,9 @@ importers:
       dsh-plugin-kit:
         specifier: workspace:*
         version: link:../dsh-plugin-kit
+      dsh-ui-kit:
+        specifier: workspace:*
+        version: link:../dsh-ui-kit
       react:
         specifier: '*'
         version: 18.3.1
@@ -452,6 +462,9 @@ importers:
       dsh-connector-npm-wire:
         specifier: workspace:^
         version: link:../dsh-npm-wire
+      dsh-ui-kit:
+        specifier: workspace:*
+        version: link:../dsh-ui-kit
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: ^4.0.1
