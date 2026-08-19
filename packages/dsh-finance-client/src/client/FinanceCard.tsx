@@ -1,0 +1,261 @@
+/**
+ * Finance plugin configuration card for the Plugins settings section
+ * ("设置 → 插件 → 插件配置页"). One disclosure card like the shell/agent-loop
+ * cards: the header names the plugin and what its settings govern; the body
+ * stages the finance namespace edits (balance connection + price facts) until
+ * save, and applies the dashboard view preferences immediately. Pure
+ * presentation over the controller's snapshot; the body is a separate export
+ * so tests can render it directly.
+ */
+
+import { useState } from 'react'
+import type { SnapshotSelectorHook } from '@deepseek-ai/dsh-client-web-react'
+import type {
+  FinanceCardFace,
+  FinanceCardFieldName,
+  FinanceCardFieldState,
+  FinanceCardState,
+} from './FinanceCardController.ts'
+import type { FinanceKey } from './locales.ts'
+import type { FinanceChartPrefs, FinanceLayout } from './persist.ts'
+import css from './FinanceCard.module.css'
+
+export interface FinanceCardInjected extends Omit<FinanceCardFace, 'hooks'> {
+  useFinanceCard: SnapshotSelectorHook<FinanceCardState>
+}
+
+export interface FinanceCardProps extends FinanceCardInjected {
+  t: (key: FinanceKey) => string
+}
+
+/** One labelled control: input/textarea + override/invalid badges + reset. */
+function Field({ id, label, hint, state, multiline, disabled, invalidLabel, overriddenLabel, resetLabel, onEdit, onReset }: {
+  id: string
+  label: string
+  hint: string
+  state: FinanceCardFieldState
+  multiline?: boolean
+  disabled: boolean
+  invalidLabel: string
+  overriddenLabel: string
+  resetLabel: string
+  onEdit: (text: string) => void
+  onReset: () => void
+}) {
+  return (
+    <div className={css.field}>
+      <div className={css.fieldHead}>
+        <label className={css.fieldLabel} htmlFor={id}>{label}</label>
+        <span className={css.fieldBadges}>
+          {state.overridden ? <span className={css.badge}>{overriddenLabel}</span> : null}
+          {state.invalid ? <span className={css.badgeError}>{invalidLabel}</span> : null}
+        </span>
+      </div>
+      {multiline
+        ? <textarea id={id} className={css.textarea} rows={6} value={state.text} disabled={disabled} spellCheck={false} onChange={(event) => onEdit(event.target.value)} />
+        : <input id={id} className={css.input} type="text" value={state.text} disabled={disabled} onChange={(event) => onEdit(event.target.value)} />}
+      <div className={css.fieldFoot}>
+        <p className={css.hint}>{hint}</p>
+        {state.overridden
+          ? <button type="button" className={css.reset} disabled={disabled} onClick={onReset}>{resetLabel}</button>
+          : null}
+      </div>
+    </div>
+  )
+}
+
+/** The card's open body: connection/pricing fields, view-preferences, and the save row. */
+export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, onSetLayout, onToggleChart }: {
+  t: (key: FinanceKey) => string
+  state: FinanceCardState
+  onEdit: (field: FinanceCardFieldName, text: string) => void
+  onReset: (field: FinanceCardFieldName) => void
+  onSave: () => void
+  onDiscard: () => void
+  onSetLayout: (layout: FinanceLayout) => void
+  onToggleChart: (key: keyof FinanceChartPrefs) => void
+}) {
+  const disabled = !state.writable
+  const blocked = !state.dirty || state.invalid || state.saving
+  const prefs = state.prefs
+  const chartToggles: Array<[keyof FinanceChartPrefs, string]> = [
+    ['gauge', t('chartGauge')],
+    ['kpis', t('chartKpis')],
+    ['split', t('chartSplit')],
+    ['hourOfDay', t('chartHourOfDay')],
+    ['byModel', t('chartByModel')],
+    ['byWorkspace', t('chartByWorkspace')],
+    ['byDay', t('chartByDay')],
+  ]
+  const layoutOptions: Array<[FinanceLayout, string]> = [
+    ['compact', t('layoutCompact')],
+    ['standard', t('layoutStandard')],
+  ]
+
+  return (
+    <div className={css.body}>
+      {!state.writable ? <p className={css.readOnly} role="status">{t('cardReadOnly')}</p> : null}
+
+      <div className={css.section}>
+        <div className={css.sectionTitle}>{t('cardConnectionTitle')}</div>
+        <Field
+          id="plugin-config-finance-currency"
+          label={t('cardCurrency')}
+          hint={t('cardCurrencyHint')}
+          state={state.currency}
+          disabled={disabled}
+          invalidLabel={t('invalidText')}
+          overriddenLabel={t('overridden')}
+          resetLabel={t('reset')}
+          onEdit={(text) => onEdit('currency', text)}
+          onReset={() => onReset('currency')}
+        />
+        <Field
+          id="plugin-config-finance-balance-url"
+          label={t('cardBalanceURL')}
+          hint={t('cardBalanceURLHint')}
+          state={state.balanceBaseURL}
+          disabled={disabled}
+          invalidLabel={t('invalidText')}
+          overriddenLabel={t('overridden')}
+          resetLabel={t('reset')}
+          onEdit={(text) => onEdit('balance.baseURL', text)}
+          onReset={() => onReset('balance.baseURL')}
+        />
+        <Field
+          id="plugin-config-finance-balance-key"
+          label={t('cardBalanceApiKeyEnv')}
+          hint={t('cardBalanceApiKeyEnvHint')}
+          state={state.balanceApiKeyEnv}
+          disabled={disabled}
+          invalidLabel={t('invalidText')}
+          overriddenLabel={t('overridden')}
+          resetLabel={t('reset')}
+          onEdit={(text) => onEdit('balance.apiKeyEnv', text)}
+          onReset={() => onReset('balance.apiKeyEnv')}
+        />
+        <Field
+          id="plugin-config-finance-balance-timeout"
+          label={t('cardBalanceTimeoutMs')}
+          hint={t('cardBalanceTimeoutMsHint')}
+          state={state.balanceTimeoutMs}
+          disabled={disabled}
+          invalidLabel={t('invalidNumber')}
+          overriddenLabel={t('overridden')}
+          resetLabel={t('reset')}
+          onEdit={(text) => onEdit('balance.timeoutMs', text)}
+          onReset={() => onReset('balance.timeoutMs')}
+        />
+        <Field
+          id="plugin-config-finance-default-price"
+          label={t('cardDefaultPrice')}
+          hint={t('cardDefaultPriceHint')}
+          state={state.defaultPrice}
+          multiline
+          disabled={disabled}
+          invalidLabel={t('invalidJson')}
+          overriddenLabel={t('overridden')}
+          resetLabel={t('reset')}
+          onEdit={(text) => onEdit('defaultPrice', text)}
+          onReset={() => onReset('defaultPrice')}
+        />
+        <Field
+          id="plugin-config-finance-prices"
+          label={t('cardPrices')}
+          hint={t('cardPricesHint')}
+          state={state.prices}
+          multiline
+          disabled={disabled}
+          invalidLabel={t('invalidJson')}
+          overriddenLabel={t('overridden')}
+          resetLabel={t('reset')}
+          onEdit={(text) => onEdit('prices', text)}
+          onReset={() => onReset('prices')}
+        />
+      </div>
+
+      <div className={css.section}>
+        <div className={css.sectionTitle}>{t('cardViewsTitle')}</div>
+        <p className={css.sectionHint}>{t('cardViewsHint')}</p>
+        <div className={css.prefsRow}>
+          <span className={css.prefsLabel}>{t('layout')}</span>
+          {layoutOptions.map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              className={prefs.layout === value ? css.segOn : css.seg}
+              aria-pressed={prefs.layout === value}
+              onClick={() => onSetLayout(value)}
+            >{label}</button>
+          ))}
+        </div>
+        <div className={css.prefsRow}>
+          <span className={css.prefsLabel}>{t('charts')}</span>
+          {chartToggles.map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              className={prefs.charts[key] ? css.chipOn : css.chip}
+              aria-pressed={prefs.charts[key]}
+              onClick={() => onToggleChart(key)}
+            >{label}</button>
+          ))}
+        </div>
+      </div>
+
+      <div className={css.footer}>
+        {state.failed ? <p className={css.failed} role="status">{t('saveFailed')}</p> : null}
+        <button
+          type="button"
+          className={css.discard}
+          disabled={!state.dirty || state.saving}
+          onClick={onDiscard}
+        >{t('discard')}</button>
+        <button
+          type="button"
+          className={css.save}
+          disabled={blocked}
+          onClick={onSave}
+        >{t(state.saving ? 'saving' : 'save')}</button>
+      </div>
+    </div>
+  )
+}
+
+export function FinanceCard(props: FinanceCardProps) {
+  const { t } = props
+  const state = props.useFinanceCard(snapshot => snapshot)
+  const [open, setOpen] = useState(false)
+  if (!state.available) return null
+
+  return (
+    <li className={open ? `${css.card} ${css.cardOpen}` : css.card}>
+      <button
+        type="button"
+        className={css.header}
+        aria-expanded={open}
+        aria-label={`${t(open ? 'cardCollapse' : 'cardExpand')}: ${t('cardTitle')}`}
+        onClick={() => setOpen(!open)}
+      >
+        <span className={css.headText}>
+          <span className={css.name}>{t('cardTitle')}</span>
+          <span className={css.description}>{t('cardDescription')}</span>
+        </span>
+        {state.dirty ? <span className={css.pending}>{t('unsaved')}</span> : null}
+        <span className={open ? `${css.chevron} ${css.chevronOpen}` : css.chevron} aria-hidden="true" />
+      </button>
+      {!open ? null : (
+        <FinanceCardBody
+          t={t}
+          state={state}
+          onEdit={props.edit}
+          onReset={props.resetField}
+          onSave={props.save}
+          onDiscard={props.discard}
+          onSetLayout={props.setLayout}
+          onToggleChart={props.toggleChart}
+        />
+      )}
+    </li>
+  )
+}

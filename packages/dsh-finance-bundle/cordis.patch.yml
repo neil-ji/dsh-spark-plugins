@@ -1,0 +1,60 @@
+# dsh-finance bundle patch: appends the finance host service and its settings
+# section over the dsh-web-app layer. Rows are addressed by id — the profile's
+# own cordis.patch.yml can override the finance config without editing this
+# file. No API key is ever written here; credentials resolve at runtime from
+# the apiKeyEnv reference.
+- insert:
+    - id: finance
+      name: dsh-finance
+      config:
+        currency: CNY
+        balance:
+          baseURL: https://api.deepseek.com
+          apiKeyEnv: DEEPSEEK_API_KEY
+          timeoutMs: 10000
+        # Flat 24/7 fallback for models without a `prices` entry (deepseek-chat
+        # era estimate). Maintain from official pricing docs.
+        defaultPrice:
+          inputMicrosPerMtok: 2000000
+          cacheReadMicrosPerMtok: 500000
+          cacheWriteMicrosPerMtok: 2000000
+          outputMicrosPerMtok: 8000000
+        # Official DeepSeek V4 price table (api.deepseek.com, 2026-08-16).
+        # Each model carries an era history: the launch flat price, then the
+        # peak/off-peak schedule effective 2026-08-17 00:00 Beijing time
+        # (peak hours 9:00-12:00 / 14:00-18:00, off-peak = half of peak).
+        # Amounts are integer micros per million tokens (CNY * 1e6).
+        prices:
+          deepseek-official/deepseek-v4-flash:
+            - inputMicrosPerMtok: 1000000   # 缓存未命中 ¥1/Mtok
+              cacheReadMicrosPerMtok: 20000 # 缓存命中 ¥0.02/Mtok
+              outputMicrosPerMtok: 2000000  # 输出 ¥2/Mtok
+            - effectiveFrom: "2026-08-17T00:00:00+08:00"
+              offPeak:
+                inputMicrosPerMtok: 1500000
+                cacheReadMicrosPerMtok: 50000
+                outputMicrosPerMtok: 4500000
+              peak:
+                inputMicrosPerMtok: 3000000
+                cacheReadMicrosPerMtok: 100000
+                outputMicrosPerMtok: 9000000
+              peakHours: [[9, 12], [14, 18]]
+              utcOffsetMinutes: 480
+          deepseek-official/deepseek-v4-pro:
+            - inputMicrosPerMtok: 3000000   # 缓存未命中 ¥3/Mtok
+              cacheReadMicrosPerMtok: 25000 # 缓存命中 ¥0.025/Mtok
+              outputMicrosPerMtok: 6000000  # 输出 ¥6/Mtok
+            - effectiveFrom: "2026-08-17T00:00:00+08:00"
+              offPeak:
+                inputMicrosPerMtok: 4500000
+                cacheReadMicrosPerMtok: 150000
+                outputMicrosPerMtok: 13500000
+              peak:
+                inputMicrosPerMtok: 9000000
+                cacheReadMicrosPerMtok: 300000
+                outputMicrosPerMtok: 27000000
+              peakHours: [[9, 12], [14, 18]]
+              utcOffsetMinutes: 480
+
+    - id: ui-finance
+      name: dsh-finance-client

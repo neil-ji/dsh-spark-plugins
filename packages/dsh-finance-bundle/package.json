@@ -1,0 +1,30 @@
+{
+  "name": "dsh-finance-bundle",
+  "version": "0.1.0",
+  "description": "Install entry for the dsh-finance audit plugin: patches the profile composition with the finance host service and the finance audit settings section.",
+  "type": "module",
+  "homepage": "https://neil-ji.github.io/dsh-finance/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/neil-ji/dsh-finance.git",
+    "directory": "packages/dsh-finance-bundle"
+  },
+  "bugs": {
+    "url": "https://github.com/neil-ji/dsh-finance/issues"
+  },
+  "dependencies": {
+    "dsh-finance": "workspace:*",
+    "dsh-finance-client": "workspace:*"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "files": [
+    "cordis.patch.yml"
+  ],
+  "license": "MIT",
+  "scripts": {},
+  "private": true
+}

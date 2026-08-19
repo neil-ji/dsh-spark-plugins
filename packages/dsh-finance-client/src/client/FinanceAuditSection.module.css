@@ -1,0 +1,742 @@
+/* Finance audit settings section: minimal, token-driven dashboard. */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fin-gap, 20px);
+  padding: 4px 2px 24px;
+  /* Density tokens; layout classes override them (compact vs standard). */
+  --fin-gap: 20px;
+  --fin-card-pad: 14px;
+  --fin-grid-gap: 12px;
+  --fin-kpi-pad: 12px 14px;
+  --fin-kpi-min: 78px;
+  --fin-kpi-value: 20px;
+  --fin-kpi-value-lh: 28px;
+  --fin-gauge-pad: 14px 16px;
+  --fin-stats-gap: 4px 16px;
+}
+
+/* 紧凑：Modal 空间有限时的默认密度 — 收紧间距但保持可读，不稠密。 */
+.rootCompact {
+  --fin-gap: 12px;
+  --fin-card-pad: 11px;
+  --fin-grid-gap: 10px;
+  --fin-kpi-pad: 10px 12px;
+  --fin-kpi-min: 62px;
+  --fin-kpi-value: 18px;
+  --fin-kpi-value-lh: 26px;
+  --fin-gauge-pad: 12px 14px;
+  --fin-stats-gap: 4px 12px;
+}
+
+/* 标准（单列）：图表全宽纵向堆叠，留白更宽松。 */
+.rootStandard {
+  --fin-gap: 20px;
+  --fin-card-pad: 16px;
+  --fin-grid-gap: 14px;
+  --fin-kpi-pad: 14px 16px;
+  --fin-kpi-min: 80px;
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.title {
+  color: var(--dsw-alias-label-primary);
+  font-size: 18px;
+  line-height: 26px;
+  font-weight: 600;
+}
+
+.subtitle {
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+  opacity: 0.72;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+/* 峰谷说明行：12px 灰色、行高收紧的提示文案。 */
+.peakValleyNotes {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.button {
+  border: none;
+  border-radius: 8px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.button:hover {
+  background: var(--dsw-alias-interactive-bg-hover-accent, var(--dsw-alias-interactive-bg-hover));
+}
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.gaugeCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 14px;
+  background: var(--dsw-alias-bg-layer-2);
+  padding: var(--fin-gauge-pad, 14px 16px);
+}
+
+.gaugeHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.gaugeTitle {
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 600;
+}
+
+.gaugePercent {
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+  opacity: 0.72;
+  font-size: 13px;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.gaugeTrack {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  overflow: hidden;
+}
+
+.gaugeFill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--dsw-static-deepseek-500), var(--dsw-static-deepseek-400));
+  transition: width 0.3s ease;
+}
+
+.gaugeMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+  opacity: 0.72;
+}
+
+.gaugeStatus {
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+  font-size: 13px;
+  line-height: 20px;
+  padding: 2px 0;
+}
+
+.kpi {
+  min-height: var(--fin-kpi-min, 78px);
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 14px;
+  background: var(--dsw-alias-bg-layer-1, var(--dsw-alias-bg-layer-2));
+  padding: var(--fin-kpi-pad, 12px 14px);
+}
+
+.kpiLabel {
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+  opacity: 0.72;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.kpiValue {
+  color: var(--dsw-alias-label-primary);
+  font-size: var(--fin-kpi-value, 20px);
+  line-height: var(--fin-kpi-value-lh, 28px);
+  font-weight: 600;
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kpiSub {
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+  opacity: 0.6;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--fin-grid-gap, 12px);
+}
+
+.rootStandard .grid {
+  /* 单列布局：每张图表占满整行。 */
+  grid-template-columns: 1fr;
+}
+
+.card,
+.cardWide {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 14px;
+  background: var(--dsw-alias-bg-layer-2);
+  padding: var(--fin-card-pad, 14px);
+  min-width: 0;
+}
+
+.cardWide {
+  grid-column: 1 / -1;
+}
+
+.cardTitle {
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 600;
+}
+
+.cardStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fin-stats-gap, 4px 16px);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+  opacity: 0.72;
+}
+
+.status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  line-height: 22px;
+  padding: 24px 4px;
+}
+
+/* First-open loading: spinner + progress bar that reassure during the
+   one-time hourly backfill. */
+.spinner {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2.5px solid var(--dsw-alias-interactive-bg-hover);
+  border-top-color: var(--dsw-static-deepseek-500);
+  animation: financeSpin 0.8s linear infinite;
+}
+
+@keyframes financeSpin {
+  to { transform: rotate(360deg); }
+}
+
+.statusTitle {
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 600;
+}
+
+.progressTrack {
+  width: 100%;
+  max-width: 320px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--dsw-static-deepseek-500), var(--dsw-static-deepseek-400));
+  transition: width 0.3s ease;
+}
+
+.statusDetail {
+  opacity: 0.68;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.empty {
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+  opacity: 0.66;
+  font-size: 12px;
+  line-height: 18px;
+  padding: 12px 0;
+}
+
+.bars {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.barsPlot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.barsGrid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.barsGridLine {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--dsw-alias-border-l1);
+}
+
+.barsAxis {
+  position: relative;
+  height: 16px;
+  margin-top: 2px;
+}
+
+.barsAxisLabel {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.barRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: opacity 0.15s ease;
+}
+
+.barRowDim {
+  opacity: 0.45;
+}
+
+.barHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.barLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-primary);
+}
+
+.barMeta {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.barPercent {
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+  opacity: 0.72;
+  font-variant-numeric: tabular-nums;
+}
+
+.barValue {
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+  opacity: 0.72;
+}
+
+.barTrack {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  overflow: hidden;
+}
+
+.barFill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--dsw-static-deepseek-500);
+  transition: width 0.2s ease;
+}
+
+.donutWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.donut {
+  width: 132px;
+  height: 132px;
+  flex: none;
+}
+
+.donutTrack {
+  stroke: var(--dsw-alias-interactive-bg-hover);
+}
+
+.donutSeg {
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.donutSegDim {
+  opacity: 0.28;
+}
+
+.donutCenterValue {
+  fill: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.donutCenterLabel {
+  fill: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.donutLegend {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.legendRow {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 18px;
+  border-radius: 6px;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  cursor: pointer;
+}
+
+.legendRowActive {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.legendSwatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dsw-static-deepseek-500);
+}
+
+.legendLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-primary);
+}
+
+.legendPercent {
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+  opacity: 0.72;
+  font-variant-numeric: tabular-nums;
+}
+
+.legendValue {
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+  opacity: 0.72;
+}
+
+/* Hour-of-day cost bars (peak/off-peak visualization). */
+.hodBar {
+  stroke: none;
+}
+
+.hodLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+}
+
+.hodLegendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.trendWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.trendStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fin-stats-gap, 4px 16px);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+  opacity: 0.72;
+}
+
+/* viewBox is 640x220 (32:11) — the aspect-ratio keeps text and dots
+   undistorted when the SVG scales with the card width. */
+.trend {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 32 / 11;
+  display: block;
+  overflow: visible;
+}
+
+.trendGrid {
+  stroke: var(--dsw-alias-border-l1);
+  stroke-width: 1;
+}
+
+.trendAxisBase {
+  stroke: var(--dsw-alias-border-l2);
+  stroke-width: 1;
+}
+
+.trendArea {
+  fill: url(#dsh-finance-trend-grad);
+}
+
+.trendLine {
+  stroke: var(--dsw-static-deepseek-500);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  fill: none;
+  vector-effect: non-scaling-stroke;
+}
+
+.trendDot {
+  fill: var(--dsw-static-deepseek-500);
+  stroke: var(--dsw-alias-bg-layer-2);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.trendDotPeak {
+  fill: var(--dsw-static-deepseek-400);
+}
+
+.trendAxis {
+  fill: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+  line-height: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.trendGuide {
+  stroke: var(--dsw-alias-border-l3);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.trendTip {
+  fill: var(--dsw-alias-tooltip-bg);
+  stroke: var(--dsw-alias-border-l2);
+}
+
+.trendTipDate {
+  fill: var(--dsw-alias-label-secondary);
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.trendTipCost {
+  fill: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+}
+
+.trendOverlay {
+  cursor: crosshair;
+}
+
+/* Pointer-following tooltip shared by the breakdown charts. Positioned
+   absolutely inside the chart container (which is position: relative) because
+   position:fixed with viewport coordinates is offset when the settings surface
+   sits under a transformed ancestor. */
+.tip {
+  position: absolute;
+  z-index: 1000;
+  max-width: 240px;
+  background: var(--dsw-alias-tooltip-bg);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  padding: 8px 10px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 14%);
+  pointer-events: none;
+}
+
+.tipTitle {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+}
+
+.tipCost {
+  margin-top: 2px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tipDetail {
+  margin-top: 2px;
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+  opacity: 0.72;
+  font-size: 11px;
+  line-height: 15px;
+}
+
+/* View preferences: layout segmented control + per-chart visibility chips. */
+.prefsBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 18px;
+  padding: 7px 10px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-1, var(--dsw-alias-bg-layer-2));
+}
+
+.prefsGroup {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.prefsLabel {
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+  opacity: 0.72;
+  font-size: 11px;
+  line-height: 16px;
+  margin-right: 2px;
+}
+
+.seg,
+.segOn,
+.chip,
+.chipOn {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 11px;
+  line-height: 16px;
+  padding: 3px 8px;
+  cursor: pointer;
+  color: var(--dsw-alias-label-primary);
+}
+
+.seg {
+  background: transparent;
+  opacity: 0.55;
+}
+
+.seg:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  opacity: 0.9;
+}
+
+.segOn {
+  background: var(--dsw-static-deepseek-500);
+  color: #fff;
+}
+
+.chip {
+  background: transparent;
+  border-color: var(--dsw-alias-border-l2);
+  opacity: 0.55;
+}
+
+.chip:hover {
+  opacity: 0.9;
+}
+
+.chipOn {
+  background: var(--dsw-alias-interactive-bg-hover-accent, var(--dsw-alias-interactive-bg-hover));
+  opacity: 1;
+}
+
+/* "Most worth shifting" hint under the peak/valley split donut. */
+.shiftSavingsTop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+  opacity: 0.8;
+  padding-top: 8px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+
+.shiftSavingsTopLabel {
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+  opacity: 1;
+}
