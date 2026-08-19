@@ -1,0 +1,79 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.title {
+  margin: 0;
+}
+
+.intro {
+  margin: 0;
+  color: var(--dsw-alias-text-secondary, inherit);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--dsw-alias-border, rgba(0, 0, 0, 0.1));
+  border-radius: 8px;
+}
+
+.cardTitle {
+  margin: 0;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.grow {
+  flex: 1;
+}
+
+.identity {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.scopes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.permissionRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fieldLabel {
+  min-width: 96px;
+}
+
+.muted {
+  color: var(--dsw-alias-text-secondary, inherit);
+}
+
+.error {
+  margin: 0;
+  color: var(--dsw-alias-text-danger, #c00);
+}
+
+.notice {
+  margin: 0;
+  color: var(--dsw-alias-text-success, #0a0);
+}

@@ -1,0 +1,9 @@
+# dsh-github bundle patch: mounts the host-side connector and the Web UI.
+# Host row provides ctx.github (GitHubService extends TypertRemoteService).
+# UI row is a dual-face client package: its node half is an empty loader entry,
+# and dsh-client-modules scans its dsh.client declaration into window.__DSH_BOOT__.
+- insert:
+    - id: github
+      name: 'dsh-github'
+    - id: github-ui
+      name: 'dsh-github-ui'

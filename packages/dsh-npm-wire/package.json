@@ -1,0 +1,45 @@
+{
+  "name": "dsh-connector-npm-wire",
+  "version": "0.1.0",
+  "description": "Shared wire contract for dsh-connector-npm: zod schemas + strict Typert invocation descriptors + host/remote contributions",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/types/**/*.js",
+    "lib/types/**/*.d.ts"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-typert-protocol": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-typert-registry": "^0.1.0-rc.6",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh-typert-protocol": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-typert-registry": "^0.1.0-rc.6",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.6.0",
+    "zod": "^4.0.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neil-ji/dsh-connector-kit.git"
+  },
+  "private": true
+}

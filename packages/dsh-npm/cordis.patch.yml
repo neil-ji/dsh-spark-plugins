@@ -1,0 +1,8 @@
+# dsh-npm bundle patch: mounts the host-side npm capability (service +
+# Remote methods + tools) and the Web UI settings section. GitHub steps reuse
+# ctx.github from the dsh-github bundle (loaded separately).
+- insert:
+    - id: npm
+      name: 'dsh-connector-npm'
+    - id: npm-ui
+      name: 'dsh-connector-npm-ui'

@@ -1,0 +1,102 @@
+/**
+ * dsh-npm-ui build:
+ *  - tsc emits declarations to lib/types
+ *  - esbuild emits the node half (empty loader entry) as lib/index.js
+ *  - esbuild emits the browser half as lib/client.js in the vendored
+ *    window.__ModuleLoader__.load factory format, inlining dsh-npm-wire +
+ *    zod, externalizing shell-provided modules, and inlining CSS modules
+ *    with a letter-prefixed hash (a digit-leading selector is invalid).
+ */
+import { build } from 'esbuild'
+import { execSync } from 'node:child_process'
+import { rmSync, readFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { relative, resolve } from 'node:path'
+
+const PACKAGE_NAME = 'dsh-connector-npm-ui'
+
+rmSync('lib', { recursive: true, force: true })
+execSync('npx --no-install tsc -p tsconfig.json', { stdio: 'inherit' })
+
+/** Turn *.module.css imports into hashed class-name modules + style injection. */
+const cssModulesPlugin = () => ({
+  name: 'css-modules',
+  setup(build) {
+    build.onResolve({ filter: /\.module\.css$/ }, (args) => ({
+      path: resolve(args.resolveDir, args.path),
+      namespace: 'css-mod',
+    }))
+    build.onLoad({ filter: /.*/, namespace: 'css-mod' }, (args) => {
+      const css = readFileSync(args.path, 'utf8')
+      // CSS class names must start with a letter: a hex digest may begin with
+      // a digit, which makes the generated selector invalid and the browser
+      // silently drops the whole rule.
+      const hash = 'x' + createHash('sha1').update(css).digest('hex').slice(0, 6)
+      const mapping = {}
+      const rewritten = css.replace(/\.([_a-zA-Z][\w-]*)/g, (match, name) => {
+        mapping[name] = hash + '_' + name
+        return '.' + hash + '_' + name
+      })
+      const tagId = PACKAGE_NAME + '/' + relative(resolve('.'), args.path).replace(/\\/g, '/')
+      const entries = Object.entries(mapping).map(([k, v]) => JSON.stringify(k) + ': ' + JSON.stringify(v)).join(', ')
+      const contents = [
+        'const css = ' + JSON.stringify(rewritten) + ';',
+        'const tagId = ' + JSON.stringify(tagId) + ';',
+        'if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]") === null) {',
+        '  const tag = document.createElement("style");',
+        '  tag.dataset.plugin = ' + JSON.stringify(PACKAGE_NAME) + ';',
+        '  tag.dataset.pluginCss = tagId;',
+        '  tag.textContent = css;',
+        '  document.head.appendChild(tag);',
+        '}',
+        'export default { ' + entries + ' };',
+      ].join('\n')
+      return { contents, loader: 'js' }
+    })
+  },
+})
+
+/** Wrap a CJS bundle in the vendored window.__ModuleLoader__.load handoff. */
+const loaderWrapper = (id) => ({
+  banner: 'window.__ModuleLoader__.load({\n' +
+    '\tid: ' + JSON.stringify(id) + ',\n' +
+    '\tfactory: (require) => {\n' +
+    '\t\tvar module = { exports: {} };\n' +
+    '\t\tvar exports = module.exports;\n' +
+    '\t\tObject.defineProperty(exports, Symbol.toStringTag, { value: "Module" });',
+  footer: '\n\t\treturn module.exports;\n\t}\n});\n',
+})
+
+// node half: the loader entry with no host-side behavior
+await build({
+  entryPoints: { 'index': 'src/index.ts' },
+  outdir: 'lib',
+  bundle: true,
+  format: 'esm',
+  platform: 'node',
+  target: 'es2022',
+  external: ['@deepseek-ai/*'],
+  logLevel: 'info',
+})
+
+// browser half
+const wrapper = loaderWrapper(PACKAGE_NAME)
+await build({
+  entryPoints: { 'client': 'src/client/index.ts' },
+  outdir: 'lib',
+  bundle: true,
+  format: 'cjs',
+  platform: 'browser',
+  target: 'es2022',
+  external: [
+    'react',
+    'react/jsx-runtime',
+    '@deepseek-ai/dsh-client-runtime/client',
+    '@deepseek-ai/dsh-client-web-react',
+    '@deepseek-ai/dsh-client-ui-primitives',
+  ],
+  banner: { js: wrapper.banner },
+  footer: { js: wrapper.footer },
+  plugins: [cssModulesPlugin()],
+  logLevel: 'info',
+})

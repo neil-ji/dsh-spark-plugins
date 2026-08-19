@@ -1,0 +1,41 @@
+name: pages
+
+# Pages preview: site/ changes on main update landing + docs (no npm publish)
+on:
+  push:
+    branches: [main]
+    paths: [site/**, .github/workflows/pages.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  build-site:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Pages site
+        run: |
+          VERSION="main-$(git rev-parse --short HEAD)"
+          sed -i "s/__DSH_VERSION__/${VERSION}/g" site/landing/index.html site/docs/index.html
+          rm -rf site-dist
+          mkdir -p site-dist/docs
+          cp site/landing/index.html site-dist/index.html
+          cp site/docs/index.html site-dist/docs/index.html
+          cp -r site/assets site-dist/assets
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site-dist
+
+      - uses: actions/deploy-pages@v4

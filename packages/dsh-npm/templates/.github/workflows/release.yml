@@ -1,0 +1,65 @@
+name: release
+
+# Tag release: build -> typecheck -> npm publish (OIDC trusted publishing) -> Pages update
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Upgrade npm (OIDC trusted publishing needs >= 11.5.1)
+        run: npm install -g npm@latest
+
+      - name: Extract version from tag
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Align version
+        run: npm pkg set version="$VERSION"
+
+      - name: Build
+        run: npm run build
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Publish to npm (OIDC trusted publishing)
+        run: npm publish --access public
+
+      - name: Build Pages site
+        run: |
+          sed -i "s/__DSH_VERSION__/${VERSION}/g" site/landing/index.html site/docs/index.html
+          rm -rf site-dist
+          mkdir -p site-dist/docs
+          cp site/landing/index.html site-dist/index.html
+          cp site/docs/index.html site-dist/docs/index.html
+          cp -r site/assets site-dist/assets
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site-dist
+
+      - uses: actions/deploy-pages@v4

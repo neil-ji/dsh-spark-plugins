@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>官方文档 — __PACKAGE_NAME__</title>
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<header class="topbar"><div class="container inner">
+<span class="brand">__PACKAGE_NAME__ · 文档</span>
+<nav><a href="/">← 落地页</a><a href="/docs/">文档</a><a href="https://github.com/__REPO_OWNER__/__REPO_NAME__">GitHub</a></nav>
+</div></header>
+<section class="hero" style="padding:48px 0 24px;"><div class="container">
+<span class="badge">v__DSH_VERSION__</span>
+<h1>官方文档</h1>
+<p class="lead">__PACKAGE_DESCRIPTION__</p>
+</div></section>
+<section class="section"><div class="container">
+<h2>快速开始</h2>
+<pre><code>npm install __PACKAGE_NAME__</code></pre>
+<h2>发布流程</h2>
+<p class="sub">推送 tag 自动发布 npm（OIDC trusted publishing）并更新本站：</p>
+<pre><code>git tag v0.1.0 && git push origin v0.1.0</code></pre>
+<div class="note">首次发布需配置 npm trusted publisher：<code>npm trust github __PACKAGE_NAME__ --file release.yml --repository __REPO_OWNER__/__REPO_NAME__ --allow-publish -y</code></div>
+<h2>仓库</h2>
+<p class="sub"><a href="https://github.com/__REPO_OWNER__/__REPO_NAME__">github.com/__REPO_OWNER__/__REPO_NAME__</a></p>
+</div></section>
+<footer><div class="container"><p>__PACKAGE_NAME__ · MIT License · <a href="/">← 返回落地页</a></p></div></footer>
+</body></html>
