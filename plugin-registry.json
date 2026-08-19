@@ -6,6 +6,8 @@
     "dsh-github": "packages/dsh-github",
     "dsh-github-ui": "packages/dsh-github-ui",
     "dsh-connector-npm": "packages/dsh-npm",
-    "dsh-connector-npm-ui": "packages/dsh-npm-ui"
+    "dsh-connector-npm-ui": "packages/dsh-npm-ui",
+    "dsh-finance": "packages/dsh-finance",
+    "dsh-finance-client": "packages/dsh-finance-client"
   }
 }

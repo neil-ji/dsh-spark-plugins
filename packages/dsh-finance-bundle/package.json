@@ -12,10 +12,6 @@
   "bugs": {
     "url": "https://github.com/neil-ji/dsh-finance/issues"
   },
-  "dependencies": {
-    "dsh-finance": "workspace:*",
-    "dsh-finance-client": "workspace:*"
-  },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
