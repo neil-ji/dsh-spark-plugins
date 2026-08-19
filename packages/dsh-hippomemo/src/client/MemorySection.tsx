@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
-  Button, IconArchiveOutline20, IconChevronDownOutline14, IconChevronLeftOutline14,
+  Button, Input, IconArchiveOutline20, IconChevronDownOutline14, IconChevronLeftOutline14,
   IconChevronRightOutline14, IconChevronUpOutline14, IconCloseOutline16,
   IconEditOutline16, IconPlusOutline16, IconSearchOutline16, IconTrashOutline16,
   Menu, Pill,
@@ -63,9 +63,10 @@ function HippomemoSelect({ value, placeholder, options, onChange }: {
       portal
       side={side}
       anchor={(
-        <button
+        <Button
           ref={triggerRef}
-          type="button"
+          variant="outline"
+          size="sm"
           className={open ? 'hippomemo-select hippomemo-select-open' : 'hippomemo-select'}
           onClick={openMenu}
         >
@@ -73,7 +74,7 @@ function HippomemoSelect({ value, placeholder, options, onChange }: {
           <span className="hippomemo-select-chevron" aria-hidden="true">
             <IconChevronDownOutline14 />
           </span>
-        </button>
+        </Button>
       )}
       items={options.map(option => ({ id: option.value, label: option.label }))}
       selectedId={value}
@@ -305,15 +306,14 @@ export function MemorySection({ api, t }: MemorySectionProps): ReactNode {
               options={SORTS.map(option => ({ value: option.value, label: t(option.label) }))}
               onChange={changeSort}
             />
-            <button
-              type="button"
-              className="hippomemo-order"
+            <Button
+              variant="outline"
+              size="sm"
               title={order === 'desc' ? t('orderDesc') : t('orderAsc')}
               aria-label={order === 'desc' ? t('orderDesc') : t('orderAsc')}
               onClick={toggleOrder}
-            >
-              {order === 'desc' ? <IconChevronDownOutline14 /> : <IconChevronUpOutline14 />}
-            </button>
+              icon={order === 'desc' ? <IconChevronDownOutline14 /> : <IconChevronUpOutline14 />}
+            />
             <Button variant="primary" size="md" icon={<IconPlusOutline16 />} onClick={() => { setEditing('new') }}>
               {t('newMemory')}
             </Button>
@@ -345,7 +345,7 @@ export function MemorySection({ api, t }: MemorySectionProps): ReactNode {
           {error.length > 0 && loading === false ? (
             <p className="hippomemo-error">
               {t('loadFailed')}: {error}
-              <button type="button" className="hippomemo-retry" onClick={reload}>{t('retry')}</button>
+              <Button variant="ghost" size="sm" onClick={reload}>{t('retry')}</Button>
             </p>
           ) : null}
 
@@ -411,37 +411,39 @@ export function MemorySection({ api, t }: MemorySectionProps): ReactNode {
                   options={PAGE_SIZES.map(size => ({ value: String(size), label: t('pageSizeLabel') + ' ' + String(size) }))}
                   onChange={changePageSize}
                 />
-                <button
-                  type="button"
-                  className="hippomemo-pager-btn"
+                <Button
+                  variant="ghost"
+                  size="sm"
                   disabled={page <= 1}
                   onClick={() => { setPage(page - 1) }}
+                  icon={<IconChevronLeftOutline14 />}
                 >
-                  <IconChevronLeftOutline14 /> {t('prevPage')}
-                </button>
+                  {t('prevPage')}
+                </Button>
                 {pageItems(page, totalPages).map((item, index) => (
                   item === 'gap' ? (
                     <span key={'gap-' + String(index)} className="hippomemo-pager-gap">…</span>
                   ) : (
-                    <button
+                    <Button
                       key={item}
-                      type="button"
-                      className={item === page ? 'hippomemo-pager-btn hippomemo-pager-active' : 'hippomemo-pager-btn'}
+                      variant={item === page ? 'primary' : 'ghost'}
+                      size="sm"
                       aria-current={item === page ? 'page' : undefined}
                       onClick={() => { setPage(item) }}
                     >
                       {item}
-                    </button>
+                    </Button>
                   )
                 ))}
-                <button
-                  type="button"
-                  className="hippomemo-pager-btn"
+                <Button
+                  variant="ghost"
+                  size="sm"
                   disabled={page >= totalPages}
                   onClick={() => { setPage(page + 1) }}
+                  icon={<IconChevronRightOutline14 />}
                 >
-                  {t('nextPage')} <IconChevronRightOutline14 />
-                </button>
+                  {t('nextPage')}
+                </Button>
               </div>
             </div>
           ) : null}
@@ -636,7 +638,7 @@ function MemoryEditor({ t, initial, onCancel, onSave }: EditorProps): ReactNode 
 
   return (
     <div className="hippomemo-form">
-      <label>{t('titleLabel')}<input value={title} onChange={event => { setTitle(event.currentTarget.value) }} /></label>
+      <label>{t('titleLabel')}<Input value={title} onChange={event => { setTitle(event.currentTarget.value) }} /></label>
       <label>{t('kind')}
         <HippomemoSelect
           value={kind}
@@ -653,9 +655,9 @@ function MemoryEditor({ t, initial, onCancel, onSave }: EditorProps): ReactNode 
           onChange={(value) => { setScope(value as MemoryScope) }}
         />
       </label>
-      <label>{t('importanceLabel')}<input type="number" min="0" max="1" step="0.1" value={importance} onChange={event => { setImportance(event.currentTarget.value) }} /></label>
+      <label>{t('importanceLabel')}<Input type="number" min="0" max="1" step="0.1" value={importance} onChange={event => { setImportance(event.currentTarget.value) }} /></label>
       <label>{t('contentLabel')}<textarea value={content} onChange={event => { setContent(event.currentTarget.value) }} /></label>
-      <label>{t('tagsLabel')}<input value={tags} onChange={event => { setTags(event.currentTarget.value) }} /></label>
+      <label>{t('tagsLabel')}<Input value={tags} onChange={event => { setTags(event.currentTarget.value) }} /></label>
       <div className="hippomemo-toolbar">
         <Button variant="primary" size="md" disabled={saving} onClick={() => { void submit() }}>{t('save')}</Button>
         <Button variant="ghost" size="md" onClick={onCancel}>{t('cancel')}</Button>

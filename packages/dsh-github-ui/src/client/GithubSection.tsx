@@ -3,9 +3,9 @@
  * test, and operation-permission configuration through the github Remote
  * namespace. Reuses dsh client primitives so the page matches the shell theme.
  */
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button, Input, Pill, StateDot } from 'dsh-ui-kit'
+import { Button, Input, Menu, Pill, StateDot } from 'dsh-ui-kit'
 import type { SnapshotSelectorHook } from '@deepseek-ai/dsh-client-web-react'
 import type { GithubSettingsState, GithubSettingsStore } from './store.ts'
 import type { GithubConfigView, GithubProxyTestValue } from 'dsh-connector-wire'
@@ -61,6 +61,8 @@ function Loaded({ injected }: { injected: GithubSectionInjected }): ReactNode {
   const [testError, setTestError] = useState<string | undefined>(undefined)
   const [configDraft, setConfigDraft] = useState<GithubConfigView | undefined>(undefined)
   const [proxyTest, setProxyTest] = useState<GithubProxyTestValue | undefined>(undefined)
+  const [visibilityOpen, setVisibilityOpen] = useState(false)
+  const visibilityRef = useRef<HTMLButtonElement | null>(null)
 
   if (state.status === 'idle') void controller.load()
   const config = configDraft ?? state.config
@@ -194,13 +196,29 @@ function Loaded({ injected }: { injected: GithubSectionInjected }): ReactNode {
             </div>
             <div className={styles.field}>
               <span className={styles.fieldLabel}>{t('defaultVisibility')}</span>
-              <select
-                value={config.defaultVisibility}
-                onChange={(event) => { setConfigDraft({ ...config, defaultVisibility: (event.currentTarget as HTMLSelectElement).value as 'private' | 'public' }) }}
-              >
-                <option value="private">{t('private')}</option>
-                <option value="public">{t('public')}</option>
-              </select>
+              <Menu
+                open={visibilityOpen}
+                portal
+                side="bottom"
+                anchor={(
+                  <Button
+                    ref={visibilityRef}
+                    variant="outline"
+                    size="sm"
+                    aria-label={t('defaultVisibility')}
+                    onClick={() => { setVisibilityOpen(v => !v) }}
+                  >
+                    {config.defaultVisibility === 'private' ? t('private') : t('public')}
+                  </Button>
+                )}
+                items={[
+                  { id: 'private', label: t('private') },
+                  { id: 'public', label: t('public') },
+                ]}
+                selectedId={config.defaultVisibility}
+                onSelect={(id) => { setConfigDraft({ ...config, defaultVisibility: id as 'private' | 'public' }); setVisibilityOpen(false) }}
+                onClose={() => { setVisibilityOpen(false) }}
+              />
             </div>
             <div className={styles.field}>
               <span className={styles.fieldLabel}>{t('gitProxy')}</span>

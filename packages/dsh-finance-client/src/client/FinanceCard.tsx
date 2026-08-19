@@ -10,7 +10,7 @@
 
 import { useState } from 'react'
 import type { SnapshotSelectorHook } from '@deepseek-ai/dsh-client-web-react'
-import { Button, Pill } from 'dsh-ui-kit'
+import { Button, Input, Pill } from 'dsh-ui-kit'
 import type {
   FinanceCardFace,
   FinanceCardFieldName,
@@ -54,7 +54,7 @@ function Field({ id, label, hint, state, multiline, disabled, invalidLabel, over
       </div>
       {multiline
         ? <textarea id={id} className={css.textarea} rows={6} value={state.text} disabled={disabled} spellCheck={false} onChange={(event) => onEdit(event.target.value)} />
-        : <input id={id} className={css.input} type="text" value={state.text} disabled={disabled} onChange={(event) => onEdit(event.target.value)} />}
+        : <Input id={id} className={css.fieldInput} type="text" value={state.text} disabled={disabled} onChange={(event) => onEdit(event.currentTarget.value)} />}
       <div className={css.fieldFoot}>
         <p className={css.hint}>{hint}</p>
         {state.overridden

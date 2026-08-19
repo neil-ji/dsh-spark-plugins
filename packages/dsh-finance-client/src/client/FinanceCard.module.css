@@ -167,6 +167,10 @@
   color: var(--dsw-alias-state-error-primary);
 }
 
+.fieldInput {
+  width: 100%;
+}
+
 .input,
 .textarea {
   appearance: none;
