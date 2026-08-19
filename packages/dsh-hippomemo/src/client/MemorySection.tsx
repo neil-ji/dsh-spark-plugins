@@ -4,7 +4,7 @@ import {
   IconChevronRightOutline14, IconChevronUpOutline14, IconCloseOutline16,
   IconEditOutline16, IconPlusOutline16, IconSearchOutline16, IconTrashOutline16,
   Menu, Pill,
-} from '@deepseek-ai/dsh-client-ui-primitives'
+} from 'dsh-ui-kit'
 import type { HippomemoApi, MemoryTagCount } from './api.ts'
 import type { HippomemoLocaleKey } from './locales.ts'
 import type {

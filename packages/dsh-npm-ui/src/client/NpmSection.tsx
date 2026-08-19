@@ -5,7 +5,7 @@
  */
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button, Input, Pill, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Input, Pill, StateDot } from 'dsh-ui-kit'
 import type { SnapshotSelectorHook } from '@deepseek-ai/dsh-client-web-react'
 import type { NpmUiState, NpmUiStore } from './store.ts'
 import type { NpmKey } from './locales.ts'

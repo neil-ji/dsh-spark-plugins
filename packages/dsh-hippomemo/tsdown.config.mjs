@@ -48,7 +48,7 @@ export default [
     // dsh-plugin-kit 是纯库（无 dsh.client 声明、非 loader entry），tsdown 默认把
     // dependencies external 化会让 client 在运行时 require 落空（HARNESS 报
     // "missed the module table"）；显式内联，与其他 client 插件一致只 external 平台模块。
-    deps: { alwaysBundle: [/^dsh-plugin-kit/] },
+    deps: { alwaysBundle: [/^dsh-plugin-kit/, /^dsh-ui-kit/] },
     outputOptions: {
       entryFileNames: 'client.js',
       banner: 'window.__ModuleLoader__.load({ id: "dsh-hippomemo", factory: (require) => {',

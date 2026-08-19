@@ -23,7 +23,8 @@
     "lib/types/**/*.d.ts"
   ],
   "dependencies": {
-    "dsh-connector-wire": "workspace:^"
+    "dsh-connector-wire": "workspace:^",
+    "dsh-ui-kit": "workspace:*"
   },
   "publishConfig": {
     "access": "public"
