@@ -1,0 +1,8 @@
+packages:
+  - packages/*
+
+overrides:
+  '@deepseek-ai/dsh-*': 0.1.0-rc.6
+
+allowBuilds:
+  esbuild: true
