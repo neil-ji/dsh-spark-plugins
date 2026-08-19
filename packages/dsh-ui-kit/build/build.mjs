@@ -1,7 +1,8 @@
 /**
  * dsh-ui-kit build pipeline
  *
- * Produces a self-contained ESM bundle at dist/index.js:
+ * Produces a tree-shakeable ESM module tree: dist/esm/** (one file per source
+ * module, imports rewritten to .js/.mjs) plus a thin aggregating dist/index.js:
  *  - Every src/**\/*.module.css is compiled with lightningcss to hashed class
  *    names ([hash]_[local], the same pattern DeepSeek Harness uses) and emitted
  *    as a tiny module that injects its stylesheet once via a <style> tag
@@ -26,7 +27,7 @@ import { copyFileSync, mkdirSync, readFileSync, readdirSync, statSync, writeFile
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { build } from 'esbuild'
+import { build, transform as transformJs } from 'esbuild'
 import { transform } from 'lightningcss'
 
 const require = createRequire(import.meta.url)
@@ -151,44 +152,41 @@ writeFileSync(path.join(stylesOutDir, 'tokens.css'), tokens)
 writeFileSync(path.join(stylesOutDir, 'tokens.css.d.ts'), 'declare const css: string\nexport default css\n')
 console.log(`[build] tokens.css aggregated (${(tokens.length / 1024).toFixed(0)}KB)`)
 
-// 4. JS bundle
-await build({
-  entryPoints: [path.join(srcDir, 'index.ts')],
-  bundle: true,
-  format: 'esm',
-  target: 'es2020',
-  platform: 'browser',
-  outfile: path.join(distDir, 'index.js'),
-  jsx: 'automatic',
-  external: [
-    'react', 'react/*',
-    'react-dom', 'react-dom/*',
-    'clsx',
-    'anser',
-    'katex',
-    'shiki', 'shiki/*',
-    '@shikijs/*',
-    'mdast-util-*',
-    'micromark', 'micromark-*',
-    '@types/mdast',
-  ],
-  plugins: [
-    {
-      name: 'dsh-ui-kit-css',
-      setup(build) {
-        build.onResolve({ filter: /\.module\.css$/ }, (args) => {
-          const abs = path.resolve(args.resolveDir, args.path)
-          const rel = path.relative(srcDir, abs)
-          return { path: path.join(cssOutDir, rel.replace(/\.css$/, '.mjs')) }
-        })
-        build.onResolve({ filter: /^katex\/dist\/katex\.min\.css$/ }, () => ({
-          path: path.join(katexOutDir, 'katex-inject.mjs'),
-        }))
-      },
-    },
-  ],
-})
-console.log(`[build] dist/index.js (${(statSync(path.join(distDir, 'index.js')).size / 1024).toFixed(0)}KB)`)
+// 4. JS: one ESM file per source module (tree-shakeable), imports rewritten
+//    so consumers resolve .js modules and the generated css/katex injectors.
+//    Bare imports (react, shiki, katex, micromark, ...) are left untouched:
+//    consumers decide whether to externalize (host-provided react) or bundle.
+const esmOutDir = path.join(distDir, 'esm')
+const jsFiles = walk(srcDir).filter((f) => /\.(ts|tsx)$/.test(f))
+for (const rel of jsFiles) {
+  const { code } = await transformJs(readFileSync(path.join(srcDir, rel), 'utf8'), {
+    loader: rel.endsWith('.tsx') ? 'tsx' : 'ts',
+    jsx: 'automatic',
+    format: 'esm',
+    target: 'es2020',
+  })
+  let out = code
+  // Directory depth of this file under esm/ decides how far up to reach dist/css|katex.
+  const depth = (rel.split('/').length - 1)
+  const up = '../'.repeat(depth + 1)
+  const dirPart = rel.split('/').slice(0, -1).join('/')
+  const cssDir = dirPart ? dirPart + '/' : ''
+  // .module.css -> dist/css/<dirPart>/<local> (css mirrors src subpaths under css/)
+  out = out.replace(/(from\s+['"])(\.?\/?)([^'"]+)\.module\.css(['"])/g, (_m, pre, _dot, p, q) => pre + up + 'css/' + cssDir + p + '.module.mjs' + q)
+  out = out.replace(/(import\s+['"])(\.?\/?)([^'"]+)\.module\.css(['"])/g, (_m, pre, _dot, p, q) => pre + up + 'css/' + cssDir + p + '.module.mjs' + q)
+  // katex/dist/katex.min.css -> dist/katex/katex-inject.mjs
+  out = out.replace(/(from\s+['"])katex\/dist\/katex\.min\.css(['"])/g, (_m, pre, q) => pre + up + 'katex/katex-inject.mjs' + q)
+  out = out.replace(/(import\s+['"])katex\/dist\/katex\.min\.css(['"])/g, (_m, pre, q) => pre + up + 'katex/katex-inject.mjs' + q)
+  // .ts/.tsx relative imports -> .js (esm mirrors src structure)
+  out = out.replace(/(from\s+['"])(\.\/?[^'"]+)\.tsx?(['"])/g, '$1$2.js$3')
+  out = out.replace(/(import\s+['"])(\.\/?[^'"]+)\.tsx?(['"])/g, '$1$2.js$3')
+  const outRel = rel.replace(/\.tsx?$/, '.js')
+  mkdirSync(path.dirname(path.join(esmOutDir, outRel)), { recursive: true })
+  writeFileSync(path.join(esmOutDir, outRel), out)
+}
+// Aggregating entry: thin re-export barrel so consumers can tree-shake.
+writeFileSync(path.join(distDir, 'index.js'), "export * from './esm/index.js'")
+console.log(`[build] esm modules: ${jsFiles.length} files -> dist/esm`)
 
 // 5. Type declarations
 const tsconfigBuild = {

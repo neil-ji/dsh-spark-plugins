@@ -55,7 +55,8 @@
     "demo:build": "vite build demo",
     "build:site": "node scripts/build-site.mjs",
     "site:serve": "node scripts/serve-site.mjs",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "test": "node --test test/"
   },
   "peerDependencies": {
     "react": "^18.2.0 || ^19.0.0",
