@@ -10,7 +10,7 @@
 
 .intro {
   margin: 0;
-  color: var(--dsw-alias-text-secondary, inherit);
+  color: var(--dsw-alias-label-secondary, inherit);
 }
 
 .card {
@@ -18,8 +18,8 @@
   flex-direction: column;
   gap: 12px;
   padding: 12px;
-  border: 1px solid var(--dsw-alias-border, rgba(0, 0, 0, 0.1));
-  border-radius: 8px;
+  border: 1px solid var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.1));
+  border-radius: 12px;
 }
 
 .cardTitle {
@@ -45,7 +45,7 @@
 .scopes {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 8px;
 }
 
 .permissionRow {
@@ -65,15 +65,19 @@
 }
 
 .muted {
-  color: var(--dsw-alias-text-secondary, inherit);
+  color: var(--dsw-alias-label-secondary, inherit);
 }
 
 .error {
   margin: 0;
-  color: var(--dsw-alias-text-danger, #c00);
+  color: var(--dsw-alias-state-error-primary, #c00);
+  font-size: 13px;
+  line-height: 20px;
 }
 
 .notice {
   margin: 0;
-  color: var(--dsw-alias-text-success, #0a0);
+  color: var(--dsw-alias-state-success-primary, #0a0);
+  font-size: 13px;
+  line-height: 20px;
 }

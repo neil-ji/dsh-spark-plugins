@@ -10,7 +10,7 @@
 
 .intro {
   margin: 0;
-  color: var(--dsw-alias-text-secondary, inherit);
+  color: var(--dsw-alias-label-secondary, inherit);
 }
 
 .card {
@@ -18,8 +18,8 @@
   flex-direction: column;
   gap: 12px;
   padding: 12px;
-  border: 1px solid var(--dsw-alias-border, rgba(0, 0, 0, 0.1));
-  border-radius: 8px;
+  border: 1px solid var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.1));
+  border-radius: 12px;
 }
 
 .cardTitle {
@@ -41,7 +41,7 @@
 .packageList {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .packageRow {
@@ -51,23 +51,23 @@
 }
 
 .packageName {
-  font-family: var(--dsw-alias-font-mono, monospace);
-  font-size: 12.5px;
+  font-family: var(--ds-font-family-code, monospace);
+  font-size: 13px;
 }
 
 .nextSteps {
   margin: 0;
   padding-left: 18px;
-  color: var(--dsw-alias-text-secondary, inherit);
+  color: var(--dsw-alias-label-secondary, inherit);
   font-size: 13px;
 }
 
 .script {
   margin: 0;
   padding: 10px 12px;
-  background: var(--dsw-alias-bg-soft, rgba(0, 0, 0, 0.04));
-  border: 1px solid var(--dsw-alias-border, rgba(0, 0, 0, 0.1));
-  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1, rgba(0, 0, 0, 0.04));
+  border: 1px solid var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.1));
+  border-radius: 8px;
   overflow-x: auto;
   font-size: 12px;
   white-space: pre-wrap;
@@ -75,15 +75,19 @@
 }
 
 .muted {
-  color: var(--dsw-alias-text-secondary, inherit);
+  color: var(--dsw-alias-label-secondary, inherit);
 }
 
 .error {
   margin: 0;
-  color: var(--dsw-alias-text-danger, #c00);
+  color: var(--dsw-alias-state-error-primary, #c00);
+  font-size: 13px;
+  line-height: 20px;
 }
 
 .notice {
   margin: 0;
-  color: var(--dsw-alias-text-success, #0a0);
+  color: var(--dsw-alias-state-success-primary, #0a0);
+  font-size: 13px;
+  line-height: 20px;
 }

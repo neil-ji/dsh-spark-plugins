@@ -164,7 +164,7 @@
 
 .badgeError {
   background: var(--dsw-alias-bg-module-platform);
-  color: var(--dsw-alias-label-error);
+  color: var(--dsw-alias-state-error-primary);
 }
 
 .input,
@@ -305,45 +305,11 @@
 
 .failed {
   min-width: 0;
-  color: var(--dsw-alias-label-error);
+  color: var(--dsw-alias-state-error-primary);
   flex: 1;
   margin: 0;
   font-size: 12px;
   line-height: 1.5;
-}
-
-.discard,
-.save {
-  appearance: none;
-  font: inherit;
-  cursor: pointer;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  padding: 5px 14px;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.discard {
-  border-color: var(--dsw-alias-border-l2);
-  color: var(--dsw-alias-label-secondary);
-  background: none;
-}
-
-.discard:hover:not(:disabled) {
-  color: var(--dsw-alias-label-primary);
-  border-color: var(--dsw-alias-label-dimmed);
-}
-
-.save {
-  background: var(--dsw-alias-label-primary);
-  color: var(--dsw-alias-bg-layer-3);
-}
-
-.discard:disabled,
-.save:disabled {
-  opacity: .4;
-  cursor: default;
 }
 
 .discard:focus-visible,
