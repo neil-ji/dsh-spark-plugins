@@ -14,6 +14,7 @@ test('dist 导出齐全（基础组件 + 工具 + 主题）', () => {
     'DiffBlock', 'ReadBlock', 'SearchBlock', 'WebBlock', 'ConnectionBanner',
     'OnboardingSurface', 'RiskConfirmation', 'FishLogo', 'BrandWordmark',
     'CodeBlock', 'JsonBlock', 'MarkdownText', 'MessageText',
+    'Checkbox', 'Textarea', 'SegmentedControl', 'SearchInput',
     'setThemePreference', 'useIsDark', 'extractMarkdownPlainText',
     'writeClipboard',
   ]) {
@@ -52,4 +53,27 @@ test('JsonTree 可 SSR 渲染', () => {
 test('markdown 模块可解析（import 不抛错）', () => {
   assert.ok(kit.MarkdownText !== undefined)
   assert.ok(typeof kit.extractMarkdownPlainText === 'function')
+})
+
+test('Checkbox / Textarea / SegmentedControl / SearchInput SSR 渲染', () => {
+  const cb = renderToStaticMarkup(React.createElement(kit.Checkbox, { checked: true, onChange: () => {}, label: '权限' }))
+  assert.ok(cb.includes('权限') && cb.includes('type="checkbox"') && cb.includes('checked'))
+  const ta = renderToStaticMarkup(React.createElement(kit.Textarea, { value: '多行', readOnly: true }))
+  assert.ok(ta.includes('多行') && ta.includes('<textarea'))
+  const seg = renderToStaticMarkup(React.createElement(kit.SegmentedControl, {
+    options: [{ value: 'compact', label: '紧凑' }, { value: 'standard', label: '标准' }],
+    value: 'compact',
+    onChange: () => {},
+  }))
+  assert.ok(seg.includes('紧凑') && seg.includes('aria-pressed="true"'))
+  const search = renderToStaticMarkup(React.createElement(kit.SearchInput, { value: 'abc', onChange: () => {}, onClear: () => {}, clearLabel: '清除' }))
+  assert.ok(search.includes('清除') && search.includes('type="text"'))
+})
+
+test('DisclosureRow 支持 description/trailing', () => {
+  const html = renderToStaticMarkup(React.createElement(kit.DisclosureRow, {
+    icon: React.createElement('i'), title: 'finance 配置', description: '连接与价格', trailing: React.createElement('span', null, '未保存'),
+    open: false, expandable: true, onToggle: () => {},
+  }))
+  assert.ok(html.includes('finance 配置') && html.includes('连接与价格') && html.includes('未保存'))
 })

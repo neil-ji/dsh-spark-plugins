@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
-  Button, Input, IconArchiveOutline20, IconChevronDownOutline14, IconChevronLeftOutline14,
+  Button, Input, SearchInput, Textarea, IconArchiveOutline20, IconChevronDownOutline14, IconChevronLeftOutline14,
   IconChevronRightOutline14, IconChevronUpOutline14, IconCloseOutline16,
   IconEditOutline16, IconPlusOutline16, IconSearchOutline16, IconTrashOutline16,
   Menu, Pill,
@@ -257,20 +257,13 @@ export function MemorySection({ api, t }: MemorySectionProps): ReactNode {
       ) : (
         <>
           <div className="hippomemo-toolbar">
-            <div className="hippomemo-search-wrap">
-              <span className="hippomemo-search-icon" aria-hidden="true"><IconSearchOutline16 /></span>
-              <input
-                className="hippomemo-search"
+            <SearchInput
                 value={q}
+                onChange={setQ}
                 placeholder={t('searchPlaceholder')}
-                onChange={event => { setQ(event.currentTarget.value) }}
+                onClear={() => { setQ('') }}
+                clearLabel={t('clearSearch')}
               />
-              {q.length > 0 ? (
-                <button type="button" className="hippomemo-search-clear" aria-label={t('clearSearch')} onClick={() => { setQ('') }}>
-                  <IconCloseOutline16 />
-                </button>
-              ) : null}
-            </div>
             <HippomemoSelect
               value={kind}
               placeholder={t('allKinds')}
@@ -656,7 +649,7 @@ function MemoryEditor({ t, initial, onCancel, onSave }: EditorProps): ReactNode 
         />
       </label>
       <label>{t('importanceLabel')}<Input type="number" min="0" max="1" step="0.1" value={importance} onChange={event => { setImportance(event.currentTarget.value) }} /></label>
-      <label>{t('contentLabel')}<textarea value={content} onChange={event => { setContent(event.currentTarget.value) }} /></label>
+      <label>{t('contentLabel')}<Textarea value={content} onChange={event => { setContent(event.currentTarget.value) }} /></label>
       <label>{t('tagsLabel')}<Input value={tags} onChange={event => { setTags(event.currentTarget.value) }} /></label>
       <div className="hippomemo-toolbar">
         <Button variant="primary" size="md" disabled={saving} onClick={() => { void submit() }}>{t('save')}</Button>

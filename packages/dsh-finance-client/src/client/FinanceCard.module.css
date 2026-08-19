@@ -256,46 +256,7 @@
   line-height: 1.5;
 }
 
-.seg,
-.segOn,
-.chip,
-.chipOn {
-  appearance: none;
-  font: inherit;
-  cursor: pointer;
-  border-radius: 999px;
-  font-size: 12px;
-  line-height: 1.5;
-  padding: 2px 10px;
-}
 
-.seg,
-.chip {
-  color: var(--dsw-alias-label-secondary);
-  background: none;
-  border: 1px solid var(--dsw-alias-border-l2);
-}
-
-.seg:hover,
-.chip:hover {
-  color: var(--dsw-alias-label-primary);
-  border-color: var(--dsw-alias-label-dimmed);
-}
-
-.segOn,
-.chipOn {
-  color: var(--dsw-alias-bg-layer-3);
-  background: var(--dsw-alias-label-primary);
-  border: 1px solid transparent;
-}
-
-.seg:focus-visible,
-.segOn:focus-visible,
-.chip:focus-visible,
-.chipOn:focus-visible {
-  outline: 2px solid var(--dsw-alias-brand-primary);
-  outline-offset: 1px;
-}
 
 .footer {
   border-top: 1px solid var(--dsw-alias-border-l2);

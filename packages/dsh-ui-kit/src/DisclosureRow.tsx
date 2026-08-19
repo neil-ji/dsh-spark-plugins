@@ -16,6 +16,10 @@ export interface DisclosureRowProps {
   previewChevron?: boolean | undefined
   /** Keeps `collapsedContent` inline while open. */
   keepContentWhenOpen?: boolean | undefined
+  /** Secondary line under the title (e.g. a card description). */
+  description?: ReactNode | undefined
+  /** Trailing element pinned to the right of the title row (e.g. a pending badge). */
+  trailing?: ReactNode | undefined
   collapsedContent?: ReactNode
   children?: ReactNode
   className?: string | undefined
@@ -30,8 +34,7 @@ export interface DisclosureRowProps {
  * @param props - Visual content, controlled state, and interaction policy.
  * @returns the disclosure row.
  */
-export function DisclosureRow({
-  icon,
+export function DisclosureRow({ description, trailing, icon,
   title,
   open,
   expandable,
@@ -45,8 +48,7 @@ export function DisclosureRow({
   rowClassName,
   leadingClassName,
   chevronClassName,
-  titleClassName,
-}: DisclosureRowProps) {
+  titleClassName, }: DisclosureRowProps) {
   const rowExpands = expandable && expandOnRowClick
   const toggleFromLeading = (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation()
@@ -95,7 +97,11 @@ export function DisclosureRow({
             {leading}
           </span>
         )}
-        <span className={clsx(css.title, titleClassName)}>{title}</span>
+        <span className={clsx(css.titleWrap, titleClassName)}>
+          <span className={css.title}>{title}</span>
+          {description != null ? <span className={css.description}>{description}</span> : null}
+        </span>
+        {trailing != null ? <span className={css.trailing}>{trailing}</span> : null}
         {(keepContentWhenOpen || !open) && collapsedContent}
       </div>
       {open && children}

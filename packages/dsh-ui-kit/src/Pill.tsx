@@ -20,10 +20,12 @@ export function Pill({ active = false, className, children, onClick, ...rest }: 
   if (!onClick) {
     return <span className={clsx(css.pill, active && css.active, className)}>{children}</span>
   }
+  const pressed = rest['aria-pressed']
   return (
     <button
       type="button"
       className={clsx(css.pill, css.interactive, active && css.active, className)}
+      aria-pressed={pressed !== undefined ? pressed : active}
       onClick={onClick}
       {...rest}
     >

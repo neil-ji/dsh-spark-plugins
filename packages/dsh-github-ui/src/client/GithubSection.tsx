@@ -5,7 +5,7 @@
  */
 import { useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button, Input, Menu, Pill, StateDot } from 'dsh-ui-kit'
+import { Button, Checkbox, Input, Menu, Pill, StateDot } from 'dsh-ui-kit'
 import type { SnapshotSelectorHook } from '@deepseek-ai/dsh-client-web-react'
 import type { GithubSettingsState, GithubSettingsStore } from './store.ts'
 import type { GithubConfigView, GithubProxyTestValue } from 'dsh-connector-wire'
@@ -29,17 +29,7 @@ function PermissionRow({ label, checked, disabled, onChange }: {
   disabled?: boolean
   onChange: (next: boolean) => void
 }): ReactNode {
-  return (
-    <label className={styles.permissionRow}>
-      <input
-        type="checkbox"
-        checked={checked}
-        disabled={disabled === true}
-        onChange={(event) => { onChange((event.currentTarget as HTMLInputElement).checked) }}
-      />
-      <span>{label}</span>
-    </label>
-  )
+  return <Checkbox checked={checked} disabled={disabled} onChange={onChange} label={label} />
 }
 
 /**

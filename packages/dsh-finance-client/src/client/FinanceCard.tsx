@@ -10,7 +10,7 @@
 
 import { useState } from 'react'
 import type { SnapshotSelectorHook } from '@deepseek-ai/dsh-client-web-react'
-import { Button, Input, Pill } from 'dsh-ui-kit'
+import { Button, Input, Pill, SegmentedControl, Textarea } from 'dsh-ui-kit'
 import type {
   FinanceCardFace,
   FinanceCardFieldName,
@@ -53,7 +53,7 @@ function Field({ id, label, hint, state, multiline, disabled, invalidLabel, over
         </span>
       </div>
       {multiline
-        ? <textarea id={id} className={css.textarea} rows={6} value={state.text} disabled={disabled} spellCheck={false} onChange={(event) => onEdit(event.target.value)} />
+        ? <Textarea id={id} className={css.textarea} rows={6} value={state.text} disabled={disabled} spellCheck={false} onChange={(event) => onEdit(event.currentTarget.value)} />
         : <Input id={id} className={css.fieldInput} type="text" value={state.text} disabled={disabled} onChange={(event) => onEdit(event.currentTarget.value)} />}
       <div className={css.fieldFoot}>
         <p className={css.hint}>{hint}</p>
@@ -180,26 +180,17 @@ export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, 
         <p className={css.sectionHint}>{t('cardViewsHint')}</p>
         <div className={css.prefsRow}>
           <span className={css.prefsLabel}>{t('layout')}</span>
-          {layoutOptions.map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              className={prefs.layout === value ? css.segOn : css.seg}
-              aria-pressed={prefs.layout === value}
-              onClick={() => onSetLayout(value)}
-            >{label}</button>
-          ))}
+          <SegmentedControl
+            options={layoutOptions.map(([value, label]) => ({ value, label }))}
+            value={prefs.layout}
+            onChange={onSetLayout}
+            ariaLabel={t('layout')}
+          />
         </div>
         <div className={css.prefsRow}>
           <span className={css.prefsLabel}>{t('charts')}</span>
           {chartToggles.map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              className={prefs.charts[key] ? css.chipOn : css.chip}
-              aria-pressed={prefs.charts[key]}
-              onClick={() => onToggleChart(key)}
-            >{label}</button>
+            <Pill key={key} active={prefs.charts[key]} onClick={() => onToggleChart(key)}>{label}</Pill>
           ))}
         </div>
       </div>
