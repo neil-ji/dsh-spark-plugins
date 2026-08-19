@@ -3,9 +3,9 @@
   "plugins": {
     "dsh-hippomemo": "packages/dsh-hippomemo",
     "dsh-finance-bundle": "packages/dsh-finance-bundle",
-    "dsh-connector-github": "packages/dsh-connector-github",
-    "dsh-connector-github-ui": "packages/dsh-connector-github-ui",
-    "dsh-connector-npm": "packages/dsh-connector-npm",
-    "dsh-connector-npm-ui": "packages/dsh-connector-npm-ui"
+    "dsh-github": "packages/dsh-github",
+    "dsh-github-ui": "packages/dsh-github-ui",
+    "dsh-connector-npm": "packages/dsh-npm",
+    "dsh-connector-npm-ui": "packages/dsh-npm-ui"
   }
 }
