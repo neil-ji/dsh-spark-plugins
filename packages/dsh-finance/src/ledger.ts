@@ -186,8 +186,24 @@ function addInto(record: Record<string, FinanceTokenBuckets>, key: string, bucke
   record[key] = addFinanceBuckets(record[key] ?? emptyFinanceBuckets(), buckets)
 }
 
-/** Build the whole-ledger projection for the browser finance dashboard. */
-export async function buildFinanceLedger(ctx: Context, config: FinanceConfig, signal?: AbortSignal): Promise<FinanceLedger> {
+/**
+ * Build the whole-ledger projection for the browser finance dashboard.
+ *
+ * The hour-of-day chart and the peak/off-peak split are aggregated over a
+ * rolling 24-hour window (usage hour timestamps >= now - 24h), so the
+ * dashboard's "last 24 hours" label matches the data. Legacy sessions
+ * (created before the windowed era) and hour-less (unclassified) costs stay
+ * full-ledger: they cannot be attributed to an hour, so they never enter the
+ * windowed buckets either way. `nowMs` is injectable for deterministic tests.
+ */
+export async function buildFinanceLedger(
+  ctx: Context,
+  config: FinanceConfig,
+  signal?: AbortSignal,
+  opts?: { nowMs?: number },
+): Promise<FinanceLedger> {
+  const nowMs = opts?.nowMs ?? Date.now()
+  const hourWindowStartMs = nowMs - 24 * 3_600_000
   const snapshots = await ctx.sessionPersistence.listSnapshots(signal)
   const workspaces = ctx.workspaceRegistry.list()
   const workspaceBySession = new Map<string, { id: string; title: string }>()
@@ -306,11 +322,16 @@ export async function buildFinanceLedger(ctx: Context, config: FinanceConfig, si
       // Fallback path: no hour detail, so the whole cost is unclassified.
       const hourEntries = Object.entries(byModelHour)
       if (hourEntries.length === 0) {
+        // Hour-less sessions: no timestamp to attribute, kept full-ledger.
         split.unclassifiedCostMicros += row.costMicros
       } else {
         for (const [modelKey, byHour] of hourEntries) {
           for (const [hourKey, buckets] of Object.entries(byHour)) {
             const timeMs = financeHourTime(hourKey)
+            // Rolling 24-hour window: only usage that occurred in the last
+            // day enters the hour-of-day chart and the peak/off-peak split;
+            // future hours (bucket start beyond now) are excluded too.
+            if (timeMs < hourWindowStartMs || timeMs > nowMs) continue
             const info = financeWindowInfo(config, modelKey, timeMs)
             const cost = financeBucketCostMicros(buckets, info.rate)
             byHourOfDayUsage[info.localHour] = addFinanceBuckets(byHourOfDayUsage[info.localHour], buckets)
@@ -403,7 +424,7 @@ export async function buildFinanceLedger(ctx: Context, config: FinanceConfig, si
   }))
 
   return {
-    generatedAt: Date.now(),
+    generatedAt: nowMs,
     currency: config.currency,
     totals,
     totalCostMicros: totalCost,
@@ -411,6 +432,7 @@ export async function buildFinanceLedger(ctx: Context, config: FinanceConfig, si
     workspaceCount: workspaceMeta.size,
     taskCount: taskMeta.size,
     windowedSinceMs,
+    hourOfDayWindowStartMs: hourWindowStartMs,
     byDay: dayRows,
     byModel: modelRows,
     byWorkspace: workspaceRows,

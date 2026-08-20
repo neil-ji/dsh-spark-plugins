@@ -18,6 +18,7 @@ function overview(): FinanceOverview {
       workspaceCount: 1,
       taskCount: 1,
       windowedSinceMs: null,
+      hourOfDayWindowStartMs: 1,
       byDay: [
         { day: '2026-01-15', usage: { uncachedInputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 500_000 }, costMicros: 6_000_000 },
       ],

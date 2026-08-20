@@ -276,14 +276,26 @@ export interface FinanceLedger {
    * pricing is configured, i.e. peak/valley never applies.
    */
   windowedSinceMs: number | null
+  /**
+   * Epoch ms where the rolling 24-hour window used by the hour-of-day chart
+   * and the peak/off-peak split begins. Only usage that occurred at or after
+   * this moment (hour-bucket timestamps) enters byHourOfDay and the
+   * peak/off-peak/flat cost buckets; legacy (pre-windowed-era) sessions and
+   * hour-less (unclassified) costs stay outside either way.
+   */
+  hourOfDayWindowStartMs: number
   byDay: readonly FinanceDayRow[]
   byModel: readonly FinanceModelRow[]
   byWorkspace: readonly FinanceWorkspaceRow[]
   tasks: readonly FinanceTaskRow[]
   sessions: readonly FinanceSessionRow[]
-  /** 24 local hour-of-day cost buckets (peak/off-peak visualization). */
+  /**
+   * 24 local hour-of-day cost buckets for the rolling 24-hour window
+   * (hourOfDayWindowStartMs .. now), i.e. what the dashboard labels
+   * "last 24 hours" - not the whole ledger's lifetime total.
+   */
   byHourOfDay: readonly FinanceHourOfDayRow[]
-  /** Peak/off-peak cost split and potential off-peak-shift savings. */
+  /** Peak/off-peak cost split (24h window) and potential off-peak-shift savings. */
   peakValley: FinancePeakValleySplit
 }
 

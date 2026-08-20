@@ -536,10 +536,12 @@ const HOD_PAD = { top: 14, right: 10, bottom: 30, left: 50 }
  * cost, tokens, and band breakdown; the stats row summarizes the peak/off-peak
  * split and the potential shift savings.
  */
-function HourOfDayChart({ byHourOfDay, split, currency, t }: {
+function HourOfDayChart({ byHourOfDay, split, currency, windowStartMs, t }: {
   byHourOfDay: readonly FinanceHourOfDayRow[]
   split: FinancePeakValleySplit
   currency: string
+  /** Rolling 24h window start (epoch ms); the chart shows only this window. */
+  windowStartMs: number
   t: (key: FinanceKey) => string
 }) {
   const rows = useMemo(() => {
@@ -561,6 +563,7 @@ function HourOfDayChart({ byHourOfDay, split, currency, t }: {
   const plotW = HOD_W - HOD_PAD.left - HOD_PAD.right
   const plotH = HOD_H - HOD_PAD.top - HOD_PAD.bottom
   const baseY = HOD_PAD.top + plotH
+  if (rows.every(row => row.costMicros <= 0)) return <div className={css.empty}>{t('empty')}</div>
   const yMax = niceCeil(Math.max(...rows.map(row => row.costMicros), 1))
   const slotW = plotW / 24
   const barW = Math.min(14, Math.max(4, slotW * 0.62))
@@ -603,6 +606,7 @@ function HourOfDayChart({ byHourOfDay, split, currency, t }: {
   return (
     <div className={css.trendWrap}>
       <div className={css.trendStats}>
+        <span>{t('hourWindowSince')} {formatBeijingTime(windowStartMs)}</span>
         <span>{t('peakBand')} {formatMicros(split.peakCostMicros, currency)}</span>
         <span>{t('offPeak')} {formatMicros(split.offPeakCostMicros, currency)}</span>
         <span>{t('flat')} {formatMicros(split.flatCostMicros, currency)}</span>
@@ -683,6 +687,14 @@ export function FinanceAuditSection(props: FinanceAuditSectionProps) {
   useEffect(() => {
     if (state.status === 'idle') refresh()
   }, [state.status, refresh])
+
+  // The hour-of-day chart is a rolling 24h window: while the panel stays open,
+  // quietly refresh so the window does not go stale (server rebuilds the ledger
+  // with the current now; the refresh patches the snapshot without flashing).
+  useEffect(() => {
+    const timer = setInterval(() => { refresh() }, 30 * 60_000)
+    return () => clearInterval(timer)
+  }, [refresh])
 
   if (state.status === 'idle' || state.status === 'loading') {
     // First open runs the host's one-time hourly backfill, which can take a
@@ -859,7 +871,7 @@ function FinanceReady({ overview, peak, t, refresh }: {
           {charts.hourOfDay ? (
             <section className={css.cardWide}>
               <div className={css.cardTitle}>{t('hourOfDay')}</div>
-              <HourOfDayChart byHourOfDay={ledger.byHourOfDay ?? []} split={split} currency={ledger.currency} t={t} />
+              <HourOfDayChart byHourOfDay={ledger.byHourOfDay ?? []} split={split} currency={ledger.currency} windowStartMs={ledger.hourOfDayWindowStartMs} t={t} />
             </section>
           ) : null}
         </div>

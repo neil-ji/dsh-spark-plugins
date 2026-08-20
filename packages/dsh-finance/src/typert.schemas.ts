@@ -101,6 +101,7 @@ export const financeLedgerSchema = z.object({
   peakValley: financePeakValleySplitSchema,
   // Same rolling-upgrade allowance: old hosts send no cut-off date.
   windowedSinceMs: z.number().nullable().optional().default(null),
+  hourOfDayWindowStartMs: z.number(),
 })
 
 export const financeOverviewSchema = z.object({

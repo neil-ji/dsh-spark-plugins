@@ -206,6 +206,11 @@ function hourlyUsage(byModelHour: Record<string, Record<string, FinanceTokenBuck
 
 const ERA_B = Date.UTC(2026, 7, 16, 16) // 2026-08-17T00:00:00+08:00
 
+// Fixed "now" for the rolling 24h hour-of-day window: [2026-08-16T04:00Z,
+// 2026-08-17T04:00Z), which contains both hourly fixture buckets below
+// (2026-08-17T02 and 2026-08-16T19).
+const HOUR_NOW_MS = Date.UTC(2026, 7, 17, 4)
+
 const windowedFlash: FinancePriceEntry = {
   effectiveFrom: ERA_B,
   kind: 'windowed',
@@ -239,7 +244,7 @@ describe('buildFinanceLedger with hourly usage', () => {
         title: 'A',
       },
     })
-    const ledger = await buildFinanceLedger(ctx, windowedConfig)
+    const ledger = await buildFinanceLedger(ctx, windowedConfig, undefined, { nowMs: HOUR_NOW_MS })
     const session = ledger.sessions[0]
     // 1M input at peak (3 CNY) + 1M input at off-peak (1.5 CNY)
     expect(session.costMicros).toBe(4_500_000)
@@ -277,7 +282,7 @@ describe('buildFinanceLedger with hourly usage', () => {
         title: 'A',
       },
     })
-    const ledger = await buildFinanceLedger(ctx, windowedConfig)
+    const ledger = await buildFinanceLedger(ctx, windowedConfig, undefined, { nowMs: HOUR_NOW_MS })
     expect(ledger.sessions[0].usage.uncachedInputTokens).toBe(1_000_000)
     expect(ledger.sessions[0].costMicros).toBe(3_000_000)
     expect(ledger.sessions[0].usage.outputTokens).toBe(0)
@@ -299,7 +304,7 @@ describe('buildFinanceLedger with hourly usage', () => {
         title: 'A',
       },
     })
-    const ledger = await buildFinanceLedger(ctx, windowedConfig)
+    const ledger = await buildFinanceLedger(ctx, windowedConfig, undefined, { nowMs: HOUR_NOW_MS })
     const session = ledger.sessions[0]
     // flash peak (3 CNY) + unknown model at default (2 CNY)
     expect(session.costMicros).toBe(5_000_000)
@@ -326,7 +331,7 @@ describe('buildFinanceLedger peak/valley split', () => {
         title: 'A',
       },
     })
-    const ledger = await buildFinanceLedger(ctx, windowedConfig)
+    const ledger = await buildFinanceLedger(ctx, windowedConfig, undefined, { nowMs: HOUR_NOW_MS })
 
     expect(ledger.byHourOfDay).toHaveLength(24)
     const hour10 = ledger.byHourOfDay[10]
@@ -352,6 +357,8 @@ describe('buildFinanceLedger peak/valley split', () => {
     // The session started exactly when the windowed era begins: not legacy.
     expect(ledger.peakValley.legacyCostMicros).toBe(0)
     expect(ledger.windowedSinceMs).toBe(ERA_B)
+    // The hour-of-day window is the fixed 24h clock injected above.
+    expect(ledger.hourOfDayWindowStartMs).toBe(HOUR_NOW_MS - 24 * 3_600_000)
     // 1M input at peak (3 CNY) would cost 1.5 CNY off-peak: 1.5 CNY saved.
     expect(ledger.peakValley.shiftSavingsMicros).toBe(1_500_000)
     // The five split buckets are disjoint and sum to the ledger total.
@@ -443,7 +450,7 @@ describe('buildFinanceLedger peak/valley split', () => {
     const { ctx } = makeCtx([{ id: 'a', createdAt: 1000 }], {
       'a': { financeUsage: usage(1_000_000, 0), title: 'A' },
     })
-    const ledger = await buildFinanceLedger(ctx, flatConfig)
+    const ledger = await buildFinanceLedger(ctx, flatConfig, undefined, { nowMs: HOUR_NOW_MS })
     expect(ledger.windowedSinceMs).toBeNull()
     expect(ledger.peakValley.legacyCostMicros).toBe(0)
   })
@@ -470,7 +477,7 @@ describe('buildFinanceLedger peak/valley split', () => {
         title: 'A',
       },
     })
-    const ledger = await buildFinanceLedger(ctx, flatConfig)
+    const ledger = await buildFinanceLedger(ctx, flatConfig, undefined, { nowMs: HOUR_NOW_MS })
     expect(ledger.peakValley.flatCostMicros).toBe(1_000_000)
     expect(ledger.peakValley.peakCostMicros).toBe(0)
     expect(ledger.peakValley.offPeakCostMicros).toBe(0)
@@ -478,6 +485,33 @@ describe('buildFinanceLedger peak/valley split', () => {
     expect(ledger.byHourOfDay[10].costMicros).toBe(1_000_000)
     expect(ledger.byHourOfDay[10].flatCostMicros).toBe(1_000_000)
     expect(ledger.byHourOfDay[10].peakCostMicros).toBe(0)
+  })
+
+  it('keeps only the last 24 hours in the hour-of-day buckets', async () => {
+    const { ctx } = makeCtx([
+      { id: 'a', createdAt: ERA_B },
+    ], {
+      'a': {
+        financeUsageHourly: hourlyUsage({
+          'deepseek-official/deepseek-v4-flash': {
+            // 2026-08-17T02 is 2h AFTER the window end (now = 2026-08-17T00): dropped.
+            '2026-08-17T02': { uncachedInputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 },
+            // 2026-08-16T19 is inside [08-16T00, 08-17T00): kept (Beijing 03:00 off-peak).
+            '2026-08-16T19': { uncachedInputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 },
+          },
+        }),
+        title: 'A',
+      },
+    })
+    const ledger = await buildFinanceLedger(ctx, windowedConfig, undefined, { nowMs: Date.UTC(2026, 7, 17, 0) })
+    // Session totals stay full-ledger; only the hour buckets are windowed.
+    expect(ledger.totalCostMicros).toBe(4_500_000)
+    expect(ledger.byHourOfDay.filter(h => h.costMicros > 0).map(h => h.localHour)).toEqual([3])
+    expect(ledger.byHourOfDay[3].costMicros).toBe(1_500_000)
+    expect(ledger.byHourOfDay[10].costMicros).toBe(0)
+    expect(ledger.peakValley.peakCostMicros).toBe(0)
+    expect(ledger.peakValley.offPeakCostMicros).toBe(1_500_000)
+    expect(ledger.peakValley.shiftSavingsMicros).toBe(0)
   })
 })
 
