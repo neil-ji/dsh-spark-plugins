@@ -8,8 +8,8 @@
 
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ClientRemote } from '@deepseek-ai/dsh-api-remotes/client'
-import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-web-react'
-import type { SnapshotSelectorHook } from '@deepseek-ai/dsh-client-web-react'
+import { bindSnapshotSelector } from 'dsh-plugin-kit/client'
+import type { SnapshotSelectorHook } from 'dsh-plugin-kit/client'
 import financeRemote from 'dsh-finance/remote'
 // Type-only: merges `ctx.remote.finance` and the locale Context merge.
 import type {} from 'dsh-finance/remote'
@@ -82,8 +82,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   const cardController = new FinanceCardController(ctx.settingsScope.bind({ namespace: 'finance' }))
   ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
     name: 'settings.plugin.item',
-    id: 'finance',
-    order: 30,
+    key: 'finance',
     locale: NS,
     inject: () => cardController.inject(),
   }, FinanceCard))

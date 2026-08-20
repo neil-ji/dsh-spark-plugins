@@ -92,7 +92,6 @@ await build({
     'react',
     'react/jsx-runtime',
     '@deepseek-ai/dsh-client-runtime/client',
-    '@deepseek-ai/dsh-client-web-react',
   ],
   banner: { js: wrapper.banner },
   footer: { js: wrapper.footer },

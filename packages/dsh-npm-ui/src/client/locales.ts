@@ -33,6 +33,21 @@ export const zh = {
   notPublishedYet: '尚未发布——先执行首次发布脚本',
   saved: '已完成',
   error: '失败',
+  cardTitle: 'npm 发布管线',
+  cardDescription: 'npm registry 根地址。发布本身始终由 CI 经 OIDC 完成，插件不持有凭证。',
+  cardExpand: '展开',
+  cardCollapse: '收起',
+  cardReadOnly: '当前部署不接受写回（内存模式或文档只读）。',
+  cardRegistry: 'npm registry',
+  cardRegistryHint: 'status / 包名检查使用的注册表根地址。',
+  cardSave: '保存',
+  cardSaving: '保存中…',
+  cardDiscard: '放弃',
+  cardUnsaved: '未保存',
+  cardSaveFailed: '保存未完全生效，请检查输入后重试。',
+  cardOverridden: '已覆盖',
+  cardReset: '重置',
+  cardInvalidText: '输入无效',
 } as const
 
 export const en: Record<NpmKey, string> = {
@@ -69,6 +84,21 @@ export const en: Record<NpmKey, string> = {
   notPublishedYet: 'Not published yet — run the first-release script first',
   saved: 'Done',
   error: 'Error',
+  cardTitle: 'npm release pipeline',
+  cardDescription: 'npm registry root. Publishing itself always runs in CI via OIDC; the plugin never holds a credential.',
+  cardExpand: 'Expand',
+  cardCollapse: 'Collapse',
+  cardReadOnly: 'This deployment does not accept writes (memory mode or read-only document).',
+  cardRegistry: 'npm registry',
+  cardRegistryHint: 'Registry root used by the status / package-name checks.',
+  cardSave: 'Save',
+  cardSaving: 'Saving…',
+  cardDiscard: 'Discard',
+  cardUnsaved: 'Unsaved',
+  cardSaveFailed: 'The save did not fully land; check the inputs and retry.',
+  cardOverridden: 'Overridden',
+  cardReset: 'Reset',
+  cardInvalidText: 'Invalid input',
 }
 
 export type NpmKey = keyof typeof zh

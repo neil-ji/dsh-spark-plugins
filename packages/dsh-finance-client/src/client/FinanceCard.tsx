@@ -9,7 +9,7 @@
  */
 
 import { useState } from 'react'
-import type { SnapshotSelectorHook } from '@deepseek-ai/dsh-client-web-react'
+import type { SnapshotSelectorHook } from 'dsh-plugin-kit/client'
 import { Button, Input, Pill, SegmentedControl, Textarea } from 'dsh-ui-kit'
 import type {
   FinanceCardFace,

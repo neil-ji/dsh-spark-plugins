@@ -72,3 +72,21 @@ export function injectPluginStyle(css: string, tag: string, plugin: string): voi
   style.textContent = css
   document.head.appendChild(style)
 }
+
+export {
+  booleanCardField,
+  choiceCardField,
+  numberCardField,
+  StagedSettingsCard,
+  textCardField,
+} from './settings-card.ts'
+export type {
+  CardFieldSpec,
+  CardFieldState,
+  CardFieldWrite,
+  CardShellState,
+  StagedCardActions,
+  StagedSettingsCardState,
+} from './settings-card.ts'
+export { bindSnapshotSelector } from './snapshot.ts'
+export type { SnapshotSelectorHook } from './snapshot.ts'

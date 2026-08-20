@@ -16,6 +16,12 @@ import type {
 } from 'dsh-connector-npm-wire'
 import { NPM_KIT_PACKAGES } from 'dsh-connector-npm-wire'
 
+/** 连接器可配置项（设置命名空间 npm 的用户层）。 */
+export interface NpmConnectorConfig {
+  /** npm registry 根地址（status/package 查询目标）。 */
+  registry?: string
+}
+
 /** Registry metadata projection for one package name. */
 export interface NpmPackageInfo {
   /** false when the registry answers 404 (name is available). */
@@ -45,11 +51,20 @@ export function firstReleaseScript(args: {
 }
 
 export class NpmService extends TypertRemoteService {
+  /**
+   * @param configSource - 读取当前连接器配置的 thunk；registry 默认值在此解析，
+   *   设置命名空间热更新后立即生效。
+   */
   constructor(
     _ctx: Context,
-    private readonly registry = 'https://registry.npmjs.org',
+    private readonly configSource: () => NpmConnectorConfig = () => ({}),
   ) {
     super(_ctx, 'npm')
+  }
+
+  /** 当前生效的 registry 根地址。 */
+  get registry(): string {
+    return this.configSource().registry ?? 'https://registry.npmjs.org'
   }
 
   /** Check availability + current metadata of a package name (public read). */

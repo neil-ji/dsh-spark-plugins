@@ -4,6 +4,7 @@
  */
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
+import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
 import type { Domain, KvTable } from '@deepseek-ai/dsh-storage-domain'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import { hippomemoDomainSpec } from './spec.ts'
@@ -37,6 +38,9 @@ interface ResolvedConfig {
   maxRecallChars: number
 }
 
+/** 本插件拥有的设置命名空间（设置 → 插件 → 插件配置页可编辑）。 */
+export const HIPPOMEMO_SETTINGS_NAMESPACE = settingsNamespace('hippomemo')
+
 const DEFAULT_CONFIG: ResolvedConfig = {
   maxMemories: 10_000,
   defaultRecallLimit: 5,
@@ -62,7 +66,7 @@ export class MemoryService extends Service {
     maxRecallChars: z.number().step(1).min(1).default(DEFAULT_CONFIG.maxRecallChars),
   })
 
-  private readonly config: ResolvedConfig
+  private configSource: () => ResolvedConfig
   private readonly core: MemoryCore
   private table?: KvTable<MemoryId, MemoryRecord>
   private citationTable?: KvTable<MemoryId, CitationRecord>
@@ -71,8 +75,19 @@ export class MemoryService extends Service {
 
   constructor(ctx: Context, config: HippomemoConfig = {}) {
     super(ctx, 'memory')
-    this.config = resolveConfig(config)
-    this.core = new MemoryCore(this.config)
+    this.configSource = () => resolveConfig(config)
+    this.core = new MemoryCore(this.configSource)
+    // 注册 hippomemo 设置命名空间：配置文件作为 base 层，用户层覆盖后
+    // configSource 返回解析后的当前配置，限制项热更新立即生效。
+    installSettingsSection(ctx, HIPPOMEMO_SETTINGS_NAMESPACE, MemoryService.Config, config, {
+      setSource: source => { this.configSource = () => resolveConfig(source()) },
+      onChange: () => {},
+    })
+  }
+
+  /** 当前生效配置（设置命名空间解析结果：默认值 → 组合层 → 用户层）。 */
+  private currentConfig(): ResolvedConfig {
+    return this.configSource()
   }
 
   protected async [Service.init](): Promise<void> {
@@ -105,8 +120,9 @@ export class MemoryService extends Service {
   async put(input: MemoryPutInput): Promise<MemoryRecord> {
     const previous = input.id === undefined ? undefined : this.core.get(input.id)
     const { record } = normalizeRecord(input, previous)
-    if (previous === undefined && this.core.size >= this.config.maxMemories) {
-      throw new Error('hippomemo: maxMemories (' + String(this.config.maxMemories) + ') reached')
+    const config = this.currentConfig()
+    if (previous === undefined && this.core.size >= config.maxMemories) {
+      throw new Error('hippomemo: maxMemories (' + String(config.maxMemories) + ') reached')
     }
     await this.requireTable().put(record.id, record)
     this.core.commit(record)

@@ -30,6 +30,8 @@ pnpm test         # 测试全部包（含根 vitest，共 227+ 用例）
 pnpm dev          # 构建全部 + 安装到 web profile
 pnpm dev --run    # 构建 + 安装 + 前台启动 dogfood（dsh --profile web --port 3999）
 pnpm install:profile  # 仅重新安装到 profile（依赖 file: 链接）
+pnpm escape       # 启动「应急逃生」profile（纯官方 web，端口 3998）
+pnpm escape:init  # 仅初始化/刷新逃生 profile（幂等）
 ```
 
 ## 本地运行机制
@@ -42,10 +44,30 @@ pnpm install:profile  # 仅重新安装到 profile（依赖 file: 链接）
 
 > 注意：`3080` 是常驻工作服务，验证一律走 `3999`，不要动 3080。
 
+## 应急逃生入口（纯官方 profile）
+
+插件栈或 web profile 出问题（版本漂移、加载失败、误改配置）导致 3080 起不来时，
+用逃生 profile 先救回一个可用的 dsh GUI——**只加载官方 bundles**（`@deepseek-ai/dsh-base`
++ `@deepseek-ai/dsh-web-app`），零第三方插件、零 monorepo 依赖，跟随全局 dsh 版本，
+不依赖本仓库的任何东西：
+
+```bash
+pnpm escape        # = 初始化（幂等）+ 启动 dsh --profile escape --port 3998
+pnpm escape:init   # 只初始化/刷新，不启动；之后手动 dsh --profile escape --port <port>
+```
+
+- 会话/存储与 web profile 共用 `DSH_HOME`，数据不变，只是不加载第三方插件。
+- 逃生 profile 目录：`~/.dsh/profiles/escape`（用官方 `initProfile` + web 模板创建，
+  含 `cordis.patch.yml` 空补丁层；已有文件不会被覆盖）。
+- 初始化脚本：`scripts/escape-profile.mjs`（从全局 dsh 安装解析 `dsh-app-boot` API）。
+- 应急三板斧：先 `pnpm escape` 拿到干净 GUI → 再排查 `pnpm install:profile` 刷新 web profile
+  → 最后重启/验证 3080。
+
 ## 依赖版本策略
 
-- 所有 `@deepseek-ai/*` 通过 `pnpm-workspace.yaml` 的 `overrides` 强制为 `0.1.0-rc.6`
-  （与全局 dsh 版本一致，避免 npm latest 指向残缺的 rc.1 系列 / 多实例类型分裂）。
+- 所有 `@deepseek-ai/*` 通过 `pnpm-workspace.yaml` 的 `overrides` 强制为 `0.1.0-rc.8`
+  （与全局 dsh 内部依赖版本一致——CLI 报 rc.7、内部 lib 是 rc.8；npm latest 仍是残缺的 rc.1 系列，
+  必须逐包精确钉版，避免多实例类型分裂与运行时加载失败）。
 - 插件包之间用 `workspace:*` 依赖，构建时内联或按需解析。
 
 ## 新增一个插件

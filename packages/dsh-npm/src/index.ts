@@ -6,17 +6,28 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type { GitHubService } from 'dsh-connector-github'
+import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
+import Schema from '@deepseek-ai/schemastery'
 import { NPM_HOST_CONTRIBUTION } from 'dsh-connector-npm-wire'
 import type {} from '@deepseek-ai/dsh-typert-registry'
 import { NpmService } from './npm-service.ts'
+import type { NpmConnectorConfig } from './npm-service.ts'
 import { registerNpmTools } from './tools.ts'
 
-export { NpmService, firstReleaseScript, type NpmPackageInfo } from './npm-service.ts'
+export { NpmService, firstReleaseScript, type NpmPackageInfo, type NpmConnectorConfig } from './npm-service.ts'
 export { renderScaffold, writeScaffold, type ScaffoldOptions } from './scaffold.ts'
 export { launchPackage, type LaunchRequest, type LaunchResult } from './launch.ts'
 
 export const name = 'dsh-connector-npm'
 export const inject = ['shell', 'tools', 'typert']
+
+/** 本插件拥有的设置命名空间（设置 → 插件 → 插件配置页可编辑）。 */
+export const NPM_SETTINGS_NAMESPACE = settingsNamespace('npm')
+
+/** 连接器配置 schema：目前只有 registry 根地址。 */
+const NpmConfigSchema = Schema.object({
+  registry: Schema.string().default('https://registry.npmjs.org'),
+})
 
 /**
  * @param ctx - host context; ctx.github is provided by dsh-connector-github.
@@ -24,6 +35,15 @@ export const inject = ['shell', 'tools', 'typert']
 export function apply(ctx: Context, config: Record<string, never> = {}): void {
   // Strict host-side Remote definitions: gateway resolves npm/status.get etc.
   ctx.typert.register(NPM_HOST_CONTRIBUTION)
-  const npm = new NpmService(ctx)
+
+  // 注册 npm 设置命名空间：registry 可在插件配置页编辑，热更新即时生效。
+  const entry: NpmConnectorConfig = {}
+  let configSource: () => NpmConnectorConfig = () => entry
+  installSettingsSection(ctx, NPM_SETTINGS_NAMESPACE, NpmConfigSchema, entry, {
+    setSource: source => { configSource = source },
+    onChange: () => {},
+  })
+
+  const npm = new NpmService(ctx, configSource)
   registerNpmTools(ctx, npm, () => ctx.get('github') as GitHubService | undefined)
 }

@@ -6,13 +6,18 @@ import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-api-remotes/client'
 // Type-only: pulls the settings shell's SlotMap merge (settings.section).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+// Type-only: pulls the settings.plugin.item slot declaration.
+import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 // Type-only: pulls ctx.locale.
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Type-only: pulls ctx.remote (api-remotes re-declares it for consumers).
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
-import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-web-react'
+import { bindSnapshotSelector } from 'dsh-plugin-kit/client'
 import type { TypertRemoteNamespaceMap } from '@deepseek-ai/dsh-typert-protocol'
 import { GITHUB_REMOTE_CONTRIBUTION } from 'dsh-connector-wire'
+import { StagedSettingsCard } from 'dsh-plugin-kit/client'
+import { GithubPluginCard } from './GithubPluginCard.tsx'
+import { GITHUB_CARD_SPECS } from './GithubPluginCard.tsx'
 import { GithubSection } from './GithubSection.tsx'
 import type { GithubSectionInjected } from './GithubSection.tsx'
 import { GithubSettingsStore } from './store.ts'
@@ -32,7 +37,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 const NS = 'settings.github'
 
 /** Required client services. */
-export const inject = ['slots', 'locale', 'connection', 'remote']
+export const inject = ['slots', 'locale', 'connection', 'remote', 'settingsScope']
 
 /**
  * Mount the Github settings page.
@@ -73,4 +78,18 @@ export async function apply(ctx: ClientContext): Promise<void> {
     label: () => t('nav'),
     inject: injected,
   }, GithubSection))
+
+  // Plugin configuration card in the Plugins settings section (设置 → 插件 → 插件配置页).
+  // Bound to the `github` settings namespace the host service registers; rendered only
+  // while that namespace is served to this client.
+  const card = new StagedSettingsCard(
+    ctx.settingsScope.bind({ namespace: 'github' }),
+    GITHUB_CARD_SPECS,
+  )
+  ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
+    name: 'settings.plugin.item',
+    key: 'github',
+    locale: NS,
+    inject: () => ({ ...card.actions(), hooks: { githubCard: card.store } }),
+  }, GithubPluginCard))
 }

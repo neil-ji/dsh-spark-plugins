@@ -11,7 +11,7 @@ vi.mock('@deepseek-ai/dsh-client-runtime/client', () => ({
     set: () => {},
   }),
 }))
-vi.mock('@deepseek-ai/dsh-client-web-react', () => ({
+vi.mock('dsh-plugin-kit/client', () => ({
   bindSnapshotSelector: (source: { getSnapshot: () => object }) => () => source.getSnapshot(),
 }))
 

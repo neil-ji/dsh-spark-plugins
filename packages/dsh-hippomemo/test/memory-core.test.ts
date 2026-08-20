@@ -6,11 +6,11 @@ import type { MemoryPutInput, MemoryRecord } from '../src/types.ts'
 function makeCore(overrides: Partial<{ maxMemories: number; defaultRecallLimit: number; maxRecallChars: number }> = {}) {
   let seq = 0
   return new MemoryCore(
-    {
+    () => ({
       maxMemories: overrides.maxMemories ?? 10,
       defaultRecallLimit: overrides.defaultRecallLimit ?? 5,
       maxRecallChars: overrides.maxRecallChars ?? 5000,
-    },
+    }),
     {
       now: () => 1000 + seq,
       newId: () => 'id-' + String(++seq),
@@ -152,7 +152,7 @@ test('core stats counts statuses and kinds', () => {
 })
 
 test('core defaults work without injected clocks or ids', () => {
-  const core = new MemoryCore({ maxMemories: 10, defaultRecallLimit: 5, maxRecallChars: 5000 })
+  const core = new MemoryCore(() => ({ maxMemories: 10, defaultRecallLimit: 5, maxRecallChars: 5000 }))
   const record = core.put(input('Default', 'default record', { tags: ['default'] }))
   assert.equal(record.id.length > 0, true)
   assert.equal(record.createdAt > 0, true)

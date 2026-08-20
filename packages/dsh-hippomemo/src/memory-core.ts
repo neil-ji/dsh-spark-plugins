@@ -192,11 +192,15 @@ export class MemoryCore {
   private readonly recordTokens = new Map<MemoryId, Set<string>>()
   private readonly fieldLengths = new Map<MemoryId, FieldLength>()
   private readonly totalFieldLengths: FieldLength = { title: 0, content: 0, tag: 0 }
-  private readonly config: MemoryCoreConfig
+  private readonly configSource: () => MemoryCoreConfig
   private readonly deps: Required<MemoryCoreDeps>
 
-  constructor(config: MemoryCoreConfig, deps: MemoryCoreDeps = {}) {
-    this.config = config
+  /**
+   * @param configSource - 读取当前配置的 thunk（设置命名空间热更新时返回新值；
+   *   构造器接收 thunk 而非快照，限制项在每次操作时实时生效）。
+   */
+  constructor(configSource: () => MemoryCoreConfig, deps: MemoryCoreDeps = {}) {
+    this.configSource = configSource
     this.deps = { now: deps.now ?? defaultNow, newId: deps.newId ?? defaultNewId }
   }
 
@@ -251,7 +255,7 @@ export class MemoryCore {
 
   search(query: MemoryListQuery = {}): MemorySearchResult {
     const q = query.q?.trim().toLocaleLowerCase() ?? ''
-    const limit = query.limit ?? this.config.defaultRecallLimit
+    const limit = query.limit ?? this.configSource().defaultRecallLimit
     const qTokens = q.length === 0 ? [] : tokenStream(q).filter(token => isStopToken(token) === false)
     const filtered = this.filter(query)
     const docCount = this.records.size
@@ -322,7 +326,7 @@ export class MemoryCore {
       || rankScore(right.record, this.deps.now()) - rankScore(left.record, this.deps.now())
       || sortByUpdated(left.record, right.record))
 
-    const budget = this.config.maxRecallChars
+    const budget = this.configSource().maxRecallChars
     let used = 0
     const items: MemorySearchHit[] = []
     for (const hit of hits) {
@@ -338,8 +342,9 @@ export class MemoryCore {
   put(input: MemoryPutInput): MemoryRecord {
     const previous = input.id === undefined ? undefined : this.records.get(input.id)
     const { record } = normalizeRecord(input, previous, this.deps)
-    if (previous === undefined && this.records.size >= this.config.maxMemories) {
-      throw new Error('hippomemo: maxMemories (' + String(this.config.maxMemories) + ') reached')
+    const config = this.configSource()
+    if (previous === undefined && this.records.size >= config.maxMemories) {
+      throw new Error('hippomemo: maxMemories (' + String(config.maxMemories) + ') reached')
     }
     this.commit(record)
     return record
