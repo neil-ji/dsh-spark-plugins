@@ -587,17 +587,21 @@
 
 .trendTip {
   fill: var(--dsw-alias-tooltip-bg);
-  stroke: var(--dsw-alias-border-l2);
+  stroke: var(--dsw-alias-border-l3);
 }
 
+/* The tooltip plate (--dsw-alias-tooltip-bg) is deliberately dark in BOTH
+   themes (figma pill: dark plate, light text — see ui-kit Tooltip). The
+   --dsw-alias-label-* tokens flip with the theme (near-black in light mode),
+   so text on the plate must use fixed light neutrals instead. */
 .trendTipDate {
-  fill: var(--dsw-alias-label-secondary);
+  fill: var(--dsw-static-neutral-bluish-300);
   font-size: 10px;
   line-height: 14px;
 }
 
 .trendTipCost {
-  fill: var(--dsw-alias-label-primary);
+  fill: var(--dsw-static-neutral-bluish-00);
   font-size: 12px;
   line-height: 16px;
   font-weight: 600;
@@ -616,10 +620,12 @@
   z-index: 1000;
   max-width: 240px;
   background: var(--dsw-alias-tooltip-bg);
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 1px solid var(--dsw-alias-border-l3);
   border-radius: 8px;
   padding: 8px 10px;
   box-shadow: 0 4px 16px rgb(0 0 0 / 14%);
+  /* Dark plate in both themes: text stays light, never theme-flipping labels. */
+  color: var(--dsw-static-neutral-bluish-00);
   pointer-events: none;
 }
 
@@ -628,7 +634,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--dsw-alias-label-primary);
+  color: var(--dsw-static-neutral-bluish-00);
   font-size: 12px;
   line-height: 16px;
   font-weight: 600;
@@ -636,7 +642,7 @@
 
 .tipCost {
   margin-top: 2px;
-  color: var(--dsw-alias-label-primary);
+  color: var(--dsw-static-neutral-bluish-00);
   font-size: 12px;
   line-height: 16px;
   font-variant-numeric: tabular-nums;
@@ -644,8 +650,7 @@
 
 .tipDetail {
   margin-top: 2px;
-  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
-  opacity: 0.72;
+  color: var(--dsw-static-neutral-bluish-300);
   font-size: 11px;
   line-height: 15px;
 }
