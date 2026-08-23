@@ -268,6 +268,32 @@ describe('buildFinanceLedger with hourly usage', () => {
     expect(ledger.tasks[0].costMicros).toBe(4_500_000)
   })
 
+  it('prices weekend peak hours at the off-peak rate (weekdays-only schedule)', async () => {
+    // Saturday 2026-08-22 Beijing 10:00 falls inside a peak window but on a
+    // weekend, so the weekdays-only schedule prices it off-peak.
+    const SAT_10 = Date.UTC(2026, 7, 22, 2)
+    const { ctx } = makeCtx([{ id: 'a', createdAt: ERA_B }], {
+      'a': {
+        financeUsageHourly: hourlyUsage({
+          'deepseek-official/deepseek-v4-flash': {
+            '2026-08-22T02': { uncachedInputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 },
+          },
+        }),
+        title: 'A',
+      },
+    })
+    const ledger = await buildFinanceLedger(ctx, windowedConfig, undefined, { nowMs: SAT_10 + 2 * 3_600_000 })
+    expect(ledger.sessions[0].costMicros).toBe(1_500_000) // off-peak rate
+    expect(ledger.peakValley.peakCostMicros).toBe(0)
+    expect(ledger.peakValley.offPeakCostMicros).toBe(1_500_000)
+    const flash = ledger.byModel.find(m => m.modelKey === 'deepseek-official/deepseek-v4-flash')!
+    expect(flash.shiftSavingsMicros).toBe(0)
+    const hour10 = ledger.byHourOfDay[10]
+    expect(hour10.costMicros).toBe(1_500_000)
+    expect(hour10.peakCostMicros).toBe(0)
+    expect(hour10.shiftSavingsMicros).toBe(0)
+  })
+
   it('prefers financeUsageHourly over financeUsage when both exist', async () => {
     const { ctx } = makeCtx([
       { id: 'a', createdAt: ERA_B },
@@ -337,9 +363,11 @@ describe('buildFinanceLedger peak/valley split', () => {
     const hour10 = ledger.byHourOfDay[10]
     const hour3 = ledger.byHourOfDay[3]
     expect(hour10.localHour).toBe(10)
+    expect(hour10.hourStartMs).toBe(Date.UTC(2026, 7, 17, 2)) // the real hour bucket
     expect(hour10.costMicros).toBe(3_000_000) // peak rate
     expect(hour10.peakCostMicros).toBe(3_000_000)
     expect(hour10.usage.uncachedInputTokens).toBe(1_000_000)
+    expect(hour3.hourStartMs).toBe(Date.UTC(2026, 7, 16, 19))
     expect(hour3.costMicros).toBe(1_500_000) // off-peak rate
     expect(hour3.peakCostMicros).toBe(0)
     expect(ledger.byHourOfDay.filter(h => h.costMicros > 0).map(h => h.localHour)).toEqual([3, 10])

@@ -291,6 +291,10 @@ export async function buildFinanceLedger(
   const byHourOfDayCost = new Array<number>(24).fill(0)
   const byHourOfDayPeakCost = new Array<number>(24).fill(0)
   const byHourOfDayFlatCost = new Array<number>(24).fill(0)
+  // The real hour (UTC epoch) each local-hour slot aggregates: within one
+  // rolling 24h window every local hour appears exactly once, so this lets
+  // the client lay the 24 buckets out in time order across the window.
+  const byHourOfDayStartMs = new Array<number | undefined>(24).fill(undefined)
   // Per-hour shift savings (peak cost − same tokens at off-peak rates), so the
   // dashboard can point at the hours most worth shifting. Sums to the total.
   const byHourOfDayShiftSavings = new Array<number>(24).fill(0)
@@ -336,6 +340,7 @@ export async function buildFinanceLedger(
             const cost = financeBucketCostMicros(buckets, info.rate)
             byHourOfDayUsage[info.localHour] = addFinanceBuckets(byHourOfDayUsage[info.localHour], buckets)
             byHourOfDayCost[info.localHour] += cost
+            byHourOfDayStartMs[info.localHour] ??= timeMs
             if (info.band === 'peak') {
               split.peakCostMicros += cost
               byHourOfDayPeakCost[info.localHour] += cost
@@ -416,6 +421,7 @@ export async function buildFinanceLedger(
 
   const byHourOfDay: FinanceHourOfDayRow[] = Array.from({ length: 24 }, (_, localHour) => ({
     localHour,
+    hourStartMs: byHourOfDayStartMs[localHour],
     usage: byHourOfDayUsage[localHour],
     costMicros: byHourOfDayCost[localHour],
     peakCostMicros: byHourOfDayPeakCost[localHour],

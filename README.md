@@ -21,6 +21,12 @@
 
 > 目录名沿用各自源码仓库的目录名（dsh-github / dsh-npm），npm 包名保持 dsh-connector-* 不变。
 
+## dsh 升级体检（常态化追踪破坏性改动）
+
+- `pnpm check:dsh-upgrade` — 快检：npm 发布产物 API 面 diff + 插件 import 符号/事件存活检查，报告归档 `docs/dsh-upgrade-reports/`
+- `pnpm dryrun:dsh-upgrade` — 真验：临时目录钉新版本 + 干净安装 + `pnpm -r typecheck`
+- 完整流程与调度见 [docs/UPGRADE-PROTOCOL.md](docs/UPGRADE-PROTOCOL.md)
+
 ## 常用命令
 
 ```bash

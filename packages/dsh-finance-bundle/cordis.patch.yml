@@ -19,10 +19,13 @@
           cacheReadMicrosPerMtok: 500000
           cacheWriteMicrosPerMtok: 2000000
           outputMicrosPerMtok: 8000000
-        # Official DeepSeek V4 price table (api.deepseek.com, 2026-08-16).
+        # Official DeepSeek V4 price table (api.deepseek.com, reviewed 2026-08).
         # Each model carries an era history: the launch flat price, then the
-        # peak/off-peak schedule effective 2026-08-17 00:00 Beijing time
-        # (peak hours 9:00-12:00 / 14:00-18:00, off-peak = half of peak).
+        # peak/off-peak schedule effective 2026-08-17 00:00 Beijing time.
+        # Peak windows are weekdays (Mon-Fri) 9:00-12:00 / 14:00-18:00
+        # Beijing time (peakDays 1-5); weekends are entirely off-peak.
+        # Off-peak = half of peak. deepseek-v4-flash-vision-exp prices
+        # identically to deepseek-v4-flash.
         # Amounts are integer micros per million tokens (CNY * 1e6).
         prices:
           deepseek-official/deepseek-v4-flash:
@@ -39,6 +42,7 @@
                 cacheReadMicrosPerMtok: 100000
                 outputMicrosPerMtok: 9000000
               peakHours: [[9, 12], [14, 18]]
+              peakDays: [1, 2, 3, 4, 5]
               utcOffsetMinutes: 480
           deepseek-official/deepseek-v4-pro:
             - inputMicrosPerMtok: 3000000   # 缓存未命中 ¥3/Mtok
@@ -54,6 +58,20 @@
                 cacheReadMicrosPerMtok: 300000
                 outputMicrosPerMtok: 27000000
               peakHours: [[9, 12], [14, 18]]
+              peakDays: [1, 2, 3, 4, 5]
+              utcOffsetMinutes: 480
+          deepseek-official/deepseek-v4-flash-vision-exp:
+            - effectiveFrom: "2026-08-17T00:00:00+08:00"
+              offPeak:
+                inputMicrosPerMtok: 1500000
+                cacheReadMicrosPerMtok: 50000
+                outputMicrosPerMtok: 4500000
+              peak:
+                inputMicrosPerMtok: 3000000
+                cacheReadMicrosPerMtok: 100000
+                outputMicrosPerMtok: 9000000
+              peakHours: [[9, 12], [14, 18]]
+              peakDays: [1, 2, 3, 4, 5]
               utcOffsetMinutes: 480
 
     - id: ui-finance

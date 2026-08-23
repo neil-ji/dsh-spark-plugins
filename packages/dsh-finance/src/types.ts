@@ -69,9 +69,10 @@ export interface FinancePriceRate {
 
 /**
  * Time-of-day pricing for one model: separate rates for peak and off-peak
- * local hours. Peak windows are half-open hour ranges (end exclusive).
- * Defaults follow DeepSeek's official peak window: Beijing 9:00-12:00 and
- * 14:00-18:00, i.e. UTC+8.
+ * local hours. Peak windows are half-open hour ranges (end exclusive) that
+ * apply only on the listed days of the week. Defaults follow DeepSeek's
+ * official peak window: weekdays (Mon-Fri) 9:00-12:00 and 14:00-18:00
+ * Beijing time, i.e. UTC+8.
  */
 export interface FinanceWindowedRate {
   /** Rate applied outside every peak window. */
@@ -80,6 +81,13 @@ export interface FinanceWindowedRate {
   peak: FinancePriceRate
   /** Half-open local-hour ranges; default [[9,12],[14,18]]. */
   peakHours?: ReadonlyArray<readonly [number, number]>
+  /**
+   * Days of the week (0=Sunday..6=Saturday on the entry's local clock) the
+   * peak windows apply on; default weekdays [1,2,3,4,5] (Mon-Fri), matching
+   * DeepSeek's official peak hours. Omit only when a schedule genuinely peaks
+   * every day.
+   */
+  peakDays?: ReadonlyArray<number>
   /** UTC offset in minutes for the local hour clock; default 480 (UTC+8). */
   utcOffsetMinutes?: number
 }
@@ -111,6 +119,7 @@ export type FinancePriceEntryInput =
     offPeak: FinancePriceRate
     peak: FinancePriceRate
     peakHours?: number[][]
+    peakDays?: number[]
     utcOffsetMinutes?: number
   }
 
@@ -210,14 +219,23 @@ export interface FinanceDayRow {
 export type FinanceTimeBand = 'peak' | 'offpeak' | 'flat'
 
 /**
- * One local hour-of-day bucket aggregated across the whole ledger from the
+ * One hour-of-day bucket aggregated across the whole ledger from the
  * windowed-era hourly usage (the hour detail financeUsageHourly provides).
- * Local hours follow each model entry's clock (UTC+8 by default), so the
- * row index 0-23 is the *local* hour of day, not UTC.
+ * The 24 rows cover one rolling 24-hour window (hourOfDayWindowStartMs ..
+ * now): each local hour of day appears exactly once, so the row can be
+ * rendered either as a fixed 0-23 clock pattern or as a time-ordered
+ * rolling window when hourStartMs is present.
  */
 export interface FinanceHourOfDayRow {
   /** Local hour 0-23 on the model schedule's clock (default UTC+8). */
   localHour: number
+  /**
+   * Epoch ms of the real hour this bucket aggregates (the UTC hour start of
+   * the usage hour). Lets the client lay the 24 buckets out in time order
+   * across the rolling window and label ticks/tooltips with the real clock.
+   * Absent on legacy snapshots — clients fall back to a bare HH:00 label.
+   */
+  hourStartMs?: number
   usage: FinanceTokenBuckets
   costMicros: number
   /** Cost priced inside a peak window; > 0 tints the bar as a peak hour. */

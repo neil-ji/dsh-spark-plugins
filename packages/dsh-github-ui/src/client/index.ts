@@ -63,7 +63,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
   ctx.effect(() => {
     const refresh = (): void => { controller.refreshIfLoaded() }
     const disposers = [
-      ctx.remote.$on('credentials/updated', refresh),
+      ctx.remote.$on('credentials/reference-updated', refresh),
       ctx.remote.$on('settings/document-updated', refresh),
     ]
     return () => { for (const dispose of disposers) dispose() }

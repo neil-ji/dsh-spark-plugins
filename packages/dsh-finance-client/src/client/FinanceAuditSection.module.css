@@ -497,6 +497,20 @@
   stroke: none;
 }
 
+/* 昨日/今日 boundary inside the rolling 24h window (Beijing midnight). */
+.hodDayDivider {
+  stroke: var(--dsw-alias-border-l3);
+  stroke-width: 1;
+  stroke-dasharray: 2 5;
+  vector-effect: non-scaling-stroke;
+}
+
+.hodDayLabel {
+  fill: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+  line-height: 14px;
+}
+
 .hodLegend {
   display: flex;
   flex-wrap: wrap;

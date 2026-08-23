@@ -69,6 +69,12 @@ export function financeBucketCostMicros(buckets: FinanceTokenBuckets, rate: Fina
 /** Default peak windows: DeepSeek official peak hours (Beijing 9:00-12:00, 14:00-18:00). */
 export const DEFAULT_PEAK_HOURS: ReadonlyArray<readonly [number, number]> = [[9, 12], [14, 18]]
 
+/**
+ * Default peak days: Monday to Friday (1-5). DeepSeek's official peak hours
+ * apply on weekdays only — weekends are entirely off-peak.
+ */
+export const DEFAULT_PEAK_DAYS: ReadonlyArray<number> = [1, 2, 3, 4, 5]
+
 /** Default local clock: UTC+8 (Beijing), the DeepSeek peak-hour reference. */
 export const DEFAULT_UTC_OFFSET_MINUTES = 480
 
@@ -90,6 +96,18 @@ export function isPeakLocalHour(
   peakHours: ReadonlyArray<readonly [number, number]> = DEFAULT_PEAK_HOURS,
 ): boolean {
   return peakHours.some(([start, end]) => localHour >= start && localHour < end)
+}
+
+/**
+ * True when `localDay` (0=Sunday..6=Saturday) is a peak day. Defaults to the
+ * official weekdays-only schedule; a schedule that peaks every day passes an
+ * explicit [0,1,2,3,4,5,6].
+ */
+export function isPeakLocalDay(
+  localDay: number,
+  peakDays: ReadonlyArray<number> = DEFAULT_PEAK_DAYS,
+): boolean {
+  return peakDays.includes(localDay)
 }
 
 /** The flat rate of a flat entry, or the off-peak rate of a windowed entry. */
@@ -138,29 +156,49 @@ export function financeLocalHour(timeMs: number, utcOffsetMinutes: number): numb
   return (((utcHour + utcOffsetMinutes / 60) % 24) + 24) % 24
 }
 
+/** Local day of week (0=Sunday..6=Saturday) on a clock with the given UTC offset. */
+export function financeLocalDay(timeMs: number, utcOffsetMinutes: number): number {
+  return new Date(timeMs + utcOffsetMinutes * 60_000).getUTCDay()
+}
+
 /**
  * The full pricing picture for a model at a moment: which time band applies
- * (peak/off-peak on a windowed entry, flat otherwise), the local hour on the
- * entry's clock (default UTC+8), and the exact rate. Unknown models resolve
+ * (peak/off-peak on a windowed entry, flat otherwise), the local hour and
+ * day on the entry's clock (default UTC+8), and the exact rate. A windowed
+ * entry prices peak only when the local hour falls inside a peak window AND
+ * the local day is a peak day (weekdays by default). Unknown models resolve
  * as flat at the default rate. The ledger uses this both to price per-hour
  * buckets and to aggregate the peak/off-peak split.
  */
 export function financeWindowInfo(config: FinanceConfig, modelKey: string, timeMs: number): {
   band: FinanceTimeBand
   localHour: number
+  localDay: number
   rate: FinancePriceRate
 } {
   const entry = financeEntryFor(config, modelKey, timeMs)
   if (entry === undefined) {
-    return { band: 'flat', localHour: financeLocalHour(timeMs, DEFAULT_UTC_OFFSET_MINUTES), rate: config.defaultPrice }
+    return {
+      band: 'flat',
+      localHour: financeLocalHour(timeMs, DEFAULT_UTC_OFFSET_MINUTES),
+      localDay: financeLocalDay(timeMs, DEFAULT_UTC_OFFSET_MINUTES),
+      rate: config.defaultPrice,
+    }
   }
   if (entry.kind === 'flat') {
-    return { band: 'flat', localHour: financeLocalHour(timeMs, DEFAULT_UTC_OFFSET_MINUTES), rate: entry.rate }
+    return {
+      band: 'flat',
+      localHour: financeLocalHour(timeMs, DEFAULT_UTC_OFFSET_MINUTES),
+      localDay: financeLocalDay(timeMs, DEFAULT_UTC_OFFSET_MINUTES),
+      rate: entry.rate,
+    }
   }
   const offset = entry.rate.utcOffsetMinutes ?? DEFAULT_UTC_OFFSET_MINUTES
   const localHour = financeLocalHour(timeMs, offset)
+  const localDay = financeLocalDay(timeMs, offset)
   const peak = isPeakLocalHour(localHour, entry.rate.peakHours ?? DEFAULT_PEAK_HOURS)
-  return { band: peak ? 'peak' : 'offpeak', localHour, rate: peak ? entry.rate.peak : entry.rate.offPeak }
+    && isPeakLocalDay(localDay, entry.rate.peakDays ?? DEFAULT_PEAK_DAYS)
+  return { band: peak ? 'peak' : 'offpeak', localHour, localDay, rate: peak ? entry.rate.peak : entry.rate.offPeak }
 }
 
 /**
@@ -218,6 +256,7 @@ function normalizePriceEntry(input: FinancePriceEntryInput | FinancePriceEntry):
       offPeak: input.offPeak,
       peak: input.peak,
       peakHours: input.peakHours as FinanceWindowedRate['peakHours'],
+      peakDays: input.peakDays as FinanceWindowedRate['peakDays'],
       utcOffsetMinutes: input.utcOffsetMinutes,
     } }
   }

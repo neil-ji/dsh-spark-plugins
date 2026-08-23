@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   addFinanceBuckets,
+  DEFAULT_UTC_OFFSET_MINUTES,
   emptyFinanceBuckets,
   financeBaseCostMicros,
   financeBaseRate,
@@ -8,10 +9,12 @@ import {
   financeCostByModelHour,
   financeEntryFor,
   financeHourTime,
+  financeLocalDay,
   financeModelKey,
   financeRateAt,
   financeWindowedSince,
   financeWindowInfo,
+  isPeakLocalDay,
   isPeakLocalHour,
   normalizeFinancePrices,
 } from '../src/pricing.ts'
@@ -116,6 +119,47 @@ describe('pricing', () => {
     expect(isPeakLocalHour(13)).toBe(false)
   })
 
+  it('treats weekdays as peak days and weekends as off-peak by default', () => {
+    expect(isPeakLocalDay(1)).toBe(true) // Monday
+    expect(isPeakLocalDay(5)).toBe(true) // Friday
+    expect(isPeakLocalDay(0)).toBe(false) // Sunday
+    expect(isPeakLocalDay(6)).toBe(false) // Saturday
+    // An explicit all-days schedule opts out of the weekdays-only default.
+    expect(isPeakLocalDay(6, [0, 1, 2, 3, 4, 5, 6])).toBe(true)
+  })
+
+  it('maps an epoch moment to the local day of week on the entry clock', () => {
+    // 2026-08-17 is a Monday; UTC and Beijing (UTC+8) agree on the date here.
+    expect(financeLocalDay(PEAK_TIME, DEFAULT_UTC_OFFSET_MINUTES)).toBe(1)
+    // 2026-08-15 is a Saturday.
+    expect(financeLocalDay(Date.UTC(2026, 7, 15, 2), DEFAULT_UTC_OFFSET_MINUTES)).toBe(6)
+  })
+
+  it('prices weekend peak hours at the off-peak rate (weekdays-only schedule)', () => {
+    const custom = flashConfig([FLASH_WINDOWED])
+    // Saturday 2026-08-22 Beijing 10:00 -> off-peak despite the peak window.
+    expect(financeRateAt(custom, 'deepseek-official/deepseek-v4-flash', Date.UTC(2026, 7, 22, 2))).toEqual(FLASH_WINDOWED.rate.offPeak)
+    // Sunday 2026-08-23 Beijing 10:00 -> off-peak too.
+    expect(financeRateAt(custom, 'deepseek-official/deepseek-v4-flash', Date.UTC(2026, 7, 23, 2))).toEqual(FLASH_WINDOWED.rate.offPeak)
+    // Monday 2026-08-17 Beijing 10:00 stays peak.
+    expect(financeRateAt(custom, 'deepseek-official/deepseek-v4-flash', PEAK_TIME)).toEqual(FLASH_WINDOWED.rate.peak)
+  })
+
+  it('honors an explicit peakDays schedule', () => {
+    const custom = flashConfig([{
+      effectiveFrom: 0,
+      kind: 'windowed',
+      rate: {
+        ...FLASH_WINDOWED.rate,
+        peakDays: [0, 6], // weekend-only peaks
+      },
+    }])
+    // Saturday Beijing 10:00 -> peak on a weekend-only schedule.
+    expect(financeRateAt(custom, 'deepseek-official/deepseek-v4-flash', Date.UTC(2026, 7, 22, 2))).toEqual(FLASH_WINDOWED.rate.peak)
+    // Monday Beijing 10:00 -> off-peak.
+    expect(financeRateAt(custom, 'deepseek-official/deepseek-v4-flash', PEAK_TIME)).toEqual(FLASH_WINDOWED.rate.offPeak)
+  })
+
   it('resolves era by effectiveFrom: flat launch price before the peak/valley era', () => {
     const custom = flashConfig([FLASH_FLAT, FLASH_WINDOWED])
     const before = ERA_B - 1
@@ -196,6 +240,7 @@ describe('pricing', () => {
           effectiveFrom: '2026-08-17T00:00:00+08:00',
           offPeak: { inputMicrosPerMtok: 1_500_000, outputMicrosPerMtok: 4_500_000 },
           peak: { inputMicrosPerMtok: 3_000_000, outputMicrosPerMtok: 9_000_000 },
+          peakDays: [1, 2, 3, 4, 5],
         },
       ],
       'deepseek-official/deepseek-v4-pro': {
@@ -209,6 +254,7 @@ describe('pricing', () => {
     expect(flash[0].effectiveFrom).toBe(0)
     expect(flash[1].kind).toBe('windowed')
     expect(flash[1].effectiveFrom).toBe(ERA_B)
+    expect(flash[1].rate.peakDays).toEqual([1, 2, 3, 4, 5])
     expect(prices['deepseek-official/deepseek-v4-pro'][0].kind).toBe('flat')
   })
 
@@ -249,11 +295,22 @@ describe('financeWindowInfo', () => {
     const peak = financeWindowInfo(custom, 'deepseek-official/deepseek-v4-flash', PEAK_TIME)
     expect(peak.band).toBe('peak')
     expect(peak.localHour).toBe(10)
+    expect(peak.localDay).toBe(1) // Monday
     expect(peak.rate).toEqual(FLASH_WINDOWED.rate.peak)
     const off = financeWindowInfo(custom, 'deepseek-official/deepseek-v4-flash', OFFPEAK_TIME)
     expect(off.band).toBe('offpeak')
     expect(off.localHour).toBe(3)
+    expect(off.localDay).toBe(1)
     expect(off.rate).toEqual(FLASH_WINDOWED.rate.offPeak)
+  })
+
+  it('reports an offpeak band for weekend peak hours (weekdays-only schedule)', () => {
+    const custom = flashConfig([FLASH_WINDOWED])
+    const info = financeWindowInfo(custom, 'deepseek-official/deepseek-v4-flash', Date.UTC(2026, 7, 22, 2)) // Saturday Beijing 10:00
+    expect(info.band).toBe('offpeak')
+    expect(info.localHour).toBe(10)
+    expect(info.localDay).toBe(6) // Saturday
+    expect(info.rate).toEqual(FLASH_WINDOWED.rate.offPeak)
   })
 
   it('honors a custom UTC offset for band and local hour', () => {

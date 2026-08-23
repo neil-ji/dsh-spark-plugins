@@ -94,8 +94,7 @@ describe('dsh-finance-client apply', () => {
     expect(ctx.slots.register).toHaveBeenCalledTimes(1)
     const [entry] = ctx.slots.register.mock.calls[0]
     expect(entry.name).toBe('settings.plugin.item')
-    expect(entry.id).toBe('finance')
-    expect(entry.order).toBe(30)
+    expect(entry.key).toBe('finance')
     expect(entry.locale).toBe('settings.finance')
   })
 

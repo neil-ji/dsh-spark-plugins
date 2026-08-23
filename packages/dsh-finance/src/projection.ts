@@ -51,6 +51,17 @@ interface FinanceHourlyState {
   last: HourlyUsageSample | null
 }
 
+/**
+ * rc.2+（dsh-session-projection）把投影 key 拆成两张表：`SessionProjectionStateMap`（host 折叠状态）与
+ * `SessionProjectionMap`（客户端可见值）。finance 的两个单位都是 client-visible，两个表都要声明合并。
+ */
+declare module '@deepseek-ai/dsh-session-projection/types' {
+  interface SessionProjectionStateMap {
+    financeUsage: FinanceUsageState
+    financeUsageHourly: FinanceHourlyState
+  }
+}
+
 const bucketsSchema = z.object({
   uncachedInputTokens: z.number().int().nonnegative(),
   cacheReadTokens: z.number().int().nonnegative(),
@@ -144,9 +155,9 @@ function writeBucket(
 }
 
 /** The `financeUsage` projection unit registered on `ctx.sessionProjections`. */
-export const financeUsageProjectionDefinition: ProjectionDefinition<'financeUsage', FinanceUsageState> = {
+export const financeUsageProjectionDefinition = {
   key: 'financeUsage',
-  schema: projectionSchema,
+  stateSchema: z.any(),
   init: () => ({
     currentModel: null,
     totals: emptyFinanceBuckets(),
@@ -194,13 +205,16 @@ export const financeUsageProjectionDefinition: ProjectionDefinition<'financeUsag
       last: { turn, step, modelKey: state.currentModel, day, buckets },
     }
   },
-  view: (state): FinanceUsageProjection => ({
-    byModel: state.byModel,
-    byDay: state.byDay,
-    totals: state.totals,
-  }),
+  wire: {
+    viewSchema: projectionSchema,
+    view: (state): FinanceUsageProjection => ({
+      byModel: state.byModel,
+      byDay: state.byDay,
+      totals: state.totals,
+    }),
+  },
   stateVersion: 1,
-}
+} satisfies ProjectionDefinition<'financeUsage', FinanceUsageState>
 
 /**
  * The `financeUsageHourly` projection unit: the same fold as
@@ -209,9 +223,9 @@ export const financeUsageProjectionDefinition: ProjectionDefinition<'financeUsag
  * before this unit existed simply lack the key and fall back to
  * `financeUsage` totals at the base rate.
  */
-export const financeUsageHourlyProjectionDefinition: ProjectionDefinition<'financeUsageHourly', FinanceHourlyState> = {
+export const financeUsageHourlyProjectionDefinition = {
   key: 'financeUsageHourly',
-  schema: hourlySchema,
+  stateSchema: z.any(),
   init: () => ({
     currentModel: null,
     byModelHour: {},
@@ -253,6 +267,9 @@ export const financeUsageHourlyProjectionDefinition: ProjectionDefinition<'finan
       last: { turn, step, modelKey: state.currentModel, hour, buckets },
     }
   },
-  view: (state): FinanceHourlyProjection => ({ byModelHour: state.byModelHour }),
+  wire: {
+    viewSchema: hourlySchema,
+    view: (state): FinanceHourlyProjection => ({ byModelHour: state.byModelHour }),
+  },
   stateVersion: 1,
-}
+} satisfies ProjectionDefinition<'financeUsageHourly', FinanceHourlyState>

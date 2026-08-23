@@ -111,6 +111,27 @@ function formatBeijingTime(ms: number): string {
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`
 }
 
+/** "08-22 13:37" — Beijing-time short stamp for rolling-window ticks and tooltips. */
+function formatBeijingShort(ms: number): string {
+  const d = new Date(ms + 8 * 3_600_000)
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  return `${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`
+}
+
+/** Local hour (0-23) on the Beijing (UTC+8) clock, the peak/off-peak reference. */
+function beijingHourOf(ms: number): number {
+  return Math.floor(((ms + 8 * 3_600_000) % 86_400_000) / 3_600_000)
+}
+
+/** "13:37" — Beijing clock time only, for compact axis edge ticks. */
+function beijingClock(ms: number): string {
+  const d = new Date(ms + 8 * 3_600_000)
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`
+}
+
+
+
 interface BreakdownSource {
   key: string
   label: string
@@ -544,8 +565,8 @@ function HourOfDayChart({ byHourOfDay, split, currency, windowStartMs, t }: {
   windowStartMs: number
   t: (key: FinanceKey) => string
 }) {
-  const rows = useMemo(() => {
-    const slots: FinanceHourOfDayRow[] = Array.from({ length: 24 }, (_, localHour) => ({
+  const slots = useMemo(() => {
+    const arr: FinanceHourOfDayRow[] = Array.from({ length: 24 }, (_, localHour) => ({
       localHour,
       usage: { uncachedInputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 },
       costMicros: 0,
@@ -554,25 +575,57 @@ function HourOfDayChart({ byHourOfDay, split, currency, windowStartMs, t }: {
       shiftSavingsMicros: 0,
     }))
     for (const row of byHourOfDay) {
-      if (Number.isInteger(row.localHour) && row.localHour >= 0 && row.localHour < 24) slots[row.localHour] = { ...row }
+      if (Number.isInteger(row.localHour) && row.localHour >= 0 && row.localHour < 24) arr[row.localHour] = { ...row }
     }
-    return slots
+    return arr
   }, [byHourOfDay])
+  const WINDOW_MS = 24 * 3_600_000
+  // Round the window edges to whole hours so the axis stays stable and
+  // symmetric: the right edge is the current moment rounded UP to the next
+  // hour (covering the in-flight hour), the left edge exactly 24h before.
+  // The axis therefore never jitters at minute granularity; it rolls one
+  // hour forward with each ledger refresh.
+  const windowEndMs = Math.ceil((windowStartMs + WINDOW_MS) / 3_600_000) * 3_600_000
+  const windowStartDisplayMs = windowEndMs - WINDOW_MS
+  // Beijing midnights that fall inside the window: the 昨日/今日 boundary
+  // the chart draws as a dashed divider.
+  const dayDividersMs = useMemo(() => {
+    const marks: number[] = []
+    const day = new Date(windowEndMs + 8 * 3_600_000)
+    for (let offset = -1; offset <= 0; offset++) {
+      const midnight = Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate() + offset) - 8 * 3_600_000
+      if (midnight > windowStartDisplayMs && midnight < windowEndMs) marks.push(midnight)
+    }
+    return marks
+  }, [windowEndMs, windowStartDisplayMs])
+  // Lay the 24 buckets out in time order across the rounded window: the
+  // first bucket starts at the left edge, each later bucket one hour on.
+  // Every local hour appears exactly once in a 24h window, so reordering
+  // is lossless.
+  const firstBucketStartMs = windowStartDisplayMs
+  const firstLocalHour = beijingHourOf(firstBucketStartMs)
+  const ordered = useMemo(() => Array.from({ length: 24 }, (_, i) => ({
+    row: slots[(firstLocalHour + i) % 24],
+    startMs: firstBucketStartMs + i * 3_600_000,
+  })), [slots, firstLocalHour, firstBucketStartMs])
   const [hover, setHover] = useState<number | null>(null)
 
   const plotW = HOD_W - HOD_PAD.left - HOD_PAD.right
   const plotH = HOD_H - HOD_PAD.top - HOD_PAD.bottom
   const baseY = HOD_PAD.top + plotH
-  if (rows.every(row => row.costMicros <= 0)) return <div className={css.empty}>{t('empty')}</div>
-  const yMax = niceCeil(Math.max(...rows.map(row => row.costMicros), 1))
+  if (ordered.every(item => item.row.costMicros <= 0)) return <div className={css.empty}>{t('empty')}</div>
+  const yMax = niceCeil(Math.max(...ordered.map(item => item.row.costMicros), 1))
   const slotW = plotW / 24
   const barW = Math.min(14, Math.max(4, slotW * 0.62))
-  const xTicks = [0, 6, 12, 18, 23]
+  // Hour ticks every 4 buckets (4h apart) so the axis stays detailed but
+  // not dense; both window edges carry their own labels.
+  const xTicks = [4, 8, 12, 16, 20]
   const yTicks = Array.from({ length: 5 }, (_, i) => ({ value: yMax * i / 4, y: baseY - plotH * i / 4 }))
 
   let tip: ReactNode = null
-  if (hover !== null && rows[hover].costMicros > 0) {
-    const row = rows[hover]
+  if (hover !== null && ordered[hover].row.costMicros > 0) {
+    const item = ordered[hover]
+    const row = item.row
     const x = HOD_PAD.left + (hover + 0.5) * slotW
     const y = baseY - row.costMicros / yMax * plotH
     const offPeak = row.costMicros - row.peakCostMicros - row.flatCostMicros
@@ -594,7 +647,7 @@ function HourOfDayChart({ byHourOfDay, split, currency, windowStartMs, t }: {
       <g pointerEvents="none">
         <line x1={x} y1={HOD_PAD.top} x2={x} y2={baseY} className={css.trendGuide} />
         <rect x={tx} y={ty} width={tipW} height={tipH} rx={6} className={css.trendTip} />
-        <text x={tx + 10} y={ty + 15} className={css.trendTipDate}>{String(row.localHour).padStart(2, '0')}:00</text>
+        <text x={tx + 10} y={ty + 15} className={css.trendTipDate}>{formatBeijingShort(item.startMs)}–{formatBeijingShort(item.startMs + 3_600_000)}</text>
         <text x={tx + 10} y={ty + 30} className={css.trendTipCost}>{formatMicros(row.costMicros, currency)}</text>
         {detailLines.map((line, i) => (
           <text key={i} x={tx + 10} y={ty + 47 + i * 20} className={css.trendTipDate}>{line}</text>
@@ -606,7 +659,7 @@ function HourOfDayChart({ byHourOfDay, split, currency, windowStartMs, t }: {
   return (
     <div className={css.trendWrap}>
       <div className={css.trendStats}>
-        <span>{t('hourWindowSince')} {formatBeijingTime(windowStartMs)}</span>
+        <span>{t('hourWindowRange')} {formatBeijingShort(windowStartDisplayMs)} → {formatBeijingShort(windowEndMs)}</span>
         <span>{t('peakBand')} {formatMicros(split.peakCostMicros, currency)}</span>
         <span>{t('offPeak')} {formatMicros(split.offPeakCostMicros, currency)}</span>
         <span>{t('flat')} {formatMicros(split.flatCostMicros, currency)}</span>
@@ -633,13 +686,42 @@ function HourOfDayChart({ byHourOfDay, split, currency, windowStartMs, t }: {
           </g>
         ))}
         <line x1={HOD_PAD.left} y1={baseY} x2={HOD_W - HOD_PAD.right} y2={baseY} className={css.trendAxisBase} />
-        {xTicks.map(hour => (
-          <g key={hour}>
-            <line x1={HOD_PAD.left + (hour + 0.5) * slotW} y1={baseY} x2={HOD_PAD.left + (hour + 0.5) * slotW} y2={baseY + 4} className={css.trendGrid} />
-            <text x={HOD_PAD.left + (hour + 0.5) * slotW} y={baseY + 18} textAnchor="middle" className={css.trendAxis}>{hour}</text>
-          </g>
-        ))}
-        {rows.map((row, i) => {
+        {/* 昨日/今日 day dividers (Beijing midnights inside the window). */}
+        {dayDividersMs.map(midnight => {
+          const x = HOD_PAD.left + (midnight - windowStartDisplayMs) / WINDOW_MS * plotW
+          // Flip the label inward when the divider hugs the right edge, so it
+          // never collides with the "now" tick.
+          const nearRight = x > HOD_PAD.left + plotW - 48
+          return (
+            <g key={midnight}>
+              <line x1={x} y1={HOD_PAD.top} x2={x} y2={baseY} className={css.hodDayDivider} />
+              <text x={nearRight ? x - 3 : x + 3} y={HOD_PAD.top + 9} textAnchor={nearRight ? 'end' : 'start'} className={css.hodDayLabel}>{t('today')}</text>
+            </g>
+          )
+        })}
+        {/* Left edge: the rounded window start (now - 24h, whole hour). */}
+        <line x1={HOD_PAD.left} y1={baseY} x2={HOD_PAD.left} y2={baseY + 4} className={css.trendGrid} />
+        <text x={HOD_PAD.left - 4} y={baseY + 18} textAnchor="end" className={css.trendAxis}>{beijingClock(windowStartDisplayMs)}</text>
+        {/* Hour ticks every 4 buckets (4h apart) ON BUCKET BOUNDARIES: the
+            tick at HH:00 marks the start of the hour its right-hand bucket
+            aggregates ([HH:00, HH:59:59]), so the axis is boundary-aligned. */}
+        {xTicks.map(i => {
+          const startMs = ordered[i].startMs
+          const x = HOD_PAD.left + i * slotW
+          return (
+            <g key={i}>
+              <line x1={x} y1={baseY} x2={x} y2={baseY + 4} className={css.trendGrid} />
+              <text x={x} y={baseY + 18} textAnchor="middle" className={css.trendAxis}>{String(beijingHourOf(startMs)).padStart(2, '0')}:00</text>
+            </g>
+          )
+        })}
+        {/* Right edge: the rounded end of the data window = the current moment
+            rounded UP to the next whole hour (covering the in-flight hour).
+            Labeled with the hour only, so it never reads as a fake clock time. */}
+        <line x1={HOD_PAD.left + plotW} y1={baseY} x2={HOD_PAD.left + plotW} y2={baseY + 4} className={css.trendGrid} />
+        <text x={HOD_PAD.left + plotW} y={baseY + 18} textAnchor="end" className={css.trendAxis}>{beijingClock(windowEndMs)}</text>
+        {ordered.map((item, i) => {
+          const row = item.row
           if (row.costMicros <= 0) return null
           const x = HOD_PAD.left + (i + 0.5) * slotW
           const h = row.costMicros / yMax * plotH
@@ -786,7 +868,10 @@ function FinanceReady({ overview, peak, t, refresh }: {
     .filter(row => (row.shiftSavingsMicros ?? 0) > 0)
     .sort((a, b) => (b.shiftSavingsMicros ?? 0) - (a.shiftSavingsMicros ?? 0))
     .slice(0, 3)
-    .map(row => ({ hour: String(row.localHour).padStart(2, '0'), savingsMicros: row.shiftSavingsMicros ?? 0 })),
+    .map(row => ({
+      hour: row.hourStartMs !== undefined ? formatBeijingShort(row.hourStartMs) : `${String(row.localHour).padStart(2, '0')}:00`,
+      savingsMicros: row.shiftSavingsMicros ?? 0,
+    })),
   [ledger])
 
   // Peak/off-peak split donut: semantic hues per time band, zero-cost bands

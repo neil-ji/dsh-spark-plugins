@@ -35,6 +35,7 @@ export { fetchFinanceBalance, FinanceBalanceError, microsFromDecimal } from './b
 export { backfillFinanceHourly } from './ledger.ts'
 export {
   addFinanceBuckets,
+  DEFAULT_PEAK_DAYS,
   DEFAULT_PEAK_HOURS,
   DEFAULT_UTC_OFFSET_MINUTES,
   emptyFinanceBuckets,
@@ -44,10 +45,12 @@ export {
   financeCostByModelHour,
   financeEntryFor,
   financeHourTime,
+  financeLocalDay,
   financeModelKey,
   financeRateAt,
   financeWindowedSince,
   financeWindowInfo,
+  isPeakLocalDay,
   isPeakLocalHour,
   normalizeFinanceConfig,
   normalizeFinancePrices,
@@ -79,6 +82,7 @@ const windowedPriceEntry = z.object({
   offPeak: priceRate,
   peak: priceRate,
   peakHours: z.array(z.array(z.number())),
+  peakDays: z.array(z.number().step(1).min(0).max(6)),
   utcOffsetMinutes: z.number().step(1),
 })
 
