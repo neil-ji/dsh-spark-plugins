@@ -32,7 +32,7 @@
 ```bash
 pnpm build        # 构建全部包（各包产出 lib/ 或 dist/）
 pnpm typecheck    # 类型检查全部包
-pnpm test         # 测试全部包（含根 vitest，共 227+ 用例）
+pnpm test         # 测试全部包（含根 vitest，共 255 用例）
 pnpm dev          # 构建全部 + 安装到 web profile
 pnpm dev --run    # 构建 + 安装 + 前台启动 dogfood（dsh --profile web --port 3999）
 pnpm install:profile  # 仅重新安装到 profile（依赖 file: 链接）
