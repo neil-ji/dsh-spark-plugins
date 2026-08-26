@@ -359,6 +359,11 @@ export function MemorySection({ api, t }: MemorySectionProps): ReactNode {
                     <span className="hippomemo-row-title">{record.title}</span>
                     <span className={'hippomemo-row-kind hippomemo-kind-' + record.kind}>{t(record.kind)}</span>
                     <span className="hippomemo-row-scope">{t(record.scope)}</span>
+                    {record.scope === 'global' ? (
+                      <span className={'hippomemo-row-proven hippomemo-proven-' + (record.globalProven ? 'yes' : 'no')}>
+                        {record.globalProven ? t('proven') : t('unproven') + '·' + (record.seenWorkspaces?.length ?? 0)}
+                      </span>
+                    ) : null}
                     <span className={'hippomemo-row-status hippomemo-status-' + record.status}>{t(record.status)}</span>
                     <span className="hippomemo-row-importance">{record.importance.toFixed(2)}</span>
                     <span className="hippomemo-row-date">{formatDate(record.updatedAt)}</span>
