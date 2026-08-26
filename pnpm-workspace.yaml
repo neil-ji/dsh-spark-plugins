@@ -2,8 +2,8 @@ packages:
   - packages/*
 
 overrides:
-  # pnpm 11.11 的通配 override（'@deepseek-ai/dsh-*'）实测不生效：^0.1.0-rc.8 仍解析到 npm 最新 rc.7。
-  # 只能逐包精确钉版，且与全局 dsh（0.1.0-rc.8）保持一致，避免 rc.6/rc.7 双版本并存导致类型分裂。
+  # pnpm 11.11 的通配 override（'@deepseek-ai/dsh-*'）实测不生效（会解析到未钉的 npm 版本）。
+  # 只能逐包精确钉版到 0.1.1-rc.2，且与全局 dsh 内部依赖版本一致，避免多实例双版本并存导致类型分裂。
   '@deepseek-ai/dsh-agent': 0.1.1-rc.2
   '@deepseek-ai/dsh-agent-default-model': 0.1.1-rc.2
   '@deepseek-ai/dsh-agent-presets': 0.1.1-rc.2

@@ -71,9 +71,9 @@ pnpm escape:init   # 只初始化/刷新，不启动；之后手动 dsh --profil
 
 ## 依赖版本策略
 
-- 所有 `@deepseek-ai/*` 通过 `pnpm-workspace.yaml` 的 `overrides` 强制为 `0.1.0-rc.8`
-  （与全局 dsh 内部依赖版本一致——CLI 报 rc.7、内部 lib 是 rc.8；npm latest 仍是残缺的 rc.1 系列，
-  必须逐包精确钉版，避免多实例类型分裂与运行时加载失败）。
+- 所有 `@deepseek-ai/*` 通过 `pnpm-workspace.yaml` 的 `overrides` 强制为 `0.1.1-rc.2`
+  （与全局 dsh 内部依赖版本一致；npm latest 仍是残缺的 rc.1 系列，必须逐包精确钉版，
+  避免多实例类型分裂与运行时加载失败）。
 - 插件包之间用 `workspace:*` 依赖，构建时内联或按需解析。
 
 ## 新增一个插件
