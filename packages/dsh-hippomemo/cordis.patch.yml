@@ -17,8 +17,9 @@
         recallLimit: 5
         maxRecallChars: 8000
 
-    # Opt-in by default: each completed turn would otherwise consume an extra
-    # auxiliary model call. Enable in the profile patch when wanted.
+    # Opt-in by default. When enabled, captures are deferred and batched: turns
+    # are buffered and extraction drains after deferMs idle, once batchMaxTurns
+    # turns accumulate, or on session/plugin disposal.
     - id: hippomemo-extractor
       name: dsh-hippomemo/extractor
       config:
@@ -26,6 +27,9 @@
         maxOutputTokens: 512
         timeoutMs: 60000
         maxCandidatesPerTurn: 4
+        deferMs: 4000
+        batchMaxTurns: 8
+        flushOnDispose: true
 
     # Fire-and-forget keyword enrichment on every memory put (low frequency).
     - id: hippomemo-terms
