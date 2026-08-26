@@ -26,6 +26,10 @@
       "types": "./lib/types/memory-terms.d.ts",
       "default": "./lib/terms.js"
     },
+    "./evolve": {
+      "types": "./lib/types/memory-evolve.d.ts",
+      "default": "./lib/evolve.js"
+    },
     "./client": {
       "types": "./lib/types/client/index.d.ts",
       "default": "./lib/client.js"

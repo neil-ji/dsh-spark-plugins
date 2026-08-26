@@ -35,3 +35,23 @@
         maxTerms: 12
         maxOutputTokens: 256
         timeoutMs: 60000
+
+    # Automatic evolution: periodic deterministic hygiene sweeps (expiry,
+    # probation for uncited noise, near-duplicate consolidation) plus write-time
+    # dedup. Conservative thresholds; every action is reported and reversible.
+    - id: hippomemo-evolve
+      name: dsh-hippomemo/evolve
+      config:
+        enabled: true
+        intervalMs: 21600000
+        dryRun: false
+        decayMinRecalls: 5
+        graceDays: 3
+        probationDays: 30
+        dupTitleThreshold: 0.7
+        maxConsolidations: 20
+        reviewEnabled: true
+        reviewProvider: deepseek-official
+        reviewModel: deepseek-v4-flash
+        reviewMaxTokens: 4096
+        reviewTimeoutMs: 60000

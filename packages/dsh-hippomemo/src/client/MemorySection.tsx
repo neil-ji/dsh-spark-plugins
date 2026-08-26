@@ -1,15 +1,18 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
-  Button, Input, SearchInput, Textarea, IconArchiveOutline20, IconChevronDownOutline14, IconChevronLeftOutline14,
-  IconChevronRightOutline14, IconChevronUpOutline14, IconCloseOutline16,
-  IconEditOutline16, IconPlusOutline16, IconSearchOutline16, IconTrashOutline16,
+  BarChart, Button, DonutChart, Input, SearchInput, SegmentedControl, Textarea, TrendChart,
+  IconChevronDownOutline14, IconChevronLeftOutline14,
+  IconChevronRightOutline14, IconChevronUpOutline14,
+  IconEditOutline16, IconPlusOutline16, IconTrashOutline16,
   Menu, Pill,
 } from 'dsh-ui-kit'
+import type { ChartDatum } from 'dsh-ui-kit'
 import type { HippomemoApi, MemoryTagCount } from './api.ts'
 import type { HippomemoLocaleKey } from './locales.ts'
 import type {
-  MemoryKind, MemoryListQuery, MemoryPatchInput, MemoryPutInput, MemoryRecord,
-  MemoryScope, MemorySortKey, MemorySortOrder, MemoryStats, MemoryStatus, MemoryUsageStats,
+  CitationRecord, EvolveAction, EvolveActionType, EvolveReport, MemoryKind, MemoryListQuery, MemoryPatchInput,
+  MemoryPutInput, MemoryRecord, MemoryScope, MemorySortKey, MemorySortOrder, MemoryStats,
+  MemoryStatus, MemoryUsageStats,
 } from '../types.ts'
 
 type Translate = (key: HippomemoLocaleKey) => string
@@ -29,6 +32,8 @@ const SORTS: { value: MemorySortKey; label: HippomemoLocaleKey }[] = [
   { value: 'title', label: 'sortTitle' },
 ]
 const PAGE_SIZES = [10, 20, 50]
+
+type SectionTab = 'memories' | 'usage' | 'evolve'
 
 interface SelectOption {
   value: string
@@ -105,6 +110,7 @@ function pageItems(page: number, totalPages: number): PageItem[] {
 }
 
 export function MemorySection({ api, t }: MemorySectionProps): ReactNode {
+  const [tab, setTab] = useState<SectionTab>('memories')
   const [q, setQ] = useState('')
   const [debouncedQ, setDebouncedQ] = useState('')
   const [kind, setKind] = useState('')
@@ -233,6 +239,18 @@ export function MemorySection({ api, t }: MemorySectionProps): ReactNode {
       <h2 className="hippomemo-title">{t('title')}</h2>
       <p className="hippomemo-intro">{t('intro')}</p>
 
+      <SegmentedControl<SectionTab>
+        className="hippomemo-tabs"
+        ariaLabel="hippomemo section"
+        value={tab}
+        onChange={setTab}
+        options={[
+          { value: 'memories', label: t('tabMemories') },
+          { value: 'usage', label: t('tabUsage') },
+          { value: 'evolve', label: t('tabEvolve') },
+        ]}
+      />
+
       {detailId !== null ? (
         editing !== null && editing !== 'new' && editing.id === detailId ? (
           <MemoryEditor
@@ -254,7 +272,7 @@ export function MemorySection({ api, t }: MemorySectionProps): ReactNode {
             onOpenRelated={openDetail}
           />
         )
-      ) : (
+      ) : tab === 'memories' ? (
         <>
           <div className="hippomemo-toolbar">
             <SearchInput
@@ -312,28 +330,6 @@ export function MemorySection({ api, t }: MemorySectionProps): ReactNode {
             </Button>
           </div>
 
-          {stats !== null ? (
-            <div className="hippomemo-meta">
-              <span>{t('total')} {stats.total} {t('results')}</span>
-              <span>{t('activeCount')} {stats.active}</span>
-              <span>{t('archivedCount')} {stats.archived}</span>
-            </div>
-          ) : null}
-
-          {usage !== null ? (
-            <div className="hippomemo-usage">
-              <span className="hippomemo-usage-label">{t('usage')}</span>
-              <span title={t('usageRecalled')}>{t('usageRecalled')} {usage.recalled}/{usage.total}</span>
-              <span>{t('usageCited')} {usage.cited}</span>
-              <span>{t('usageNeverRecalled')} {usage.neverRecalled}</span>
-              <span>{t('usageStale')} {usage.staleCount}</span>
-              <span>{t('usageRecallRate')} {(usage.recallRate * 100).toFixed(0)}%</span>
-              <span>{t('usageCitationRate')} {(usage.citationRate * 100).toFixed(0)}%</span>
-              <span>{t('usageConversion')} {(usage.conversionRate * 100).toFixed(0)}%</span>
-              {usage.staleCount > 0 ? <span className="hippomemo-usage-hint">{t('usageStaleHint')}</span> : null}
-            </div>
-          ) : null}
-
           {loading ? <p className="hippomemo-status">{t('loading')}</p> : null}
           {error.length > 0 && loading === false ? (
             <p className="hippomemo-error">
@@ -358,34 +354,27 @@ export function MemorySection({ api, t }: MemorySectionProps): ReactNode {
           {records.length > 0 ? (
             <div className="hippomemo-list">
               {records.map(record => (
-                <div className="hippomemo-card" key={record.id}>
-                  <button type="button" className="hippomemo-card-main" onClick={() => { openDetail(record.id) }}>
-                    <div className="hippomemo-card-head">
-                      <span className="hippomemo-card-title">{record.title}</span>
-                      <Pill className={'hippomemo-kind-pill hippomemo-kind-' + record.kind}>{t(record.kind)}</Pill>
-                    </div>
-                    <p className="hippomemo-content hippomemo-clamp">{record.content}</p>
-                    <div className="hippomemo-meta">
-                      <span>{t(record.scope)}</span>
-                      <span>{t(record.status)}</span>
-                      <span>{t('importanceLabel')}: {record.importance.toFixed(2)}</span>
-                      <span>{formatDate(record.updatedAt)}</span>
-                    </div>
+                <div className="hippomemo-row" key={record.id}>
+                  <button type="button" className="hippomemo-row-main" onClick={() => { openDetail(record.id) }} title={record.title}>
+                    <span className="hippomemo-row-title">{record.title}</span>
+                    <span className={'hippomemo-row-kind hippomemo-kind-' + record.kind}>{t(record.kind)}</span>
+                    <span className="hippomemo-row-scope">{t(record.scope)}</span>
+                    <span className={'hippomemo-row-status hippomemo-status-' + record.status}>{t(record.status)}</span>
+                    <span className="hippomemo-row-importance">{record.importance.toFixed(2)}</span>
+                    <span className="hippomemo-row-date">{formatDate(record.updatedAt)}</span>
                   </button>
-                  <div className="hippomemo-card-actions">
-                    <Button size="sm" variant="ghost" icon={<IconEditOutline16 />} onClick={() => { setEditing(record) }}>
-                      {t('edit')}
-                    </Button>
+                  <div className="hippomemo-row-actions">
+                    <Button size="sm" variant="ghost" icon={<IconEditOutline16 />} title={t('edit')} aria-label={t('edit')} onClick={() => { setEditing(record) }} />
                     <Button
                       size="sm"
                       variant="ghost"
+                      title={record.status === 'archived' ? t('restore') : t('archive')}
+                      aria-label={record.status === 'archived' ? t('restore') : t('archive')}
                       onClick={() => { void setStatusFor(record, record.status === 'archived' ? 'active' : 'archived') }}
                     >
                       {record.status === 'archived' ? t('restore') : t('archive')}
                     </Button>
-                    <Button size="sm" variant="ghost" className="hippomemo-button-danger" icon={<IconTrashOutline16 />} onClick={() => { void remove(record.id) }}>
-                      {t('delete')}
-                    </Button>
+                    <Button size="sm" variant="ghost" className="hippomemo-button-danger" icon={<IconTrashOutline16 />} title={t('delete')} aria-label={t('delete')} onClick={() => { void remove(record.id) }} />
                   </div>
                 </div>
               ))}
@@ -441,10 +430,286 @@ export function MemorySection({ api, t }: MemorySectionProps): ReactNode {
             </div>
           ) : null}
         </>
+      ) : tab === 'usage' ? (
+        <div className="hippomemo-panel">
+          {stats !== null ? (
+            <div className="hippomemo-meta">
+              <span>{t('total')} {stats.total} {t('results')}</span>
+              <span>{t('activeCount')} {stats.active}</span>
+              <span>{t('archivedCount')} {stats.archived}</span>
+            </div>
+          ) : null}
+
+          {usage !== null ? (
+            <div className="hippomemo-usage">
+              <span className="hippomemo-usage-label">{t('usage')}</span>
+              <span title={t('usageRecalled')}>{t('usageRecalled')} {usage.recalled}/{usage.total}</span>
+              <span>{t('usageCited')} {usage.cited}</span>
+              <span>{t('usageNeverRecalled')} {usage.neverRecalled}</span>
+              <span>{t('usageStale')} {usage.staleCount}</span>
+              <span>{t('usageRecallRate')} {(usage.recallRate * 100).toFixed(0)}%</span>
+              <span>{t('usageCitationRate')} {(usage.citationRate * 100).toFixed(0)}%</span>
+              <span>{t('usageConversion')} {(usage.conversionRate * 100).toFixed(0)}%</span>
+              {usage.staleCount > 0 ? <span className="hippomemo-usage-hint">{t('usageStaleHint')}</span> : null}
+            </div>
+          ) : null}
+
+          <MemoryCharts api={api} t={t} stats={stats} reloadKey={reloadKey} />
+        </div>
+      ) : (
+        <EvolvePanel api={api} t={t} />
       )}
     </div>
   )
 }
+
+
+// ---- 统计图表 ----
+
+function dayKey(ms: number): string {
+  const d = new Date(ms)
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+function MemoryCharts({ api, t, stats, reloadKey }: {
+  api: HippomemoApi
+  t: Translate
+  stats: MemoryStats | null
+  reloadKey: number
+}): ReactNode {
+  const [allRecords, setAllRecords] = useState<MemoryRecord[]>([])
+  const [citations, setCitations] = useState<CitationRecord[]>([])
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let current = true
+    setError('')
+    void Promise.all([api.list({ limit: 200, sort: 'updatedAt', order: 'desc' }), api.citations({ limit: 200 })])
+      .then(([list, citationsResult]) => {
+        if (current === false) return
+        setAllRecords(list.items)
+        setCitations(citationsResult.items)
+      })
+      .catch((cause: unknown) => {
+        if (current === false) return
+        setError(cause instanceof Error ? cause.message : String(cause))
+      })
+    return () => { current = false }
+  }, [api, reloadKey])
+
+  const kindRows = useMemo<ChartDatum[]>(() => {
+    if (stats === null) return []
+    return KINDS.map(kind => ({ key: kind, label: t(kind), value: stats.byKind[kind] }))
+      .filter(row => row.value > 0)
+  }, [stats])
+
+  const statusRows = useMemo<ChartDatum[]>(() => {
+    if (stats === null) return []
+    const counts: Record<string, number> = {
+      active: stats.active,
+      archived: stats.archived,
+      superseded: stats.superseded,
+      candidate: stats.candidate,
+    }
+    return STATUSES.map(status => ({ key: status, label: t(status), value: counts[status] ?? 0 }))
+      .filter(row => row.value > 0)
+  }, [stats])
+
+  const topRecalled = useMemo<ChartDatum[]>(() =>
+    [...allRecords]
+      .filter(record => (record.recallCount ?? 0) > 0)
+      .sort((a, b) => (b.recallCount ?? 0) - (a.recallCount ?? 0))
+      .slice(0, 8)
+      .map(record => ({
+        key: record.id,
+        label: record.title,
+        value: record.recallCount ?? 0,
+        detail: `${t('usageCited')} ${record.citationCount ?? 0}`,
+      })),
+  [allRecords, t])
+
+  const trendPoints = useMemo(() => {
+    const buckets = new Map<string, number>()
+    for (const citation of citations) {
+      const key = dayKey(citation.ts)
+      buckets.set(key, (buckets.get(key) ?? 0) + 1)
+    }
+    return [...buckets.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, value]) => ({ key, label: key.slice(5), value }))
+  }, [citations])
+
+  if (error.length > 0) {
+    return <p className="hippomemo-error">{t('loadFailed')}: {error}</p>
+  }
+
+  return (
+    <div className="hippomemo-chart-grid">
+      {kindRows.length > 0 ? (
+        <section className="hippomemo-chart-card">
+          <div className="hippomemo-chart-title">{t('chartKindTitle')}</div>
+          <DonutChart
+            rows={kindRows}
+            centerValue={String(stats?.total ?? 0)}
+            centerLabel={t('chartTotal')}
+            ariaLabel={t('chartKindTitle')}
+            formatValue={value => String(value)}
+          />
+        </section>
+      ) : null}
+
+      {statusRows.length > 0 ? (
+        <section className="hippomemo-chart-card">
+          <div className="hippomemo-chart-title">{t('chartStatusTitle')}</div>
+          <DonutChart
+            rows={statusRows}
+            centerValue={String(stats?.total ?? 0)}
+            centerLabel={t('chartTotal')}
+            ariaLabel={t('chartStatusTitle')}
+            formatValue={value => String(value)}
+          />
+        </section>
+      ) : null}
+
+      <section className="hippomemo-chart-card">
+        <div className="hippomemo-chart-title">{t('chartTopRecalledTitle')}</div>
+        {topRecalled.length === 0 ? (
+          <p className="hippomemo-empty">{t('chartNoData')}</p>
+        ) : (
+          <BarChart
+            rows={topRecalled}
+            ariaLabel={t('chartTopRecalledTitle')}
+            formatValue={value => String(value)}
+            axisFormatter={value => String(Math.round(value))}
+          />
+        )}
+      </section>
+
+      <section className="hippomemo-chart-card hippomemo-chart-card-wide">
+        <div className="hippomemo-chart-title">{t('chartCitationsTrendTitle')}</div>
+        {trendPoints.length < 2 ? (
+          <p className="hippomemo-empty">{t('chartNoData')}</p>
+        ) : (
+          <TrendChart
+            points={trendPoints}
+            ariaLabel={t('chartCitationsTrendTitle')}
+            formatValue={value => String(value)}
+            gradientId="dsh-hippomemo-citations-grad"
+          />
+        )}
+      </section>
+    </div>
+  )
+}
+
+// ---- 进化面板 ----
+
+const ACTION_LABELS: Record<EvolveActionType, HippomemoLocaleKey> = {
+  archive: 'evolveActionArchive',
+  probation: 'evolveActionProbation',
+  'cancel-probation': 'evolveActionCancelProbation',
+  supersede: 'evolveActionSupersede',
+  link: 'evolveActionLink',
+}
+
+function EvolvePanel({ api, t }: { api: HippomemoApi; t: Translate }): ReactNode {
+  const [report, setReport] = useState<EvolveReport | null>(null)
+  const [running, setRunning] = useState(false)
+  const [error, setError] = useState('')
+
+  const load = async (): Promise<void> => {
+    try {
+      setReport(await api.evolveLast())
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    }
+  }
+
+  useEffect(() => {
+    let current = true
+    void api.evolveLast().then(found => {
+      if (current) setReport(found)
+    }).catch((cause: unknown) => {
+      if (current) setError(cause instanceof Error ? cause.message : String(cause))
+    })
+    return () => { current = false }
+  }, [api])
+
+  const run = async (dryRun: boolean): Promise<void> => {
+    setRunning(true)
+    setError('')
+    try {
+      setReport(await api.evolveRun(dryRun))
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setRunning(false)
+    }
+  }
+
+  return (
+    <div className="hippomemo-panel">
+      <p className="hippomemo-intro">{t('evolveIntro')}</p>
+      <div className="hippomemo-toolbar">
+        <Button variant="outline" size="md" disabled={running} onClick={() => { void run(true) }}>
+          {running ? t('evolveRunning') : t('evolveRunDry')}
+        </Button>
+        <Button variant="primary" size="md" disabled={running} onClick={() => { void run(false) }}>
+          {running ? t('evolveRunning') : t('evolveRunApply')}
+        </Button>
+      </div>
+
+      {error.length > 0 ? <p className="hippomemo-error">{t('loadFailed')}: {error}</p> : null}
+
+      {report === null && error.length === 0 ? (
+        <p className="hippomemo-empty">{t('evolveNoReport')}</p>
+      ) : null}
+
+      {report !== null ? (
+        <div className="hippomemo-evolve-report">
+          <div className="hippomemo-meta">
+            <span>{t('evolveRunAt')} {formatDate(report.runAt)}</span>
+            <span>{report.dryRun ? t('evolveDryRun') : t('evolveApplied')}</span>
+            <span>{t('evolveActionsLabel')} {report.actions.length}</span>
+            {report.review !== undefined ? <span>{t('evolveReviewedLabel')} {report.review.length}</span> : null}
+          </div>
+
+          {report.review !== undefined && report.review.length > 0 ? (
+            <div className="hippomemo-evolve-review">
+              <div className="hippomemo-evolve-block-title">{t('evolveReviewedLabel')}</div>
+              {report.review.map(verdict => (
+                <div className="hippomemo-evolve-verdict" key={verdict.id}>
+                  <Pill className={'hippomemo-verdict-' + verdict.verdict}>
+                    {verdict.verdict === 'keep' ? t('evolveKeep') : t('evolveNoise')}
+                  </Pill>
+                  <span className="hippomemo-evolve-verdict-id">{verdict.id.slice(0, 8)}</span>
+                  {verdict.reason !== undefined ? <span className="hippomemo-evolve-verdict-reason">{verdict.reason}</span> : null}
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {report.actions.length > 0 ? (
+            <div className="hippomemo-evolve-actions">
+              <div className="hippomemo-evolve-block-title">{t('evolveActionsLabel')}</div>
+              {report.actions.map(action => (
+                <div className="hippomemo-evolve-action" key={action.id + action.action}>
+                  <Pill className={'hippomemo-action-' + action.action}>{t(ACTION_LABELS[action.action])}</Pill>
+                  <span className="hippomemo-evolve-action-id">{action.id.slice(0, 8)}</span>
+                  <span className="hippomemo-evolve-action-reason">{action.reason}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="hippomemo-empty">—</p>
+          )}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 
 interface DetailProps {
   api: HippomemoApi

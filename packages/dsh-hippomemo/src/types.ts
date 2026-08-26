@@ -212,3 +212,36 @@ export interface HippomemoChanged {
   operation: 'put' | 'deleted'
   id: MemoryId
 }
+// ---- 自动进化（hippomemo-evolve）----
+
+export type EvolveActionType =
+  | 'archive'
+  | 'probation'
+  | 'cancel-probation'
+  | 'supersede'
+  | 'link'
+
+/** One planned/executed evolution action. */
+export interface EvolveAction {
+  id: string
+  action: EvolveActionType
+  reason: string
+  /** Winner id for supersede/link actions. */
+  targetId?: string
+}
+
+/** LLM review verdict for one probation candidate. */
+export interface EvolveReviewVerdict {
+  id: string
+  verdict: 'noise' | 'keep'
+  reason?: string
+}
+
+/** Result of one evolution sweep (dry-run or applied). */
+export interface EvolveReport {
+  runAt: number
+  dryRun: boolean
+  actions: EvolveAction[]
+  /** When the LLM review pass ran: which candidates were kept (not probated). */
+  review?: EvolveReviewVerdict[]
+}

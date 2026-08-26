@@ -25,6 +25,7 @@ export default [
       context: 'src/context.ts',
       extractor: 'src/extractor.ts',
       terms: 'src/memory-terms.ts',
+      evolve: 'src/memory-evolve.ts',
     },
     outDir: 'lib',
     format: ['esm'],

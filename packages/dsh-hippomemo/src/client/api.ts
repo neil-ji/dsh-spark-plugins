@@ -1,7 +1,7 @@
 /** Tiny fetch wrapper for the plugin-owned /hippomemo API. */
 
 import type {
-  CitationListQuery, CitationListResult, MemoryListQuery, MemoryListResult,
+  CitationListQuery, CitationListResult, EvolveReport, MemoryListQuery, MemoryListResult,
   MemoryPatchInput, MemoryPutInput, MemoryRecord, MemoryStats, MemoryUsageStats,
 } from '../types.ts'
 
@@ -68,6 +68,8 @@ export interface HippomemoApi {
   tags(): Promise<MemoryTagCount[]>
   usage(): Promise<MemoryUsageStats>
   citations(query?: CitationListQuery): Promise<CitationListResult>
+  evolveLast(): Promise<EvolveReport | null>
+  evolveRun(dryRun: boolean): Promise<EvolveReport>
   events(onChange: (event: { operation: string; id: string }) => void): () => void
 }
 
@@ -88,6 +90,11 @@ export function createHippomemoApi(): HippomemoApi {
     tags: () => request<MemoryTagCount[]>('/hippomemo/tags'),
     usage: () => request<MemoryUsageStats>('/hippomemo/usage'),
     citations: query => request<CitationListResult>('/hippomemo/citations' + citationQueryString(query)),
+    evolveLast: () => request<EvolveReport | null>('/hippomemo/evolve/last'),
+    evolveRun: dryRun => request<EvolveReport>('/hippomemo/evolve', {
+      method: 'POST',
+      body: JSON.stringify({ dryRun }),
+    }),
     events: (onChange) => {
       const source = new EventSource('/hippomemo/events')
       source.onmessage = (event) => {
