@@ -30,6 +30,29 @@ export function extractTextFromBlocks(blocks: readonly { type: string; text?: st
     .trim()
 }
 
+/**
+ * A message is "direct" user input only when its source kind is literally
+ * `user`. Plugin-injected context (recall / time snapshots / other tool
+ * provenance) carries a non-`user` source kind, and must never be captured as
+ * direct user text — otherwise memory would re-ingest its own recall block.
+ */
+export function isDirectUserMessage(message: { source?: { kind?: string } } | null | undefined): boolean {
+  return message?.source?.kind === 'user'
+}
+
+/**
+ * Neutralize the fence tags hippomemo uses to wrap injected recall content, so
+ * a stored memory containing `</system-reminder>` (or `<system-reminder>` /
+ * any `system-prompt` tag) cannot close the injection block early and let the
+ * rest of its text escape as non-reminder instructions. Applied only at
+ * render/inject time; the stored record keeps its original text.
+ */
+const FENCE_TAGS = /<(\/?)(system-reminder|system-prompt)>/giu
+
+export function neutralizeFences(text: string): string {
+  return text.replace(FENCE_TAGS, (match, slash: string, tag: string) => '[' + slash + tag + ']')
+}
+
 export function collectTurnMessages(messages: readonly TurnMessage[]): string {
   const text = messages
     .filter(message => message.text.trim().length > 0)

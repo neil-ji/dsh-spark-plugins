@@ -14,7 +14,7 @@ import type { GenerateOptions } from '@deepseek-ai/dsh-llm'
 import type {} from './memory-service.ts'
 import {
   buildExtractionPrompt, candidateToInput, collectTurnMessages,
-  extractTextFromBlocks, parseCandidateMemories, type TurnMessage,
+  extractTextFromBlocks, isDirectUserMessage, parseCandidateMemories, type TurnMessage,
 } from './memory-extract.ts'
 
 export const name = 'hippomemo-extractor'
@@ -107,6 +107,10 @@ function collectTurnMessagesFromAgent(agent: AgentLike, turn: number): TurnMessa
   const messages: TurnMessage[] = []
   for (const event of events.slice(start + 1)) {
     if (event.type === 'user/message') {
+      // Skip plugin-injected context (recall blocks, time snapshots, other
+      // plugin provenance) — only direct user input is a candidate source for
+      // durable memory, so memory never re-ingests its own recall block.
+      if (!isDirectUserMessage(event.data)) continue
       const text = extractTextFromBlocks(event.data.content ?? [])
       if (text.length > 0) messages.push({ role: 'user', text })
     } else if (event.type === 'assistant/message') {

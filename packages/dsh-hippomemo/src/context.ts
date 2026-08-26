@@ -10,6 +10,7 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { AssistantMessage, UserMessage } from '@deepseek-ai/dsh-llm'
 import type {} from './memory-service.ts'
 import type { MemoryRecord } from './types.ts'
+import { neutralizeFences } from './memory-extract.ts'
 
 export const name = 'hippomemo-context'
 export const inject = ['agents', 'memory']
@@ -148,12 +149,12 @@ function renderRecallMessage(query: string, items: readonly RenderItem[], maxCha
 
   for (const item of items) {
     const record = item.record
-    const body = [
+    const body = neutralizeFences([
       '[' + record.kind + '] ' + record.title,
       record.content,
       record.tags.length > 0 ? 'tags: ' + record.tags.join(', ') : '',
       'matched: ' + (item.reason.length > 0 ? item.reason.join(', ') : 'recency'),
-    ].filter(line => line.length > 0).join('\n')
+    ].filter(line => line.length > 0).join('\n'));
     if (body.length > budget) continue
     lines.push('<memory id="' + record.id + '" scope="' + record.scope + '">\n' + body + '\n</memory>')
     memoryIds.push(record.id)
