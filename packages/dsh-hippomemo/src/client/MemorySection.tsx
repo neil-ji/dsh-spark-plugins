@@ -804,6 +804,11 @@ function MemoryDetail({ api, t, id, refreshKey, onBack, onEdit, onChanged, onDel
         <div className="hippomemo-detail-pills">
           <Pill className={'hippomemo-kind-pill hippomemo-kind-' + record.kind}>{t(record.kind)}</Pill>
           <Pill className="hippomemo-scope-pill">{t(record.scope)}</Pill>
+          {record.scope === 'global' ? (
+            <Pill className={'hippomemo-proven-pill hippomemo-proven-' + (record.globalProven ? 'yes' : 'no')}>
+              {record.globalProven ? t('proven') : t('unproven') + '·' + (record.seenWorkspaces?.length ?? 0)}
+            </Pill>
+          ) : null}
           <Pill className={'hippomemo-status-pill hippomemo-status-' + record.status}>{t(record.status)}</Pill>
         </div>
       </div>

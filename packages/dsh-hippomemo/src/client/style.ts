@@ -119,6 +119,8 @@ export const HIPPOMEMO_CSS = [
   '[data-plugin="dsh-hippomemo"] .hippomemo-row-proven { flex: none; font-size: 12px; line-height: 18px; white-space: nowrap; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-row-proven.hippomemo-proven-yes { color: var(--dsw-alias-state-success-primary, #16a34a); font-weight: 600; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-row-proven.hippomemo-proven-no { color: var(--dsw-alias-state-warning-primary, #d97706); }',
+  '[data-plugin="dsh-hippomemo"] .hippomemo-proven-pill.hippomemo-proven-yes { color: var(--dsw-alias-state-success-primary, #16a34a); font-weight: 600; }',
+  '[data-plugin="dsh-hippomemo"] .hippomemo-proven-pill.hippomemo-proven-no { color: var(--dsw-alias-state-warning-primary, #d97706); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-row-status.hippomemo-status-archived, [data-plugin="dsh-hippomemo"] .hippomemo-row-status.hippomemo-status-superseded { text-decoration: line-through; opacity: 0.55; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-row-date { flex: none; color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary)); opacity: 0.6; font-size: 12px; line-height: 18px; white-space: nowrap; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-row-actions { display: flex; align-items: center; gap: 2px; flex: none; padding: 0 6px; }',
