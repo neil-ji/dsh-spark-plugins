@@ -611,6 +611,7 @@ const ACTION_LABELS: Record<EvolveActionType, HippomemoLocaleKey> = {
   'cancel-probation': 'evolveActionCancelProbation',
   supersede: 'evolveActionSupersede',
   link: 'evolveActionLink',
+  'downgrade-scope': 'evolveActionDowngradeScope',
 }
 
 function EvolvePanel({ api, t }: { api: HippomemoApi; t: Translate }): ReactNode {

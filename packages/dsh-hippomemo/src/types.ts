@@ -228,6 +228,7 @@ export type EvolveActionType =
   | 'cancel-probation'
   | 'supersede'
   | 'link'
+  | 'downgrade-scope'
 
 /** One planned/executed evolution action. */
 export interface EvolveAction {

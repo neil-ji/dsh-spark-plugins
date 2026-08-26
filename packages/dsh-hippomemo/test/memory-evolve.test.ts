@@ -25,6 +25,8 @@ function record(partial: Partial<MemoryRecord> & { id: string; title: string }):
     tags: [],
     scope: 'global',
     workspacePath: null,
+    globalProven: false,
+    seenWorkspaces: [],
     importance: 0.8,
     status: 'active',
     sourceSessionId: 's',
@@ -160,6 +162,22 @@ test('maxConsolidations bounds the pairing work', () => {
   const actions = planEvolution(records, options)
   const consolidations = actions.filter(action => action.action === 'supersede' || action.action === 'link')
   assert.ok(consolidations.length <= 1)
+})
+
+test('a declared global with only source-workspace evidence is downgraded to workspace', () => {
+  const actions = planEvolution([
+    record({ id: 'g', title: 'Global claim', recallCount: 8, citationCount: 0, scope: 'global', workspacePath: '/a', seenWorkspaces: ['/a'], globalProven: false }),
+    record({ id: 'k', title: 'Proven global', recallCount: 8, citationCount: 0, scope: 'global', workspacePath: '/a', seenWorkspaces: ['/a', '/b', '/c'], globalProven: true }),
+    record({ id: 'w', title: 'On its way', recallCount: 8, citationCount: 0, scope: 'global', workspacePath: '/a', seenWorkspaces: ['/a', '/b'], globalProven: false }),
+    record({ id: 'legacy', title: 'No evidence data', recallCount: 12, citationCount: 0, scope: 'global', workspacePath: '/a', seenWorkspaces: [], globalProven: false }),
+  ], BASE_OPTIONS)
+
+  const gActions = actionsBy(actions, 'g')
+  assert.equal(gActions.some(action => action.action === 'downgrade-scope'), true)
+  assert.equal(gActions.some(action => action.action === 'probation'), false)
+  assert.equal(actionsBy(actions, 'k').some(action => action.action === 'downgrade-scope'), false)
+  assert.equal(actionsBy(actions, 'w').some(action => action.action === 'downgrade-scope'), false)
+  assert.equal(actionsBy(actions, 'legacy').some(action => action.action === 'downgrade-scope'), false)
 })
 // ---- LLM review pass ----
 import { buildReviewPrompt, parseReviewVerdicts } from '../src/memory-evolve.ts'

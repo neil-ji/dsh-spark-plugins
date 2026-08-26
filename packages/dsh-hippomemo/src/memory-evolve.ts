@@ -232,6 +232,24 @@ export function planEvolution(records: readonly MemoryRecord[], options: EvolveO
     }
   }
 
+  // Pass C1: a declared global that never earned cross-workspace evidence is
+  // downgraded to workspace-bound (its workspacePath already carries the source).
+  // Only fire when the memory was surfaced in exactly one distinct workspace
+  // (its source) after enough recalls and age — a memory on its way to global
+  // (>=2 distinct workspaces) or a legitimate legacy record (no evidence data)
+  // is left alone. Downgrade under-recalls, which is the harmless direction.
+  for (const record of survivors) {
+    if (claimed.has(record.id)) continue
+    if (record.scope !== 'global' || record.globalProven === true) continue
+    if (record.expiresAt !== null && record.expiresAt !== undefined) continue
+    if (record.recallCount < options.decayMinRecalls) continue
+    if (now - record.createdAt < options.graceMs) continue
+    const seen = record.seenWorkspaces ?? []
+    if (seen.length !== 1) continue
+    claimed.add(record.id)
+    actions.push({ id: record.id, action: 'downgrade-scope', reason: 'declared global but surfaced only in its source workspace; no cross-workspace evidence' })
+  }
+
   // Pass C: probation for uncited noise not already handled above. Records
   // with a future expiresAt (already on probation, or an author-set TTL) are
   // never re-judged — pass A put them in survivors as "not judged again", so
@@ -500,6 +518,13 @@ async function applyActions(ctx: Context, actions: readonly EvolveAction[], reso
           if (a === undefined || b === undefined) break
           await ctx.memory.update(a.id, { relatedIds: [...new Set([...(a.relatedIds ?? []), b.id])].slice(0, 16) })
           await ctx.memory.update(b.id, { relatedIds: [...new Set([...(b.relatedIds ?? []), a.id])].slice(0, 16) })
+          break
+        }
+        case 'downgrade-scope': {
+          const record = ctx.memory.get(action.id)
+          if (record === undefined) break
+          if (record.scope !== 'global') break
+          await ctx.memory.update(action.id, { scope: 'workspace', globalProven: false })
           break
         }
       }
