@@ -17,7 +17,8 @@ import type {
 import type { FinanceAuditState } from './controller.ts'
 import type { FinanceKey } from './locales.ts'
 import { readFinancePrefs } from './persist.ts'
-import { Button } from 'dsh-ui-kit'
+import { BarChart, Button, DonutChart, TrendChart, CHART_PALETTE, OTHER_CHART_COLOR, niceCeil } from 'dsh-ui-kit'
+import type { ChartDatum } from 'dsh-ui-kit'
 import type { FinancePrefs } from './persist.ts'
 import css from './FinanceAuditSection.module.css'
 
@@ -45,14 +46,6 @@ function currencySymbol(currency: string): string {
   return CURRENCY_SYMBOLS[currency] ?? currency
 }
 
-/** Round up to a clean axis maximum (1 / 2 / 2.5 / 5 × 10^n) so gridlines land on round values. */
-function niceCeil(value: number): number {
-  if (value <= 0) return 1
-  const base = 10 ** Math.floor(Math.log10(value))
-  const factor = value / base
-  const step = factor <= 1 ? 1 : factor <= 2 ? 2 : factor <= 2.5 ? 2.5 : factor <= 5 ? 5 : 10
-  return step * base
-}
 
 /** Compact axis label for a micros value: currency symbol + up to two decimals. */
 function formatAxisLabel(micros: number, currency: string): string {
@@ -66,38 +59,6 @@ function dayShortLabel(day: string): string {
   return day.length >= 10 ? day.slice(5) : day
 }
 
-/**
- * Distinct hues per breakdown category. The design system only ships blue
- * (incl. the brand family), green, amber, red and neutrals, so two adjacent
- * categories were both blue (flash and pro were indistinguishable). This
- * categorical palette therefore uses literal hexes with maximal hue
- * separation — brand first, then complementary chart accents. The static
- * tokens are fixed colors anyway, so literals behave identically.
- */
-const PALETTE = [
-  '#4176e6', // dsw-static-deepseek-500 (brand)
-  '#22c55e', // dsw-static-green-500
-  '#f59e0b', // dsw-static-amber-500
-  '#ef4444', // dsw-static-red-500
-  '#8b5cf6', // violet chart accent
-  '#14b8a6', // teal chart accent
-  '#2563eb', // dsw-static-blue-600
-  '#e879f9', // fuchsia chart accent
-  '#fb923c', // orange chart accent
-  '#64748b', // slate chart accent
-]
-
-/** Aggregated "everything else" slice; deliberately muted. */
-const OTHER_COLOR = '#65676b'
-
-/** Peak-hour bars / peak segment of the peak-valley split (amber). */
-const PEAK_COLOR = '#f59e0b'
-/** Off-peak bars / off-peak segment (brand blue). */
-const OFFPEAK_COLOR = '#4176e6'
-/** Flat-rate (no window schedule) bars / segment (slate). */
-const FLAT_COLOR = '#64748b'
-/** Pre-window-era sessions, billed at the flat rate (lighter slate). */
-const LEGACY_COLOR = '#94a3b8'
 
 /**
  * Format an epoch moment as Beijing time (UTC+8), the DeepSeek peak/off-peak
@@ -145,31 +106,20 @@ interface BreakdownSource {
   color?: string
 }
 
-interface BreakdownDatum {
-  key: string
-  label: string
-  costMicros: number
-  /** Share of the total cost, 0-100. */
-  percent: number
-  color: string
-  detail?: string
-}
-
 /**
  * Sort a cost breakdown by cost (descending), keep the top `limit` entries and
  * fold the remainder into a single "Other" row so a handful of slices stay
  * legible. Every entry keeps its share of the total.
  */
-function buildBreakdown(sources: readonly BreakdownSource[], limit: number, t: (key: FinanceKey) => string): BreakdownDatum[] {
+function buildBreakdown(sources: readonly BreakdownSource[], limit: number, t: (key: FinanceKey) => string): ChartDatum[] {
   const sorted = [...sources].sort((a, b) => b.costMicros - a.costMicros)
   const total = sorted.reduce((sum, row) => sum + row.costMicros, 0)
   const rest = sorted.slice(limit)
   const data = sorted.slice(0, limit).map((row, i) => ({
     key: row.key,
     label: row.label,
-    costMicros: row.costMicros,
-    percent: total === 0 ? 0 : row.costMicros / total * 100,
-    color: row.color ?? PALETTE[i % PALETTE.length],
+    value: row.costMicros,
+    color: row.color ?? CHART_PALETTE[i % CHART_PALETTE.length],
     detail: row.detail,
   }))
   if (rest.length > 0) {
@@ -178,59 +128,22 @@ function buildBreakdown(sources: readonly BreakdownSource[], limit: number, t: (
     data.push({
       key: '__other__',
       label: t('other'),
-      costMicros: restCost,
-      percent: total === 0 ? 0 : restCost / total * 100,
-      color: OTHER_COLOR,
+      value: restCost,
+      color: OTHER_CHART_COLOR,
       detail: rest[0].value2Label !== undefined && secondary > 0 ? `${secondary} ${rest[0].value2Label}` : undefined,
     })
   }
   return data
 }
 
-interface ChartHover {
-  index: number
-  /** Pointer position relative to the chart container. */
-  x: number
-  y: number
-  /** Container size, used to clamp the tooltip into view. */
-  w: number
-  h: number
-}
-
-/**
- * Shared hover state for the breakdown charts. Coordinates are measured
- * relative to the chart container (NOT the viewport) and the tooltip is
- * absolutely positioned inside it: position:fixed with viewport coords is
- * broken when the settings surface lives under a transformed ancestor, which
- * offsets every tooltip out of sight.
- */
-function useChartHover() {
-  const [hover, setHover] = useState<ChartHover | null>(null)
-  const wrapRef = useRef<HTMLDivElement | null>(null)
-  const move = useCallback((index: number) => (event: { clientX: number; clientY: number }) => {
-    const rect = wrapRef.current?.getBoundingClientRect()
-    if (!rect) return
-    setHover({ index, x: event.clientX - rect.left, y: event.clientY - rect.top, w: rect.width, h: rect.height })
-  }, [])
-  const leave = useCallback(() => setHover(null), [])
-  return { hover, wrapRef, move, leave }
-}
-
-/** Pointer-following tooltip shared by the breakdown charts. */
-function ChartTip({ row, currency, x, y, w, h }: { row: BreakdownDatum; currency: string; x: number; y: number; w: number; h: number }) {
-  const width = 240
-  const height = row.detail === undefined ? 54 : 74
-  // Prefer above the cursor, flip below near the top; clamp to the chart bounds.
-  const left = Math.max(4, Math.min(x + 12, w - width - 4))
-  const top = y - height - 12 >= 4 ? y - height - 12 : Math.max(4, Math.min(y + 16, h - height - 4))
-  return (
-    <div className={css.tip} role="tooltip" style={{ left, top }}>
-      <div className={css.tipTitle}>{row.label}</div>
-      <div className={css.tipCost}>{formatMicros(row.costMicros, currency)} · {row.percent.toFixed(1)}%</div>
-      {row.detail === undefined ? null : <div className={css.tipDetail}>{row.detail}</div>}
-    </div>
-  )
-}
+/** Peak-hour bars / peak segment of the peak-valley split (amber). */
+const PEAK_COLOR = '#f59e0b'
+/** Off-peak bars / off-peak segment (brand blue). */
+const OFFPEAK_COLOR = '#4176e6'
+/** Flat-rate (no window schedule) bars / segment (slate). */
+const FLAT_COLOR = '#64748b'
+/** Pre-window-era sessions, billed at the flat rate (lighter slate). */
+const LEGACY_COLOR = '#94a3b8'
 
 function KpiCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
@@ -287,263 +200,6 @@ function BalanceGauge({ balance, peak, spentMicros, currency, t }: {
         <span>{t('spent')} {formatMicros(spentMicros, currency)}</span>
       </div>
     </section>
-  )
-}
-
-const DONUT_SIZE = 132
-const DONUT_R = 50
-const DONUT_STROKE = 17
-
-/**
- * SVG donut of the cost breakdown: one ring segment per category in its own
- * hue, total cost in the hole, hover tooltip, and a synced legend showing each
- * category's share and cost. Mirrors the trend chart's interactivity.
- */
-function Donut({ rows, currency, ariaLabel, t }: {
-  rows: readonly BreakdownDatum[]
-  currency: string
-  ariaLabel: string
-  t: (key: FinanceKey) => string
-}) {
-  const { hover, wrapRef, move, leave } = useChartHover()
-  const center = DONUT_SIZE / 2
-  const circumference = 2 * Math.PI * DONUT_R
-  const total = rows.reduce((sum, row) => sum + row.costMicros, 0)
-  let cursor = 0
-  const segments = rows.map(row => {
-    const fraction = total === 0 ? 0 : row.costMicros / total
-    const segment = { ...row, start: cursor, fraction }
-    cursor += fraction
-    return segment
-  })
-
-  if (rows.length === 0) return <div className={css.empty}>{t('empty')}</div>
-
-  return (
-    <div ref={wrapRef} className={css.donutWrap} onPointerLeave={leave}>
-      <svg
-        width={DONUT_SIZE}
-        height={DONUT_SIZE}
-        viewBox={`0 0 ${DONUT_SIZE} ${DONUT_SIZE}`}
-        className={css.donut}
-        role="img"
-        aria-label={ariaLabel}
-      >
-        <circle cx={center} cy={center} r={DONUT_R} fill="none" className={css.donutTrack} />
-        {segments.map((segment, i) => (
-          <circle
-            key={segment.key}
-            cx={center}
-            cy={center}
-            r={DONUT_R}
-            fill="none"
-            style={{ stroke: segment.color }}
-            strokeWidth={DONUT_STROKE}
-            strokeDasharray={`${Math.max(0, segment.fraction * circumference - 1.5)} ${circumference}`}
-            strokeDashoffset={-segment.start * circumference}
-            transform={`rotate(-90 ${center} ${center})`}
-            className={hover === null || hover.index === i ? css.donutSeg : `${css.donutSeg} ${css.donutSegDim}`}
-            onPointerMove={move(i)}
-          />
-        ))}
-        <text x={center} y={center - 1} textAnchor="middle" className={css.donutCenterValue}>
-          {formatAxisLabel(total, currency)}
-        </text>
-        <text x={center} y={center + 13} textAnchor="middle" className={css.donutCenterLabel}>
-          {t('trendTotal')}
-        </text>
-      </svg>
-      <div className={css.donutLegend}>
-        {segments.map((segment, i) => (
-          <div
-            key={segment.key}
-            className={hover !== null && hover.index === i ? `${css.legendRow} ${css.legendRowActive}` : css.legendRow}
-            onPointerMove={move(i)}
-          >
-            <span className={css.legendSwatch} style={{ background: segment.color }} />
-            <span className={css.legendLabel} title={segment.label}>{segment.label}</span>
-            <span className={css.legendPercent}>{segment.percent.toFixed(1)}%</span>
-            <span className={css.legendValue}>{formatMicros(segment.costMicros, currency)}</span>
-          </div>
-        ))}
-      </div>
-      {hover === null ? null : <ChartTip row={segments[hover.index]} currency={currency} x={hover.x} y={hover.y} w={hover.w} h={hover.h} />}
-    </div>
-  )
-}
-
-/**
- * Horizontal bar breakdown with a value axis and gridlines: bars scale to the
- * largest category, each carries its share and cost, and hovering any row pops
- * a pointer-following tooltip. Mirrors the trend chart's axes and tooltip.
- */
-function CostBars({ rows, currency, t }: { rows: readonly BreakdownDatum[]; currency: string; t: (key: FinanceKey) => string }) {
-  const { hover, wrapRef, move, leave } = useChartHover()
-  const maxCost = rows.reduce((max, row) => Math.max(max, row.costMicros), 0)
-
-  if (rows.length === 0) return <div className={css.empty}>{t('empty')}</div>
-
-  return (
-    <div ref={wrapRef} className={css.bars} onPointerLeave={leave}>
-      <div className={css.barsPlot}>
-        <div className={css.barsGrid} aria-hidden="true">
-          {[0.25, 0.5, 0.75].map(fraction => (
-            <div key={fraction} className={css.barsGridLine} style={{ left: `${fraction * 100}%` }} />
-          ))}
-        </div>
-        {rows.map((row, i) => (
-          <div
-            key={row.key}
-            className={hover !== null && hover.index !== i ? `${css.barRow} ${css.barRowDim}` : css.barRow}
-            onPointerMove={move(i)}
-          >
-            <div className={css.barHead}>
-              <span className={css.barLabel} title={row.label}>{row.label}</span>
-              <span className={css.barMeta}>
-                <span className={css.barPercent}>{row.percent.toFixed(1)}%</span>
-                <span className={css.barValue}>{formatMicros(row.costMicros, currency)}</span>
-              </span>
-            </div>
-            <div className={css.barTrack}>
-              <div
-                className={css.barFill}
-                style={{
-                  width: `${maxCost === 0 ? 0 : Math.max(row.costMicros / maxCost * 100, row.costMicros === 0 ? 0 : 2)}%`,
-                  background: row.color,
-                }}
-              />
-            </div>
-          </div>
-        ))}
-      </div>
-      {maxCost === 0 ? null : (
-        <div className={css.barsAxis} aria-hidden="true">
-          {[0, 0.25, 0.5, 0.75, 1].map(fraction => (
-            <span key={fraction} className={css.barsAxisLabel} style={{ left: `${fraction * 100}%` }}>
-              {formatAxisLabel(maxCost * fraction, currency)}
-            </span>
-          ))}
-        </div>
-      )}
-      {hover === null ? null : <ChartTip row={rows[hover.index]} currency={currency} x={hover.x} y={hover.y} w={hover.w} h={hover.h} />}
-    </div>
-  )
-}
-
-const TREND_W = 640
-const TREND_H = 220
-const TREND_PAD = { top: 14, right: 10, bottom: 30, left: 50 }
-
-function Trend({ ledger, t }: { ledger: FinanceLedger; t: (key: FinanceKey) => string }) {
-  const rows = useMemo(() => ledger.byDay.slice(-30), [ledger])
-  const [hover, setHover] = useState<number | null>(null)
-
-  const plotW = TREND_W - TREND_PAD.left - TREND_PAD.right
-  const plotH = TREND_H - TREND_PAD.top - TREND_PAD.bottom
-  const baseY = TREND_PAD.top + plotH
-
-  const geometry = useMemo(() => {
-    if (rows.length < 2) return null
-    const yMax = niceCeil(Math.max(...rows.map(row => row.costMicros), 1))
-    const xs = rows.map((_, i) => TREND_PAD.left + i / (rows.length - 1) * plotW)
-    const ys = rows.map(row => baseY - row.costMicros / yMax * plotH)
-    const points = rows.map((_, i) => `${xs[i]},${ys[i]}`).join(' ')
-    const area = `M ${xs[0]},${baseY} L ${rows.map((_, i) => `${xs[i]},${ys[i]}`).join(' L ')} L ${xs[xs.length - 1]},${baseY} Z`
-    let peakIndex = 0
-    rows.forEach((row, i) => { if (row.costMicros > rows[peakIndex].costMicros) peakIndex = i })
-    // 4 intervals -> 5 gridlines including the baseline.
-    const yTicks = Array.from({ length: 5 }, (_, i) => ({ value: yMax * i / 4, y: baseY - plotH * i / 4 }))
-    const labelCount = Math.min(5, rows.length)
-    const xTicks = [...new Set(Array.from({ length: labelCount }, (_, i) => Math.round((rows.length - 1) * i / (labelCount - 1))))]
-    return { xs, ys, points, area, yMax, peakIndex, yTicks, xTicks }
-  }, [rows])
-
-  if (geometry === null) return <div className={css.empty}>{t('empty')}</div>
-
-  const { xs, ys, points, area, peakIndex, yTicks, xTicks } = geometry
-  const currency = ledger.currency
-  const totalMicros = rows.reduce((sum, row) => sum + row.costMicros, 0)
-
-  let tip: ReactNode = null
-  if (hover !== null) {
-    const x = xs[hover]
-    const y = ys[hover]
-    const tipW = 128
-    const tipH = 38
-    const tx = Math.max(TREND_PAD.left, Math.min(TREND_W - TREND_PAD.right - tipW, x - tipW / 2))
-    const ty = y - 14 - tipH >= TREND_PAD.top ? y - 14 - tipH : y + 14
-    tip = (
-      <g pointerEvents="none">
-        <line x1={x} y1={TREND_PAD.top} x2={x} y2={baseY} className={css.trendGuide} />
-        <rect x={tx} y={ty} width={tipW} height={tipH} rx={6} className={css.trendTip} />
-        <text x={tx + 10} y={ty + 15} className={css.trendTipDate}>{rows[hover].day}</text>
-        <text x={tx + 10} y={ty + 30} className={css.trendTipCost}>{formatMicros(rows[hover].costMicros, currency)}</text>
-      </g>
-    )
-  }
-
-  return (
-    <div className={css.trendWrap}>
-      <div className={css.trendStats}>
-        <span>{t('trendRange')} {rows.length} {t('trendDaysUnit')}</span>
-        <span>{t('trendTotal')} {formatMicros(totalMicros, currency)}</span>
-        <span>{t('trendAvg')} {formatMicros(Math.round(totalMicros / rows.length), currency)}</span>
-      </div>
-      <svg className={css.trend} viewBox={`0 0 ${TREND_W} ${TREND_H}`} role="img" aria-label={t('byDay')}>
-        <defs>
-          <linearGradient id="dsh-finance-trend-grad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--dsw-static-deepseek-500)" stopOpacity="0.3" />
-            <stop offset="100%" stopColor="var(--dsw-static-deepseek-500)" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        {yTicks.map(tick => (
-          <g key={tick.value}>
-            <line x1={TREND_PAD.left} y1={tick.y} x2={TREND_W - TREND_PAD.right} y2={tick.y} className={css.trendGrid} />
-            <text x={TREND_PAD.left - 8} y={tick.y + 3.5} textAnchor="end" className={css.trendAxis}>
-              {formatAxisLabel(tick.value, currency)}
-            </text>
-          </g>
-        ))}
-        <line x1={TREND_PAD.left} y1={baseY} x2={TREND_W - TREND_PAD.right} y2={baseY} className={css.trendAxisBase} />
-        {xTicks.map(index => (
-          <g key={index}>
-            <line x1={xs[index]} y1={baseY} x2={xs[index]} y2={baseY + 4} className={css.trendGrid} />
-            <text x={xs[index]} y={baseY + 18} textAnchor="middle" className={css.trendAxis}>
-              {dayShortLabel(rows[index].day)}
-            </text>
-          </g>
-        ))}
-        <path d={area} className={css.trendArea} />
-        <polyline points={points} className={css.trendLine} fill="none" vectorEffect="non-scaling-stroke" />
-        {xs.map((x, i) => (
-          <circle
-            key={rows[i].day}
-            cx={x}
-            cy={ys[i]}
-            r={i === peakIndex ? 4.2 : 3}
-            className={i === peakIndex ? `${css.trendDot} ${css.trendDotPeak}` : css.trendDot}
-            vectorEffect="non-scaling-stroke"
-          />
-        ))}
-        {tip}
-        <rect
-          x={0}
-          y={0}
-          width={TREND_W}
-          height={TREND_H}
-          fill="transparent"
-          pointerEvents="all"
-          className={css.trendOverlay}
-          onPointerMove={(event) => {
-            const rect = event.currentTarget.getBoundingClientRect()
-            const px = (event.clientX - rect.left) / rect.width * TREND_W
-            const index = Math.round((px - TREND_PAD.left) / plotW * (rows.length - 1))
-            setHover(Math.max(0, Math.min(rows.length - 1, index)))
-          }}
-          onPointerLeave={() => setHover(null)}
-        />
-      </svg>
-    </div>
   )
 }
 
@@ -881,13 +537,13 @@ function FinanceReady({ overview, peak, t, refresh }: {
   const split = ledger.peakValley
   const legacyCost = split?.legacyCostMicros ?? 0
   const splitRows = useMemo(() => {
-    if (split === undefined) return [] as BreakdownDatum[]
+    if (split === undefined) return [] as ChartDatum[]
     const sources: BreakdownSource[] = []
     if (legacyCost > 0) sources.push({ key: 'legacy', label: t('legacySessions'), costMicros: legacyCost, color: LEGACY_COLOR })
     if (split.peakCostMicros > 0) sources.push({ key: 'peak', label: t('peakBand'), costMicros: split.peakCostMicros, color: PEAK_COLOR })
     if (split.offPeakCostMicros > 0) sources.push({ key: 'offpeak', label: t('offPeak'), costMicros: split.offPeakCostMicros, color: OFFPEAK_COLOR })
     if (split.flatCostMicros > 0) sources.push({ key: 'flat', label: t('flat'), costMicros: split.flatCostMicros, color: FLAT_COLOR })
-    if (split.unclassifiedCostMicros > 0) sources.push({ key: 'unclassified', label: t('unclassified'), costMicros: split.unclassifiedCostMicros, color: OTHER_COLOR })
+    if (split.unclassifiedCostMicros > 0) sources.push({ key: 'unclassified', label: t('unclassified'), costMicros: split.unclassifiedCostMicros, color: OTHER_CHART_COLOR })
     return buildBreakdown(sources, 5, t)
   }, [split, legacyCost, t])
 
@@ -942,7 +598,13 @@ function FinanceReady({ overview, peak, t, refresh }: {
                 <span title={t('shiftSavingsHint')}>{t('shiftSavings')} {formatMicros(split.shiftSavingsMicros, ledger.currency)}</span>
                 {shiftPct === null ? null : <span title={t('shiftSavingsHint')}>{t('shiftSavingsOfPeak')} {shiftPct}%</span>}
               </div>
-              <Donut rows={splitRows} currency={ledger.currency} ariaLabel={t('peakValleySplit')} t={t} />
+              <DonutChart
+                rows={splitRows}
+                centerValue={formatAxisLabel(splitRows.reduce((sum, row) => sum + row.value, 0), ledger.currency)}
+                centerLabel={t('trendTotal')}
+                ariaLabel={t('peakValleySplit')}
+                formatValue={(value) => formatMicros(value, ledger.currency)}
+              />
               {topShiftHours.length === 0 ? null : (
                 <div className={css.shiftSavingsTop} title={t('shiftSavingsHint')}>
                   <span className={css.shiftSavingsTopLabel}>{t('shiftSavingsTop')}</span>
@@ -971,7 +633,13 @@ function FinanceReady({ overview, peak, t, refresh }: {
                 <span>{ledger.byModel.length} {t('modelCountUnit')}</span>
                 <span>{t('trendTotal')} {formatMicros(ledger.totalCostMicros, ledger.currency)}</span>
               </div>
-              <Donut rows={modelRows} currency={ledger.currency} ariaLabel={t('byModel')} t={t} />
+              <DonutChart
+                rows={modelRows}
+                centerValue={formatAxisLabel(modelRows.reduce((sum, row) => sum + row.value, 0), ledger.currency)}
+                centerLabel={t('trendTotal')}
+                ariaLabel={t('byModel')}
+                formatValue={(value) => formatMicros(value, ledger.currency)}
+              />
             </section>
           ) : null}
           {charts.byWorkspace ? (
@@ -981,13 +649,30 @@ function FinanceReady({ overview, peak, t, refresh }: {
                 <span>{ledger.byWorkspace.length} {t('workspaceCountUnit')}</span>
                 <span>{t('trendTotal')} {formatMicros(ledger.totalCostMicros, ledger.currency)}</span>
               </div>
-              <CostBars rows={workspaceRows} currency={ledger.currency} t={t} />
+              <BarChart
+                rows={workspaceRows}
+                ariaLabel={t('byWorkspace')}
+                formatValue={(value) => formatMicros(value, ledger.currency)}
+                axisFormatter={(value) => formatAxisLabel(value, ledger.currency)}
+              />
             </section>
           ) : null}
           {charts.byDay ? (
             <section className={css.cardWide}>
               <div className={css.cardTitle}>{t('byDay')}</div>
-              <Trend ledger={ledger} t={t} />
+              <div className={css.trendWrap}>
+                <div className={css.trendStats}>
+                  <span>{t('trendRange')} {ledger.byDay.length} {t('trendDaysUnit')}</span>
+                  <span>{t('trendTotal')} {formatMicros(ledger.byDay.reduce((sum, row) => sum + row.costMicros, 0), ledger.currency)}</span>
+                  <span>{t('trendAvg')} {formatMicros(Math.round(ledger.byDay.reduce((sum, row) => sum + row.costMicros, 0) / Math.max(1, ledger.byDay.length)), ledger.currency)}</span>
+                </div>
+                <TrendChart
+                  points={ledger.byDay.slice(-30).map(row => ({ key: row.day, label: dayShortLabel(row.day), value: row.costMicros }))}
+                  ariaLabel={t('byDay')}
+                  formatValue={(value) => formatAxisLabel(value, ledger.currency)}
+                  gradientId="dsh-finance-trend-grad"
+                />
+              </div>
             </section>
           ) : null}
         </div>

@@ -237,6 +237,14 @@
   opacity: 0.72;
 }
 
+.empty {
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+  opacity: 0.66;
+  font-size: 12px;
+  line-height: 18px;
+  padding: 12px 0;
+}
+
 .status {
   display: flex;
   flex-direction: column;
@@ -292,180 +300,31 @@
   line-height: 18px;
 }
 
-.empty {
-  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
-  opacity: 0.66;
-  font-size: 12px;
-  line-height: 18px;
-  padding: 12px 0;
-}
 
-.bars {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
 
-.barsPlot {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
 
-.barsGrid {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
 
-.barsGridLine {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: var(--dsw-alias-border-l1);
-}
 
-.barsAxis {
-  position: relative;
-  height: 16px;
-  margin-top: 2px;
-}
 
-.barsAxisLabel {
-  position: absolute;
-  top: 0;
-  transform: translateX(-50%);
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 10px;
-  line-height: 16px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
 
-.barRow {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  transition: opacity 0.15s ease;
-}
 
-.barRowDim {
-  opacity: 0.45;
-}
 
-.barHead {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  font-size: 12px;
-  line-height: 18px;
-}
 
-.barLabel {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--dsw-alias-label-primary);
-}
 
-.barMeta {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 10px;
-}
 
-.barPercent {
-  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
-  opacity: 0.72;
-  font-variant-numeric: tabular-nums;
-}
 
-.barValue {
-  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
-  opacity: 0.72;
-}
 
-.barTrack {
-  height: 6px;
-  border-radius: 999px;
-  background: var(--dsw-alias-interactive-bg-hover);
-  overflow: hidden;
-}
 
-.barFill {
-  height: 100%;
-  border-radius: inherit;
-  background: var(--dsw-static-deepseek-500);
-  transition: width 0.2s ease;
-}
 
-.donutWrap {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
 
-.donut {
-  width: 132px;
-  height: 132px;
-  flex: none;
-}
 
-.donutTrack {
-  stroke: var(--dsw-alias-interactive-bg-hover);
-}
 
-.donutSeg {
-  cursor: pointer;
-  transition: opacity 0.15s ease;
-}
 
-.donutSegDim {
-  opacity: 0.28;
-}
 
-.donutCenterValue {
-  fill: var(--dsw-alias-label-primary);
-  font-size: 13px;
-  line-height: 16px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
 
-.donutCenterLabel {
-  fill: var(--dsw-alias-label-tertiary);
-  font-size: 10px;
-  line-height: 14px;
-}
 
-.donutLegend {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-  flex: 1;
-}
 
-.legendRow {
-  display: grid;
-  grid-template-columns: 8px minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  line-height: 18px;
-  border-radius: 6px;
-  padding: 2px 4px;
-  margin: -2px -4px;
-  cursor: pointer;
-}
 
-.legendRowActive {
-  background: var(--dsw-alias-interactive-bg-hover);
-}
 
 .legendSwatch {
   width: 8px;
@@ -474,23 +333,8 @@
   background: var(--dsw-static-deepseek-500);
 }
 
-.legendLabel {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--dsw-alias-label-primary);
-}
 
-.legendPercent {
-  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
-  opacity: 0.72;
-  font-variant-numeric: tabular-nums;
-}
 
-.legendValue {
-  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
-  opacity: 0.72;
-}
 
 /* Hour-of-day cost bars (peak/off-peak visualization). */
 .hodBar {
@@ -562,29 +406,9 @@
   stroke-width: 1;
 }
 
-.trendArea {
-  fill: url(#dsh-finance-trend-grad);
-}
 
-.trendLine {
-  stroke: var(--dsw-static-deepseek-500);
-  stroke-width: 2;
-  stroke-linejoin: round;
-  stroke-linecap: round;
-  fill: none;
-  vector-effect: non-scaling-stroke;
-}
 
-.trendDot {
-  fill: var(--dsw-static-deepseek-500);
-  stroke: var(--dsw-alias-bg-layer-2);
-  stroke-width: 1.5;
-  vector-effect: non-scaling-stroke;
-}
 
-.trendDotPeak {
-  fill: var(--dsw-static-deepseek-400);
-}
 
 .trendAxis {
   fill: var(--dsw-alias-label-tertiary);
@@ -629,45 +453,9 @@
    absolutely inside the chart container (which is position: relative) because
    position:fixed with viewport coordinates is offset when the settings surface
    sits under a transformed ancestor. */
-.tip {
-  position: absolute;
-  z-index: 1000;
-  max-width: 240px;
-  background: var(--dsw-alias-tooltip-bg);
-  border: 1px solid var(--dsw-alias-border-l3);
-  border-radius: 8px;
-  padding: 8px 10px;
-  box-shadow: 0 4px 16px rgb(0 0 0 / 14%);
-  /* Dark plate in both themes: text stays light, never theme-flipping labels. */
-  color: var(--dsw-static-neutral-bluish-00);
-  pointer-events: none;
-}
 
-.tipTitle {
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--dsw-static-neutral-bluish-00);
-  font-size: 12px;
-  line-height: 16px;
-  font-weight: 600;
-}
 
-.tipCost {
-  margin-top: 2px;
-  color: var(--dsw-static-neutral-bluish-00);
-  font-size: 12px;
-  line-height: 16px;
-  font-variant-numeric: tabular-nums;
-}
 
-.tipDetail {
-  margin-top: 2px;
-  color: var(--dsw-static-neutral-bluish-300);
-  font-size: 11px;
-  line-height: 15px;
-}
 
 /* View preferences: layout segmented control + per-chart visibility chips. */
 .prefsBar {
