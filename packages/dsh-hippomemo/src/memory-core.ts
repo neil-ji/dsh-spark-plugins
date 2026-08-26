@@ -101,6 +101,13 @@ export function splitTags(value: string): string[] {
   return [...new Set(value.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0))].slice(0, 32)
 }
 
+/** Seed a record's seen-workspaces with its source workspace (deduped, capped). */
+function seedWorkspaces(existing: string[], sourceWorkspace: string | null): string[] {
+  const out = [...new Set(existing)]
+  if (sourceWorkspace !== null && sourceWorkspace.length > 0 && out.includes(sourceWorkspace) === false) out.push(sourceWorkspace)
+  return out.slice(0, 64)
+}
+
 /** Fill usage counters on records that predate the analytics fields (or are otherwise partial). */
 function completeRecord(record: MemoryRecord): MemoryRecord {
   if (record.searchTerms === undefined) record.searchTerms = []
@@ -109,6 +116,7 @@ function completeRecord(record: MemoryRecord): MemoryRecord {
   if (record.citationCount === undefined) record.citationCount = 0
   if (record.lastCitedAt === undefined) record.lastCitedAt = null
   if (record.globalProven === undefined) record.globalProven = false
+  if (record.seenWorkspaces === undefined) record.seenWorkspaces = []
   return record
 }
 
@@ -192,6 +200,7 @@ export function normalizeRecord(input: MemoryPutInput, previous?: MemoryRecord, 
     scope: input.scope ?? previous?.scope ?? 'workspace',
     workspacePath: input.workspacePath === undefined ? previous?.workspacePath ?? null : input.workspacePath,
     globalProven: input.globalProven ?? previous?.globalProven ?? false,
+    seenWorkspaces: seedWorkspaces(input.seenWorkspaces ?? previous?.seenWorkspaces ?? [], input.workspacePath === undefined ? previous?.workspacePath ?? null : input.workspacePath),
     importance: clampImportance(input.importance ?? previous?.importance ?? 0.5),
     status: input.status ?? previous?.status ?? 'active',
     sourceSessionId: input.sourceSessionId ?? previous?.sourceSessionId ?? 'user',
@@ -408,16 +417,32 @@ export class MemoryCore {
   }
 
   /** Bump exposure counters for recalled ids; returns the mutated records (persistence is the caller's job). */
-  markRecalled(ids: Iterable<MemoryId>, at: number = this.deps.now()): MemoryRecord[] {
+  markRecalled(ids: Iterable<MemoryId>, at: number = this.deps.now(), workspacePath?: string): MemoryRecord[] {
     const changed: MemoryRecord[] = []
     for (const id of ids) {
       const record = this.records.get(id)
       if (record === undefined) continue
       record.recallCount = (record.recallCount ?? 0) + 1
       record.lastRecalledAt = at
+      this.observeWorkspace(record, workspacePath)
       changed.push(record)
     }
     return changed
+  }
+
+  /** Record one workspace where a memory was surfaced; auto-confirm a declared
+   * global once it has been surfaced in enough distinct workspaces (source + 2). */
+  private observeWorkspace(record: MemoryRecord, workspacePath?: string): void {
+    if (workspacePath === undefined || workspacePath === null || workspacePath.length === 0) return
+    if (record.seenWorkspaces === undefined) record.seenWorkspaces = []
+    if (record.seenWorkspaces.includes(workspacePath)) return
+    record.seenWorkspaces.push(workspacePath)
+    // Auto-promote only with strong cross-workspace evidence (>=3 distinct
+    // workspaces). A mislabeled global is gated from injection in other
+    // workspaces, so it can never reach this bar on its own.
+    if (record.scope === 'global' && record.globalProven !== true && record.seenWorkspaces.length >= 3) {
+      record.globalProven = true
+    }
   }
 
   /** Bump citation counters for one memory; returns the record when it exists. */

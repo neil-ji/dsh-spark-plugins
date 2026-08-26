@@ -491,3 +491,34 @@ test('auto-injection gate: unproven global under-recalls, never pollutes', () =>
   assert.equal(filtered.length, 1)
   assert.equal(filtered[0].record.id, 'proven')
 })
+
+test('cross-workspace recall accumulates evidence and auto-confirms a global', () => {
+  const core = makeCore()
+  const g = core.put(input('Shared pref', 'cross workspace tokens', { scope: 'global', workspacePath: '/a' }))
+  assert.equal(g.globalProven, false)
+  assert.deepEqual(g.seenWorkspaces, ['/a'])
+
+  // Surfaced only in its source workspace: still not proven.
+  core.markRecalled([g.id], 1000, '/a')
+  assert.equal(core.get(g.id).seenWorkspaces.length, 1)
+  assert.equal(core.get(g.id).globalProven, false)
+
+  // One more distinct workspace: evidence grows but the >=3 bar is not met.
+  core.markRecalled([g.id], 1001, '/b')
+  assert.equal(core.get(g.id).globalProven, false)
+
+  // A third distinct workspace auto-confirms the declared global.
+  core.markRecalled([g.id], 1002, '/c')
+  assert.equal(core.get(g.id).globalProven, true)
+
+  // A workspace-bound memory never auto-confirms, even across many workspaces.
+  const w = core.put(input('Local pref', 'local tokens', { scope: 'workspace', workspacePath: '/x' }))
+  core.markRecalled([w.id], 1003, '/x')
+  core.markRecalled([w.id], 1004, '/y')
+  core.markRecalled([w.id], 1005, '/z')
+  assert.equal(core.get(w.id).globalProven, false)
+
+  // Repeated recall in the same workspace does not double-count.
+  core.markRecalled([g.id], 1006, '/c')
+  assert.equal(core.get(g.id).seenWorkspaces.length, 3)
+})

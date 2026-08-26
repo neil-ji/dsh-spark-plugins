@@ -25,6 +25,8 @@ export interface MemoryRecord {
   workspacePath: string | null
   /** True only when cross-workspace reach is confirmed (explicit/human). Auto-scraped globals start false so a mislabel degrades to workspace-bound. */
   globalProven: boolean
+  /** Distinct workspaces where this memory has been surfaced (recall/cite), accumulating cross-workspace evidence for auto-confirming a global. */
+  seenWorkspaces: string[]
   importance: number
   status: MemoryStatus
   sourceSessionId: string
@@ -94,6 +96,7 @@ export interface MemoryPutInput {
   scope?: MemoryScope
   workspacePath?: string | null
   globalProven?: boolean
+  seenWorkspaces?: string[]
   importance?: number
   status?: MemoryStatus
   sourceSessionId?: string
@@ -121,6 +124,7 @@ export interface MemoryPatchInput {
   scope?: MemoryScope
   workspacePath?: string | null
   globalProven?: boolean
+  seenWorkspaces?: string[]
   importance?: number
   status?: MemoryStatus
   sourceAgentId?: string

@@ -112,7 +112,7 @@ export class MemoryService extends Service {
   search(query: MemoryListQuery = {}): MemorySearchResult {
     const result = this.core.search(query)
     if (result.items.length > 0) {
-      this.persistChanged(this.core.markRecalled(result.items.map(hit => hit.record.id)))
+      this.persistChanged(this.core.markRecalled(result.items.map(hit => hit.record.id), undefined, query.workspacePath))
     }
     return result
   }

@@ -24,6 +24,7 @@ const memoryRecord = z.object({
   scope: z.enum(['global', 'workspace', 'project']).default('global'),
   workspacePath: z.string().nullable().default(null),
   globalProven: z.boolean().default(false),
+  seenWorkspaces: z.array(z.string()).max(64).default([]),
   importance: z.number().min(0).max(1).default(0.5),
   status: z.enum(['active', 'archived', 'superseded', 'candidate']).default('active'),
   sourceSessionId: z.string().min(1),
