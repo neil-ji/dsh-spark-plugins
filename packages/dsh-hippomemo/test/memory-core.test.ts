@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { MemoryCore, normalizeRecord, splitTags, tokenize } from '../src/memory-core.ts'
+import { MemoryCore, normalizeRecord, splitTags, tokenize, isMemoryAutoInjectable, filterAutoInjection } from '../src/memory-core.ts'
 import type { MemoryPutInput, MemoryRecord } from '../src/types.ts'
 
 function makeCore(overrides: Partial<{ maxMemories: number; defaultRecallLimit: number; maxRecallChars: number }> = {}) {
@@ -454,4 +454,40 @@ test('core search updates searchTerms on revision and drops them on delete', () 
   assert.equal(core.search({ q: 'beta' }).total, 1)
   core.delete(record.id)
   assert.equal(core.search({ q: 'beta' }).total, 0)
+})
+
+test('auto-injection gate: unproven global under-recalls, never pollutes', () => {
+  const base = {
+    id: 'g', kind: 'fact' as const, title: 'G', content: 'c', tags: [], scope: 'global' as const,
+    workspacePath: '/a', globalProven: true, importance: 0.5, status: 'active' as const,
+    sourceSessionId: 's', revision: 1, updatedBy: 'system' as const, supersedes: null,
+    supersededBy: null, createdAt: 1, updatedAt: 1, expiresAt: null, relatedIds: [],
+    searchTerms: [], recallCount: 0, lastRecalledAt: null, citationCount: 0, lastCitedAt: null,
+  }
+  const proven = { ...base, id: 'proven' } as MemoryRecord
+  const unproven = { ...base, id: 'unproven', globalProven: false } as MemoryRecord
+  const local = { ...base, id: 'local', scope: 'workspace' as const, workspacePath: '/a', globalProven: false } as MemoryRecord
+
+  // In workspace /a: proven global, unproven global (bound to /a), and the /a workspace memory all inject.
+  assert.equal(isMemoryAutoInjectable(proven, '/a'), true)
+  assert.equal(isMemoryAutoInjectable(unproven, '/a'), true)
+  assert.equal(isMemoryAutoInjectable(local, '/a'), true)
+
+  // In the unrelated workspace /b: only the proven global injects — an unproven
+  // global degrades to workspace-bound and cannot pollute another workspace.
+  assert.equal(isMemoryAutoInjectable(proven, '/b'), true)
+  assert.equal(isMemoryAutoInjectable(unproven, '/b'), false)
+  assert.equal(isMemoryAutoInjectable(local, '/b'), false)
+
+  // No workspace supplied: only a proven global is injectable.
+  assert.equal(isMemoryAutoInjectable(proven, undefined), true)
+  assert.equal(isMemoryAutoInjectable(unproven, undefined), false)
+
+  const filtered = filterAutoInjection([
+    { record: proven, matchedReason: ['title'] },
+    { record: unproven, matchedReason: ['title'] },
+    { record: local, matchedReason: ['title'] },
+  ], '/b')
+  assert.equal(filtered.length, 1)
+  assert.equal(filtered[0].record.id, 'proven')
 })

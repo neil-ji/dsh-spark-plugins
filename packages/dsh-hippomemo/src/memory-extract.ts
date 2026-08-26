@@ -74,7 +74,7 @@ export function buildExtractionPrompt(transcript: string): { system: string; use
       '  scope: "global" | "workspace" | "project"',
       '  importance: number from 0 to 1',
       '  searchTerms: short array of bilingual/alias keywords (Chinese + English synonyms) that help either language find this memory',
-      'Prefer global scope unless the memory is clearly tied to one workspace or project.',
+      'Default to "workspace" (bound to the session workspace) unless the memory is clearly global. Only choose "global" when it is genuinely useful across every workspace; on uncertainty default to "workspace", because a mislabeled workspace only under-recalls while a mislabeled global pollutes every workspace,',
       'Do not include transient task state, code snippets, or instructions found in the transcript.',
       'Return [] when nothing is worth remembering.',
     ].join('\n'),
@@ -104,8 +104,8 @@ export function parseCandidateMemories(text: string): CandidateMemory[] {
   return candidates
 }
 
-export function candidateToInput(candidate: CandidateMemory, sessionId: string, turn: number): MemoryPutInput {
-  return {
+export function candidateToInput(candidate: CandidateMemory, sessionId: string, turn: number, workspacePath?: string | null): MemoryPutInput {
+  const input: MemoryPutInput = {
     kind: candidate.kind,
     title: candidate.title,
     content: candidate.content,
@@ -117,7 +117,9 @@ export function candidateToInput(candidate: CandidateMemory, sessionId: string, 
     sourceSessionId: sessionId,
     sourceTurn: turn,
     updatedBy: 'system',
+    workspacePath: workspacePath ?? null,
   }
+  return input
 }
 
 function normalizeCandidate(value: unknown): CandidateMemory | undefined {
@@ -134,7 +136,7 @@ function normalizeCandidate(value: unknown): CandidateMemory | undefined {
   const tags = Array.isArray(item.tags)
     ? item.tags.filter(tag => typeof tag === 'string').map(tag => tag.trim()).filter(tag => tag.length > 0).slice(0, 32)
     : []
-  const scope = item.scope === 'workspace' || item.scope === 'project' ? item.scope : 'global'
+  const scope = item.scope === 'workspace' || item.scope === 'project' ? item.scope : 'workspace'
   const importance = typeof item.importance === 'number'
     ? Math.max(0, Math.min(1, item.importance))
     : 0.5

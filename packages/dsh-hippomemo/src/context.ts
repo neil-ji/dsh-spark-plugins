@@ -11,6 +11,7 @@ import type { AssistantMessage, UserMessage } from '@deepseek-ai/dsh-llm'
 import type {} from './memory-service.ts'
 import type { MemoryRecord } from './types.ts'
 import { neutralizeFences } from './memory-extract.ts'
+import { filterAutoInjection } from './memory-core.ts'
 
 export const name = 'hippomemo-context'
 export const inject = ['agents', 'memory']
@@ -63,16 +64,21 @@ export function apply(ctx: Context, config: HippomemoContextConfig = {}): void {
     const query = firstUserText(messages)
     if (query.length === 0) return decision
 
+    // Anti-pollution gate: only a *proven* global, or a memory bound to this
+    // workspace, may be auto-injected. A stale/mislabeled global degrades to
+    // workspace-bound here so it cannot pollute an unrelated workspace.
+    const cwd = agent.session.header.cwd ?? undefined
     const result = ctx.memory.search({
       q: query,
       scope: 'current',
       status: 'active',
-      workspacePath: agent.session.header.cwd ?? undefined,
+      workspacePath: cwd,
       limit: recallLimit,
     })
 
-    if (result.items.length === 0) return decision
-    const recall = renderRecallMessage(query, result.items.map(hit => ({ record: hit.record, reason: hit.matchedReason })), maxRecallChars)
+    const injectable = filterAutoInjection(result.items, cwd)
+    if (injectable.length === 0) return decision
+    const recall = renderRecallMessage(query, injectable.map(hit => ({ record: hit.record, reason: hit.matchedReason })), maxRecallChars)
     if (recall === undefined) return decision
 
     // Track exactly the ids that were injected (renderRecallMessage may drop some on the byte budget).

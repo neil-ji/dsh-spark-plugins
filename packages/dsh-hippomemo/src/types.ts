@@ -23,6 +23,8 @@ export interface MemoryRecord {
   tags: string[]
   scope: MemoryScope
   workspacePath: string | null
+  /** True only when cross-workspace reach is confirmed (explicit/human). Auto-scraped globals start false so a mislabel degrades to workspace-bound. */
+  globalProven: boolean
   importance: number
   status: MemoryStatus
   sourceSessionId: string
@@ -91,6 +93,7 @@ export interface MemoryPutInput {
   tags?: string[]
   scope?: MemoryScope
   workspacePath?: string | null
+  globalProven?: boolean
   importance?: number
   status?: MemoryStatus
   sourceSessionId?: string
@@ -117,6 +120,7 @@ export interface MemoryPatchInput {
   tags?: string[]
   scope?: MemoryScope
   workspacePath?: string | null
+  globalProven?: boolean
   importance?: number
   status?: MemoryStatus
   sourceAgentId?: string

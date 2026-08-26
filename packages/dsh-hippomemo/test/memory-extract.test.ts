@@ -62,7 +62,7 @@ test('parseCandidateMemories normalizes scope and importance', () => {
   const candidates = parseCandidateMemories(JSON.stringify([
     { kind: 'constraint', title: 'X', content: 'Y', tags: ['a', 'a'], scope: 'other', importance: 2 },
   ]))
-  assert.equal(candidates[0].scope, 'global')
+  assert.equal(candidates[0].scope, 'workspace')
   assert.equal(candidates[0].importance, 1)
 })
 
@@ -75,6 +75,22 @@ test('candidateToInput writes candidate status and provenance', () => {
   assert.equal(input.sourceTurn, 3)
   assert.equal(input.updatedBy, 'system')
   assert.equal(input.scope, 'workspace')
+  assert.equal(input.workspacePath, null)
+})
+
+test('candidateToInput binds workspacePath and keeps out an unproven global', () => {
+  const bound = candidateToInput({
+    kind: 'insight', title: 'T', content: 'C', tags: ['t'], scope: 'workspace', importance: 0.7,
+  }, 'session-1', 4, '/ws/a')
+  assert.equal(bound.workspacePath, '/ws/a')
+
+  // Even a candidate the model labeled global must not be immediately proven,
+  // so it degrades to workspace-bound and cannot pollute other workspaces.
+  const globalCandidate = candidateToInput({
+    kind: 'insight', title: 'G', content: 'C', tags: ['t'], scope: 'global', importance: 0.7,
+  }, 'session-1', 5, '/ws/a')
+  assert.equal(globalCandidate.scope, 'global')
+  assert.equal(globalCandidate.globalProven, undefined)
 })
 
 test('isDirectUserMessage accepts only source.kind === "user"', () => {

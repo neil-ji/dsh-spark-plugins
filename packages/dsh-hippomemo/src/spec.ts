@@ -23,6 +23,7 @@ const memoryRecord = z.object({
   tags: z.array(z.string().min(1).max(50)).max(32).default([]),
   scope: z.enum(['global', 'workspace', 'project']).default('global'),
   workspacePath: z.string().nullable().default(null),
+  globalProven: z.boolean().default(false),
   importance: z.number().min(0).max(1).default(0.5),
   status: z.enum(['active', 'archived', 'superseded', 'candidate']).default('active'),
   sourceSessionId: z.string().min(1),

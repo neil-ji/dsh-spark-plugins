@@ -108,7 +108,31 @@ function completeRecord(record: MemoryRecord): MemoryRecord {
   if (record.lastRecalledAt === undefined) record.lastRecalledAt = null
   if (record.citationCount === undefined) record.citationCount = 0
   if (record.lastCitedAt === undefined) record.lastCitedAt = null
+  if (record.globalProven === undefined) record.globalProven = false
   return record
+}
+
+/**
+ * Anti-pollution gate for automatic recall injection.
+ *
+ * A memory may be auto-injected into a workspace only when it is a *proven*
+ * global (`scope === 'global'` and `globalProven`), or it is bound to that
+ * exact workspace (`workspacePath === cwd`). A memory declared `global` but
+ * not yet proven degrades to workspace-bound here, so a mislabeled or stale
+ * global can never be injected into an unrelated workspace — it only
+ * under-recalls, which is the harmless direction.
+ *
+ * Explicit searches (memory_search) intentionally keep the lenient behavior;
+ * this gate targets the automatic <system-reminder> recall injection.
+ */
+export function isMemoryAutoInjectable(record: MemoryRecord, workspacePath?: string): boolean {
+  if (record.scope === 'global' && record.globalProven === true) return true
+  return workspacePath !== undefined && record.workspacePath === workspacePath
+}
+
+/** Filter search hits down to the ones that may be auto-injected in `workspacePath`. */
+export function filterAutoInjection(items: MemorySearchHit[], workspacePath?: string): MemorySearchHit[] {
+  return items.filter(hit => isMemoryAutoInjectable(hit.record, workspacePath))
 }
 
 
@@ -161,8 +185,13 @@ export function normalizeRecord(input: MemoryPutInput, previous?: MemoryRecord, 
     title,
     content,
     tags: splitTags((input.tags ?? (previous !== undefined && Array.isArray(previous.tags) ? previous.tags : [])).join(',')),
-    scope: input.scope ?? previous?.scope ?? 'global',
+    // Default to workspace (bound to the source) rather than global, so an
+    // omitted scope never accidentally becomes an over-broad global. The
+    // auto-injection gate treats an unproven global as workspace-bound anyway;
+    // this keeps the stored label honest for explicit scope filters.
+    scope: input.scope ?? previous?.scope ?? 'workspace',
     workspacePath: input.workspacePath === undefined ? previous?.workspacePath ?? null : input.workspacePath,
+    globalProven: input.globalProven ?? previous?.globalProven ?? false,
     importance: clampImportance(input.importance ?? previous?.importance ?? 0.5),
     status: input.status ?? previous?.status ?? 'active',
     sourceSessionId: input.sourceSessionId ?? previous?.sourceSessionId ?? 'user',

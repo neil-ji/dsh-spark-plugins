@@ -85,6 +85,7 @@ function resolveConfig(config: HippomemoExtractorConfig = {}): ResolvedConfig {
 interface AgentLike {
   id: string
   session: {
+    header?: { cwd?: string }
     events: readonly {
       type: string
       data: any
@@ -96,6 +97,7 @@ interface PendingTurn {
   sessionId: string
   turn: number
   messages: TurnMessage[]
+  workspacePath?: string
 }
 
 /** Per-session capture buffer that defers LLM extraction off the turn path. */
@@ -152,7 +154,7 @@ class DeferredExtractor {
         this.buffers.set(sessionId, [])
         for (const entry of buffer) {
           try {
-            await extractCandidates(this.ctx, entry.sessionId, entry.turn, entry.messages, this.config)
+            await extractCandidates(this.ctx, entry.sessionId, entry.turn, entry.messages, entry.workspacePath, this.config)
           } catch (error) {
             this.ctx.logger.warn('hippomemo-extractor: candidate extraction failed: ' + String(error))
           }
@@ -195,7 +197,7 @@ export function apply(ctx: Context, config: HippomemoExtractorConfig = {}): void
   ctx.on('agent/turn-stopping', ({ agent, turn }) => {
     const messages = collectTurnMessagesFromAgent(agent, turn)
     if (messages.length === 0) return
-    extractor.enqueue(agent.id, { sessionId: agent.id, turn, messages })
+    extractor.enqueue(agent.id, { sessionId: agent.id, turn, messages, workspacePath: agent.session.header?.cwd ?? undefined })
   })
 
   ctx.on('agent/disposed', ({ agent }) => {
@@ -243,6 +245,7 @@ async function extractCandidates(
   sessionId: string,
   turn: number,
   messages: TurnMessage[],
+  workspacePath: string | undefined,
   config: ResolvedConfig,
 ): Promise<void> {
   const transcript = collectTurnMessages(messages)
@@ -275,6 +278,6 @@ async function extractCandidates(
   const text = extractTextFromBlocks(assembler.blocks())
   const candidates = parseCandidateMemories(text).slice(0, config.maxCandidatesPerTurn)
   for (const candidate of candidates) {
-    await ctx.memory.put(candidateToInput(candidate, sessionId, turn))
+    await ctx.memory.put(candidateToInput(candidate, sessionId, turn, workspacePath))
   }
 }
