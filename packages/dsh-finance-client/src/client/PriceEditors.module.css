@@ -1,0 +1,194 @@
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 4px 0;
+}
+
+.headerRow {
+  align-items: center;
+  color: var(--dsw-alias-label-tertiary);
+  display: flex;
+  font-size: 11px;
+  gap: 8px;
+  padding: 0 2px;
+}
+
+.colHead {
+  text-transform: uppercase;
+}
+
+.colProvider {
+  width: 150px;
+  min-width: 150px;
+}
+
+.colRate {
+  flex: 1;
+  min-width: 0;
+}
+
+.row {
+  align-items: flex-start;
+  display: flex;
+  gap: 8px;
+  padding: 6px 2px;
+}
+
+.rateGrid {
+  display: grid;
+  gap: 4px 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.rateField {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.rateField.invalid .rateInput {
+  border-color: var(--dsw-alias-state-error-primary);
+}
+
+.rateLabel {
+  color: var(--dsw-alias-label-secondary);
+  flex: 0 0 auto;
+  font-size: 11px;
+  width: 56px;
+}
+
+.rateInput {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+}
+
+.rateUnit {
+  color: var(--dsw-alias-label-tertiary);
+  flex: 0 0 auto;
+  font-size: 11px;
+  width: 44px;
+}
+
+.remove {
+  background: none;
+  border: none;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 4px 6px;
+}
+
+.remove:disabled,
+.add:disabled,
+.addEntry:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.add,
+.addEntry {
+  align-self: flex-start;
+  background: none;
+  border: 1px dashed var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 10px;
+}
+
+.modelBlock {
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+}
+
+.modelHead {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.modelKeyInput {
+  flex: 1;
+  min-width: 0;
+}
+
+.entryCard {
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 8px;
+}
+
+.entryHead {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.effectiveFrom {
+  align-items: center;
+  color: var(--dsw-alias-label-secondary);
+  display: flex;
+  flex: 1;
+  font-size: 11px;
+  gap: 6px;
+  min-width: 0;
+}
+
+.effectiveFrom input {
+  flex: 1;
+  min-width: 0;
+}
+
+.windowedBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rateBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rateBlockTitle {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.scheduleRow {
+  display: flex;
+  gap: 12px;
+}
+
+.scheduleRow.invalid input {
+  border-color: var(--dsw-alias-state-error-primary);
+}
+
+.scheduleField {
+  align-items: center;
+  color: var(--dsw-alias-label-secondary);
+  display: flex;
+  flex: 1;
+  font-size: 11px;
+  gap: 6px;
+  min-width: 0;
+}
+
+.scheduleField input {
+  flex: 1;
+  min-width: 0;
+}
