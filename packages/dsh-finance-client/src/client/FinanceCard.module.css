@@ -206,6 +206,50 @@
   cursor: default;
 }
 
+.billingEditor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+.billingRow {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.billingRouteInput {
+  flex: 1;
+  min-width: 0;
+}
+
+.billingRemove {
+  background: none;
+  border: none;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 4px 6px;
+}
+
+.billingRemove:disabled, .billingAdd:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.billingAdd {
+  align-self: flex-start;
+  background: none;
+  border: 1px dashed var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 10px;
+}
+
 .fieldFoot {
   align-items: center;
   gap: 10px;

@@ -18,12 +18,13 @@ export interface SegmentedOption<T extends string> {
  * @param props.onChange - called with the newly selected value.
  * @param props.ariaLabel - accessible name for the group.
  */
-export function SegmentedControl<T extends string>({ options, value, onChange, ariaLabel, className }: {
+export function SegmentedControl<T extends string>({ options, value, onChange, ariaLabel, className, disabled }: {
   options: readonly SegmentedOption<T>[]
   value: T
   onChange: (next: T) => void
   ariaLabel?: string
   className?: string | undefined
+  disabled?: boolean
 }) {
   return (
     <div className={clsx(css.group, className)} role="group" aria-label={ariaLabel}>
@@ -33,6 +34,7 @@ export function SegmentedControl<T extends string>({ options, value, onChange, a
           type="button"
           className={clsx(css.seg, option.value === value && css.on)}
           aria-pressed={option.value === value}
+          disabled={disabled}
           onClick={() => { onChange(option.value) }}
         >
           {option.label}

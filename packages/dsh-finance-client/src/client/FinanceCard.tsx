@@ -11,6 +11,8 @@
 import { useState } from 'react'
 import type { SnapshotSelectorHook } from 'dsh-plugin-kit/client'
 import { Button, Input, Pill, SegmentedControl, Textarea } from 'dsh-ui-kit'
+import { billingModesToRows } from './billing-modes.ts'
+import type { BillingModeRow } from './billing-modes.ts'
 import type {
   FinanceCardFace,
   FinanceCardFieldName,
@@ -66,13 +68,14 @@ function Field({ id, label, hint, state, multiline, disabled, invalidLabel, over
 }
 
 /** The card's open body: connection/pricing fields, view-preferences, and the save row. */
-export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, onSetLayout, onToggleChart }: {
+export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, onSetBillingModes, onSetLayout, onToggleChart }: {
   t: (key: FinanceKey) => string
   state: FinanceCardState
   onEdit: (field: FinanceCardFieldName, text: string) => void
   onReset: (field: FinanceCardFieldName) => void
   onSave: () => void
   onDiscard: () => void
+  onSetBillingModes: (rows: readonly BillingModeRow[]) => void
   onSetLayout: (layout: FinanceLayout) => void
   onToggleChart: (key: keyof FinanceChartPrefs) => void
 }) {
@@ -174,19 +177,24 @@ export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, 
           onEdit={(text) => onEdit('providerDefaults', text)}
           onReset={() => onReset('providerDefaults')}
         />
-        <Field
-          id="plugin-config-finance-billing-modes"
-          label={t('cardBillingModes')}
-          hint={t('cardBillingModesHint')}
-          state={state.billingModes}
-          multiline
-          disabled={disabled}
-          invalidLabel={t('invalidJson')}
-          overriddenLabel={t('overridden')}
-          resetLabel={t('reset')}
-          onEdit={(text) => onEdit('billingModes', text)}
-          onReset={() => onReset('billingModes')}
-        />
+        <div className={css.field}>
+          <div className={css.fieldHead}>
+            <label className={css.fieldLabel} htmlFor="plugin-config-finance-billing-modes">{t('cardBillingModes')}</label>
+            <span className={css.fieldBadges}>{state.billingModes.overridden ? <Pill>{t('overridden')}</Pill> : null}</span>
+          </div>
+          <BillingModesEditor
+            rows={billingModesToRows(state.billingModes.text)}
+            disabled={disabled}
+            t={t}
+            onChange={onSetBillingModes}
+          />
+          <div className={css.fieldFoot}>
+            <p className={css.hint}>{t('cardBillingModesHint')}</p>
+            {state.billingModes.overridden
+              ? <button type="button" className={css.reset} disabled={disabled} onClick={() => onReset('billingModes')}>{t('reset')}</button>
+              : null}
+          </div>
+        </div>
         <Field
           id="plugin-config-finance-prices"
           label={t('cardPrices')}
@@ -231,6 +239,68 @@ export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, 
   )
 }
 
+/**
+ * Form-based editor for billing-mode tags: one row per route with a
+ * metered/plan switch and a remove button, plus an add-row button. Fully
+ * controlled over the staged JSON text — every edit re-serializes, so the
+ * existing save/clear/dirty pipeline stays untouched.
+ */
+function BillingModesEditor({ rows, disabled, t, onChange }: {
+  rows: readonly BillingModeRow[]
+  disabled: boolean
+  t: (key: FinanceKey) => string
+  onChange: (rows: readonly BillingModeRow[]) => void
+}) {
+  const update = (index: number, next: Partial<BillingModeRow>): void => {
+    onChange(rows.map((row, i) => (i === index ? { ...row, ...next } : row)))
+  }
+  return (
+    <div id="plugin-config-finance-billing-modes" className={css.billingEditor}>
+      {rows.map((row, index) => (
+        <div key={`${row.route}-${index}`} className={css.billingRow}>
+          <Input
+            className={css.billingRouteInput}
+            type="text"
+            value={row.route}
+            disabled={disabled}
+            spellCheck={false}
+            placeholder="provider | provider/model"
+            aria-label={t('billingRouteLabel')}
+            onChange={(event) => update(index, { route: event.currentTarget.value })}
+          />
+          <SegmentedControl
+            options={[
+              { value: 'metered', label: t('modeMetered') },
+              { value: 'plan', label: t('modePlan') },
+            ]}
+            value={row.mode}
+            ariaLabel={`${t('billingModeFor')} ${row.route}`}
+            disabled={disabled}
+            onChange={(mode) => update(index, { mode })}
+          />
+          <button
+            type="button"
+            className={css.billingRemove}
+            disabled={disabled}
+            aria-label={`${t('removeBillingRoute')}: ${row.route}`}
+            onClick={() => onChange(rows.filter((_, i) => i !== index))}
+          >
+            ×
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        className={css.billingAdd}
+        disabled={disabled}
+        onClick={() => onChange([...rows, { route: '', mode: 'plan' }])}
+      >
+        {t('addBillingRoute')}
+      </button>
+    </div>
+  )
+}
+
 export function FinanceCard(props: FinanceCardProps) {
   const { t } = props
   const state = props.useFinanceCard(snapshot => snapshot)
@@ -261,6 +331,7 @@ export function FinanceCard(props: FinanceCardProps) {
           onReset={props.resetField}
           onSave={props.save}
           onDiscard={props.discard}
+          onSetBillingModes={props.setBillingModes}
           onSetLayout={props.setLayout}
           onToggleChart={props.toggleChart}
         />

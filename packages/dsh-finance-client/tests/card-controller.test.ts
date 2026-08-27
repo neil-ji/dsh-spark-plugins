@@ -197,6 +197,40 @@ describe('FinanceCardController', () => {
     expect(face.hooks.financeCard.getSnapshot().invalid).toBe(true)
   })
 
+  it('applies form-editor rows to the staged field and saves them', async () => {
+    const { scope, writes } = makeScope({ value: baseSection() })
+    const controller = new FinanceCardController(scope)
+    const face = controller.inject()
+    // The editor drives rows; the controller serializes them into the stage.
+    face.setBillingModes([{ route: 'zai', mode: 'plan' }, { route: 'volcengine', mode: 'metered' }])
+    const staged = face.hooks.financeCard.getSnapshot()
+    expect(staged.billingModes.overridden).toBe(true)
+    expect(staged.dirty).toBe(true)
+    face.save()
+    await flush()
+    expect(writes).toEqual([{ op: 'set', field: 'billingModes', value: { zai: 'plan', volcengine: 'metered' } }])
+  })
+
+  it('clears the billing override when the editor empties', async () => {
+    const { scope, writes } = makeScope({ value: baseSection(), user: { billingModes: { zai: 'plan' } } })
+    const controller = new FinanceCardController(scope)
+    const face = controller.inject()
+    face.setBillingModes([])
+    const staged = face.hooks.financeCard.getSnapshot()
+    expect(staged.billingModes.overridden).toBe(false)
+    face.save()
+    await flush()
+    expect(writes).toEqual([{ op: 'unset', field: 'billingModes' }])
+  })
+
+  it('keeps the form clean (no dirty) when nothing changed', () => {
+    const { scope } = makeScope({ value: baseSection() })
+    const controller = new FinanceCardController(scope)
+    const face = controller.inject()
+    face.setBillingModes([]) // no stored value, empty editor
+    expect(face.hooks.financeCard.getSnapshot().dirty).toBe(false)
+  })
+
   it('clears an overridden field on reset + save', async () => {
     const { scope, writes } = makeScope({ value: baseSection(), user: { currency: 'USD' } })
     const controller = new FinanceCardController(scope)

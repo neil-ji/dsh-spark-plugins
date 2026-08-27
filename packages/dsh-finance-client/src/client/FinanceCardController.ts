@@ -12,6 +12,8 @@
 import type { SettingsScope, SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import type { FinanceConfigInput } from 'dsh-finance/types'
+import { rowsToBillingModes } from './billing-modes.ts'
+import type { BillingModeRow } from './billing-modes.ts'
 import { readFinancePrefs, writeFinancePrefs } from './persist.ts'
 import type { FinanceChartPrefs, FinanceLayout, FinancePrefs } from './persist.ts'
 
@@ -27,6 +29,12 @@ export type FinanceCardFieldName =
 
 const BALANCE_FIELDS: readonly FinanceCardFieldName[] = ['balance.baseURL', 'balance.apiKeyEnv', 'balance.timeoutMs']
 const JSON_FIELDS: ReadonlySet<FinanceCardFieldName> = new Set(['defaultPrice', 'providerDefaults', 'billingModes', 'prices'])
+
+// Re-exported so existing consumers (tests, faces) keep one import face; the
+// implementations live in billing-modes.ts, which stays free of the
+// client-runtime dependency for SSR-safe rendering.
+export { billingModesToRows, rowsToBillingModes } from './billing-modes.ts'
+export type { BillingModeRow } from './billing-modes.ts'
 
 export interface FinanceCardFieldState {
   /** Draft text the control renders. */
@@ -80,6 +88,8 @@ export interface FinanceCardFace {
   setLayout: (layout: FinanceLayout) => void
   /** Toggle one dashboard chart's visibility immediately. */
   toggleChart: (key: keyof FinanceChartPrefs) => void
+  /** Stage the billing-mode editor rows (serialized into the staged JSON). */
+  setBillingModes: (rows: readonly BillingModeRow[]) => void
 }
 
 type PlannedWrite = { run: (() => Promise<boolean>) | undefined }
@@ -357,6 +367,13 @@ export class FinanceCardController {
         const prefs = readFinancePrefs()
         writeFinancePrefs({ ...prefs, charts: { ...prefs.charts, [key]: !prefs.charts[key] } })
         this.publish()
+      },
+      setBillingModes: (rows) => {
+        const text = rowsToBillingModes(rows)
+        // An empty serialization means 'inherit again' when nothing is stored:
+        // stage it as a clear so dirty stays false for a no-op edit.
+        const storedAlready = this.stored('billingModes')
+        this.stage('billingModes', text === '' && !storedAlready ? { text: '', clear: true } : { text, clear: text === '' })
       },
     }
   }

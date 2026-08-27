@@ -33,6 +33,15 @@ function state(overrides: Partial<FinanceCardState> = {}): FinanceCardState {
   }
 }
 
+/** Render the body with one stored plan route to inspect the editor. */
+function bodyWithBillingRows(rows: Array<{ route: string; mode: 'metered' | 'plan' }>): string {
+  const staged = state({ billingModes: { text: JSON.stringify(Object.fromEntries(rows.map(r => [r.route, r.mode]))), overridden: true, invalid: false } })
+  return renderToStaticMarkup(createElement(FinanceCardBody, {
+    ...baseProps,
+    state: staged,
+  }))
+}
+
 const baseProps = {
   t,
   useFinanceCard: (selector: (snapshot: FinanceCardState) => unknown) => selector(state()),
@@ -40,6 +49,7 @@ const baseProps = {
   resetField: () => {},
   save: () => {},
   discard: () => {},
+  setBillingModes: () => {},
   setLayout: () => {},
   toggleChart: () => {},
 }
@@ -84,6 +94,16 @@ describe('FinanceCardBody', () => {
     onSetLayout: () => {},
     onToggleChart: () => {},
   }
+
+  it('renders the billing-mode editor as rows instead of a JSON textarea', () => {
+    const html = bodyWithBillingRows([{ route: 'zai', mode: 'plan' }])
+    expect(html).toContain('addBillingRoute')     // add-row button
+    expect(html).toContain('modeMetered')         // segment options
+    expect(html).toContain('modePlan')
+    expect(html).toContain('zai')                 // seeded route value
+    expect(html).toContain('removeBillingRoute')  // per-row remove
+    expect(html).not.toContain('plugin-config-finance-billing-modes\" type=\"text') // no textarea/input for the field itself
+  })
 
   it('renders the connection fields seeded from the section', () => {
     const html = renderToStaticMarkup(createElement(FinanceCardBody, bodyProps))
