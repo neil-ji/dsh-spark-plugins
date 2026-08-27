@@ -63,10 +63,20 @@ export const financeLedgerSchema = z.object({
   })),
   byModel: z.array(z.object({
     modelKey: z.string(),
+    // Rolling-upgrade allowance: hosts before the provider split omit them.
+    provider: z.string().optional().default(''),
+    model: z.string().optional().default(''),
     usage: financeTokenBucketsSchema,
     costMicros: z.number(),
     shiftSavingsMicros: z.number().optional().default(0),
   })),
+  // Rolling-upgrade allowance: old hosts omit the provider rollup entirely.
+  byProvider: z.array(z.object({
+    provider: z.string(),
+    usage: financeTokenBucketsSchema,
+    costMicros: z.number(),
+    modelCount: z.number(),
+  })).optional().default([]),
   byWorkspace: z.array(z.object({
     workspaceId: z.string().nullable(),
     title: z.string(),
