@@ -140,7 +140,8 @@ export function HippomemoPluginCard(props: HippomemoPluginCardProps): ReactNode 
   if (state.shell.available === false) return null
 
   return (
-    <li className={open ? 'hippomemo-card hippomemo-card-open' : 'hippomemo-card'}>
+    <div data-plugin="dsh-hippomemo">
+      <li className={open ? 'hippomemo-card hippomemo-card-open' : 'hippomemo-card'}>
       <button
         type="button"
         className="hippomemo-card-header"
@@ -165,6 +166,7 @@ export function HippomemoPluginCard(props: HippomemoPluginCardProps): ReactNode 
           onDiscard={props.discard}
         />
       )}
-    </li>
+      </li>
+    </div>
   )
 }
