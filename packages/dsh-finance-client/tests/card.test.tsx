@@ -28,6 +28,9 @@ function state(overrides: Partial<FinanceCardState> = {}): FinanceCardState {
     providerDefaults: field(''),
     billingModes: field(''),
     billingRows: [],
+    defaultPriceDraft: { input: '', cacheRead: '', cacheWrite: '', output: '' },
+    providerDefaultsDraft: { rows: [] },
+    priceTableDraft: { models: [] },
     prices: field(''),
     prefs: DEFAULT_FINANCE_PREFS,
     ...overrides,
@@ -54,6 +57,9 @@ const baseProps = {
   save: () => {},
   discard: () => {},
   setBillingModes: () => {},
+  setDefaultPrice: () => {},
+  setProviderDefaults: () => {},
+  setPriceTable: () => {},
   setLayout: () => {},
   toggleChart: () => {},
 }
@@ -172,11 +178,13 @@ describe('FinanceCardBody', () => {
   it('renders field override badges and invalid notices', () => {
     const html = renderToStaticMarkup(createElement(FinanceCardBody, {
       ...bodyProps,
-      state: state({ currency: field('USD', true), prices: field('{bad', false, true) }),
+      state: state({ currency: field('USD', true, true) }),
     }))
     expect(html).toContain('overridden')    // currency override badge
     expect(html).toContain('reset')         // reset control for the override
-    expect(html).toContain('invalidJson')   // prices invalid badge
+    // JSON fields validate inline now (no textarea badge); the Field-based
+    // invalid channel still surfaces on scalar fields like currency.
+    expect(html).toContain('invalidText')   // invalid currency text badge
   })
 
   it('renders a failed-save status line', () => {

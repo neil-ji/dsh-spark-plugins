@@ -11,6 +11,8 @@
 import { useState } from 'react'
 import type { SnapshotSelectorHook } from 'dsh-plugin-kit/client'
 import { Button, Input, Pill, SegmentedControl, Textarea } from 'dsh-ui-kit'
+import { ProviderDefaultsEditor, PriceTableEditor, RateFields } from './PriceEditors.tsx'
+import type { PriceTableDraft, ProviderDefaultsDraft, RateDraft } from './price-forms.ts'
 import type { BillingModeRow } from './billing-modes.ts'
 import type {
   FinanceCardFace,
@@ -67,7 +69,7 @@ function Field({ id, label, hint, state, multiline, disabled, invalidLabel, over
 }
 
 /** The card's open body: connection/pricing fields, view-preferences, and the save row. */
-export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, onSetBillingModes, onSetLayout, onToggleChart }: {
+export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, onSetBillingModes, onSetDefaultPrice, onSetProviderDefaults, onSetPriceTable, onSetLayout, onToggleChart }: {
   t: (key: FinanceKey) => string
   state: FinanceCardState
   onEdit: (field: FinanceCardFieldName, text: string) => void
@@ -75,6 +77,9 @@ export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, 
   onSave: () => void
   onDiscard: () => void
   onSetBillingModes: (rows: readonly BillingModeRow[]) => void
+  onSetDefaultPrice: (draft: RateDraft) => void
+  onSetProviderDefaults: (draft: ProviderDefaultsDraft) => void
+  onSetPriceTable: (draft: PriceTableDraft) => void
   onSetLayout: (layout: FinanceLayout) => void
   onToggleChart: (key: keyof FinanceChartPrefs) => void
 }) {
@@ -150,32 +155,42 @@ export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, 
           onEdit={(text) => onEdit('balance.timeoutMs', text)}
           onReset={() => onReset('balance.timeoutMs')}
         />
-        <Field
-          id="plugin-config-finance-default-price"
-          label={t('cardDefaultPrice')}
-          hint={t('cardDefaultPriceHint')}
-          state={state.defaultPrice}
-          multiline
-          disabled={disabled}
-          invalidLabel={t('invalidJson')}
-          overriddenLabel={t('overridden')}
-          resetLabel={t('reset')}
-          onEdit={(text) => onEdit('defaultPrice', text)}
-          onReset={() => onReset('defaultPrice')}
-        />
-        <Field
-          id="plugin-config-finance-provider-defaults"
-          label={t('cardProviderDefaults')}
-          hint={t('cardProviderDefaultsHint')}
-          state={state.providerDefaults}
-          multiline
-          disabled={disabled}
-          invalidLabel={t('invalidJson')}
-          overriddenLabel={t('overridden')}
-          resetLabel={t('reset')}
-          onEdit={(text) => onEdit('providerDefaults', text)}
-          onReset={() => onReset('providerDefaults')}
-        />
+        <div className={css.field}>
+          <div className={css.fieldHead}>
+            <label className={css.fieldLabel} htmlFor="plugin-config-finance-default-price">{t('cardDefaultPrice')}</label>
+            <span className={css.fieldBadges}>{state.defaultPrice.overridden ? <Pill>{t('overridden')}</Pill> : null}</span>
+          </div>
+          <RateFields
+            rate={state.defaultPriceDraft}
+            idPrefix="plugin-config-finance-default-price"
+            t={t}
+            onChange={onSetDefaultPrice}
+          />
+          <div className={css.fieldFoot}>
+            <p className={css.hint}>{t('cardDefaultPriceHint')}</p>
+            {state.defaultPrice.overridden
+              ? <button type="button" className={css.reset} disabled={disabled} onClick={() => onReset('defaultPrice')}>{t('reset')}</button>
+              : null}
+          </div>
+        </div>
+        <div className={css.field}>
+          <div className={css.fieldHead}>
+            <label className={css.fieldLabel} htmlFor="plugin-config-finance-provider-defaults">{t('cardProviderDefaults')}</label>
+            <span className={css.fieldBadges}>{state.providerDefaults.overridden ? <Pill>{t('overridden')}</Pill> : null}</span>
+          </div>
+          <ProviderDefaultsEditor
+            value={state.providerDefaultsDraft}
+            disabled={disabled}
+            t={t}
+            onChange={onSetProviderDefaults}
+          />
+          <div className={css.fieldFoot}>
+            <p className={css.hint}>{t('cardProviderDefaultsHint')}</p>
+            {state.providerDefaults.overridden
+              ? <button type="button" className={css.reset} disabled={disabled} onClick={() => onReset('providerDefaults')}>{t('reset')}</button>
+              : null}
+          </div>
+        </div>
         <div className={css.field}>
           <div className={css.fieldHead}>
             <label className={css.fieldLabel} htmlFor="plugin-config-finance-billing-modes">{t('cardBillingModes')}</label>
@@ -194,19 +209,24 @@ export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, 
               : null}
           </div>
         </div>
-        <Field
-          id="plugin-config-finance-prices"
-          label={t('cardPrices')}
-          hint={t('cardPricesHint')}
-          state={state.prices}
-          multiline
-          disabled={disabled}
-          invalidLabel={t('invalidJson')}
-          overriddenLabel={t('overridden')}
-          resetLabel={t('reset')}
-          onEdit={(text) => onEdit('prices', text)}
-          onReset={() => onReset('prices')}
-        />
+        <div className={css.field}>
+          <div className={css.fieldHead}>
+            <label className={css.fieldLabel} htmlFor="plugin-config-finance-prices">{t('cardPrices')}</label>
+            <span className={css.fieldBadges}>{state.prices.overridden ? <Pill>{t('overridden')}</Pill> : null}</span>
+          </div>
+          <PriceTableEditor
+            value={state.priceTableDraft}
+            disabled={disabled}
+            t={t}
+            onChange={onSetPriceTable}
+          />
+          <div className={css.fieldFoot}>
+            <p className={css.hint}>{t('cardPricesHint')}</p>
+            {state.prices.overridden
+              ? <button type="button" className={css.reset} disabled={disabled} onClick={() => onReset('prices')}>{t('reset')}</button>
+              : null}
+          </div>
+        </div>
       </div>
 
       <div className={css.section}>
@@ -331,6 +351,9 @@ export function FinanceCard(props: FinanceCardProps) {
           onSave={props.save}
           onDiscard={props.discard}
           onSetBillingModes={props.setBillingModes}
+          onSetDefaultPrice={props.setDefaultPrice}
+          onSetProviderDefaults={props.setProviderDefaults}
+          onSetPriceTable={props.setPriceTable}
           onSetLayout={props.setLayout}
           onToggleChart={props.toggleChart}
         />

@@ -342,4 +342,64 @@ describe('FinanceCardController', () => {
       ;(globalThis as { localStorage?: unknown }).localStorage = original
     }
   })
+
+  it('serializes the default-price draft to the wire rate on save', async () => {
+    const { scope, writes } = makeScope({ value: baseSection() })
+    const controller = new FinanceCardController(scope)
+    const face = controller.inject()
+    face.setDefaultPrice({ input: '2000000', cacheRead: '500000', cacheWrite: '', output: '8000000' })
+    expect(face.hooks.financeCard.getSnapshot().dirty).toBe(true)
+    face.save()
+    await flush()
+    expect(writes).toEqual([{ op: 'set', field: 'defaultPrice', value: { inputMicrosPerMtok: 2000000, cacheReadMicrosPerMtok: 500000, outputMicrosPerMtok: 8000000 } }])
+  })
+
+  it('blocks the save when the default-price draft is malformed', async () => {
+    const { scope, writes } = makeScope({ value: baseSection() })
+    const controller = new FinanceCardController(scope)
+    const face = controller.inject()
+    face.setDefaultPrice({ input: 'oops', cacheRead: '', cacheWrite: '', output: '1' })
+    expect(face.hooks.financeCard.getSnapshot().invalid).toBe(true)
+    face.save()
+    await flush()
+    expect(writes).toEqual([])
+  })
+
+  it('serializes provider-default rows into the wire map', async () => {
+    const { scope, writes } = makeScope({ value: baseSection() })
+    const controller = new FinanceCardController(scope)
+    const face = controller.inject()
+    face.setProviderDefaults({ rows: [{ provider: 'openai', rate: { input: '3600000', cacheRead: '900000', cacheWrite: '', output: '14400000' } }] })
+    face.save()
+    await flush()
+    expect(writes).toEqual([{ op: 'set', field: 'providerDefaults', value: { openai: { inputMicrosPerMtok: 3600000, cacheReadMicrosPerMtok: 900000, outputMicrosPerMtok: 14400000 } } }])
+  })
+
+  it('serializes the price-table draft into the wire map', async () => {
+    const { scope, writes } = makeScope({ value: baseSection() })
+    const controller = new FinanceCardController(scope)
+    const face = controller.inject()
+    face.setPriceTable({ models: [{ modelKey: 'openai/gpt-4o', entries: [{
+      kind: 'flat' as const,
+      effectiveFrom: '',
+      flat: { input: '18000000', cacheRead: '9000000', cacheWrite: '', output: '72000000' },
+      offPeak: { input: '', cacheRead: '', cacheWrite: '', output: '' },
+      peak: { input: '', cacheRead: '', cacheWrite: '', output: '' },
+      peakHours: '',
+      peakDays: '',
+    }] }] })
+    face.save()
+    await flush()
+    expect(writes).toEqual([{ op: 'set', field: 'prices', value: { 'openai/gpt-4o': { inputMicrosPerMtok: 18000000, cacheReadMicrosPerMtok: 9000000, outputMicrosPerMtok: 72000000 } } }])
+  })
+
+  it('clears an empty price-table draft through the unset path', async () => {
+    const { scope, writes } = makeScope({ value: baseSection(), user: { prices: { 'x/y': { inputMicrosPerMtok: 1, outputMicrosPerMtok: 1 } } } })
+    const controller = new FinanceCardController(scope)
+    const face = controller.inject()
+    face.setPriceTable({ models: [] })
+    face.save()
+    await flush()
+    expect(writes).toEqual([{ op: 'unset', field: 'prices' }])
+  })
 })

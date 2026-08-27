@@ -14,6 +14,21 @@ import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import type { FinanceConfigInput } from 'dsh-finance/types'
 import { billingModesToRows, rowsToBillingModes } from './billing-modes.ts'
 import type { BillingModeRow } from './billing-modes.ts'
+import {
+  EMPTY_RATE,
+  seedPriceTable,
+  seedProviderDefaults,
+  seedRateDraft,
+  serializeDefaultPriceDraft,
+  serializePriceTableDraft,
+  serializeProviderDefaultsDraft,
+} from './price-forms.ts'
+import type {
+  PriceFormResult,
+  PriceTableDraft,
+  ProviderDefaultsDraft,
+  RateDraft,
+} from './price-forms.ts'
 import { readFinancePrefs, writeFinancePrefs } from './persist.ts'
 import type { FinanceChartPrefs, FinanceLayout, FinancePrefs } from './persist.ts'
 
@@ -71,6 +86,12 @@ export interface FinanceCardState {
    * so an added row survives re-renders until it is saved or reset.
    */
   billingRows: readonly BillingModeRow[]
+  /** Live default-price rate draft (never shown as raw JSON). */
+  defaultPriceDraft: RateDraft
+  /** Live provider-default rows. */
+  providerDefaultsDraft: ProviderDefaultsDraft
+  /** Live price-table draft. */
+  priceTableDraft: PriceTableDraft
   prices: FinanceCardFieldState
   /** Dashboard view preferences (browser-local; apply immediately). */
   prefs: FinancePrefs
@@ -96,6 +117,12 @@ export interface FinanceCardFace {
   toggleChart: (key: keyof FinanceChartPrefs) => void
   /** Stage the billing-mode editor rows (serialized into the staged JSON). */
   setBillingModes: (rows: readonly BillingModeRow[]) => void
+  /** Stage the default-price rate draft. */
+  setDefaultPrice: (draft: RateDraft) => void
+  /** Stage the provider-default rows. */
+  setProviderDefaults: (draft: ProviderDefaultsDraft) => void
+  /** Stage the price-table draft. */
+  setPriceTable: (draft: PriceTableDraft) => void
 }
 
 type PlannedWrite = { run: (() => Promise<boolean>) | undefined }
@@ -123,6 +150,10 @@ export class FinanceCardController {
    * from the stored value.
    */
   private billingEditorRows: BillingModeRow[] = []
+  /** Live drafts for the three price-form editors; null = not yet edited (seed from stored). */
+  private defaultPriceDraftValue: RateDraft | null = null
+  private providerDefaultsDraftValue: ProviderDefaultsDraft | null = null
+  private priceTableDraftValue: PriceTableDraft | null = null
 
   /** @param scope - the bound settings scope for the `finance` namespace. */
   constructor(private readonly scope: SettingsScope<FinanceConfigInput>) {
@@ -304,6 +335,13 @@ export class FinanceCardController {
     }
   }
 
+  /** Parse the stored value of a JSON field into a draft seed; empty when absent/invalid. */
+  private seedJson<T>(field: FinanceCardFieldName, seed: (value: unknown) => T): T {
+    const text = this.format(field).trim()
+    if (text === '') return seed(undefined)
+    try { return seed(JSON.parse(text)) } catch { return seed(undefined) }
+  }
+
   private projection(): FinanceCardState {
     return {
       ...this.shell(),
@@ -315,6 +353,9 @@ export class FinanceCardController {
       providerDefaults: this.fieldState('providerDefaults'),
       billingModes: this.fieldState('billingModes'),
       billingRows: this.staged.has('billingModes') ? this.billingEditorRows : billingModesToRows(this.format('billingModes')),
+      defaultPriceDraft: this.staged.has('defaultPrice') ? (this.defaultPriceDraftValue ?? { ...EMPTY_RATE }) : this.seedJson('defaultPrice', value => seedRateDraft(value)),
+      providerDefaultsDraft: this.staged.has('providerDefaults') ? (this.providerDefaultsDraftValue ?? seedProviderDefaults(undefined)) : this.seedJson('providerDefaults', seedProviderDefaults),
+      priceTableDraft: this.staged.has('prices') ? (this.priceTableDraftValue ?? seedPriceTable(undefined)) : this.seedJson('prices', seedPriceTable),
       prices: this.fieldState('prices'),
       prefs: readFinancePrefs(),
     }
@@ -328,6 +369,19 @@ export class FinanceCardController {
     this.staged.set(field, edit)
     this.failed = false
     this.publish()
+  }
+
+  /**
+   * Stage a serialized price-form result: '' becomes a clear (inherit), a
+   * payload becomes the draft JSON, and a malformed draft stages a marker
+   * that fails JSON validation — blocking the save via the invalid flag.
+   */
+  private stagePriceResult(field: FinanceCardFieldName, result: PriceFormResult): void {
+    if (result.ok) {
+      this.stage(field, result.text === '' ? { text: '', clear: true } : { text: result.text, clear: false })
+    } else {
+      this.stage(field, { text: '!invalid-price-draft', clear: false })
+    }
   }
 
   private async clearField(field: string): Promise<boolean> {
@@ -369,6 +423,12 @@ export class FinanceCardController {
         if (field === 'billingModes') {
           // Reset drops the draft: reseed the live editor from the stored value.
           this.billingEditorRows = billingModesToRows(this.format(field))
+        } else if (field === 'defaultPrice') {
+          this.defaultPriceDraftValue = null
+        } else if (field === 'providerDefaults') {
+          this.providerDefaultsDraftValue = null
+        } else if (field === 'prices') {
+          this.priceTableDraftValue = null
         }
         this.stage(field, { text: this.format(field), clear: true })
       },
@@ -397,6 +457,18 @@ export class FinanceCardController {
         // stage it as a clear so dirty stays false for a no-op edit.
         const storedAlready = this.stored('billingModes')
         this.stage('billingModes', text === '' && !storedAlready ? { text: '', clear: true } : { text, clear: text === '' })
+      },
+      setDefaultPrice: (draft) => {
+        this.defaultPriceDraftValue = draft
+        this.stagePriceResult('defaultPrice', serializeDefaultPriceDraft(draft))
+      },
+      setProviderDefaults: (draft) => {
+        this.providerDefaultsDraftValue = draft
+        this.stagePriceResult('providerDefaults', serializeProviderDefaultsDraft(draft))
+      },
+      setPriceTable: (draft) => {
+        this.priceTableDraftValue = draft
+        this.stagePriceResult('prices', serializePriceTableDraft(draft))
       },
     }
   }
