@@ -5,6 +5,7 @@ import {
   emptyFinanceBuckets,
   financeBaseCostMicros,
   financeBaseRate,
+  financeBillingMode,
   financeBucketCostMicros,
   financeCostByModelHour,
   financeEntryFor,
@@ -319,6 +320,23 @@ describe('pricing', () => {
   it('normalization is idempotent over already-normalized entries', () => {
     const prices = normalizeFinancePrices({ 'm': [FLASH_WINDOWED] })
     expect(prices['m'][0]).toBe(FLASH_WINDOWED)
+  })
+
+  it('resolves the billing mode with model-key precedence over provider', () => {
+    const custom: FinanceConfig = {
+      ...config,
+      billingModes: { zai: 'plan', 'zai/special-model': 'metered' },
+    }
+    expect(financeBillingMode(custom, 'zai/glm-4.6')).toBe('plan')
+    expect(financeBillingMode(custom, 'zai/special-model')).toBe('metered') // exact wins
+    expect(financeBillingMode(custom, 'openai/gpt-4o')).toBe('metered')   // unlisted default
+    expect(financeBillingMode(config, 'zai/glm-4.6')).toBe('metered')     // no map at all
+  })
+
+  it('normalizeFinanceConfig carries billing modes and defaults them to empty', () => {
+    const normalized = normalizeFinanceConfig({ billingModes: { zai: 'plan' } })
+    expect(normalized.billingModes).toEqual({ zai: 'plan' })
+    expect(normalizeFinanceConfig({}).billingModes).toEqual({})
   })
 
   it('normalizeFinanceConfig carries provider defaults and defaults them to empty', () => {

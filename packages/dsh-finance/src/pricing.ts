@@ -56,6 +56,23 @@ export function financeProviderDefault(config: FinanceConfig, modelKey: string):
   return config.providerDefaults?.[financeProviderOf(modelKey)] ?? config.defaultPrice
 }
 
+/**
+ * How a route bills: an exact model-key entry in `billingModes` wins over the
+ * provider-level entry; anything unlisted defaults to 'metered' (real wallet
+ * spend). Plan routes still get priced at list prices — but the ledger keeps
+ * that amount apart so subscriptions never masquerade as cash flow.
+ */
+export function financeBillingMode(config: FinanceConfig, modelKey: string): 'metered' | 'plan' {
+  const modes = config.billingModes
+  if (modes !== undefined) {
+    const exact = modes[modelKey]
+    if (exact !== undefined) return exact
+    const providerLevel = modes[financeProviderOf(modelKey)]
+    if (providerLevel !== undefined) return providerLevel
+  }
+  return 'metered'
+}
+
 /** Empty token buckets. */
 export function emptyFinanceBuckets(): FinanceTokenBuckets {
   return {
@@ -321,6 +338,7 @@ export function normalizeFinanceConfig(raw: FinanceConfigInput | FinanceConfig):
     balance: base.balance ?? { baseURL: 'https://api.deepseek.com', apiKeyEnv: 'DEEPSEEK_API_KEY', timeoutMs: 10_000 },
     defaultPrice: base.defaultPrice ?? DEFAULT_PRICE,
     providerDefaults: base.providerDefaults ?? {},
+    billingModes: base.billingModes ?? {},
     prices: normalizeFinancePrices(base.prices),
   }
 }

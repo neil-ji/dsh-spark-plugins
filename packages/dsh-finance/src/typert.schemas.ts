@@ -53,6 +53,9 @@ export const financeLedgerSchema = z.object({
   currency: z.string(),
   totals: financeTokenBucketsSchema,
   totalCostMicros: z.number(),
+  // Billing-mode split; absent on hosts predating it.
+  meteredCostMicros: z.number().optional().default(0),
+  planEquivalentCostMicros: z.number().optional().default(0),
   sessionCount: z.number(),
   workspaceCount: z.number(),
   taskCount: z.number(),
@@ -66,6 +69,8 @@ export const financeLedgerSchema = z.object({
     // Rolling-upgrade allowance: hosts before the provider split omit them.
     provider: z.string().optional().default(''),
     model: z.string().optional().default(''),
+    // Billing classification; absent on hosts predating it = 'metered'.
+    billingMode: z.enum(['metered', 'plan']).optional(),
     usage: financeTokenBucketsSchema,
     costMicros: z.number(),
     shiftSavingsMicros: z.number().optional().default(0),
@@ -76,6 +81,7 @@ export const financeLedgerSchema = z.object({
     usage: financeTokenBucketsSchema,
     costMicros: z.number(),
     modelCount: z.number(),
+    billingMode: z.enum(['metered', 'plan', 'mixed']).optional(),
   })).optional().default([]),
   byWorkspace: z.array(z.object({
     workspaceId: z.string().nullable(),

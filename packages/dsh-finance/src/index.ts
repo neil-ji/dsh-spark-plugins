@@ -41,6 +41,7 @@ export {
   emptyFinanceBuckets,
   financeBaseCostMicros,
   financeBaseRate,
+  financeBillingMode,
   financeBucketCostMicros,
   financeCostByModelHour,
   financeEntryFor,
@@ -108,6 +109,7 @@ export class FinanceService extends TypertRemoteService {
     }),
     defaultPrice: priceRate.default(DEFAULT_PRICE),
     providerDefaults: z.dict(priceRate).default({}),
+    billingModes: z.dict(z.union(['metered', 'plan'])).default({}),
     prices: z.dict(priceEntries).default({}),
   })
 

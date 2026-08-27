@@ -137,6 +137,13 @@ export interface FinanceConfigInput {
    * enumerating every model.
    */
   providerDefaults?: Record<string, FinancePriceRate>
+  /**
+   * How every route is billed: 'metered' (pay-as-you-go wallet, the default)
+   * or 'plan' (subscription — its computed amount is a LIST-PRICE EQUIVALENT,
+   * never real cash flow). Keys may be either a full model key ('zai/glm-4.6',
+   * highest precedence) or just a provider ('zai').
+   */
+  billingModes?: Record<string, 'metered' | 'plan'>
   /** One price entry per model key, or an era history list of entries. */
   prices?: Record<string, FinancePriceEntryInput | FinancePriceEntryInput[]>
 }
@@ -151,6 +158,8 @@ export interface FinanceConfig {
   }
   defaultPrice: FinancePriceRate
   providerDefaults: Record<string, FinancePriceRate>
+  /** Route-level billing classification; absent = 'metered' at lookup time. */
+  billingModes: Record<string, 'metered' | 'plan'>
   prices: Record<string, readonly FinancePriceEntry[]>
 }
 
@@ -202,12 +211,24 @@ export interface FinanceWorkspaceRow {
   costMicros: number
 }
 
+/**
+ * Billing route classification. 'plan' routes are subscriptions: their
+ * amounts in the ledger are LIST-PRICE EQUIVALENTS, not cash flow, so the
+ * client labels them apart and excludes them from wallet-facing math.
+ */
+export type FinanceBillingMode = 'metered' | 'plan'
+
 export interface FinanceModelRow {
   modelKey: string
   /** Provider part of the model key (the part before the first '/'). */
   provider: string
   /** Model part of the model key (the part after the first '/'). */
   model: string
+  /**
+   * How this route bills ('mixed' never appears here — that is a rollup-only
+   * state). Absent on old snapshots = 'metered'.
+   */
+  billingMode?: FinanceBillingMode
   usage: FinanceTokenBuckets
   costMicros: number
   /**
@@ -225,6 +246,11 @@ export interface FinanceProviderRow {
   costMicros: number
   /** Distinct models observed under this provider. */
   modelCount: number
+  /**
+   * Rollup of member models' modes: all-plan -> 'plan', mixed -> 'mixed',
+   * otherwise omitted (pure-metered is the default and needs no marker).
+   */
+  billingMode?: FinanceBillingMode | 'mixed'
 }
 
 export interface FinanceDayRow {
@@ -306,6 +332,17 @@ export interface FinanceLedger {
   currency: string
   totals: FinanceTokenBuckets
   totalCostMicros: number
+  /**
+   * Pay-as-you-go share of totalCostMicros: money that actually left (or is
+   * draining) a metered wallet. The balance gauge reconciles against THIS.
+   */
+  meteredCostMicros?: number
+  /**
+   * Subscription-route share of totalCostMicros, valued at list prices — a
+   * 'what this would have cost without the plan' equivalent, not cash flow.
+   * Present only from hosts with billing-mode awareness.
+   */
+  planEquivalentCostMicros?: number
   sessionCount: number
   workspaceCount: number
   taskCount: number

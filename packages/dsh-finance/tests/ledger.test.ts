@@ -353,6 +353,51 @@ describe('buildFinanceLedger with hourly usage', () => {
     expect(ledger.byProvider[0].provider).toBe('deepseek-official')
   })
 
+  it('splits metered and plan costs when billingModes mark a provider', async () => {
+    const { ctx } = makeCtx([{ id: 'a', createdAt: ERA_B }], {
+      'a': {
+        financeUsageHourly: hourlyUsage({
+          'zai/glm-4.6': { '2026-08-17T02': { uncachedInputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 } },
+          'deepseek-official/deepseek-v4-flash': { '2026-08-17T02': { uncachedInputTokens: 2_000_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 } },
+        }),
+        title: 'A',
+      },
+    })
+    const planConfig: FinanceConfig = { ...windowedConfig, billingModes: { zai: 'plan' } }
+    const ledger = await buildFinanceLedger(ctx, planConfig, undefined, { nowMs: HOUR_NOW_MS })
+    // session total: peak flash (3 CNY/Mtok x 2M) + glm at default 2/Mtok = 8M
+    expect(ledger.totalCostMicros).toBe(8_000_000)
+    // plan share = the zai model only; metered reconciles to the rest.
+    const glmRow = ledger.byModel.find(m => m.modelKey === 'zai/glm-4.6')!
+    expect(glmRow.billingMode).toBe('plan')
+    expect(ledger.planEquivalentCostMicros).toBe(glmRow.costMicros)
+    expect(ledger.meteredCostMicros).toBe(ledger.totalCostMicros - ledger.planEquivalentCostMicros)
+    const zaiProvider = ledger.byProvider.find(p => p.provider === 'zai')!
+    expect(zaiProvider.billingMode).toBe('plan')
+    expect(ledger.byProvider.find(p => p.provider === 'deepseek-official')!.billingMode).toBeUndefined()
+  })
+
+  it('rolls mixed-mode providers up as mixed and keeps exact-key precedence', async () => {
+    const { ctx } = makeCtx([{ id: 'a', createdAt: ERA_B }], {
+      'a': {
+        financeUsageHourly: hourlyUsage({
+          'zai/glm-4.6': { '2026-08-17T02': { uncachedInputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 } },
+          'zai/api-only': { '2026-08-17T02': { uncachedInputTokens: 500_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 } },
+        }),
+        title: 'A',
+      },
+    })
+    const planConfig: FinanceConfig = {
+      ...windowedConfig,
+      billingModes: { zai: 'plan', 'zai/api-only': 'metered' }, // exact key wins
+    }
+    const ledger = await buildFinanceLedger(ctx, planConfig, undefined, { nowMs: HOUR_NOW_MS })
+    expect(ledger.byModel.find(m => m.modelKey === 'zai/glm-4.6')!.billingMode).toBe('plan')
+    expect(ledger.byModel.find(m => m.modelKey === 'zai/api-only')!.billingMode).toBe('metered') // exact key overrides the plan provider
+    const zaiProvider = ledger.byProvider.find(p => p.provider === 'zai')!
+    expect(zaiProvider.billingMode).toBe('mixed')
+  })
+
   it('rolls multiple models of one provider into a single byProvider row', async () => {
     const { ctx } = makeCtx([{ id: 'a', createdAt: ERA_B }], {
       'a': {

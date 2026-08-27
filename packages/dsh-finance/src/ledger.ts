@@ -35,6 +35,7 @@ import {
   addFinanceBuckets,
   emptyFinanceBuckets,
   financeBaseCostMicros,
+  financeBillingMode,
   financeBucketCostMicros,
   financeEntryFor,
   financeHourTime,
@@ -46,6 +47,7 @@ import {
 } from './pricing.ts'
 import type {
   FinanceBackfillSink,
+  FinanceBillingMode,
   FinanceConfig,
   FinanceDayRow,
   FinanceHourOfDayRow,
@@ -391,19 +393,32 @@ export async function buildFinanceLedger(
       modelKey,
       provider: financeProviderOf(modelKey),
       model: financeModelOf(modelKey),
+      billingMode: financeBillingMode(config, modelKey) as 'metered' | 'plan',
       usage,
       costMicros: byModelCost[modelKey] ?? 0,
       shiftSavingsMicros: Math.max(0, (modelPeakCost[modelKey] ?? 0) - (modelPeakOffPeakCost[modelKey] ?? 0)),
     }))
     .sort((a, b) => b.costMicros - a.costMicros)
+  // Wallet math stays honest under plan subscriptions: plan rows are
+  // list-price equivalents, never cash flow. Sessions whose projections
+  // carry no model split (legacy tokenUsage) can't be classified either way
+  // — they stay in the metered bucket so the two shares always reconcile
+  // exactly to totalCostMicros.
+  let planEquivalentCostMicros = 0
+  for (const row of modelRows) {
+    if (row.billingMode === 'plan') planEquivalentCostMicros += row.costMicros
+  }
+  const meteredCostMicros = totalCost - planEquivalentCostMicros
   // Per-provider rollup: fold the model rows by their provider part, keeping
   // the distinct model count so the dashboard can show how spread the spend is.
+  // A provider mixing plan and metered models rolls up as 'mixed'.
   const providerRows: FinanceProviderRow[] = Object.entries(
-    modelRows.reduce<Record<string, { usage: FinanceTokenBuckets; costMicros: number; models: Set<string> }>>((acc, row) => {
-      const agg = acc[row.provider] ?? { usage: emptyFinanceBuckets(), costMicros: 0, models: new Set<string>() }
+    modelRows.reduce<Record<string, { usage: FinanceTokenBuckets; costMicros: number; models: Set<string>; modes: Set<FinanceBillingMode> }>>((acc, row) => {
+      const agg = acc[row.provider] ?? { usage: emptyFinanceBuckets(), costMicros: 0, models: new Set<string>(), modes: new Set<FinanceBillingMode>() }
       agg.usage = addFinanceBuckets(agg.usage, row.usage)
       agg.costMicros += row.costMicros
       agg.models.add(row.model)
+      agg.modes.add(row.billingMode ?? 'metered')
       acc[row.provider] = agg
       return acc
     }, {}),
@@ -412,6 +427,7 @@ export async function buildFinanceLedger(
     usage: agg.usage,
     costMicros: agg.costMicros,
     modelCount: agg.models.size,
+    ...agg.modes.size > 1 ? { billingMode: 'mixed' as const } : agg.modes.has('plan') ? { billingMode: 'plan' as const } : {},
   })).sort((a, b) => b.costMicros - a.costMicros)
   const dayRows: FinanceDayRow[] = Object.entries(byDayUsage)
     .map(([day, usage]) => ({ day, usage, costMicros: byDayCost[day] ?? 0 }))
@@ -456,6 +472,8 @@ export async function buildFinanceLedger(
     currency: config.currency,
     totals,
     totalCostMicros: totalCost,
+    meteredCostMicros,
+    planEquivalentCostMicros,
     sessionCount: records.length,
     workspaceCount: workspaceMeta.size,
     taskCount: taskMeta.size,
