@@ -34,6 +34,28 @@ export function financeModelKey(provider: string, model: string): string {
   return `${provider}/${model}`
 }
 
+/** The provider part of a model key (the part before the first '/'). */
+export function financeProviderOf(modelKey: string): string {
+  const slash = modelKey.indexOf('/')
+  return slash === -1 ? modelKey : modelKey.slice(0, slash)
+}
+
+/** The model part of a model key (the part after the first '/'). */
+export function financeModelOf(modelKey: string): string {
+  const slash = modelKey.indexOf('/')
+  return slash === -1 ? modelKey : modelKey.slice(slash + 1)
+}
+
+/**
+ * The flat fallback rate for a model with no prices[modelKey] entry: the
+ * provider's configured default rate when one exists, else the global
+ * `defaultPrice`. This is the resolution that lets non-DeepSeek providers
+ * (openai/*, anthropic/*, ...) price sensibly without a per-model entry.
+ */
+export function financeProviderDefault(config: FinanceConfig, modelKey: string): FinancePriceRate {
+  return config.providerDefaults?.[financeProviderOf(modelKey)] ?? config.defaultPrice
+}
+
 /** Empty token buckets. */
 export function emptyFinanceBuckets(): FinanceTokenBuckets {
   return {
@@ -182,7 +204,7 @@ export function financeWindowInfo(config: FinanceConfig, modelKey: string, timeM
       band: 'flat',
       localHour: financeLocalHour(timeMs, DEFAULT_UTC_OFFSET_MINUTES),
       localDay: financeLocalDay(timeMs, DEFAULT_UTC_OFFSET_MINUTES),
-      rate: config.defaultPrice,
+      rate: financeProviderDefault(config, modelKey),
     }
   }
   if (entry.kind === 'flat') {
@@ -204,7 +226,8 @@ export function financeWindowInfo(config: FinanceConfig, modelKey: string, timeM
 /**
  * Full rate for a model at a moment: era-resolved, and peak/off-peak aware
  * for windowed entries (the UTC hour is converted to the entry's local clock).
- * Unknown models fall back to the flat `defaultPrice`.
+ * Unknown models fall back to the flat `providerDefaults[provider]` rate, then
+ * to the global `defaultPrice`.
  */
 export function financeRateAt(config: FinanceConfig, modelKey: string, timeMs: number): FinancePriceRate {
   return financeWindowInfo(config, modelKey, timeMs).rate
@@ -236,7 +259,7 @@ export function financeCostByModelHour(config: FinanceConfig, modelKey: string, 
  */
 export function financeBaseCostMicros(config: FinanceConfig, modelKey: string, buckets: FinanceTokenBuckets, timeMs: number): number {
   const entry = financeEntryFor(config, modelKey, timeMs)
-  return financeBucketCostMicros(buckets, entry === undefined ? config.defaultPrice : financeBaseRate(entry))
+  return financeBucketCostMicros(buckets, entry === undefined ? financeProviderDefault(config, modelKey) : financeBaseRate(entry))
 }
 
 /** Epoch ms from a raw `effectiveFrom` (number, ISO string, or absent). */
@@ -297,6 +320,7 @@ export function normalizeFinanceConfig(raw: FinanceConfigInput | FinanceConfig):
     currency: base.currency ?? 'CNY',
     balance: base.balance ?? { baseURL: 'https://api.deepseek.com', apiKeyEnv: 'DEEPSEEK_API_KEY', timeoutMs: 10_000 },
     defaultPrice: base.defaultPrice ?? DEFAULT_PRICE,
+    providerDefaults: base.providerDefaults ?? {},
     prices: normalizeFinancePrices(base.prices),
   }
 }

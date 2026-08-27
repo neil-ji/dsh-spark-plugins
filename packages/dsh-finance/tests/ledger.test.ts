@@ -260,6 +260,11 @@ describe('buildFinanceLedger with hourly usage', () => {
     const model = ledger.byModel.find(m => m.modelKey === 'deepseek-official/deepseek-v4-flash')!
     expect(model.usage.uncachedInputTokens).toBe(2_000_000)
     expect(model.costMicros).toBe(4_500_000)
+    expect(model.provider).toBe('deepseek-official')
+    expect(model.model).toBe('deepseek-v4-flash')
+    const provider = ledger.byProvider.find(p => p.provider === 'deepseek-official')!
+    expect(provider.costMicros).toBe(4_500_000)
+    expect(provider.modelCount).toBe(1)
 
     // Aggregate rows stay consistent with the session total.
     expect(ledger.totalCostMicros).toBe(4_500_000)
@@ -334,9 +339,51 @@ describe('buildFinanceLedger with hourly usage', () => {
     const session = ledger.sessions[0]
     // flash peak (3 CNY) + unknown model at default (2 CNY)
     expect(session.costMicros).toBe(5_000_000)
-    expect(ledger.byModel.find(m => m.modelKey === 'custom/my-model')!.costMicros).toBe(2_000_000)
+    const custom = ledger.byModel.find(m => m.modelKey === 'custom/my-model')!
+    expect(custom.costMicros).toBe(2_000_000)
+    expect(custom.provider).toBe('custom')
+    expect(custom.model).toBe('my-model')
     // Unknown models price at the flat default: no shift savings.
-    expect(ledger.byModel.find(m => m.modelKey === 'custom/my-model')!.shiftSavingsMicros).toBe(0)
+    expect(custom.shiftSavingsMicros).toBe(0)
+    // Provider rollup folds the two providers' models into two rows.
+    expect(ledger.byProvider).toHaveLength(2)
+    const byCustom = ledger.byProvider.find(p => p.provider === 'custom')!
+    expect(byCustom.costMicros).toBe(2_000_000)
+    expect(byCustom.modelCount).toBe(1)
+    expect(ledger.byProvider[0].provider).toBe('deepseek-official')
+  })
+
+  it('rolls multiple models of one provider into a single byProvider row', async () => {
+    const { ctx } = makeCtx([{ id: 'a', createdAt: ERA_B }], {
+      'a': {
+        financeUsageHourly: hourlyUsage({
+          'openai/gpt-4o': { '2026-08-17T02': { uncachedInputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 } },
+          'openai/gpt-4o-mini': { '2026-08-17T02': { uncachedInputTokens: 500_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 } },
+          'anthropic/claude-opus': { '2026-08-17T02': { uncachedInputTokens: 200_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 } },
+        }),
+        title: 'A',
+      },
+    })
+    const configWithOpenAI: FinanceConfig = {
+      ...windowedConfig,
+      providerDefaults: { openai: { inputMicrosPerMtok: 4_000_000, outputMicrosPerMtok: 20_000_000 } },
+    }
+    const ledger = await buildFinanceLedger(ctx, configWithOpenAI, undefined, { nowMs: HOUR_NOW_MS })
+    // openai/gpt-4o (1M @ 4) + openai/gpt-4o-mini (0.5M @ 4) = 6,000,000
+    // anthropic/claude-opus (0.2M @ default 2) = 400,000
+    const openai = ledger.byProvider.find(p => p.provider === 'openai')!
+    expect(openai.costMicros).toBe(6_000_000)
+    expect(openai.modelCount).toBe(2)
+    expect(openai.usage.uncachedInputTokens).toBe(1_500_000)
+    const anthropic = ledger.byProvider.find(p => p.provider === 'anthropic')!
+    expect(anthropic.costMicros).toBe(400_000)
+    expect(anthropic.modelCount).toBe(1)
+    // Sorted by cost descending: openai first.
+    expect(ledger.byProvider[0].provider).toBe('openai')
+    // byModel rows still carry the split provider/model.
+    const mini = ledger.byModel.find(m => m.modelKey === 'openai/gpt-4o-mini')!
+    expect(mini.provider).toBe('openai')
+    expect(mini.model).toBe('gpt-4o-mini')
   })
 })
 

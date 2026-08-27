@@ -11,11 +11,15 @@ import {
   financeHourTime,
   financeLocalDay,
   financeModelKey,
+  financeModelOf,
+  financeProviderDefault,
+  financeProviderOf,
   financeRateAt,
   financeWindowedSince,
   financeWindowInfo,
   isPeakLocalDay,
   isPeakLocalHour,
+  normalizeFinanceConfig,
   normalizeFinancePrices,
 } from '../src/pricing.ts'
 import type { FinanceConfig, FinancePriceEntry } from '../src/types.ts'
@@ -65,6 +69,13 @@ describe('pricing', () => {
     expect(financeModelKey('deepseek-official', 'deepseek-v4-flash')).toBe('deepseek-official/deepseek-v4-flash')
   })
 
+  it('splits a model key back into provider and model', () => {
+    expect(financeProviderOf('openai/gpt-4o')).toBe('openai')
+    expect(financeModelOf('openai/gpt-4o')).toBe('gpt-4o')
+    expect(financeProviderOf('bare-model')).toBe('bare-model')
+    expect(financeModelOf('bare-model')).toBe('bare-model')
+  })
+
   it('returns zero buckets', () => {
     expect(emptyFinanceBuckets()).toEqual({
       uncachedInputTokens: 0,
@@ -106,6 +117,43 @@ describe('pricing', () => {
     const buckets = { uncachedInputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 }
     expect(financeRateAt(config, 'unknown/model', PEAK_TIME)).toBe(config.defaultPrice)
     expect(financeBucketCostMicros(buckets, financeRateAt(config, 'unknown/model', PEAK_TIME))).toBe(2_000_000)
+  })
+
+  it('prices unknown models of a configured provider at its per-provider default', () => {
+    const openaiDefault = { inputMicrosPerMtok: 10_000_000, cacheReadMicrosPerMtok: 2_500_000, outputMicrosPerMtok: 40_000_000 }
+    const custom: FinanceConfig = {
+      ...config,
+      providerDefaults: { openai: openaiDefault },
+    }
+    const buckets = { uncachedInputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 1_000_000 }
+    expect(financeProviderDefault(custom, 'openai/gpt-4o')).toBe(openaiDefault)
+    expect(financeRateAt(custom, 'openai/gpt-4o', PEAK_TIME)).toBe(openaiDefault)
+    // 1M input at 10 + 1M output at 40 = 50,000,000 micros
+    expect(financeBucketCostMicros(buckets, financeRateAt(custom, 'openai/gpt-4o', PEAK_TIME))).toBe(50_000_000)
+  })
+
+  it('still falls back to the global default for providers without a default', () => {
+    const custom: FinanceConfig = {
+      ...config,
+      providerDefaults: { openai: { inputMicrosPerMtok: 1, outputMicrosPerMtok: 1 } },
+    }
+    expect(financeProviderDefault(custom, 'anthropic/claude-opus')).toBe(config.defaultPrice)
+    expect(financeRateAt(custom, 'anthropic/claude-opus', PEAK_TIME)).toBe(config.defaultPrice)
+  })
+
+  it('prices hour-less unknown models at the provider default rate', () => {
+    const openaiDefault = { inputMicrosPerMtok: 10_000_000, cacheReadMicrosPerMtok: 2_500_000, outputMicrosPerMtok: 40_000_000 }
+    const custom: FinanceConfig = { ...config, providerDefaults: { openai: openaiDefault } }
+    const buckets = { uncachedInputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 }
+    expect(financeBaseCostMicros(custom, 'openai/gpt-4o', buckets, OFFPEAK_TIME)).toBe(10_000_000)
+  })
+
+  it('reports unknown models of a configured provider as flat at its default rate', () => {
+    const openaiDefault = { inputMicrosPerMtok: 10_000_000, cacheReadMicrosPerMtok: 2_500_000, outputMicrosPerMtok: 40_000_000 }
+    const custom: FinanceConfig = { ...config, providerDefaults: { openai: openaiDefault } }
+    const info = financeWindowInfo(custom, 'openai/gpt-4o', PEAK_TIME)
+    expect(info.band).toBe('flat')
+    expect(info.rate).toBe(openaiDefault)
   })
 
   it('recognizes the DeepSeek peak windows (Beijing hours)', () => {
@@ -271,6 +319,15 @@ describe('pricing', () => {
   it('normalization is idempotent over already-normalized entries', () => {
     const prices = normalizeFinancePrices({ 'm': [FLASH_WINDOWED] })
     expect(prices['m'][0]).toBe(FLASH_WINDOWED)
+  })
+
+  it('normalizeFinanceConfig carries provider defaults and defaults them to empty', () => {
+    const normalized = normalizeFinanceConfig({
+      providerDefaults: { openai: { inputMicrosPerMtok: 1, outputMicrosPerMtok: 2 } },
+    })
+    expect(normalized.providerDefaults.openai).toEqual({ inputMicrosPerMtok: 1, outputMicrosPerMtok: 2 })
+    expect(normalizeFinanceConfig({}).providerDefaults).toEqual({})
+    expect(normalizeFinanceConfig(config).providerDefaults).toEqual({})
   })
 })
 

@@ -47,6 +47,9 @@ export {
   financeHourTime,
   financeLocalDay,
   financeModelKey,
+  financeModelOf,
+  financeProviderDefault,
+  financeProviderOf,
   financeRateAt,
   financeWindowedSince,
   financeWindowInfo,
@@ -104,6 +107,7 @@ export class FinanceService extends TypertRemoteService {
       timeoutMs: z.number().step(1).min(1).default(10_000),
     }),
     defaultPrice: priceRate.default(DEFAULT_PRICE),
+    providerDefaults: z.dict(priceRate).default({}),
     prices: z.dict(priceEntries).default({}),
   })
 

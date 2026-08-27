@@ -38,6 +38,8 @@ import {
   financeBucketCostMicros,
   financeEntryFor,
   financeHourTime,
+  financeModelOf,
+  financeProviderOf,
   financeRateAt,
   financeWindowedSince,
   financeWindowInfo,
@@ -51,6 +53,7 @@ import type {
   FinanceLedger,
   FinanceModelRow,
   FinancePeakValleySplit,
+  FinanceProviderRow,
   FinanceRescanResult,
   FinanceSessionRow,
   FinanceTaskRow,
@@ -386,11 +389,30 @@ export async function buildFinanceLedger(
   const modelRows: FinanceModelRow[] = Object.entries(byModelUsage)
     .map(([modelKey, usage]) => ({
       modelKey,
+      provider: financeProviderOf(modelKey),
+      model: financeModelOf(modelKey),
       usage,
       costMicros: byModelCost[modelKey] ?? 0,
       shiftSavingsMicros: Math.max(0, (modelPeakCost[modelKey] ?? 0) - (modelPeakOffPeakCost[modelKey] ?? 0)),
     }))
     .sort((a, b) => b.costMicros - a.costMicros)
+  // Per-provider rollup: fold the model rows by their provider part, keeping
+  // the distinct model count so the dashboard can show how spread the spend is.
+  const providerRows: FinanceProviderRow[] = Object.entries(
+    modelRows.reduce<Record<string, { usage: FinanceTokenBuckets; costMicros: number; models: Set<string> }>>((acc, row) => {
+      const agg = acc[row.provider] ?? { usage: emptyFinanceBuckets(), costMicros: 0, models: new Set<string>() }
+      agg.usage = addFinanceBuckets(agg.usage, row.usage)
+      agg.costMicros += row.costMicros
+      agg.models.add(row.model)
+      acc[row.provider] = agg
+      return acc
+    }, {}),
+  ).map(([provider, agg]) => ({
+    provider,
+    usage: agg.usage,
+    costMicros: agg.costMicros,
+    modelCount: agg.models.size,
+  })).sort((a, b) => b.costMicros - a.costMicros)
   const dayRows: FinanceDayRow[] = Object.entries(byDayUsage)
     .map(([day, usage]) => ({ day, usage, costMicros: byDayCost[day] ?? 0 }))
     .sort((a, b) => a.day.localeCompare(b.day))
@@ -441,6 +463,7 @@ export async function buildFinanceLedger(
     hourOfDayWindowStartMs: hourWindowStartMs,
     byDay: dayRows,
     byModel: modelRows,
+    byProvider: providerRows,
     byWorkspace: workspaceRows,
     tasks: taskRows,
     sessions: records.map(record => record.row).sort((a, b) => b.createdAt - a.createdAt),

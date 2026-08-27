@@ -128,6 +128,15 @@ export interface FinanceConfigInput {
   currency?: string
   balance?: FinanceConfig['balance']
   defaultPrice?: FinancePriceRate
+  /**
+   * Flat per-provider fallback rates, keyed by provider (the part of the model
+   * key before the first '/' of 'provider/model'). A model with no
+   * prices[modelKey] entry prices at its provider's default rate first, then
+   * at the global defaultPrice. This is what lets the ledger give non-DeepSeek
+   * providers (openai/*, anthropic/*, google/*, ...) a sensible cost without
+   * enumerating every model.
+   */
+  providerDefaults?: Record<string, FinancePriceRate>
   /** One price entry per model key, or an era history list of entries. */
   prices?: Record<string, FinancePriceEntryInput | FinancePriceEntryInput[]>
 }
@@ -141,6 +150,7 @@ export interface FinanceConfig {
     timeoutMs: number
   }
   defaultPrice: FinancePriceRate
+  providerDefaults: Record<string, FinancePriceRate>
   prices: Record<string, readonly FinancePriceEntry[]>
 }
 
@@ -194,6 +204,10 @@ export interface FinanceWorkspaceRow {
 
 export interface FinanceModelRow {
   modelKey: string
+  /** Provider part of the model key (the part before the first '/'). */
+  provider: string
+  /** Model part of the model key (the part after the first '/'). */
+  model: string
   usage: FinanceTokenBuckets
   costMicros: number
   /**
@@ -202,6 +216,15 @@ export interface FinanceModelRow {
    * exact per-hour path; absent when the model has no hour detail.
    */
   shiftSavingsMicros?: number
+}
+
+/** Per-provider cost rollup across every model observed under that provider. */
+export interface FinanceProviderRow {
+  provider: string
+  usage: FinanceTokenBuckets
+  costMicros: number
+  /** Distinct models observed under this provider. */
+  modelCount: number
 }
 
 export interface FinanceDayRow {
@@ -304,6 +327,11 @@ export interface FinanceLedger {
   hourOfDayWindowStartMs: number
   byDay: readonly FinanceDayRow[]
   byModel: readonly FinanceModelRow[]
+  /**
+   * Per-provider cost rollup (provider part of the model key), sorted by cost
+   * descending. Lets the dashboard show which LLM provider drives the spend.
+   */
+  byProvider: readonly FinanceProviderRow[]
   byWorkspace: readonly FinanceWorkspaceRow[]
   tasks: readonly FinanceTaskRow[]
   sessions: readonly FinanceSessionRow[]
