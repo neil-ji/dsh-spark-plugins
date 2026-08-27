@@ -7,6 +7,13 @@
  *  2. 更新 <profile>/pnpm-workspace.yaml：挂载本 monorepo 的 packages/*（替换旧项目路径）
  *  3. 在 profile 目录执行 pnpm install（生成/更新链接与锁文件）
  *
+ * 注意：必须用 file: 而非 link:。实测 dsh web（3080）的 /plugins/<id>/client.js
+ * 路由直接按 .pnpm/<name>@* 虚拟 store 目录解析包（改名残留副本立即 404），
+ * 不跟随顶层 node_modules symlink——link: 会让服务端永远读不到 workspace 更新。
+ * file: 的 .pnpm 副本与 workspace lib 是硬链接（同 inode），build 后内容即时
+ * 同步；install 重链期间有短暂空文件窗口（实测抓过），由各包 build 的原子写
+ * （临时文件 + rename）+ 浏览器刷新兜底。
+ *
  * bundle 注册列表在 profile package.json 的 dsh.profile.bundles 中维护，本脚本不动它。
  */
 import { readFile, writeFile } from 'node:fs/promises'

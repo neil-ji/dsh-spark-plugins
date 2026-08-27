@@ -23,6 +23,7 @@
  */
 
 import { execSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { copyFileSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import path from 'node:path'
@@ -61,7 +62,11 @@ function emitCssModule(relPath) {
   })
   const classMap = {}
   for (const [local, exp] of Object.entries(cssExports ?? {})) classMap[local] = exp.name
-  const id = `dsh-ui-kit/${relPath}`
+  // 内容寻址 id：同一份 css 产物（同一 ui-kit dist 版本）hash 相同，跨插件共享
+  // 一个 <style> 标签（幂等）；内容不同（不同 ui-kit 版本）时 hash 不同，
+  // 各插件注入各自的标签——避免"先 materialize 者赢"导致其他插件丢样式。
+  const hash = createHash('sha1').update(code.toString()).digest('hex').slice(0, 8)
+  const id = `dsh-ui-kit/${hash}/${relPath}`
   const module = [
     `/* generated from ${relPath} */`,
     `const id = ${JSON.stringify(id)}`,
@@ -101,7 +106,7 @@ function emitKatex() {
       path.join(katexOutDir, 'katex-inject.mjs'),
       [
         '/* generated KaTeX stylesheet with inlined woff2 fonts */',
-        `const id = 'dsh-ui-kit/katex'`,
+        `const id = 'dsh-ui-kit/${createHash('sha1').update(css).digest('hex').slice(0, 8)}/katex'`,
         `if (typeof document !== 'undefined' && !document.querySelector('style[data-dsh-ui-kit="' + id + '"]')) {`,
         `  const el = document.createElement('style')`,
         `  el.setAttribute('data-dsh-ui-kit', id)`,

@@ -9,12 +9,18 @@
  */
 import { build } from 'esbuild'
 import { execSync } from 'node:child_process'
-import { rmSync } from 'node:fs'
-import { readFileSync } from 'node:fs'
+import { rmSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { relative, resolve } from 'node:path'
 
 const PACKAGE_NAME = 'dsh-finance-client'
+
+/** 原子写：先生成临时文件再 rename，读方永远看到完整的旧文件或完整的新文件。 */
+const atomicWrite = (file, contents) => {
+  const tmp = file + '.tmp-' + process.pid
+  writeFileSync(tmp, contents)
+  renameSync(tmp, file)
+}
 
 rmSync('lib', { recursive: true, force: true })
 execSync('npx tsc -p tsconfig.json', { stdio: 'inherit' })
@@ -67,7 +73,14 @@ const loaderWrapper = (id) => ({
   footer: '\n\t\treturn module.exports;\n\t}\n});\n',
 })
 
-await build({
+/** 构建并原子落盘全部产物（write:false 由本脚本控制写入时机）。 */
+const buildAtomic = async (options) => {
+  const result = await build({ ...options, write: false })
+  for (const file of result.outputFiles) atomicWrite(file.path, file.contents)
+  return result
+}
+
+await buildAtomic({
   entryPoints: { 'index': 'src/index.ts' },
   outdir: 'lib',
   bundle: true,
@@ -79,7 +92,7 @@ await build({
 })
 
 const wrapper = loaderWrapper(PACKAGE_NAME)
-await build({
+await buildAtomic({
   entryPoints: { 'client': 'src/client/index.ts' },
   outdir: 'lib',
   bundle: true,

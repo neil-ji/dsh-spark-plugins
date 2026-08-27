@@ -61,7 +61,7 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "node --test --test-reporter=spec test/memory-core.test.ts test/memory-extract.test.ts test/memory-terms.test.ts test/memory-spec-heal.test.ts",
     "test:coverage": "node --test --experimental-test-coverage test/memory-core.test.ts test/memory-extract.test.ts test/memory-terms.test.ts test/memory-spec-heal.test.ts",
-    "build": "tsdown"
+    "build": "node build.mjs"
   },
   "license": "MIT",
   "peerDependencies": {
