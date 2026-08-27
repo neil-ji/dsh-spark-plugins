@@ -12,13 +12,35 @@
           baseURL: https://api.deepseek.com
           apiKeyEnv: DEEPSEEK_API_KEY
           timeoutMs: 10000
-        # Flat 24/7 fallback for models without a `prices` entry (deepseek-chat
-        # era estimate). Maintain from official pricing docs.
+        # Flat 24/7 fallback for models without a `prices` entry and whose
+        # provider has no `providerDefaults` rate (deepseek-chat era estimate).
+        # Maintain from official pricing docs.
         defaultPrice:
           inputMicrosPerMtok: 2000000
           cacheReadMicrosPerMtok: 500000
           cacheWriteMicrosPerMtok: 2000000
           outputMicrosPerMtok: 8000000
+        # Per-provider flat fallback rates, keyed by provider (the part of the
+        # model key before the first '/'). Any model with no per-model `prices`
+        # entry under that provider prices at this rate instead of the DeepSeek-
+        # oriented global defaultPrice. This is how non-DeepSeek providers get a
+        # sensible cost estimate without enumerating every model. Amounts are
+        # integer micros per million tokens (CNY * 1e6); estimates converted at
+        # ~7.2 CNY/USD from published USD list prices (reviewed 2025), maintain
+        # from official pricing docs.
+        providerDefaults:
+          openai:
+            inputMicrosPerMtok: 3600000
+            cacheReadMicrosPerMtok: 900000
+            outputMicrosPerMtok: 14400000
+          anthropic:
+            inputMicrosPerMtok: 18000000
+            cacheReadMicrosPerMtok: 1800000
+            outputMicrosPerMtok: 90000000
+          google:
+            inputMicrosPerMtok: 4320000
+            cacheReadMicrosPerMtok: 1080000
+            outputMicrosPerMtok: 28800000
         # Official DeepSeek V4 price table (api.deepseek.com, reviewed 2026-08).
         # Each model carries an era history: the launch flat price, then the
         # peak/off-peak schedule effective 2026-08-17 00:00 Beijing time.
@@ -73,6 +95,39 @@
               peakHours: [[9, 12], [14, 18]]
               peakDays: [1, 2, 3, 4, 5]
               utcOffsetMinutes: 480
+        # Starter non-DeepSeek price entries (flat 24/7, no peak/valley until a
+        # provider publishes a schedule). USD list prices converted at ~7.2
+        # CNY/USD; amounts are integer micros per million tokens (CNY * 1e6).
+        # Estimates as of 2025 — verify against each provider's official docs
+        # and adjust here or via the settings card.
+          openai/gpt-4o:
+            - inputMicrosPerMtok: 18000000
+              cacheReadMicrosPerMtok: 9000000
+              outputMicrosPerMtok: 72000000
+          openai/gpt-4o-mini:
+            - inputMicrosPerMtok: 1080000
+              cacheReadMicrosPerMtok: 540000
+              outputMicrosPerMtok: 4320000
+          anthropic/claude-opus-4-5:
+            - inputMicrosPerMtok: 108000000
+              cacheReadMicrosPerMtok: 10800000
+              outputMicrosPerMtok: 540000000
+          anthropic/claude-sonnet-4-5:
+            - inputMicrosPerMtok: 21600000
+              cacheReadMicrosPerMtok: 2160000
+              outputMicrosPerMtok: 108000000
+          anthropic/claude-haiku-4-5:
+            - inputMicrosPerMtok: 7200000
+              cacheReadMicrosPerMtok: 720000
+              outputMicrosPerMtok: 36000000
+          google/gemini-2.5-pro:
+            - inputMicrosPerMtok: 9000000
+              cacheReadMicrosPerMtok: 2250000
+              outputMicrosPerMtok: 72000000
+          google/gemini-2.5-flash:
+            - inputMicrosPerMtok: 2160000
+              cacheReadMicrosPerMtok: 540000
+              outputMicrosPerMtok: 18000000
 
     - id: ui-finance
       name: dsh-finance-client
