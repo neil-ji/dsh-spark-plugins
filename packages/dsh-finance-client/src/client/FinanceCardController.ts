@@ -22,10 +22,11 @@ export type FinanceCardFieldName =
   | 'balance.timeoutMs'
   | 'defaultPrice'
   | 'providerDefaults'
+  | 'billingModes'
   | 'prices'
 
 const BALANCE_FIELDS: readonly FinanceCardFieldName[] = ['balance.baseURL', 'balance.apiKeyEnv', 'balance.timeoutMs']
-const JSON_FIELDS: ReadonlySet<FinanceCardFieldName> = new Set(['defaultPrice', 'providerDefaults', 'prices'])
+const JSON_FIELDS: ReadonlySet<FinanceCardFieldName> = new Set(['defaultPrice', 'providerDefaults', 'billingModes', 'prices'])
 
 export interface FinanceCardFieldState {
   /** Draft text the control renders. */
@@ -55,6 +56,7 @@ export interface FinanceCardState {
   balanceTimeoutMs: FinanceCardFieldState
   defaultPrice: FinanceCardFieldState
   providerDefaults: FinanceCardFieldState
+  billingModes: FinanceCardFieldState
   prices: FinanceCardFieldState
   /** Dashboard view preferences (browser-local; apply immediately). */
   prefs: FinancePrefs
@@ -119,6 +121,7 @@ export class FinanceCardController {
       case 'balance.timeoutMs': return value.balance?.timeoutMs
       case 'defaultPrice': return value.defaultPrice
       case 'providerDefaults': return value.providerDefaults
+      case 'billingModes': return value.billingModes
       case 'prices': return value.prices
     }
   }
@@ -145,6 +148,13 @@ export class FinanceCardController {
       let parsed: unknown
       try { parsed = JSON.parse(trimmed) } catch { return undefined }
       if (!isPlainObject(parsed)) return undefined
+      // Billing-mode tags must carry known modes only — fail fast client-side
+      // instead of letting the Host reject the whole settings write later.
+      if (field === 'billingModes') {
+        for (const mode of Object.values(parsed)) {
+          if (mode !== 'metered' && mode !== 'plan') return undefined
+        }
+      }
       return { kind: 'set', value: parsed }
     }
     return { kind: 'set', value: trimmed }
@@ -251,7 +261,7 @@ export class FinanceCardController {
       }
     }
 
-    for (const field of ['defaultPrice', 'providerDefaults', 'prices'] as const) {
+    for (const field of ['defaultPrice', 'providerDefaults', 'billingModes', 'prices'] as const) {
       const staged = this.staged.get(field)
       if (staged !== undefined) pushIfChanged(field, staged, this.sectionValue(field))
     }
@@ -280,6 +290,7 @@ export class FinanceCardController {
       balanceTimeoutMs: this.fieldState('balance.timeoutMs'),
       defaultPrice: this.fieldState('defaultPrice'),
       providerDefaults: this.fieldState('providerDefaults'),
+      billingModes: this.fieldState('billingModes'),
       prices: this.fieldState('prices'),
       prefs: readFinancePrefs(),
     }

@@ -144,6 +144,8 @@ const OFFPEAK_COLOR = '#4176e6'
 const FLAT_COLOR = '#64748b'
 /** Pre-window-era sessions, billed at the flat rate (lighter slate). */
 const LEGACY_COLOR = '#94a3b8'
+/** Plan (subscription) routes: list-price equivalents, never cash flow. */
+const PLAN_COLOR = '#a855f7'
 
 function KpiCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
@@ -505,23 +507,31 @@ function FinanceReady({ overview, peak, t, refresh }: {
     if ((row.shiftSavingsMicros ?? 0) > 0) {
       parts.push(`${t('shiftSavings')} ${formatMicros(row.shiftSavingsMicros ?? 0, ledger.currency)}`)
     }
+    const plan = row.billingMode === 'plan'
+    if (plan) parts.unshift(`${t('planEquivalent')} ${formatMicros(row.costMicros, ledger.currency)}`)
     return {
       key: row.modelKey,
-      label: row.model,
+      label: plan ? `${row.model} ·${t('planTag')}` : row.model,
       costMicros: row.costMicros,
+      color: plan ? PLAN_COLOR : undefined,
       detail: parts.join(' · '),
     }
   }), 5, t), [ledger, t])
   // Provider donut: cost rollup per LLM provider, with the distinct model
   // count folded into the Other row's secondary value.
-  const providerRows = useMemo(() => buildBreakdown((ledger.byProvider ?? []).map(row => ({
-    key: row.provider,
-    label: row.provider,
-    costMicros: row.costMicros,
-    detail: `${row.modelCount} ${t('modelCountUnit')} · ${t('tipInput')} ${formatTokens(row.usage.uncachedInputTokens)}`,
-    value2: row.modelCount,
-    value2Label: t('modelCountUnit'),
-  })), 5, t), [ledger, t])
+  const providerRows = useMemo(() => buildBreakdown((ledger.byProvider ?? []).map(row => {
+    const plan = row.billingMode === 'plan'
+    const mixed = row.billingMode === 'mixed'
+    return {
+      key: row.provider,
+      label: plan ? `${row.provider} ·${t('planTag')}` : mixed ? `${row.provider} ·${t('mixedTag')}` : row.provider,
+      costMicros: row.costMicros,
+      color: plan ? PLAN_COLOR : mixed ? OTHER_CHART_COLOR : undefined,
+      detail: `${row.modelCount} ${t('modelCountUnit')} · ${t('tipInput')} ${formatTokens(row.usage.uncachedInputTokens)}`,
+      value2: row.modelCount,
+      value2Label: t('modelCountUnit'),
+    }
+  }), 5, t), [ledger, t])
   const workspaceRows = useMemo(() => buildBreakdown(ledger.byWorkspace.map(row => ({
     key: row.workspaceId ?? '__unassigned__',
     label: row.title,
@@ -578,7 +588,17 @@ function FinanceReady({ overview, peak, t, refresh }: {
         </div>
       </div>
 
-      {charts.gauge ? <BalanceGauge balance={balance} peak={peak} spentMicros={ledger.totalCostMicros} currency={ledger.currency} t={t} /> : null}
+      {charts.gauge ? (
+        <BalanceGauge
+          balance={balance}
+          peak={peak}
+          // The wallet only ever loses METERED money; plan subscriptions are a
+          // flat fee, so their list-price equivalent must not drain the gauge.
+          spentMicros={ledger.meteredCostMicros ?? ledger.totalCostMicros}
+          currency={ledger.currency}
+          t={t}
+        />
+      ) : null}
 
       {charts.kpis ? (
         <div className={css.kpis}>
@@ -586,6 +606,12 @@ function FinanceReady({ overview, peak, t, refresh }: {
           <KpiCard label={t('totalOutput')} value={formatTokens(ledger.totals.outputTokens)} />
           <KpiCard label={t('sessions')} value={String(ledger.sessionCount)} />
           <KpiCard label={t('workspaces')} value={String(ledger.workspaceCount)} />
+        </div>
+      ) : null}
+      {(ledger.planEquivalentCostMicros ?? 0) > 0 && charts.kpis ? (
+        <div className={css.kpis}>
+          <KpiCard label={t('meteredSpend')} value={formatMicros(ledger.meteredCostMicros ?? ledger.totalCostMicros, ledger.currency)} sub={t('meteredSpendHint')} />
+          <KpiCard label={t('planEquivalent')} value={formatMicros(ledger.planEquivalentCostMicros ?? 0, ledger.currency)} sub={t('planEquivalentHint')} />
         </div>
       ) : null}
       {ledger.windowedSinceMs == null ? (
@@ -644,7 +670,14 @@ function FinanceReady({ overview, peak, t, refresh }: {
               <div className={css.cardTitle}>{t('byProvider')}</div>
               <div className={css.cardStats}>
                 <span>{(ledger.byProvider ?? []).length} {t('providerCountUnit')}</span>
-                <span>{t('trendTotal')} {formatMicros(ledger.totalCostMicros, ledger.currency)}</span>
+                {(ledger.planEquivalentCostMicros ?? 0) > 0 ? (
+                  <>
+                    <span title={t('meteredSpendHint')}>{t('meteredSpend')} {formatMicros(ledger.meteredCostMicros ?? ledger.totalCostMicros, ledger.currency)}</span>
+                    <span title={t('planEquivalentHint')}>{t('planEquivalent')} {formatMicros(ledger.planEquivalentCostMicros ?? 0, ledger.currency)}</span>
+                  </>
+                ) : (
+                  <span>{t('trendTotal')} {formatMicros(ledger.totalCostMicros, ledger.currency)}</span>
+                )}
               </div>
               <DonutChart
                 rows={providerRows}

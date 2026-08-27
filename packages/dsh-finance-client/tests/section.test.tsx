@@ -14,6 +14,8 @@ function overview(): FinanceOverview {
       currency: 'CNY',
       totals: { uncachedInputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 500_000 },
       totalCostMicros: 6_000_000,
+      meteredCostMicros: 6_000_000,
+      planEquivalentCostMicros: 0,
       sessionCount: 2,
       workspaceCount: 1,
       taskCount: 1,
@@ -333,15 +335,42 @@ describe('FinanceAuditSection', () => {
       { provider: 'openai', usage, costMicros: 4_000_000, modelCount: 2 },
       { provider: 'anthropic', usage, costMicros: 2_000_000, modelCount: 1 },
     ]
-    const html = renderToStaticMarkup(createElement(FinanceAuditSection, {
-      ...baseProps,
-      useSnapshot: () => ({ status: 'ready' as const, overview: multi, error: null }),
-    }))
+    const html = renderToStaticMarkup(createElement(FinanceAuditSection, basePropsUse(multi)))
     expect(html).toContain('byProvider')            // card title + aria-label
     expect(html).toContain('providerCountUnit')     // stats line
     expect(html).toContain('aria-label="byProvider"')
     expect(html).toContain('openai')                // provider label kept
     expect(html).toContain('anthropic')             // second provider kept
+  })
+
+  it('labels and tints plan providers apart from metered spend', () => {
+    const mixed = overview()
+    const usage = { uncachedInputTokens: 100_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 50_000 }
+    mixed.ledger.totalCostMicros = 6_000_000
+    mixed.ledger.meteredCostMicros = 2_000_000
+    mixed.ledger.planEquivalentCostMicros = 4_000_000
+    mixed.ledger.byProvider = [
+      { provider: 'zai', usage, costMicros: 4_000_000, modelCount: 1, billingMode: 'plan' },
+      { provider: 'volcengine', usage, costMicros: 1_500_000, modelCount: 1 },
+      { provider: 'omni', usage, costMicros: 500_000, modelCount: 2, billingMode: 'mixed' },
+    ]
+    const html = renderToStaticMarkup(createElement(FinanceAuditSection, basePropsUse(mixed)))
+    expect(html).toContain('zai ·planTag')          // suffix tag on plan provider
+    expect(html).toContain('omni ·mixedTag')        // mixed providers get their own marker
+    expect(html).toContain('stroke:#a855f7')        // distinct plan hue
+    expect(html).toContain('meteredSpend CNY 2.00')   // real wallet outflow
+    expect(html).toContain('planEquivalent CNY 4.00') // list-price equivalent only
+  })
+
+  it('reconciles the balance gauge against metered spend only', () => {
+    const split = overview()
+    split.ledger.totalCostMicros = 6_000_000
+    split.ledger.meteredCostMicros = 2_000_000
+    split.ledger.planEquivalentCostMicros = 4_000_000
+    split.balance = { status: 'ok', updatedAt: 1, totalMicros: 100_000_000, currency: 'CNY' }
+    const html = renderToStaticMarkup(createElement(FinanceAuditSection, basePropsUse(split)))
+    // spent must NOT include plan equivalents — the wallet never paid them.
+    expect(html).toContain('spent CNY 2.00')
   })
 
   it('labels model donut slices by model and names the provider in the tooltip', () => {

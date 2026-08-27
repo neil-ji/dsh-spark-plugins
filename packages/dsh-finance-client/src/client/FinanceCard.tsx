@@ -175,6 +175,19 @@ export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, 
           onReset={() => onReset('providerDefaults')}
         />
         <Field
+          id="plugin-config-finance-billing-modes"
+          label={t('cardBillingModes')}
+          hint={t('cardBillingModesHint')}
+          state={state.billingModes}
+          multiline
+          disabled={disabled}
+          invalidLabel={t('invalidJson')}
+          overriddenLabel={t('overridden')}
+          resetLabel={t('reset')}
+          onEdit={(text) => onEdit('billingModes', text)}
+          onReset={() => onReset('billingModes')}
+        />
+        <Field
           id="plugin-config-finance-prices"
           label={t('cardPrices')}
           hint={t('cardPricesHint')}

@@ -26,6 +26,7 @@ function state(overrides: Partial<FinanceCardState> = {}): FinanceCardState {
     balanceTimeoutMs: field('10000'),
     defaultPrice: field(''),
     providerDefaults: field(''),
+    billingModes: field(''),
     prices: field(''),
     prefs: DEFAULT_FINANCE_PREFS,
     ...overrides,

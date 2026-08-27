@@ -183,6 +183,20 @@ describe('FinanceCardController', () => {
     expect(face.hooks.financeCard.getSnapshot().invalid).toBe(true)
   })
 
+  it('stages and saves billing-mode tags as one JSON write', async () => {
+    const { scope, writes } = makeScope({ value: baseSection() })
+    const controller = new FinanceCardController(scope)
+    const face = controller.inject()
+    face.edit('billingModes', JSON.stringify({ zai: 'plan' }))
+    expect(face.hooks.financeCard.getSnapshot().billingModes.invalid).toBe(false)
+    face.save()
+    await flush()
+    expect(writes).toEqual([{ op: 'set', field: 'billingModes', value: { zai: 'plan' } }])
+    // Unknown mode strings fail validation like any other non-enum JSON.
+    face.edit('billingModes', '{"zai":"prepaid"}')
+    expect(face.hooks.financeCard.getSnapshot().invalid).toBe(true)
+  })
+
   it('clears an overridden field on reset + save', async () => {
     const { scope, writes } = makeScope({ value: baseSection(), user: { currency: 'USD' } })
     const controller = new FinanceCardController(scope)
