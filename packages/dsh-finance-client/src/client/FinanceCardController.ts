@@ -21,10 +21,11 @@ export type FinanceCardFieldName =
   | 'balance.apiKeyEnv'
   | 'balance.timeoutMs'
   | 'defaultPrice'
+  | 'providerDefaults'
   | 'prices'
 
 const BALANCE_FIELDS: readonly FinanceCardFieldName[] = ['balance.baseURL', 'balance.apiKeyEnv', 'balance.timeoutMs']
-const JSON_FIELDS: ReadonlySet<FinanceCardFieldName> = new Set(['defaultPrice', 'prices'])
+const JSON_FIELDS: ReadonlySet<FinanceCardFieldName> = new Set(['defaultPrice', 'providerDefaults', 'prices'])
 
 export interface FinanceCardFieldState {
   /** Draft text the control renders. */
@@ -53,6 +54,7 @@ export interface FinanceCardState {
   balanceApiKeyEnv: FinanceCardFieldState
   balanceTimeoutMs: FinanceCardFieldState
   defaultPrice: FinanceCardFieldState
+  providerDefaults: FinanceCardFieldState
   prices: FinanceCardFieldState
   /** Dashboard view preferences (browser-local; apply immediately). */
   prefs: FinancePrefs
@@ -116,6 +118,7 @@ export class FinanceCardController {
       case 'balance.apiKeyEnv': return value.balance?.apiKeyEnv
       case 'balance.timeoutMs': return value.balance?.timeoutMs
       case 'defaultPrice': return value.defaultPrice
+      case 'providerDefaults': return value.providerDefaults
       case 'prices': return value.prices
     }
   }
@@ -248,7 +251,7 @@ export class FinanceCardController {
       }
     }
 
-    for (const field of ['defaultPrice', 'prices'] as const) {
+    for (const field of ['defaultPrice', 'providerDefaults', 'prices'] as const) {
       const staged = this.staged.get(field)
       if (staged !== undefined) pushIfChanged(field, staged, this.sectionValue(field))
     }
@@ -276,6 +279,7 @@ export class FinanceCardController {
       balanceApiKeyEnv: this.fieldState('balance.apiKeyEnv'),
       balanceTimeoutMs: this.fieldState('balance.timeoutMs'),
       defaultPrice: this.fieldState('defaultPrice'),
+      providerDefaults: this.fieldState('providerDefaults'),
       prices: this.fieldState('prices'),
       prefs: readFinancePrefs(),
     }

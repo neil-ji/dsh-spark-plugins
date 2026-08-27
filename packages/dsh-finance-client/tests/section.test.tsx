@@ -23,7 +23,10 @@ function overview(): FinanceOverview {
         { day: '2026-01-15', usage: { uncachedInputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 500_000 }, costMicros: 6_000_000 },
       ],
       byModel: [
-        { modelKey: 'deepseek-official/deepseek-v4-flash', usage: { uncachedInputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 500_000 }, costMicros: 6_000_000 },
+        { modelKey: 'deepseek-official/deepseek-v4-flash', provider: 'deepseek-official', model: 'deepseek-v4-flash', usage: { uncachedInputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 500_000 }, costMicros: 6_000_000 },
+      ],
+      byProvider: [
+        { provider: 'deepseek-official', usage: { uncachedInputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 500_000 }, costMicros: 6_000_000, modelCount: 1 },
       ],
       byWorkspace: [
         { workspaceId: 'ws-1', title: 'Workspace A', sessionCount: 2, usage: { uncachedInputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 500_000 }, costMicros: 6_000_000 },
@@ -52,6 +55,11 @@ const baseProps = {
   t,
   refresh: () => {},
   close: () => {},
+}
+
+/** Snapshot props pinned to one ready overview (shared by several tests). */
+function basePropsUse(ov: FinanceOverview) {
+  return { ...baseProps, useSnapshot: () => ({ status: 'ready' as const, overview: ov, error: null }) }
 }
 
 describe('FinanceAuditSection', () => {
@@ -279,6 +287,8 @@ describe('FinanceAuditSection', () => {
     const usage = { uncachedInputTokens: 100_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 50_000 }
     many.ledger.byModel = Array.from({ length: 8 }, (_, i) => ({
       modelKey: `model-${i + 1}`,
+      provider: 'prov',
+      model: `model-${i + 1}`,
       usage,
       costMicros: (8 - i) * 1_000_000,
     }))
@@ -303,8 +313,8 @@ describe('FinanceAuditSection', () => {
     const many = overview()
     const usage = { uncachedInputTokens: 100_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 50_000 }
     many.ledger.byModel = [
-      { modelKey: 'deepseek-official/deepseek-v4-flash', usage, costMicros: 3_400_000 },
-      { modelKey: 'deepseek-official/deepseek-v4-pro', usage, costMicros: 2_600_000 },
+      { modelKey: 'deepseek-official/deepseek-v4-flash', provider: 'deepseek-official', model: 'deepseek-v4-flash', usage, costMicros: 3_400_000 },
+      { modelKey: 'deepseek-official/deepseek-v4-pro', provider: 'deepseek-official', model: 'deepseek-v4-pro', usage, costMicros: 2_600_000 },
     ]
     const html = renderToStaticMarkup(createElement(FinanceAuditSection, {
       ...baseProps,
@@ -314,6 +324,37 @@ describe('FinanceAuditSection', () => {
     expect(html).toContain('stroke:#4176e6') // brand
     expect(html).toContain('stroke:#22c55e') // green
     expect(html).not.toContain('stroke:#3b82f6') // the colliding blue token is gone
+  })
+
+  it('renders the per-provider cost donut with provider rollups', () => {
+    const multi = overview()
+    const usage = { uncachedInputTokens: 100_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 50_000 }
+    multi.ledger.byProvider = [
+      { provider: 'openai', usage, costMicros: 4_000_000, modelCount: 2 },
+      { provider: 'anthropic', usage, costMicros: 2_000_000, modelCount: 1 },
+    ]
+    const html = renderToStaticMarkup(createElement(FinanceAuditSection, {
+      ...baseProps,
+      useSnapshot: () => ({ status: 'ready' as const, overview: multi, error: null }),
+    }))
+    expect(html).toContain('byProvider')            // card title + aria-label
+    expect(html).toContain('providerCountUnit')     // stats line
+    expect(html).toContain('aria-label="byProvider"')
+    expect(html).toContain('openai')                // provider label kept
+    expect(html).toContain('anthropic')             // second provider kept
+  })
+
+  it('labels model donut slices by model and names the provider in the tooltip', () => {
+    const cross = overview()
+    const usage = { uncachedInputTokens: 100_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 50_000 }
+    cross.ledger.byModel = [
+      { modelKey: 'openai/gpt-4o-mini', provider: 'openai', model: 'gpt-4o-mini', usage, costMicros: 4_000_000 },
+      { modelKey: 'deepseek-official/deepseek-v4-flash', provider: 'deepseek-official', model: 'deepseek-v4-flash', usage, costMicros: 2_000_000 },
+    ]
+    const html = renderToStaticMarkup(createElement(FinanceAuditSection, basePropsUse(cross)))
+    expect(html).toContain('gpt-4o-mini')              // short model label
+    expect(html).toContain('deepseek-v4-flash')        // short model label
+    expect(html).not.toContain('openai/gpt-4o-mini')   // raw key no longer the label
   })
 
   it('keeps breakdown tooltips out of the static markup (client-only hover)', () => {

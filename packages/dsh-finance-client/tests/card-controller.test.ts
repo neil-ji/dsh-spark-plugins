@@ -166,6 +166,23 @@ describe('FinanceCardController', () => {
     expect(writes).toEqual([{ op: 'set', field: 'prices', value: prices }])
   })
 
+  it('stages and saves per-provider default rates as one JSON write', async () => {
+    const { scope, writes } = makeScope({ value: baseSection() })
+    const controller = new FinanceCardController(scope)
+    const face = controller.inject()
+    const defaults = { openai: { inputMicrosPerMtok: 3600000, outputMicrosPerMtok: 14400000 } }
+    face.edit('providerDefaults', JSON.stringify(defaults, null, 2))
+    const staged = face.hooks.financeCard.getSnapshot()
+    expect(staged.providerDefaults.invalid).toBe(false)
+    expect(staged.dirty).toBe(true)
+    face.save()
+    await flush()
+    expect(writes).toEqual([{ op: 'set', field: 'providerDefaults', value: defaults }])
+    // A non-object draft (array) stays invalid and blocks the save.
+    face.edit('providerDefaults', '[1,2]')
+    expect(face.hooks.financeCard.getSnapshot().invalid).toBe(true)
+  })
+
   it('clears an overridden field on reset + save', async () => {
     const { scope, writes } = makeScope({ value: baseSection(), user: { currency: 'USD' } })
     const controller = new FinanceCardController(scope)

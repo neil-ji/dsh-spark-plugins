@@ -25,6 +25,7 @@ function state(overrides: Partial<FinanceCardState> = {}): FinanceCardState {
     balanceApiKeyEnv: field('DEEPSEEK_API_KEY'),
     balanceTimeoutMs: field('10000'),
     defaultPrice: field(''),
+    providerDefaults: field(''),
     prices: field(''),
     prefs: DEFAULT_FINANCE_PREFS,
     ...overrides,

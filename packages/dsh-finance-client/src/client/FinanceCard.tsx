@@ -84,6 +84,7 @@ export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, 
     ['kpis', t('chartKpis')],
     ['split', t('chartSplit')],
     ['hourOfDay', t('chartHourOfDay')],
+    ['byProvider', t('chartByProvider')],
     ['byModel', t('chartByModel')],
     ['byWorkspace', t('chartByWorkspace')],
     ['byDay', t('chartByDay')],
@@ -159,6 +160,19 @@ export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, 
           resetLabel={t('reset')}
           onEdit={(text) => onEdit('defaultPrice', text)}
           onReset={() => onReset('defaultPrice')}
+        />
+        <Field
+          id="plugin-config-finance-provider-defaults"
+          label={t('cardProviderDefaults')}
+          hint={t('cardProviderDefaultsHint')}
+          state={state.providerDefaults}
+          multiline
+          disabled={disabled}
+          invalidLabel={t('invalidJson')}
+          overriddenLabel={t('overridden')}
+          resetLabel={t('reset')}
+          onEdit={(text) => onEdit('providerDefaults', text)}
+          onReset={() => onReset('providerDefaults')}
         />
         <Field
           id="plugin-config-finance-prices"

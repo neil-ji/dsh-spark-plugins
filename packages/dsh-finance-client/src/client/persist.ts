@@ -54,6 +54,7 @@ export interface FinanceChartPrefs {
   kpis: boolean
   split: boolean
   hourOfDay: boolean
+  byProvider: boolean
   byModel: boolean
   byWorkspace: boolean
   byDay: boolean
@@ -71,6 +72,7 @@ export const DEFAULT_FINANCE_PREFS: FinancePrefs = {
     kpis: true,
     split: true,
     hourOfDay: true,
+    byProvider: true,
     byModel: true,
     byWorkspace: true,
     byDay: true,

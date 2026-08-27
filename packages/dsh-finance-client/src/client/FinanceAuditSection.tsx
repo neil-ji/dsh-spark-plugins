@@ -494,8 +494,11 @@ function FinanceReady({ overview, peak, t, refresh }: {
   const [prefs] = useState<FinancePrefs>(() => readFinancePrefs())
   const charts = prefs.charts
 
+  // Model donut: the slice label is the model id, the tooltip names its
+  // provider (the ledger now splits provider/model on every row).
   const modelRows = useMemo(() => buildBreakdown(ledger.byModel.map(row => {
     const parts = [
+      `${t('tipProvider')} ${row.provider}`,
       `${t('tipInput')} ${formatTokens(row.usage.uncachedInputTokens)}`,
       `${t('tipOutput')} ${formatTokens(row.usage.outputTokens)}`,
     ]
@@ -504,11 +507,21 @@ function FinanceReady({ overview, peak, t, refresh }: {
     }
     return {
       key: row.modelKey,
-      label: row.modelKey,
+      label: row.model,
       costMicros: row.costMicros,
       detail: parts.join(' · '),
     }
   }), 5, t), [ledger, t])
+  // Provider donut: cost rollup per LLM provider, with the distinct model
+  // count folded into the Other row's secondary value.
+  const providerRows = useMemo(() => buildBreakdown((ledger.byProvider ?? []).map(row => ({
+    key: row.provider,
+    label: row.provider,
+    costMicros: row.costMicros,
+    detail: `${row.modelCount} ${t('modelCountUnit')} · ${t('tipInput')} ${formatTokens(row.usage.uncachedInputTokens)}`,
+    value2: row.modelCount,
+    value2Label: t('modelCountUnit'),
+  })), 5, t), [ledger, t])
   const workspaceRows = useMemo(() => buildBreakdown(ledger.byWorkspace.map(row => ({
     key: row.workspaceId ?? '__unassigned__',
     label: row.title,
@@ -624,8 +637,24 @@ function FinanceReady({ overview, peak, t, refresh }: {
         </div>
       ) : null}
 
-      {charts.byModel || charts.byWorkspace || charts.byDay ? (
+      {charts.byProvider || charts.byModel || charts.byWorkspace || charts.byDay ? (
         <div className={css.grid}>
+          {charts.byProvider ? (
+            <section className={css.card}>
+              <div className={css.cardTitle}>{t('byProvider')}</div>
+              <div className={css.cardStats}>
+                <span>{(ledger.byProvider ?? []).length} {t('providerCountUnit')}</span>
+                <span>{t('trendTotal')} {formatMicros(ledger.totalCostMicros, ledger.currency)}</span>
+              </div>
+              <DonutChart
+                rows={providerRows}
+                centerValue={formatAxisLabel(providerRows.reduce((sum, row) => sum + row.value, 0), ledger.currency)}
+                centerLabel={t('trendTotal')}
+                ariaLabel={t('byProvider')}
+                formatValue={(value) => formatMicros(value, ledger.currency)}
+              />
+            </section>
+          ) : null}
           {charts.byModel ? (
             <section className={css.card}>
               <div className={css.cardTitle}>{t('byModel')}</div>
