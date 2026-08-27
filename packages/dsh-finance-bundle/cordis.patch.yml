@@ -95,12 +95,209 @@
               peakHours: [[9, 12], [14, 18]]
               peakDays: [1, 2, 3, 4, 5]
               utcOffsetMinutes: 480
-        # Starter non-DeepSeek price entries (flat 24/7, no peak/valley until a
-        # provider publishes a schedule). USD list prices converted at ~7.2
-        # CNY/USD; amounts are integer micros per million tokens (CNY * 1e6).
-        # Estimates as of 2025 — verify against each provider's official docs
-        # and adjust here or via the settings card.
+        # Non-DeepSeek pricing is synced from a community-maintained table so
+        # nobody hand-maintains it: `pnpm finance:sync-prices` refills everything
+        # between the two markers below from models.dev (USD list prices x --fx).
+        # Do not hand-edit inside the markers; add one-off overrides ABOVE them,
+        # or pin a model via the settings card's user layer instead.
+          # >>> FINANCE-COMMUNITY-PRICES-BEGIN source=models.dev/api.json updated=2026-08-27T08:56Z fx=7.2
+          # anthropic
+          anthropic/claude-fable-5:
+            - inputMicrosPerMtok: 72000000
+              cacheReadMicrosPerMtok: 7200000
+              cacheWriteMicrosPerMtok: 90000000
+              outputMicrosPerMtok: 360000000
+          anthropic/claude-haiku-4-5:
+            - inputMicrosPerMtok: 7200000
+              cacheReadMicrosPerMtok: 720000
+              cacheWriteMicrosPerMtok: 9000000
+              outputMicrosPerMtok: 36000000
+          anthropic/claude-opus-4-5:
+            - inputMicrosPerMtok: 36000000
+              cacheReadMicrosPerMtok: 3600000
+              cacheWriteMicrosPerMtok: 45000000
+              outputMicrosPerMtok: 180000000
+          anthropic/claude-opus-4-6:
+            - inputMicrosPerMtok: 36000000
+              cacheReadMicrosPerMtok: 3600000
+              cacheWriteMicrosPerMtok: 45000000
+              outputMicrosPerMtok: 180000000
+          anthropic/claude-opus-4-7:
+            - inputMicrosPerMtok: 36000000
+              cacheReadMicrosPerMtok: 3600000
+              cacheWriteMicrosPerMtok: 45000000
+              outputMicrosPerMtok: 180000000
+          anthropic/claude-opus-4-8:
+            - inputMicrosPerMtok: 36000000
+              cacheReadMicrosPerMtok: 3600000
+              cacheWriteMicrosPerMtok: 45000000
+              outputMicrosPerMtok: 180000000
+          anthropic/claude-opus-5:
+            - inputMicrosPerMtok: 36000000
+              cacheReadMicrosPerMtok: 3600000
+              cacheWriteMicrosPerMtok: 45000000
+              outputMicrosPerMtok: 180000000
+          anthropic/claude-sonnet-4-5:
+            - inputMicrosPerMtok: 21600000
+              cacheReadMicrosPerMtok: 2160000
+              cacheWriteMicrosPerMtok: 27000000
+              outputMicrosPerMtok: 108000000
+          anthropic/claude-sonnet-4-6:
+            - inputMicrosPerMtok: 21600000
+              cacheReadMicrosPerMtok: 2160000
+              cacheWriteMicrosPerMtok: 27000000
+              outputMicrosPerMtok: 108000000
+          anthropic/claude-sonnet-5:
+            - inputMicrosPerMtok: 14400000
+              cacheReadMicrosPerMtok: 1440000
+              cacheWriteMicrosPerMtok: 18000000
+              outputMicrosPerMtok: 72000000
+          # google
+          google/deep-research-max-preview-04-2026:
+            - inputMicrosPerMtok: 14400000
+              cacheReadMicrosPerMtok: 1440000
+              outputMicrosPerMtok: 86400000
+          google/deep-research-preview-04-2026:
+            - inputMicrosPerMtok: 14400000
+              cacheReadMicrosPerMtok: 1440000
+              outputMicrosPerMtok: 86400000
+          google/gemini-2.5-computer-use-preview-10-2025:
+            - inputMicrosPerMtok: 9000000
+              outputMicrosPerMtok: 72000000
+          google/gemini-2.5-flash:
+            - inputMicrosPerMtok: 2160000
+              cacheReadMicrosPerMtok: 216000
+              outputMicrosPerMtok: 18000000
+          google/gemini-2.5-flash-image:
+            - inputMicrosPerMtok: 2160000
+              cacheReadMicrosPerMtok: 540000
+              outputMicrosPerMtok: 216000000
+          google/gemini-2.5-flash-lite:
+            - inputMicrosPerMtok: 720000
+              cacheReadMicrosPerMtok: 72000
+              outputMicrosPerMtok: 2880000
+          google/gemini-2.5-pro:
+            - inputMicrosPerMtok: 9000000
+              cacheReadMicrosPerMtok: 900000
+              outputMicrosPerMtok: 72000000
+          google/gemini-3-flash-preview:
+            - inputMicrosPerMtok: 3600000
+              cacheReadMicrosPerMtok: 360000
+              outputMicrosPerMtok: 21600000
+          google/gemini-3-pro-image:
+            - inputMicrosPerMtok: 14400000
+              outputMicrosPerMtok: 864000000
+          google/gemini-3-pro-image-preview:
+            - inputMicrosPerMtok: 14400000
+              outputMicrosPerMtok: 864000000
+          google/gemini-3.1-flash-image:
+            - inputMicrosPerMtok: 3600000
+              outputMicrosPerMtok: 432000000
+          google/gemini-3.1-flash-image-preview:
+            - inputMicrosPerMtok: 3600000
+              outputMicrosPerMtok: 432000000
+          google/gemini-3.1-flash-lite:
+            - inputMicrosPerMtok: 1800000
+              cacheReadMicrosPerMtok: 180000
+              outputMicrosPerMtok: 10800000
+          google/gemini-3.1-flash-lite-image:
+            - inputMicrosPerMtok: 1800000
+              outputMicrosPerMtok: 216000000
+          google/gemini-3.1-flash-lite-preview:
+            - inputMicrosPerMtok: 1800000
+              cacheReadMicrosPerMtok: 180000
+              outputMicrosPerMtok: 10800000
+          google/gemini-3.1-flash-live-preview:
+            - inputMicrosPerMtok: 5400000
+              outputMicrosPerMtok: 32400000
+          google/gemini-3.1-pro-preview:
+            - inputMicrosPerMtok: 14400000
+              cacheReadMicrosPerMtok: 1440000
+              outputMicrosPerMtok: 86400000
+          google/gemini-3.1-pro-preview-customtools:
+            - inputMicrosPerMtok: 14400000
+              cacheReadMicrosPerMtok: 1440000
+              outputMicrosPerMtok: 86400000
+          google/gemini-3.5-flash:
+            - inputMicrosPerMtok: 10800000
+              cacheReadMicrosPerMtok: 1080000
+              outputMicrosPerMtok: 64800000
+          google/gemini-3.5-flash-lite:
+            - inputMicrosPerMtok: 2160000
+              cacheReadMicrosPerMtok: 216000
+              outputMicrosPerMtok: 18000000
+          google/gemini-3.5-live-translate-preview:
+            - inputMicrosPerMtok: 25200000
+              outputMicrosPerMtok: 151200000
+          google/gemini-3.6-flash:
+            - inputMicrosPerMtok: 5400000
+              cacheReadMicrosPerMtok: 540000
+              outputMicrosPerMtok: 27000000
+          google/gemini-3.7-flash:
+            - inputMicrosPerMtok: 5400000
+              cacheReadMicrosPerMtok: 540000
+              outputMicrosPerMtok: 27000000
+          google/gemini-embedding-001:
+            - inputMicrosPerMtok: 1080000
+              outputMicrosPerMtok: 0
+          google/gemini-embedding-2:
+            - inputMicrosPerMtok: 1440000
+              outputMicrosPerMtok: 0
+          google/gemini-flash-latest:
+            - inputMicrosPerMtok: 5400000
+              cacheReadMicrosPerMtok: 540000
+              outputMicrosPerMtok: 27000000
+          google/gemini-flash-lite-latest:
+            - inputMicrosPerMtok: 2160000
+              cacheReadMicrosPerMtok: 216000
+              outputMicrosPerMtok: 18000000
+          google/gemini-omni-flash-preview:
+            - inputMicrosPerMtok: 10800000
+              outputMicrosPerMtok: 126000000
+          google/gemini-robotics-er-1.6-preview:
+            - inputMicrosPerMtok: 7200000
+              outputMicrosPerMtok: 36000000
+          google/lyria-3-clip-preview:
+            - inputMicrosPerMtok: 0
+              outputMicrosPerMtok: 0
+          google/lyria-3-pro-preview:
+            - inputMicrosPerMtok: 0
+              outputMicrosPerMtok: 0
+          # openai
+          openai/gpt-3.5-turbo:
+            - inputMicrosPerMtok: 3600000
+              cacheReadMicrosPerMtok: 0
+              outputMicrosPerMtok: 10800000
+          openai/gpt-4:
+            - inputMicrosPerMtok: 216000000
+              outputMicrosPerMtok: 432000000
+          openai/gpt-4-turbo:
+            - inputMicrosPerMtok: 72000000
+              outputMicrosPerMtok: 216000000
+          openai/gpt-4.1:
+            - inputMicrosPerMtok: 14400000
+              cacheReadMicrosPerMtok: 3600000
+              outputMicrosPerMtok: 57600000
+          openai/gpt-4.1-mini:
+            - inputMicrosPerMtok: 2880000
+              cacheReadMicrosPerMtok: 720000
+              outputMicrosPerMtok: 11520000
+          openai/gpt-4.1-nano:
+            - inputMicrosPerMtok: 720000
+              cacheReadMicrosPerMtok: 180000
+              outputMicrosPerMtok: 2880000
           openai/gpt-4o:
+            - inputMicrosPerMtok: 18000000
+              cacheReadMicrosPerMtok: 9000000
+              outputMicrosPerMtok: 72000000
+          openai/gpt-4o-2024-05-13:
+            - inputMicrosPerMtok: 36000000
+              outputMicrosPerMtok: 108000000
+          openai/gpt-4o-2024-08-06:
+            - inputMicrosPerMtok: 18000000
+              cacheReadMicrosPerMtok: 9000000
+              outputMicrosPerMtok: 72000000
+          openai/gpt-4o-2024-11-20:
             - inputMicrosPerMtok: 18000000
               cacheReadMicrosPerMtok: 9000000
               outputMicrosPerMtok: 72000000
@@ -108,26 +305,264 @@
             - inputMicrosPerMtok: 1080000
               cacheReadMicrosPerMtok: 540000
               outputMicrosPerMtok: 4320000
-          anthropic/claude-opus-4-5:
-            - inputMicrosPerMtok: 108000000
-              cacheReadMicrosPerMtok: 10800000
-              outputMicrosPerMtok: 540000000
-          anthropic/claude-sonnet-4-5:
-            - inputMicrosPerMtok: 21600000
-              cacheReadMicrosPerMtok: 2160000
-              outputMicrosPerMtok: 108000000
-          anthropic/claude-haiku-4-5:
-            - inputMicrosPerMtok: 7200000
-              cacheReadMicrosPerMtok: 720000
-              outputMicrosPerMtok: 36000000
-          google/gemini-2.5-pro:
+          openai/gpt-5:
             - inputMicrosPerMtok: 9000000
-              cacheReadMicrosPerMtok: 2250000
+              cacheReadMicrosPerMtok: 900000
               outputMicrosPerMtok: 72000000
-          google/gemini-2.5-flash:
-            - inputMicrosPerMtok: 2160000
+          openai/gpt-5-mini:
+            - inputMicrosPerMtok: 1800000
+              cacheReadMicrosPerMtok: 180000
+              outputMicrosPerMtok: 14400000
+          openai/gpt-5-nano:
+            - inputMicrosPerMtok: 360000
+              cacheReadMicrosPerMtok: 36000
+              outputMicrosPerMtok: 2880000
+          openai/gpt-5-pro:
+            - inputMicrosPerMtok: 108000000
+              outputMicrosPerMtok: 864000000
+          openai/gpt-5.1:
+            - inputMicrosPerMtok: 9000000
+              cacheReadMicrosPerMtok: 900000
+              outputMicrosPerMtok: 72000000
+          openai/gpt-5.2:
+            - inputMicrosPerMtok: 12600000
+              cacheReadMicrosPerMtok: 1260000
+              outputMicrosPerMtok: 100800000
+          openai/gpt-5.2-chat-latest:
+            - inputMicrosPerMtok: 12600000
+              cacheReadMicrosPerMtok: 1260000
+              outputMicrosPerMtok: 100800000
+          openai/gpt-5.2-pro:
+            - inputMicrosPerMtok: 151200000
+              outputMicrosPerMtok: 1209600000
+          openai/gpt-5.3-chat-latest:
+            - inputMicrosPerMtok: 12600000
+              cacheReadMicrosPerMtok: 1260000
+              outputMicrosPerMtok: 100800000
+          openai/gpt-5.3-codex:
+            - inputMicrosPerMtok: 12600000
+              cacheReadMicrosPerMtok: 1260000
+              outputMicrosPerMtok: 100800000
+          openai/gpt-5.3-codex-spark:
+            - inputMicrosPerMtok: 12600000
+              cacheReadMicrosPerMtok: 1260000
+              outputMicrosPerMtok: 100800000
+          openai/gpt-5.4:
+            - inputMicrosPerMtok: 18000000
+              cacheReadMicrosPerMtok: 1800000
+              outputMicrosPerMtok: 108000000
+          openai/gpt-5.4-mini:
+            - inputMicrosPerMtok: 5400000
               cacheReadMicrosPerMtok: 540000
-              outputMicrosPerMtok: 18000000
+              outputMicrosPerMtok: 32400000
+          openai/gpt-5.4-nano:
+            - inputMicrosPerMtok: 1440000
+              cacheReadMicrosPerMtok: 144000
+              outputMicrosPerMtok: 9000000
+          openai/gpt-5.4-pro:
+            - inputMicrosPerMtok: 216000000
+              outputMicrosPerMtok: 1296000000
+          openai/gpt-5.5:
+            - inputMicrosPerMtok: 36000000
+              cacheReadMicrosPerMtok: 3600000
+              outputMicrosPerMtok: 216000000
+          openai/gpt-5.5-pro:
+            - inputMicrosPerMtok: 216000000
+              outputMicrosPerMtok: 1296000000
+          openai/gpt-5.6:
+            - inputMicrosPerMtok: 28800000
+              cacheReadMicrosPerMtok: 2880000
+              cacheWriteMicrosPerMtok: 36000000
+              outputMicrosPerMtok: 144000000
+          openai/gpt-5.6-luna:
+            - inputMicrosPerMtok: 1440000
+              cacheReadMicrosPerMtok: 144000
+              cacheWriteMicrosPerMtok: 1800000
+              outputMicrosPerMtok: 8640000
+          openai/gpt-5.6-sol:
+            - inputMicrosPerMtok: 28800000
+              cacheReadMicrosPerMtok: 2880000
+              cacheWriteMicrosPerMtok: 36000000
+              outputMicrosPerMtok: 144000000
+          openai/gpt-5.6-terra:
+            - inputMicrosPerMtok: 14400000
+              cacheReadMicrosPerMtok: 1440000
+              cacheWriteMicrosPerMtok: 18000000
+              outputMicrosPerMtok: 86400000
+          openai/gpt-image-2:
+            - inputMicrosPerMtok: 36000000
+              cacheReadMicrosPerMtok: 9000000
+              outputMicrosPerMtok: 216000000
+          openai/o1:
+            - inputMicrosPerMtok: 108000000
+              cacheReadMicrosPerMtok: 54000000
+              outputMicrosPerMtok: 432000000
+          openai/o1-pro:
+            - inputMicrosPerMtok: 1080000000
+              outputMicrosPerMtok: 4320000000
+          openai/o3:
+            - inputMicrosPerMtok: 14400000
+              cacheReadMicrosPerMtok: 3600000
+              outputMicrosPerMtok: 57600000
+          openai/o3-mini:
+            - inputMicrosPerMtok: 7920000
+              cacheReadMicrosPerMtok: 3960000
+              outputMicrosPerMtok: 31680000
+          openai/o3-pro:
+            - inputMicrosPerMtok: 144000000
+              outputMicrosPerMtok: 576000000
+          openai/o4-mini:
+            - inputMicrosPerMtok: 7920000
+              cacheReadMicrosPerMtok: 1980000
+              outputMicrosPerMtok: 31680000
+          openai/text-embedding-3-large:
+            - inputMicrosPerMtok: 936000
+              outputMicrosPerMtok: 0
+          openai/text-embedding-3-small:
+            - inputMicrosPerMtok: 144000
+              outputMicrosPerMtok: 0
+          openai/text-embedding-ada-002:
+            - inputMicrosPerMtok: 720000
+              outputMicrosPerMtok: 0
+          # volcengine
+          volcengine/deepseek-v4-flash-ga-260731:
+            - inputMicrosPerMtok: 3206160
+              cacheReadMicrosPerMtok: 106848
+              outputMicrosPerMtok: 9618480
+          volcengine/deepseek-v4-pro-ga-260813:
+            - inputMicrosPerMtok: 9618480
+              cacheReadMicrosPerMtok: 320616
+              outputMicrosPerMtok: 28855512
+          volcengine/doubao-seed-1-6-251015:
+            - inputMicrosPerMtok: 855000
+              cacheReadMicrosPerMtok: 171000
+              outputMicrosPerMtok: 8549784
+          volcengine/doubao-seed-1-6-flash-250828:
+            - inputMicrosPerMtok: 160344
+              cacheReadMicrosPerMtok: 32040
+              outputMicrosPerMtok: 1603080
+          volcengine/doubao-seed-1-6-vision-250815:
+            - inputMicrosPerMtok: 855000
+              cacheReadMicrosPerMtok: 171000
+              outputMicrosPerMtok: 8549784
+          volcengine/doubao-seed-1-8-251228:
+            - inputMicrosPerMtok: 855000
+              cacheReadMicrosPerMtok: 171000
+              outputMicrosPerMtok: 8549784
+          volcengine/doubao-seed-2-0-code-preview-260215:
+            - inputMicrosPerMtok: 3419928
+              cacheReadMicrosPerMtok: 684000
+              outputMicrosPerMtok: 17099568
+          volcengine/doubao-seed-2-0-lite-260428:
+            - inputMicrosPerMtok: 641232
+              cacheReadMicrosPerMtok: 128232
+              outputMicrosPerMtok: 3847392
+          volcengine/doubao-seed-2-0-mini-260428:
+            - inputMicrosPerMtok: 213768
+              cacheReadMicrosPerMtok: 42768
+              outputMicrosPerMtok: 2137464
+          volcengine/doubao-seed-2-0-pro-260215:
+            - inputMicrosPerMtok: 3419928
+              cacheReadMicrosPerMtok: 684000
+              outputMicrosPerMtok: 17099568
+          volcengine/doubao-seed-2-1-pro-260628:
+            - inputMicrosPerMtok: 6412320
+              cacheReadMicrosPerMtok: 1282464
+              outputMicrosPerMtok: 32061672
+          volcengine/doubao-seed-2-1-turbo-260628:
+            - inputMicrosPerMtok: 3206160
+              cacheReadMicrosPerMtok: 641232
+              outputMicrosPerMtok: 16030872
+          volcengine/doubao-seed-character-260628:
+            - inputMicrosPerMtok: 855000
+              cacheReadMicrosPerMtok: 171000
+              outputMicrosPerMtok: 2137464
+          volcengine/doubao-seed-evolving:
+            - inputMicrosPerMtok: 6412320
+              cacheReadMicrosPerMtok: 1282464
+              outputMicrosPerMtok: 32061672
+          volcengine/glm-5-2-260617:
+            - inputMicrosPerMtok: 8549784
+              cacheReadMicrosPerMtok: 2137464
+              outputMicrosPerMtok: 29924280
+          # zai
+          zai/glm-4.5:
+            - inputMicrosPerMtok: 4320000
+              cacheReadMicrosPerMtok: 792000
+              cacheWriteMicrosPerMtok: 0
+              outputMicrosPerMtok: 15840000
+          zai/glm-4.5-air:
+            - inputMicrosPerMtok: 1440000
+              cacheReadMicrosPerMtok: 216000
+              cacheWriteMicrosPerMtok: 0
+              outputMicrosPerMtok: 7920000
+          zai/glm-4.5-flash:
+            - inputMicrosPerMtok: 0
+              cacheReadMicrosPerMtok: 0
+              cacheWriteMicrosPerMtok: 0
+              outputMicrosPerMtok: 0
+          zai/glm-4.5v:
+            - inputMicrosPerMtok: 4320000
+              outputMicrosPerMtok: 12960000
+          zai/glm-4.6:
+            - inputMicrosPerMtok: 4320000
+              cacheReadMicrosPerMtok: 792000
+              cacheWriteMicrosPerMtok: 0
+              outputMicrosPerMtok: 15840000
+          zai/glm-4.6v:
+            - inputMicrosPerMtok: 2160000
+              outputMicrosPerMtok: 6480000
+          zai/glm-4.7:
+            - inputMicrosPerMtok: 4320000
+              cacheReadMicrosPerMtok: 792000
+              cacheWriteMicrosPerMtok: 0
+              outputMicrosPerMtok: 15840000
+          zai/glm-4.7-flash:
+            - inputMicrosPerMtok: 0
+              cacheReadMicrosPerMtok: 0
+              cacheWriteMicrosPerMtok: 0
+              outputMicrosPerMtok: 0
+          zai/glm-4.7-flashx:
+            - inputMicrosPerMtok: 504000
+              cacheReadMicrosPerMtok: 72000
+              cacheWriteMicrosPerMtok: 0
+              outputMicrosPerMtok: 2880000
+          zai/glm-5:
+            - inputMicrosPerMtok: 7200000
+              cacheReadMicrosPerMtok: 1440000
+              cacheWriteMicrosPerMtok: 0
+              outputMicrosPerMtok: 23040000
+          zai/glm-5-turbo:
+            - inputMicrosPerMtok: 8640000
+              cacheReadMicrosPerMtok: 1728000
+              cacheWriteMicrosPerMtok: 0
+              outputMicrosPerMtok: 28800000
+          zai/glm-5.1:
+            - inputMicrosPerMtok: 10080000
+              cacheReadMicrosPerMtok: 1872000
+              cacheWriteMicrosPerMtok: 0
+              outputMicrosPerMtok: 31680000
+          zai/glm-5.2:
+            - inputMicrosPerMtok: 10080000
+              cacheReadMicrosPerMtok: 1872000
+              cacheWriteMicrosPerMtok: 0
+              outputMicrosPerMtok: 31680000
+          zai/glm-5.3:
+            - inputMicrosPerMtok: 10080000
+              cacheReadMicrosPerMtok: 1872000
+              cacheWriteMicrosPerMtok: 0
+              outputMicrosPerMtok: 31680000
+          zai/glm-5.3-flash:
+            - inputMicrosPerMtok: 540000
+              cacheReadMicrosPerMtok: 108000
+              cacheWriteMicrosPerMtok: 0
+              outputMicrosPerMtok: 1800000
+          zai/glm-5v-turbo:
+            - inputMicrosPerMtok: 8640000
+              cacheReadMicrosPerMtok: 1728000
+              cacheWriteMicrosPerMtok: 0
+              outputMicrosPerMtok: 28800000
+          # <<< FINANCE-COMMUNITY-PRICES-END
 
     - id: ui-finance
       name: dsh-finance-client

@@ -38,6 +38,7 @@ pnpm dev --run    # 构建 + 安装 + 前台启动 dogfood（dsh --profile web -
 pnpm install:profile  # 仅重新安装到 profile（依赖 file: 链接）
 pnpm escape       # 启动「应急逃生」profile（纯官方 web，端口 3998）
 pnpm escape:init  # 仅初始化/刷新逃生 profile（幂等）
+pnpm finance:sync-prices  # 从 models.dev 社区价格表同步非 DeepSeek 计价进 bundle（--dry-run 预览、--fx 调汇率）
 ```
 
 ## 本地运行机制
