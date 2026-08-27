@@ -231,6 +231,46 @@ describe('FinanceCardController', () => {
     expect(face.hooks.financeCard.getSnapshot().dirty).toBe(false)
   })
 
+  it('keeps a just-added blank route visible in the editor rows', () => {
+    const { scope } = makeScope({ value: baseSection() })
+    const controller = new FinanceCardController(scope)
+    const face = controller.inject()
+    // The '+' button emits a blank route; the form must show it even though
+    // serialization (and therefore the draft JSON) drops blanks.
+    face.setBillingModes([{ route: 'zai', mode: 'plan' }, { route: '', mode: 'plan' }])
+    const snapshot = face.hooks.financeCard.getSnapshot()
+    expect(snapshot.billingRows).toHaveLength(2)
+    expect(snapshot.billingRows[1].route).toBe('')
+    // The staged payload stays clean: no blank-route entry is written.
+    expect(JSON.parse(snapshot.billingModes.text)).toEqual({ zai: 'plan' })
+  })
+
+  it('reseeds the editor rows from the accepted value after save', async () => {
+    const { scope, writes } = makeScope({ value: baseSection() })
+    const controller = new FinanceCardController(scope)
+    const face = controller.inject()
+    face.setBillingModes([{ route: 'zai', mode: 'plan' }, { route: '', mode: 'plan' }])
+    face.save()
+    await flush()
+    // After a landed save the draft clears and the editor shows stored rows.
+    const snapshot = face.hooks.financeCard.getSnapshot()
+    expect(snapshot.billingRows.map(r => r.route)).toEqual(['zai'])
+    expect(writes).toEqual([{ op: 'set', field: 'billingModes', value: { zai: 'plan' } }])
+  })
+
+  it('reseeds the editor rows from the composition default on reset', () => {
+    const { scope } = makeScope({ value: baseSection(), user: { billingModes: { zai: 'plan' } } })
+    const controller = new FinanceCardController(scope)
+    const face = controller.inject()
+    face.setBillingModes([{ route: 'volcengine', mode: 'metered' }])
+    face.resetField('billingModes')
+    // Reset drops the override and returns the editor to the composition layer
+    // (which carries no billingModes here), like every other field on the card.
+    const snapshot = face.hooks.financeCard.getSnapshot()
+    expect(snapshot.billingRows).toEqual([])
+    expect(snapshot.billingModes.overridden).toBe(false)
+  })
+
   it('clears an overridden field on reset + save', async () => {
     const { scope, writes } = makeScope({ value: baseSection(), user: { currency: 'USD' } })
     const controller = new FinanceCardController(scope)

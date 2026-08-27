@@ -11,7 +11,6 @@
 import { useState } from 'react'
 import type { SnapshotSelectorHook } from 'dsh-plugin-kit/client'
 import { Button, Input, Pill, SegmentedControl, Textarea } from 'dsh-ui-kit'
-import { billingModesToRows } from './billing-modes.ts'
 import type { BillingModeRow } from './billing-modes.ts'
 import type {
   FinanceCardFace,
@@ -183,7 +182,7 @@ export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, 
             <span className={css.fieldBadges}>{state.billingModes.overridden ? <Pill>{t('overridden')}</Pill> : null}</span>
           </div>
           <BillingModesEditor
-            rows={billingModesToRows(state.billingModes.text)}
+            rows={state.billingRows}
             disabled={disabled}
             t={t}
             onChange={onSetBillingModes}

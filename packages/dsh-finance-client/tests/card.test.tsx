@@ -27,6 +27,7 @@ function state(overrides: Partial<FinanceCardState> = {}): FinanceCardState {
     defaultPrice: field(''),
     providerDefaults: field(''),
     billingModes: field(''),
+    billingRows: [],
     prices: field(''),
     prefs: DEFAULT_FINANCE_PREFS,
     ...overrides,
@@ -35,7 +36,10 @@ function state(overrides: Partial<FinanceCardState> = {}): FinanceCardState {
 
 /** Render the body with one stored plan route to inspect the editor. */
 function bodyWithBillingRows(rows: Array<{ route: string; mode: 'metered' | 'plan' }>): string {
-  const staged = state({ billingModes: { text: JSON.stringify(Object.fromEntries(rows.map(r => [r.route, r.mode]))), overridden: true, invalid: false } })
+  const staged = state({
+    billingModes: { text: JSON.stringify(Object.fromEntries(rows.map(r => [r.route, r.mode]))), overridden: true, invalid: false },
+    billingRows: rows,
+  })
   return renderToStaticMarkup(createElement(FinanceCardBody, {
     ...baseProps,
     state: staged,

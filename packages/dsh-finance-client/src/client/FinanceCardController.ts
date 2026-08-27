@@ -12,7 +12,7 @@
 import type { SettingsScope, SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import type { FinanceConfigInput } from 'dsh-finance/types'
-import { rowsToBillingModes } from './billing-modes.ts'
+import { billingModesToRows, rowsToBillingModes } from './billing-modes.ts'
 import type { BillingModeRow } from './billing-modes.ts'
 import { readFinancePrefs, writeFinancePrefs } from './persist.ts'
 import type { FinanceChartPrefs, FinanceLayout, FinancePrefs } from './persist.ts'
@@ -65,6 +65,12 @@ export interface FinanceCardState {
   defaultPrice: FinanceCardFieldState
   providerDefaults: FinanceCardFieldState
   billingModes: FinanceCardFieldState
+  /**
+   * Live editor rows for the billing-mode form (INCLUDING in-progress
+   * blank routes the serialized JSON drops). Controlled from the controller
+   * so an added row survives re-renders until it is saved or reset.
+   */
+  billingRows: readonly BillingModeRow[]
   prices: FinanceCardFieldState
   /** Dashboard view preferences (browser-local; apply immediately). */
   prefs: FinancePrefs
@@ -110,6 +116,13 @@ export class FinanceCardController {
   private readonly store: SnapshotStore<FinanceCardState>
   private saving = false
   private failed = false
+  /**
+   * Latest editor rows passed through setBillingModes — kept verbatim (blank
+   * routes included) so the form never eats a row mid-edit. Only consulted
+   * while a billingModes draft is staged; otherwise the projection reseeds
+   * from the stored value.
+   */
+  private billingEditorRows: BillingModeRow[] = []
 
   /** @param scope - the bound settings scope for the `finance` namespace. */
   constructor(private readonly scope: SettingsScope<FinanceConfigInput>) {
@@ -301,6 +314,7 @@ export class FinanceCardController {
       defaultPrice: this.fieldState('defaultPrice'),
       providerDefaults: this.fieldState('providerDefaults'),
       billingModes: this.fieldState('billingModes'),
+      billingRows: this.staged.has('billingModes') ? this.billingEditorRows : billingModesToRows(this.format('billingModes')),
       prices: this.fieldState('prices'),
       prefs: readFinancePrefs(),
     }
@@ -351,7 +365,13 @@ export class FinanceCardController {
     return {
       hooks: { financeCard: this.store },
       edit: (field, text) => this.stage(field, { text, clear: false }),
-      resetField: (field) => this.stage(field, { text: this.format(field), clear: true }),
+      resetField: (field) => {
+        if (field === 'billingModes') {
+          // Reset drops the draft: reseed the live editor from the stored value.
+          this.billingEditorRows = billingModesToRows(this.format(field))
+        }
+        this.stage(field, { text: this.format(field), clear: true })
+      },
       save: () => { void this.save() },
       discard: () => {
         if (this.staged.size === 0 && !this.failed) return
@@ -369,6 +389,9 @@ export class FinanceCardController {
         this.publish()
       },
       setBillingModes: (rows) => {
+        // Keep the verbatim rows (blank routes included) for the live form;
+        // only the serialized JSON drops blanks and stays the save payload.
+        this.billingEditorRows = [...rows]
         const text = rowsToBillingModes(rows)
         // An empty serialization means 'inherit again' when nothing is stored:
         // stage it as a clear so dirty stays false for a no-op edit.
