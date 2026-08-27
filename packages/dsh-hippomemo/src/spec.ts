@@ -15,12 +15,38 @@ import type { CitationRecord, MemoryId, MemoryRecord } from './types.ts'
 
 const memoryId = z.string().min(1).transform(value => value as MemoryId)
 
+/**
+ * Self-healing loader for the bounded string lists (`searchTerms`/`tags`).
+ * Records written before these caps existed can carry a single
+ * whitespace-joined mega-term, which otherwise makes the whole storage
+ * domain unopenable at boot (one bad record bricks every fresh launch).
+ * Splitting on whitespace / truncating / deduping here means read paths
+ * always succeed AND every later write-back persists the sanitized form.
+ * Non-array shapes are passed through untouched so genuine corruption still
+ * surfaces as a normal validation error.
+ */
+export function healBoundedStringList(value: unknown): unknown {
+  if (!Array.isArray(value)) return value
+  const MAX_LEN = 50
+  const MAX_ITEMS = 32
+  const out: string[] = []
+  for (const item of value) {
+    if (typeof item !== 'string') continue // scalar corruption -> let zod report it
+    for (const part of item.split(/\s+/)) {
+      if (part.length === 0) continue
+      out.push(part.length > MAX_LEN ? part.slice(0, MAX_LEN) : part)
+    }
+    if (out.length >= MAX_ITEMS) break
+  }
+  return Array.from(new Set(out)).slice(0, MAX_ITEMS)
+}
+
 const memoryRecord = z.object({
   id: memoryId,
   kind: z.enum(['insight', 'decision', 'fact', 'preference', 'constraint']),
   title: z.string().min(1).max(200),
   content: z.string().min(1).max(20_000),
-  tags: z.array(z.string().min(1).max(50)).max(32).default([]),
+  tags: z.preprocess(healBoundedStringList, z.array(z.string().min(1).max(50)).max(32).default([])),
   scope: z.enum(['global', 'workspace', 'project']).default('global'),
   workspacePath: z.string().nullable().default(null),
   globalProven: z.boolean().default(false),
@@ -38,7 +64,7 @@ const memoryRecord = z.object({
   updatedAt: z.number(),
   expiresAt: z.number().nullable().default(null),
   relatedIds: z.array(memoryId).max(16).default([]),
-  searchTerms: z.array(z.string().min(1).max(50)).max(32).default([]),
+  searchTerms: z.preprocess(healBoundedStringList, z.array(z.string().min(1).max(50)).max(32).default([])),
   recallCount: z.number().int().nonnegative().default(0),
   lastRecalledAt: z.number().nullable().default(null),
   citationCount: z.number().int().nonnegative().default(0),
