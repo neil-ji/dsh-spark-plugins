@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dsh-spark-plugins · 与 DeepSeek Harness 风格完全对齐的插件集</title>
+<meta name="description" content="为 DeepSeek Harness (dsh) 打造的第三方插件集：跨会话记忆、成本审计、GitHub/npm 连接器。UI/UX 与 DSH Web 完全对齐，版本兼容两道闸体检，杜绝装错版本。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  /* ===== DSH 暗色主题原版设计令牌（design-platform.css 对齐） ===== */
+  :root {
+    --bg: rgb(21,21,23);          /* bluish-950 */
+    --layer1: rgb(35,35,36);      /* bluish-875 */
+    --layer2: rgb(44,44,46);      /* bluish-850 */
+    --layer3: rgb(53,54,56);      /* bluish-800 */
+    --text: rgb(249,250,251);     /* bluish-50 */
+    --text2: rgb(207,211,214);    /* bluish-300 */
+    --text3: rgb(173,178,184);    /* bluish-400 */
+    --l1: rgba(255,255,255,.06); --l2: rgba(255,255,255,.12); --l3: rgba(255,255,255,.16);
+    --brand: #4176e6;             /* deepseek-500 */
+    --brand-dark: rgb(103,158,254); /* deepseek-400 */
+    --green: rgb(34,197,94); --amber: rgb(221,134,41); --red: rgb(242,90,90);
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+    --mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', Consolas, monospace;
+    --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 15px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  a { color: inherit; text-decoration: none; }
+  a, button { cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--brand-dark); outline-offset: 2px; border-radius: 6px; }
+  ::selection { background: rgba(65,118,230,.4); }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+  .mono { font-family: var(--mono); }
+
+  /* ===== 顶部导航 ===== */
+  nav { position: sticky; top: 0; z-index: 50; backdrop-filter: blur(12px); background: rgba(21,21,23,.82); border-bottom: 1px solid var(--l1); }
+  nav .inner { display: flex; align-items: center; gap: 12px; height: 60px; }
+  .wordmark { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; }
+  .fish { width: 26px; height: 26px; border-radius: 8px; background: linear-gradient(135deg, var(--brand), var(--brand-dark)); display: flex; align-items: center; justify-content: center; }
+  nav .spacer { flex: 1; }
+  nav .links { display: flex; gap: 22px; font-size: 13px; color: var(--text2); }
+  nav .links a { transition: color .2s var(--ease); }
+  nav .links a:hover { color: var(--text); }
+  .btn { display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 18px; border-radius: 18px; font-size: 13px; font-weight: 500; border: 1px solid transparent; transition: all .2s var(--ease); font-family: var(--sans); }
+  .btn.primary { background: #fff; color: #0f1115; }
+  .btn.primary:hover { background: #e8eaed; }
+  .btn.outline { background: transparent; color: var(--text); border-color: var(--l3); }
+  .btn.outline:hover { background: var(--layer2); }
+  .btn.sm { height: 30px; padding: 0 12px; border-radius: 15px; font-size: 12px; }
+  .btn svg { width: 15px; height: 15px; }
+
+  /* ===== Hero ===== */
+  .hero { padding: 88px 0 40px; text-align: center; }
+  .hero-badge { display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 14px; border-radius: 14px; font-size: 12px; color: var(--brand-dark); background: rgba(65,118,230,.12); border: 1px solid rgba(65,118,230,.35); }
+  .hero-badge svg { width: 13px; height: 13px; }
+  .hero h1 { font-size: clamp(34px, 6vw, 58px); line-height: 1.15; font-weight: 700; letter-spacing: -.02em; margin-top: 22px; }
+  .hero h1 .accent { color: var(--brand-dark); text-shadow: 0 0 24px rgba(103,158,254,.45); }
+  .hero .lede { max-width: 640px; margin: 18px auto 0; color: var(--text2); font-size: clamp(15px, 2vw, 17px); }
+  .hero .cta { display: flex; gap: 12px; justify-content: center; margin-top: 30px; flex-wrap: wrap; }
+  .hero .meta { margin-top: 18px; font-size: 12px; color: var(--text3); display: flex; gap: 18px; justify-content: center; flex-wrap: wrap; }
+  .hero .meta b { color: var(--text2); font-weight: 600; }
+
+  /* ===== 截图展示 ===== */
+  .shot { margin: 46px auto 0; border: 1px solid var(--l2); border-radius: 14px; overflow: hidden; background: var(--layer1); box-shadow: 0 24px 80px rgba(0,0,0,.5), 0 0 0 1px rgba(65,118,230,.15), 0 0 60px rgba(65,118,230,.08); }
+  .shot-bar { display: flex; align-items: center; gap: 7px; padding: 10px 14px; border-bottom: 1px solid var(--l1); background: var(--layer2); }
+  .shot-bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--layer3); }
+  .shot-bar .addr { flex: 1; text-align: center; font-family: var(--mono); font-size: 11px; color: var(--text3); background: var(--bg); border-radius: 6px; padding: 4px 10px; margin: 0 40px; }
+  .shot img { display: block; width: 100%; height: auto; }
+
+  /* ===== 通用 section ===== */
+  section { padding: 76px 0; }
+  section + section { border-top: 1px solid var(--l1); }
+  .kicker { font-family: var(--mono); font-size: 12px; color: var(--brand-dark); letter-spacing: .08em; }
+  h2 { font-size: clamp(24px, 3.4vw, 32px); font-weight: 700; letter-spacing: -.01em; margin-top: 10px; }
+  .sub { color: var(--text2); max-width: 620px; margin-top: 10px; font-size: 15px; }
+
+  /* ===== 对齐声明 ===== */
+  .align-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 34px; }
+  .card { background: var(--layer1); border: 1px solid var(--l1); border-radius: 14px; padding: 20px; transition: border-color .2s var(--ease), transform .2s var(--ease); }
+  .card:hover { border-color: var(--l3); transform: translateY(-2px); }
+  .card .ic { width: 34px; height: 34px; border-radius: 10px; background: rgba(65,118,230,.14); display: flex; align-items: center; justify-content: center; margin-bottom: 14px; }
+  .card .ic svg { width: 17px; height: 17px; stroke: var(--brand-dark); }
+  .card h3 { font-size: 15px; font-weight: 600; }
+  .card p { color: var(--text2); font-size: 13px; margin-top: 6px; }
+  .swatches { display: flex; gap: 6px; margin-top: 14px; flex-wrap: wrap; }
+  .sw { display: flex; flex-direction: column; align-items: center; gap: 4px; font-family: var(--mono); font-size: 9px; color: var(--text3); }
+  .sw i { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--l2); }
+
+  /* ===== 插件网格 ===== */
+  .plugins { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 34px; }
+  .plugin-card { background: var(--layer1); border: 1px solid var(--l1); border-radius: 14px; padding: 18px 20px; }
+  .plugin-card .head { display: flex; align-items: center; gap: 10px; }
+  .plugin-card .head .mono { font-size: 13px; font-weight: 600; }
+  .plugin-card .desc { color: var(--text2); font-size: 13px; margin-top: 8px; }
+  .plugin-card ul { list-style: none; margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .plugin-card li { font-size: 12.5px; color: var(--text3); display: flex; gap: 7px; align-items: flex-start; }
+  .plugin-card li svg { width: 13px; height: 13px; stroke: var(--green); flex: none; margin-top: 3px; }
+  .pill { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 11px; font-size: 11px; background: var(--layer2); border: 1px solid var(--l1); color: var(--text2); }
+  .pill.green { color: var(--green); border-color: rgba(34,197,94,.4); background: rgba(34,197,94,.08); }
+
+  /* ===== 版本兼容（重点区） ===== */
+  #compat { background: linear-gradient(180deg, rgba(65,118,230,.05), transparent 30%); }
+  .warn-strip { display: flex; gap: 12px; align-items: flex-start; background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.35); border-radius: 12px; padding: 14px 16px; margin-top: 26px; }
+  .warn-strip svg { width: 18px; height: 18px; stroke: rgb(245,158,11); flex: none; margin-top: 2px; }
+  .warn-strip p { font-size: 13.5px; color: var(--text2); }
+  .warn-strip b { color: var(--text); }
+  .checker { background: var(--layer1); border: 1px solid var(--l2); border-radius: 14px; padding: 20px; margin-top: 26px; }
+  .checker h3 { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .checker .row { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  .checker input { flex: 1; min-width: 200px; height: 38px; border-radius: 10px; border: 1px solid var(--l3); background: var(--bg); color: var(--text); padding: 0 14px; font-size: 14px; font-family: var(--mono); transition: border-color .2s var(--ease); }
+  .checker input:focus { outline: none; border-color: var(--brand-dark); }
+  .checker input::placeholder { color: var(--text3); }
+  .verdict { margin-top: 14px; border-radius: 10px; padding: 13px 16px; font-size: 13.5px; display: none; align-items: flex-start; gap: 10px; }
+  .verdict.show { display: flex; }
+  .verdict svg { width: 17px; height: 17px; flex: none; margin-top: 2px; }
+  .verdict.ok { background: rgba(34,197,94,.09); border: 1px solid rgba(34,197,94,.4); color: rgb(180,240,205); }
+  .verdict.ok svg { stroke: var(--green); }
+  .verdict.warn { background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.35); color: rgb(240,215,180); }
+  .verdict.warn svg { stroke: rgb(245,158,11); }
+  .verdict.err { background: rgba(242,90,90,.09); border: 1px solid rgba(242,90,90,.4); color: rgb(245,195,195); }
+  .verdict.err svg { stroke: var(--red); }
+  .verdict .mono { font-size: 12.5px; }
+  .quick-try { margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .quick-try span { font-size: 12px; color: var(--text3); }
+  .chip { font-family: var(--mono); font-size: 11.5px; color: var(--text2); background: var(--layer2); border: 1px solid var(--l2); border-radius: 999px; padding: 4px 11px; transition: all .15s var(--ease); }
+  .chip:hover { border-color: var(--brand-dark); color: var(--text); }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 26px; background: var(--layer1); border: 1px solid var(--l1); border-radius: 14px; overflow: hidden; font-size: 13.5px; }
+  th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--l1); }
+  th { font-size: 12px; color: var(--text3); font-weight: 500; background: var(--layer2); }
+  tr:last-child td { border-bottom: none; }
+  td .mono { font-size: 12.5px; }
+  .status { display: inline-flex; align-items: center; gap: 7px; font-weight: 500; }
+  .status i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .status.ok { color: rgb(180,240,205); } .status.ok i { background: var(--green); }
+  .status.warn { color: rgb(240,215,180); } .status.warn i { background: rgb(245,158,11); }
+  .status.err { color: rgb(245,195,195); } .status.err i { background: var(--red); }
+
+  .gates { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 26px; }
+  .gate { background: var(--layer1); border: 1px solid var(--l1); border-radius: 14px; padding: 18px 20px; }
+  .gate .num { font-family: var(--mono); font-size: 11px; color: var(--brand-dark); background: rgba(65,118,230,.12); border: 1px solid rgba(65,118,230,.3); border-radius: 999px; padding: 2px 10px; }
+  .gate h3 { font-size: 14.5px; font-weight: 600; margin-top: 10px; }
+  .gate .mono.cmd { display: block; font-size: 12px; color: var(--brand-dark); background: var(--bg); border: 1px solid var(--l1); border-radius: 8px; padding: 8px 12px; margin-top: 10px; }
+  .gate p { font-size: 13px; color: var(--text2); margin-top: 10px; }
+
+  /* ===== 安装 ===== */
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 34px; }
+  .step { background: var(--layer1); border: 1px solid var(--l1); border-radius: 14px; padding: 18px 20px; }
+  .step .n { width: 26px; height: 26px; border-radius: 8px; background: #fff; color: #0f1115; font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center; }
+  .step h3 { font-size: 14.5px; font-weight: 600; margin-top: 12px; }
+  .step p { font-size: 13px; color: var(--text2); margin-top: 5px; }
+  .step code { display: block; font-family: var(--mono); font-size: 12px; color: var(--brand-dark); background: var(--bg); border: 1px solid var(--l1); border-radius: 8px; padding: 9px 12px; margin-top: 12px; overflow-x: auto; white-space: nowrap; }
+
+  /* ===== Footer / CTA ===== */
+  .cta-final { text-align: center; padding: 90px 0; border-top: 1px solid var(--l1); background: radial-gradient(ellipse 60% 80% at 50% 110%, rgba(65,118,230,.14), transparent); }
+  .cta-final h2 { font-size: clamp(26px, 4vw, 36px); }
+  .cta-final p { color: var(--text2); margin-top: 12px; }
+  .cta-final .cta { display: flex; gap: 12px; justify-content: center; margin-top: 28px; flex-wrap: wrap; }
+  footer { border-top: 1px solid var(--l1); padding: 26px 0; }
+  footer .inner { display: flex; align-items: center; gap: 14px; font-size: 12.5px; color: var(--text3); flex-wrap: wrap; }
+  footer .spacer { flex: 1; }
+  footer a { color: var(--text2); transition: color .2s var(--ease); }
+  footer a:hover { color: var(--text); }
+
+  @media (max-width: 900px) {
+    .align-grid, .plugins, .steps { grid-template-columns: 1fr 1fr; }
+    .gates { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 620px) {
+    .align-grid, .plugins, .steps { grid-template-columns: 1fr; }
+    nav .links { display: none; }
+    .hero { padding-top: 56px; }
+    section { padding: 56px 0; }
+    th:nth-child(3), td:nth-child(3) { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    * { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap inner">
+    <a class="wordmark" href="#top">
+      <span class="fish"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 12c.94-3.46 4.94-6 8.5-6 3.56 0 6.06 2.54 7 6-.94 3.47-3.44 6-7 6s-7.56-2.53-8.5-6Z"/><path d="M18 12v.5"/><path d="M16 17.93a9.77 9.77 0 0 1 0-11.86"/><path d="M7 10.67C7 8 5.58 5.97 2.73 5.5c-1 1.5-1 5 .23 6.5-1.24 1.5-1.24 5-.23 6.5C5.58 18.03 7 16 7 13.33"/></svg></span>
+      dsh-spark-plugins
+    </a>
+    <span class="spacer"></span>
+    <div class="links">
+      <a href="#align">风格对齐</a>
+      <a href="#plugins">插件</a>
+      <a href="#compat">版本兼容</a>
+      <a href="#install">安装</a>
+    </div>
+    <a class="btn outline sm" href="demo.html">Demo 页</a>
+    <a class="btn primary sm" href="https://github.com/neil-ji/dsh-spark-plugins">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.27-.01-1.17-.02-2.12-3.2.7-3.88-1.36-3.88-1.36-.52-1.33-1.28-1.68-1.28-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.03 1.76 2.69 1.25 3.35.96.1-.75.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.15 1.18a10.9 10.9 0 0 1 5.74 0c2.19-1.49 3.15-1.18 3.15-1.18.62 1.59.23 2.76.11 3.05.74.81 1.18 1.83 1.18 3.09 0 4.41-2.69 5.38-5.26 5.66.41.36.78 1.06.78 2.14 0 1.54-.01 2.79-.01 3.17 0 .31.21.68.8.56A10.52 10.52 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"/></svg>
+      Star
+    </a>
+  </div>
+</nav>
+
+<header class="hero wrap" id="top">
+  <span class="hero-badge">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+    为 DeepSeek Harness (dsh) 打造 · 12 个插件包 · MIT 开源
+  </span>
+  <h1>插件即原生<br><span class="accent">风格、版本，双重对齐</span></h1>
+  <p class="lede">跨会话记忆、成本审计、GitHub / npm 连接器 —— 每一个像素都对齐 DSH Web 官方设计系统，每一次 dsh 升级都经过两道闸体检。</p>
+  <div class="cta">
+    <a class="btn primary" href="#install">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      安装到本地 profile
+    </a>
+    <a class="btn outline" href="#compat">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      检查版本兼容性
+    </a>
+  </div>
+  <div class="meta">
+    <span>当前适配 <b class="mono">dsh 0.1.1-rc.2</b></span>
+    <span><b>12</b> 个包</span>
+    <span><b>255+</b> 测试用例</span>
+    <span><b>MIT</b> License</span>
+  </div>
+
+  <div class="shot">
+    <div class="shot-bar"><i></i><i></i><i></i><span class="addr">dsh · settings · dsh-spark-plugins</span></div>
+    <img src="screenshots/plugins-ui.png" alt="四个插件安装后的 DSH 设置页截图：GitHub 连接、财务审计、npm 发布、记忆" loading="lazy" width="1265" height="3012">
+  </div>
+</header>
+
+<section id="align">
+  <div class="wrap">
+    <span class="kicker">PIXEL-ALIGNED</span>
+    <h2>UI/UX 与 DSH Web 完全同源</h2>
+    <p class="sub">不是"风格相似"，而是直接复刻 DSH 的设计令牌。插件渲染在 DSH 设置面板里，与官方界面放在一起分辨不出来——因为它们本就出自同一套 design-platform.css。</p>
+    <div class="align-grid">
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg></div>
+        <h3>设计令牌同源</h3>
+        <p>颜色、圆角、字号、间距逐项取自 DSH 的 <span class="mono">--dsw-*</span> 变量表：bluish 灰阶、deepseek 品牌蓝、14px 卡片圆角、13px 正文节奏。</p>
+        <div class="swatches">
+          <span class="sw"><i style="background:#4176e6"></i>ds-500</span>
+          <span class="sw"><i style="background:#679efe"></i>ds-400</span>
+          <span class="sw"><i style="background:#2c2c2e"></i>bl-850</span>
+          <span class="sw"><i style="background:#151517"></i>bl-950</span>
+          <span class="sw"><i style="background:#22c55e"></i>ok-500</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg></div>
+        <h3>组件框架同构</h3>
+        <p>折叠设置卡、Pill 徽章、Segmented 分段器、StateDot 状态点、KPI 卡——全部按官方组件的结构与交互态实现，含深浅双主题。</p>
+      </div>
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg></div>
+        <h3>体验零割裂</h3>
+        <p>文案走 DSH 的 locale 体系（默认中文），加载态、空态、错误态全部遵循官方规范——安装后没有"第三方感"。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="plugins">
+  <div class="wrap">
+    <span class="kicker">PLUGINS</span>
+    <h2>四组能力，十二个包</h2>
+    <p class="sub">host（能力）+ client（设置页 UI）+ wire（协议）分层，全部跑在 DSH 插件机制上，<span class="mono">pnpm dev</span> 一键装入 profile。</p>
+    <div class="plugins">
+      <div class="plugin-card">
+        <div class="head"><span class="pill green">host + client</span><span class="mono">dsh-connector-github</span></div>
+        <p class="desc">GitHub 连接器：令牌写入本机凭据存储，永不回显。</p>
+        <ul>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>仓库 / 提交 / PR / Review 全流程工具</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Actions 工作流与发布 Release</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>九项操作权限独立开关</li>
+        </ul>
+      </div>
+      <div class="plugin-card">
+        <div class="head"><span class="pill green">host + client</span><span class="mono">dsh-finance</span></div>
+        <p class="desc">成本审计：把每次会话折算成真金白银。</p>
+        <ul>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>余额电量卡 + 供应商/模型/工作区成本图</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>峰谷计价（高峰/空闲自动拆分）</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>价格表从 models.dev 自动同步</li>
+        </ul>
+      </div>
+      <div class="plugin-card">
+        <div class="head"><span class="pill green">host + client</span><span class="mono">dsh-hippomemo</span></div>
+        <p class="desc">跨会话/跨工作区共享记忆层。</p>
+        <ul>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>自动召回 + 显式沉淀，全局证明机制</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>统计看板：召回率 / 引用转化</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>LLM 复核的记忆进化（归档/取代）</li>
+        </ul>
+      </div>
+      <div class="plugin-card">
+        <div class="head"><span class="pill green">host + client</span><span class="mono">dsh-connector-npm</span></div>
+        <p class="desc">npm 发布管线：从起名到 OIDC 自动发版。</p>
+        <ul>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>包名可用性 + trust 状态检查</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>首发 2FA 脚本生成，后续 CI 免 2FA</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Pages 站点一键上线</li>
+        </ul>
+      </div>
+      <div class="plugin-card">
+        <div class="head"><span class="pill">基础层</span><span class="mono">dsh-ui-kit</span></div>
+        <p class="desc">复刻 DSH 设计系统的本地 React 组件库，零 cordis 依赖。</p>
+        <ul>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>按钮/输入/Pill/Toast/Modal/图表全套</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Markdown / 代码高亮渲染</li>
+        </ul>
+      </div>
+      <div class="plugin-card">
+        <div class="head"><span class="pill">基础层</span><span class="mono">dsh-plugin-kit + wire</span></div>
+        <p class="desc">client 设置页样板与 remote 协议定义，新插件的小时级脚手架。</p>
+        <ul>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>settings.section / locale / CSS 注入样板</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>typert 远程协议类型安全</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="compat">
+  <div class="wrap">
+    <span class="kicker">VERSION COMPATIBILITY</span>
+    <h2>版本不匹配的插件，一个都别装</h2>
+    <p class="sub">dsh 迭代很快，接口与事件随时改名。本仓库每个插件线都钉死在经过验证的 dsh 版本上——装之前先对表，装完升级先过闸。</p>
+
+    <div class="warn-strip">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+      <p><b>真实教训：</b>dsh 曾把 <span class="mono">ProjectionDefinition.schema/view</span> 改成 <span class="mono">stateSchema/wire</span>、把事件 <span class="mono">credentials/updated</span> 改名 <span class="mono">credentials/reference-updated</span>——旧插件装上新版 dsh，轻则编译失败，重则静默失效。</p>
+    </div>
+
+    <div class="checker">
+      <h3>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#679efe" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        输入你的 dsh 版本，即时判定
+      </h3>
+      <div class="row">
+        <input id="ver-in" class="mono" type="text" placeholder="如 0.1.1-rc.2" aria-label="输入你的 dsh 版本号" autocomplete="off" spellcheck="false">
+        <button class="btn primary" id="ver-go" type="button">检查兼容性</button>
+      </div>
+      <div class="verdict" id="verdict" role="status" aria-live="polite"></div>
+      <div class="quick-try">
+        <span>试试：</span>
+        <button class="chip" type="button" data-ver="0.1.1-rc.2">0.1.1-rc.2</button>
+        <button class="chip" type="button" data-ver="0.1.1-rc.5">0.1.1-rc.5</button>
+        <button class="chip" type="button" data-ver="0.1.0-rc.8">0.1.0-rc.8</button>
+        <button class="chip" type="button" data-ver="0.2.0">0.2.0</button>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr><th>你的 dsh 版本</th><th>兼容状态</th><th>说明</th><th>建议动作</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="mono">0.1.1-rc.2</td>
+          <td><span class="status ok"><i></i>完全兼容</span></td>
+          <td>当前主线。typecheck / 255+ 用例 / 3999 狗粮全部通过</td>
+          <td class="mono">直接安装</td>
+        </tr>
+        <tr>
+          <td class="mono">0.1.1-rc.3+</td>
+          <td><span class="status warn"><i></i>未验证</span></td>
+          <td>同 tuple 新 rc：符号与事件可能被上游改名</td>
+          <td class="mono">先跑两道闸</td>
+        </tr>
+        <tr>
+          <td class="mono">0.1.0-rc.8 及更早</td>
+          <td><span class="status err"><i></i>不兼容</span></td>
+          <td>插件已适配 0.1.1 的 projection / credentials 破坏性改动，回装旧宿主会缺符号</td>
+          <td class="mono">先升 dsh</td>
+        </tr>
+        <tr>
+          <td class="mono">其他 / 更新的大版本</td>
+          <td><span class="status warn"><i></i>未验证</span></td>
+          <td>接口面 diff 未知，不排除编译级破坏</td>
+          <td class="mono">先跑两道闸</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="gates">
+      <div class="gate">
+        <span class="num">第一道闸 · 快检 ~1 分钟</span>
+        <h3>发布产物 API 面存活检查</h3>
+        <code class="mono cmd">pnpm check:dsh-upgrade</code>
+        <p>把插件实际 import 的符号、接口成员、事件名逐个对到新版 .d.ts 里——删符号、改字段、换事件名都逃不掉。报告自动归档 <span class="mono">docs/dsh-upgrade-reports/</span>。</p>
+      </div>
+      <div class="gate">
+        <span class="num">第二道闸 · 真验数分钟</span>
+        <h3>干净安装 + 全仓 typecheck</h3>
+        <code class="mono cmd">pnpm dryrun:dsh-upgrade</code>
+        <p>临时目录钉新版本、干净安装、全仓编译——专抓第一道闸报不出的运行期语义破坏。全绿才允许正式升级。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <span class="kicker">GET STARTED</span>
+    <h2>三步装入你的 dsh profile</h2>
+    <div class="steps">
+      <div class="step">
+        <span class="n">1</span>
+        <h3>克隆仓库</h3>
+        <p>插件以 workspace 源码分发，clone 即得全部 12 包。</p>
+        <code>git clone https://github.com/neil-ji/dsh-spark-plugins.git</code>
+      </div>
+      <div class="step">
+        <span class="n">2</span>
+        <h3>对齐版本并安装依赖</h3>
+        <p>确认你的 dsh 版本在上表兼容行内，然后装依赖。</p>
+        <code>pnpm install</code>
+      </div>
+      <div class="step">
+        <span class="n">3</span>
+        <h3>装入 profile</h3>
+        <p>构建全部包并链接到本地 profile，即刻生效。</p>
+        <code>pnpm install:profile</code>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="cta-final">
+  <div class="wrap">
+    <h2>让你的 DSH，长出该有的样子</h2>
+    <p>风格如官方，版本有体检 —— 装完即用，不崩 3080。</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/neil-ji/dsh-spark-plugins">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.27-.01-1.17-.02-2.12-3.2.7-3.88-1.36-3.88-1.36-.52-1.33-1.28-1.68-1.28-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.03 1.76 2.69 1.25 3.35.96.1-.75.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.15 1.18a10.9 10.9 0 0 1 5.74 0c2.19-1.49 3.15-1.18 3.15-1.18.62 1.59.23 2.76.11 3.05.74.81 1.18 1.83 1.18 3.09 0 4.41-2.69 5.38-5.26 5.66.41.36.78 1.06.78 2.14 0 1.54-.01 2.79-.01 3.17 0 .31.21.68.8.56A10.52 10.52 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"/></svg>
+        GitHub · 点个 Star
+      </a>
+      <a class="btn outline" href="demo.html">先看 UI Demo</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap inner">
+    <span class="mono">dsh-spark-plugins</span>
+    <span>·</span>
+    <span>MIT License</span>
+    <span>·</span>
+    <span>当前适配 <span class="mono">dsh 0.1.1-rc.2</span></span>
+    <span class="spacer"></span>
+    <a href="https://github.com/neil-ji/dsh-spark-plugins">GitHub</a>
+    <a href="demo.html">Demo</a>
+    <a href="UPGRADE-PROTOCOL.md">升级协议</a>
+  </div>
+</footer>
+
+<script>
+  // 版本兼容判定（数据与 docs/UPGRADE-PROTOCOL.md 一致）
+  function judge(v) {
+    v = (v || '').trim().toLowerCase().replace(/^v/, '');
+    if (!/^\d+\.\d+\.\d+(-rc\.\d+)?$/.test(v)) return null;
+    const m = v.match(/^(\d+)\.(\d+)\.(\d+)(?:-rc\.(\d+))?$/);
+    const M = m[1], mi = m[2], pa = m[3], rc = m[4];
+    if (M === '0' && mi === '1' && rc === '2') return { s: 'ok', t: '完全兼容', d: 'v' + v + ' 正是当前插件线钉版并通过全部验证的版本，直接安装即可。' };
+    if (M === '0' && mi === '1' && pa === '0') return { s: 'err', t: '不兼容 · 先升级 dsh', d: '0.1.0 线（含 0.1.0-rc.x）早于插件适配的 projection / credentials 破坏性改动，安装会缺符号或静默失效。' };
+    if (M === '0' && mi === '1' && rc) return { s: 'warn', t: '未验证 · 建议先体检', d: '同 tuple 的新 rc 未逐一验证。克隆仓库后先跑 pnpm check:dsh-upgrade，有信号再跑 pnpm dryrun:dsh-upgrade，全绿后再钉版。' };
+    return { s: 'warn', t: '未验证 · 接口面未知', d: '该版本超出已验证范围（可能更新也可能过旧）。不要直接安装：先跑 pnpm check:dsh-upgrade 对比发布产物 API 面，再跑 pnpm dryrun:dsh-upgrade 真验。' };
+  }
+  const input = document.getElementById('ver-in');
+  const box = document.getElementById('verdict');
+  function icons(s) {
+    return s === 'ok'
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>';
+  }
+  function run(v) {
+    const r = judge(v);
+    box.classList.remove('ok', 'warn', 'err');
+    if (!r) {
+      box.classList.add('err'); box.classList.add('show');
+      box.innerHTML = icons('err') + '<span>看起来不是合法的 dsh 版本号。格式形如 <span class="mono">0.1.1-rc.2</span>，可在 <span class="mono">~/.dsh/profiles/web</span> 的依赖钉版或 dsh 启动日志里找到。</span>';
+      return;
+    }
+    box.classList.add(r.s); box.classList.add('show');
+    box.innerHTML = icons(r.s) + '<span><b>' + r.t + '</b> — ' + r.d + '</span>';
+  }
+  document.getElementById('ver-go').addEventListener('click', () => run(input.value));
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') run(input.value); });
+  document.querySelectorAll('.chip[data-ver]').forEach(c =>
+    c.addEventListener('click', () => { input.value = c.dataset.ver; run(c.dataset.ver); }));
+  run('0.1.1-rc.2');
+</script>
+</body>
+</html>
