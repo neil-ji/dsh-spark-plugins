@@ -2,6 +2,12 @@
 
 本地自用的 DSH 插件 monorepo（pnpm workspace）。**不做 GitHub Pages，不维护 npm 发布**——所有包均为 private，通过 workspace 源码构建 + 安装到本地 dsh profile 运行。
 
+## 安装后 UI 速览
+
+![插件 UI 预览](docs/screenshots/plugins-ui.png)
+
+<p align="center">GitHub 连接器 · 财务审计 · npm 发布管线 · 记忆（HippoMemo）——按 DSH 设计系统 1:1 复刻的静态预览，演示数据见 <a href="docs/demo.html">docs/demo.html</a></p>
+
 ## 包一览（12 个包）
 
 | 包 | 目录 | 说明 |

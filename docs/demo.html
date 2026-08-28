@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>dsh-spark-plugins · UI 预览</title>
+<style>
+  :root {
+    --bg: rgb(245,246,247);
+    --card: #fff;
+    --l1: rgba(0,0,0,.04); --l2: rgba(0,0,0,.10); --l3: rgba(0,0,0,.12);
+    --text: rgb(15,17,21); --text2: rgb(97,102,107); --text3: rgb(129,133,140);
+    --brand: #4176e6; --brand2: rgb(103,158,254);
+    --green: rgb(34,197,94); --amber: rgb(245,158,11); --red: rgb(236,19,19); --blue: rgb(86,134,254);
+    --mono: 'SF Mono','JetBrains Mono','Fira Code',Consolas,monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+    background: var(--bg); color: var(--text); font-size: 13px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { width: 1100px; margin: 0 auto; padding: 36px 0 48px; }
+  .page-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+  .page-head h1 { font-size: 18px; line-height: 26px; font-weight: 600; }
+  .page-head .sub { color: var(--text3); font-size: 12px; }
+  .mono { font-family: var(--mono); }
+
+  .plugin { margin-top: 36px; }
+  .plugin-tag {
+    display: inline-block; font-size: 11px; color: var(--text2);
+    background: rgb(245,246,247); border: 1px solid var(--l2); border-radius: 12px;
+    padding: 2px 10px; margin-bottom: 8px;
+  }
+  .title { font-size: 18px; line-height: 26px; font-weight: 600; }
+  .intro { font-size: 13px; color: var(--text2); opacity: .72; margin-top: 2px; }
+  .title-row { display: flex; align-items: flex-start; justify-content: space-between; }
+
+  .card { background: var(--card); border: 1px solid var(--l2); border-radius: 12px; padding: 14px 16px; margin-top: 12px; }
+  .card-name { font-size: 15px; font-weight: 600; }
+  .card-desc { font-size: 13px; color: var(--text3); margin-top: 1px; }
+  .sect { font-size: 13px; font-weight: 600; margin: 14px 0 8px; }
+  .row { display: flex; align-items: center; gap: 8px; }
+  .hint { font-size: 12px; color: var(--text3); }
+
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .dot.done { background: var(--green); } .dot.warn { background: var(--amber); } .dot.err { background: var(--red); }
+  .pill {
+    display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 12px;
+    font-size: 11px; background: rgb(245,246,247); border: 1px solid var(--l1); color: var(--text2); white-space: nowrap;
+  }
+  .pill.green { color: rgb(21,128,61); background: rgb(236,253,245); border-color: rgba(34,197,94,.35); }
+  .pill.amber { color: rgb(221,134,41); background: rgb(255,251,235); border-color: rgba(245,158,11,.35); }
+  .pill.blue  { color: #2b5bd7; background: rgb(239,245,255); border-color: rgba(65,118,230,.35); }
+  .pill.red   { color: rgb(200,30,30); background: rgb(255,241,241); border-color: rgba(236,25,25,.30); }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; height: 30px; padding: 0 14px;
+    border-radius: 15px; font-size: 13px; font-weight: 500; cursor: default; white-space: nowrap;
+  }
+  .btn.primary { background: #0f1115; color: #fff; border: 1px solid #0f1115; }
+  .btn.outline { background: #fff; color: var(--text); border: 1px solid var(--l3); }
+  .btn.sm { height: 26px; padding: 0 10px; border-radius: 13px; font-size: 12px; }
+
+  .input {
+    height: 32px; border-radius: 8px; border: 1px solid rgba(0,0,0,.10); background: rgb(245,246,247);
+    padding: 0 10px; font-size: 13px; color: var(--text3); display: flex; align-items: center; flex: 1; min-width: 0;
+  }
+  .input .mono { font-size: 12px; }
+  .field { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0; }
+  .field label { font-size: 13px; color: var(--text); }
+  .fields-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  .check { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .box { width: 16px; height: 16px; border-radius: 4px; border: 1px solid rgba(0,0,0,.2); flex: none;
+         display: flex; align-items: center; justify-content: center; font-size: 11px; color: #fff; }
+  .box.on { background: #0f1115; border-color: #0f1115; }
+  .checks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 16px; margin-top: 8px; }
+
+  .seg { display: inline-flex; background: rgb(240,241,243); border-radius: 999px; padding: 2px; }
+  .seg span { padding: 4px 14px; border-radius: 999px; font-size: 12px; color: var(--text2); }
+  .seg span.on { background: #fff; color: var(--text); font-weight: 500; border: 1px solid var(--l1); }
+
+  .saved { font-size: 12px; color: rgb(21,128,61); }
+  .footer { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 14px; }
+
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 12px; }
+  .kpi { background: var(--card); border: 1px solid var(--l2); border-radius: 14px; padding: 12px 16px; }
+  .kpi .k { font-size: 12px; color: var(--text2); }
+  .kpi .v { font-size: 20px; line-height: 28px; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .kpi .h { font-size: 11px; color: var(--text3); margin-top: 2px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+  .chart-card { background: var(--card); border: 1px solid var(--l2); border-radius: 14px; padding: 14px 16px; }
+  .chart-card h3 { font-size: 13px; font-weight: 600; margin-bottom: 10px; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--text2); }
+  .legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; }
+  .stats { margin-top: 10px; font-size: 12px; color: var(--text2); display: flex; flex-direction: column; gap: 4px; }
+  .stats b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .peak-note { font-size: 12px; color: var(--text3); margin-top: 12px; }
+
+  .mem-row { background: #fff; border: 1px solid var(--l1); border-radius: 10px; padding: 10px 14px; display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+  .mem-row .t { font-size: 13px; font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mem-row .ops { color: var(--text3); font-size: 12px; display: flex; gap: 10px; flex: none; }
+  .mem-row .ops .del { color: var(--red); }
+  .toolbar { display: flex; gap: 8px; margin-top: 12px; }
+  .toolbar .input { flex: 1; }
+  .select { height: 32px; border-radius: 8px; border: 1px solid rgba(0,0,0,.10); background: #fff; padding: 0 10px; font-size: 12px; color: var(--text2); display: flex; align-items: center; gap: 14px; }
+  .pagination { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 12px; color: var(--text2); }
+  .pagenum { min-width: 24px; height: 24px; border-radius: 6px; border: 1px solid var(--l2); background: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+  .pagenum.on { background: #0f1115; color: #fff; border-color: #0f1115; }
+
+  .script { background: rgb(245,246,247); border: 1px solid var(--l2); border-radius: 8px; padding: 10px 12px; font-family: var(--mono); font-size: 12px; color: var(--text); white-space: pre; margin-top: 8px; }
+  .disclaimer { margin-top: 40px; padding-top: 14px; border-top: 1px solid var(--l2); font-size: 12px; color: var(--text3); }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="page-head">
+    <h1>dsh-spark-plugins · 插件安装后 UI 速览</h1>
+    <span class="sub mono">demo data · 非真实用量</span>
+  </div>
+
+  <!-- ============ GitHub 连接器 ============ -->
+  <section class="plugin">
+    <span class="plugin-tag mono">dsh-connector-github-ui</span>
+    <h2 class="title">GitHub 连接</h2>
+    <p class="intro">配置 GitHub 访问令牌与操作权限。令牌只写入本机凭据存储，永不会回显。</p>
+
+    <div class="card">
+      <div class="row">
+        <span class="dot done"></span>
+        <span class="card-name">已连接为</span>
+        <span class="pill blue mono">neil-ji</span>
+        <span style="color:var(--text2)">Neil Ji</span>
+        <span class="pill">repo</span><span class="pill">workflow</span><span class="pill">read:org</span>
+        <span style="flex:1"></span>
+        <span class="btn primary">测试连接</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-name">访问令牌</div>
+      <div class="row" style="margin-top:8px">
+        <span class="dot done"></span><span>已配置</span>
+        <span class="hint">来源：凭据存储 refs.GITHUB_TOKEN</span>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div class="input mono">粘贴 GitHub 访问令牌（PAT）</div>
+        <span class="btn primary">保存令牌</span>
+        <span class="btn outline">移除令牌</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-name">操作权限</div>
+      <div class="checks">
+        <div class="check"><span class="box on">✓</span>创建仓库</div>
+        <div class="check"><span class="box on">✓</span>推送代码</div>
+        <div class="check"><span class="box on">✓</span>拉取代码</div>
+        <div class="check"><span class="box on">✓</span>创建 PR</div>
+        <div class="check"><span class="box on">✓</span>代码审查</div>
+        <div class="check"><span class="box on">✓</span>发布 Pages 站点</div>
+        <div class="check"><span class="box on">✓</span>触发 Actions 工作流</div>
+        <div class="check"><span class="box on">✓</span>Issue 与评论</div>
+        <div class="check"><span class="box on">✓</span>发布 Release</div>
+      </div>
+      <div class="hint" style="margin-top:10px">强制推送 — 不可用（本连接器未提供）· 删除仓库 / 删除分支 — 不可用</div>
+      <div class="sect">Git 身份与默认值</div>
+      <div class="fields-2">
+        <div class="field"><label>Git 用户名</label><div class="input">Neil Ji</div></div>
+        <div class="field"><label>Git 邮箱</label><div class="input mono">neil-ji@users.noreply.github.com</div></div>
+        <div class="field"><label>默认可见性</label><div class="seg"><span>私有</span><span class="on">公开</span></div></div>
+        <div class="field"><label>Git 代理</label><div class="row"><div class="input mono">如 http://127.0.0.1:7897（VPN/Clash），留空直连</div><span class="btn outline sm">测试代理</span></div></div>
+      </div>
+      <div class="footer"><span class="saved">已保存</span><span class="btn primary">保存配置</span></div>
+    </div>
+  </section>
+
+  <!-- ============ 财务审计 ============ -->
+  <section class="plugin">
+    <span class="plugin-tag mono">dsh-finance-client</span>
+    <div class="title-row">
+      <div>
+        <h2 class="title">财务审计</h2>
+        <p class="subtitle intro">余额、Token 用量与成本总览</p>
+      </div>
+      <span class="btn outline">刷新</span>
+    </div>
+
+    <div class="card">
+      <div class="row" style="gap:20px">
+        <svg width="120" height="120" viewBox="0 0 120 120">
+          <defs><linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="rgb(65,118,230)"/><stop offset="1" stop-color="rgb(103,158,254)"/>
+          </linearGradient></defs>
+          <circle cx="60" cy="60" r="50" fill="none" stroke="rgb(240,241,243)" stroke-width="10"/>
+          <circle cx="60" cy="60" r="50" fill="none" stroke="url(#g1)" stroke-width="10" stroke-linecap="round"
+                  stroke-dasharray="245 314" transform="rotate(-90 60 60)"/>
+          <text x="60" y="56" text-anchor="middle" font-size="11" fill="rgb(97,102,107)">剩余</text>
+          <text x="60" y="74" text-anchor="middle" font-size="18" font-weight="600" fill="rgb(15,17,21)">78%</text>
+        </svg>
+        <div>
+          <div class="card-name">余额电量</div>
+          <div class="row" style="margin-top:10px; gap:24px">
+            <div><div class="hint">当前余额</div><div style="font-size:15px;font-weight:600">¥1,240.50</div></div>
+            <div><div class="hint">历史峰值</div><div style="font-size:15px;font-weight:600">¥1,588.00</div></div>
+            <div><div class="hint">已消耗</div><div style="font-size:15px;font-weight:600">¥347.50</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi"><div class="k">输入 Tokens</div><div class="v">18.42M</div><div class="h">缓存命中 41%</div></div>
+      <div class="kpi"><div class="k">输出 Tokens</div><div class="v">4.87M</div><div class="h">近 30 天</div></div>
+      <div class="kpi"><div class="k">会话</div><div class="v">126</div><div class="h">已重放计账</div></div>
+      <div class="kpi"><div class="k">工作区</div><div class="v">6</div><div class="h">跨工作区统计</div></div>
+    </div>
+    <div class="kpi-grid" style="grid-template-columns:1fr 1fr">
+      <div class="kpi"><div class="k">按量支出</div><div class="v">¥132.86</div><div class="h">按官方牌价逐次调用累计</div></div>
+      <div class="kpi"><div class="k">订阅等价</div><div class="v">¥89.60</div><div class="h">按当前用量折算的包月等效价，供参考</div></div>
+    </div>
+    <div class="peak-note">峰谷计价自 2026-08-17 00:00（北京时间）起生效：工作日 9:00–12:00 / 14:00–18:00 为高峰，其余时段半价。</div>
+
+    <div class="grid-2">
+      <div class="chart-card">
+        <h3>峰谷成本拆分</h3>
+        <div class="row" style="gap:18px">
+          <svg width="132" height="132" viewBox="0 0 132 132">
+            <circle cx="66" cy="66" r="54" fill="none" stroke="rgb(240,241,243)" stroke-width="14"/>
+            <circle cx="66" cy="66" r="54" fill="none" stroke="#f59e0b" stroke-width="14" stroke-dasharray="132.3 339.3" transform="rotate(-90 66 66)"/>
+            <circle cx="66" cy="66" r="54" fill="none" stroke="#4176e6" stroke-width="14" stroke-dasharray="207 339.3" stroke-dashoffset="-132.3" transform="rotate(-90 66 66)"/>
+            <text x="66" y="62" text-anchor="middle" font-size="10" fill="rgb(129,133,140)">估算成本</text>
+            <text x="66" y="80" text-anchor="middle" font-size="17" font-weight="600" fill="rgb(15,17,21)">¥86.40</text>
+          </svg>
+          <div class="stats" style="margin:0">
+            <span>高峰 <b>¥52.30</b>（占 39%）</span>
+            <span>空闲 <b>¥80.56</b></span>
+            <span>此前会话 <b>¥23.40</b></span>
+            <span>错峰可省 <b style="color:rgb(21,128,61)">¥26.15</b></span>
+            <span class="hint">最值得错峰：deepseek-v4-pro</span>
+          </div>
+        </div>
+      </div>
+      <div class="chart-card">
+        <h3>近 24 小时成本分布</h3>
+        <div class="legend" style="margin-bottom:8px">
+          <span><i style="background:#f59e0b"></i>高峰</span>
+          <span><i style="background:#4176e6"></i>空闲</span>
+          <span><i style="background:#64748b"></i>平价</span>
+        </div>
+        <svg width="100%" height="130" viewBox="0 0 460 130" preserveAspectRatio="none">
+          <g>
+            <rect x="10"  y="88" width="12" height="36" rx="3" fill="#4176e6"/><rect x="28"  y="98" width="12" height="26" rx="3" fill="#4176e6"/>
+            <rect x="46"  y="92" width="12" height="32" rx="3" fill="#4176e6"/><rect x="64"  y="102" width="12" height="22" rx="3" fill="#64748b"/>
+            <rect x="82"  y="96" width="12" height="28" rx="3" fill="#4176e6"/><rect x="100" y="90" width="12" height="34" rx="3" fill="#4176e6"/>
+            <rect x="118" y="99" width="12" height="25" rx="3" fill="#4176e6"/><rect x="136" y="94" width="12" height="30" rx="3" fill="#4176e6"/>
+            <rect x="154" y="62" width="12" height="62" rx="3" fill="#f59e0b"/><rect x="172" y="44" width="12" height="80" rx="3" fill="#f59e0b"/>
+            <rect x="190" y="52" width="12" height="72" rx="3" fill="#f59e0b"/><rect x="208" y="70" width="12" height="54" rx="3" fill="#f59e0b"/>
+            <rect x="226" y="82" width="12" height="42" rx="3" fill="#4176e6"/><rect x="244" y="58" width="12" height="66" rx="3" fill="#f59e0b"/>
+            <rect x="262" y="40" width="12" height="84" rx="3" fill="#f59e0b"/><rect x="280" y="48" width="12" height="76" rx="3" fill="#f59e0b"/>
+            <rect x="298" y="60" width="12" height="64" rx="3" fill="#f59e0b"/><rect x="316" y="86" width="12" height="38" rx="3" fill="#4176e6"/>
+            <rect x="334" y="92" width="12" height="32" rx="3" fill="#4176e6"/><rect x="352" y="84" width="12" height="40" rx="3" fill="#64748b"/>
+            <rect x="370" y="90" width="12" height="34" rx="3" fill="#4176e6"/><rect x="388" y="96" width="12" height="28" rx="3" fill="#4176e6"/>
+            <rect x="406" y="100" width="12" height="24" rx="3" fill="#4176e6"/><rect x="424" y="106" width="12" height="18" rx="3" fill="#4176e6"/>
+          </g>
+          <line x1="163" y1="6" x2="163" y2="124" stroke="rgba(0,0,0,.25)" stroke-dasharray="4 4"/>
+          <text x="170" y="14" font-size="10" fill="rgb(129,133,140)">今日</text>
+          <text x="10" y="12" font-size="10" fill="rgb(129,133,140)">昨日 00:00</text>
+          <text x="452" y="12" font-size="10" fill="rgb(129,133,140)" text-anchor="end">23:00</text>
+        </svg>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="chart-card">
+        <h3>按供应商成本</h3>
+        <div class="row" style="gap:18px">
+          <svg width="120" height="120" viewBox="0 0 132 132">
+            <circle cx="66" cy="66" r="54" fill="none" stroke="rgb(240,241,243)" stroke-width="14"/>
+            <circle cx="66" cy="66" r="54" fill="none" stroke="#4176e6" stroke-width="14" stroke-dasharray="240.9 339.3" transform="rotate(-90 66 66)"/>
+            <circle cx="66" cy="66" r="54" fill="none" stroke="#8b5cf6" stroke-width="14" stroke-dasharray="50.9 339.3" stroke-dashoffset="-240.9" transform="rotate(-90 66 66)"/>
+            <circle cx="66" cy="66" r="54" fill="none" stroke="#f59e0b" stroke-width="14" stroke-dasharray="30.5 339.3" stroke-dashoffset="-291.8" transform="rotate(-90 66 66)"/>
+            <circle cx="66" cy="66" r="54" fill="none" stroke="#22c55e" stroke-width="14" stroke-dasharray="17 339.3" stroke-dashoffset="-322.3" transform="rotate(-90 66 66)"/>
+            <text x="66" y="62" text-anchor="middle" font-size="10" fill="rgb(129,133,140)">合计</text>
+            <text x="66" y="80" text-anchor="middle" font-size="15" font-weight="600" fill="rgb(15,17,21)">¥132.86</text>
+          </svg>
+          <div class="stats" style="margin:0">
+            <span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#4176e6;margin-right:6px"></i>DeepSeek <b>71%</b> · ¥94.33</span>
+            <span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#8b5cf6;margin-right:6px"></i>OpenAI <b>15%</b> · ¥19.93</span>
+            <span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#f59e0b;margin-right:6px"></i>Anthropic <b>9%</b> · ¥11.96</span>
+            <span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#22c55e;margin-right:6px"></i>Zai <b>5%</b> · ¥6.64</span>
+          </div>
+        </div>
+      </div>
+      <div class="chart-card">
+        <h3>按模型成本</h3>
+        <div class="row" style="gap:18px">
+          <svg width="120" height="120" viewBox="0 0 132 132">
+            <circle cx="66" cy="66" r="54" fill="none" stroke="rgb(240,241,243)" stroke-width="14"/>
+            <circle cx="66" cy="66" r="54" fill="none" stroke="#4176e6" stroke-width="14" stroke-dasharray="210.4 339.3" transform="rotate(-90 66 66)"/>
+            <circle cx="66" cy="66" r="54" fill="none" stroke="#6741d9" stroke-width="14" stroke-dasharray="71.3 339.3" stroke-dashoffset="-210.4" transform="rotate(-90 66 66)"/>
+            <circle cx="66" cy="66" r="54" fill="none" stroke="#f59e0b" stroke-width="14" stroke-dasharray="33.9 339.3" stroke-dashoffset="-281.7" transform="rotate(-90 66 66)"/>
+            <circle cx="66" cy="66" r="54" fill="none" stroke="#22c55e" stroke-width="14" stroke-dasharray="23.8 339.3" stroke-dashoffset="-315.6" transform="rotate(-90 66 66)"/>
+            <text x="66" y="62" text-anchor="middle" font-size="10" fill="rgb(129,133,140)">4 个模型</text>
+            <text x="66" y="80" text-anchor="middle" font-size="15" font-weight="600" fill="rgb(15,17,21)">近 30 天</text>
+          </svg>
+          <div class="stats" style="margin:0">
+            <span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#4176e6;margin-right:6px"></i>deepseek-v4-flash <b>62%</b></span>
+            <span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#6741d9;margin-right:6px"></i>deepseek-v4-pro <b>21%</b></span>
+            <span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#f59e0b;margin-right:6px"></i>glm-5.3-flash <b>10%</b></span>
+            <span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#22c55e;margin-right:6px"></i>gpt-5.4-mini <b>7%</b></span>
+          </div>
+        </div>
+      </div>
+      <div class="chart-card">
+        <h3>按工作区成本</h3>
+        <svg width="100%" height="128" viewBox="0 0 460 128">
+          <g font-size="11" fill="rgb(97,102,107)">
+            <text x="0" y="18">dsh-spark-plugins</text>
+            <rect x="150" y="8" width="264" height="14" rx="7" fill="#4176e6" opacity=".9"/>
+            <text x="422" y="19" fill="rgb(15,17,21)" font-weight="600">¥58.20</text>
+            <text x="0" y="50">dsh-checkout</text>
+            <rect x="150" y="40" width="142" height="14" rx="7" fill="#4176e6" opacity=".65"/>
+            <text x="298" y="51" fill="rgb(15,17,21)" font-weight="600">¥31.40</text>
+            <text x="0" y="82">neilsblog</text>
+            <rect x="150" y="72" width="100" height="14" rx="7" fill="#4176e6" opacity=".45"/>
+            <text x="256" y="83" fill="rgb(15,17,21)" font-weight="600">¥22.10</text>
+            <text x="0" y="114">aigc-lab</text>
+            <rect x="150" y="104" width="96" height="14" rx="7" fill="#4176e6" opacity=".35"/>
+            <text x="252" y="115" fill="rgb(15,17,21)" font-weight="600">¥21.16</text>
+          </g>
+        </svg>
+      </div>
+      <div class="chart-card">
+        <h3>按日成本趋势</h3>
+        <div class="hint" style="margin-bottom:6px">近 14 天 · 总成本 ¥132.86 · 日均 ¥9.49</div>
+        <svg width="100%" height="112" viewBox="0 0 460 112" preserveAspectRatio="none">
+          <defs><linearGradient id="g2" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#4176e6" stop-opacity=".25"/><stop offset="1" stop-color="#4176e6" stop-opacity="0"/>
+          </linearGradient></defs>
+          <path d="M10,88 L43,80 76,84 109,66 142,72 175,54 208,60 241,42 274,50 307,34 340,44 373,26 406,36 450,20 L450,106 10,106 Z" fill="url(#g2)"/>
+          <polyline points="10,88 43,80 76,84 109,66 142,72 175,54 208,60 241,42 274,50 307,34 340,44 373,26 406,36 450,20"
+                    fill="none" stroke="#4176e6" stroke-width="2"/>
+          <circle cx="450" cy="20" r="3.5" fill="#4176e6"/>
+          <text x="10" y="106" font-size="10" fill="rgb(129,133,140)">08-15</text>
+          <text x="450" y="106" font-size="10" fill="rgb(129,133,140)" text-anchor="end">08-28</text>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ npm 发布管线 ============ -->
+  <section class="plugin">
+    <span class="plugin-tag mono">dsh-connector-npm-ui</span>
+    <h2 class="title">npm 发布</h2>
+    <p class="intro">只读检查注册表与包名，发布由 CI 经 OIDC 完成。</p>
+
+    <div class="card">
+      <div class="row">
+        <span class="dot done"></span><span class="card-name" style="font-size:13px;font-weight:500">npm 注册表</span>
+        <span class="pill green">可达</span>
+        <span class="hint mono">https://registry.npmjs.org</span>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <span class="dot done"></span>
+        <span class="mono" style="font-weight:600">my-awesome-lib</span>
+        <span class="hint">已发布 · 最新 0.1.2</span>
+        <span style="flex:1"></span>
+        <span class="btn outline sm">重试</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-name">检查包名</div>
+      <div class="row" style="margin-top:8px">
+        <div class="input mono">spark-fish-ui</div>
+        <span class="btn primary">检查</span>
+        <span class="pill green">包名可用</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-name">首次发布脚本</div>
+      <p class="hint" style="margin-top:4px">在终端执行（浏览器 2FA，每条确认一次）。执行成功后：创建 v0.1.3 tag，CI 将经 OIDC 免 2FA 自动发布。</p>
+      <div class="script">npm publish --access public
+npm trust neil-ji/my-awesome-lib</div>
+      <div class="footer"><span class="saved">已复制</span><span class="btn outline sm">复制</span></div>
+    </div>
+  </section>
+
+  <!-- ============ 记忆（hippomemo） ============ -->
+  <section class="plugin">
+    <span class="plugin-tag mono">dsh-hippomemo</span>
+    <h2 class="title">记忆</h2>
+    <p class="intro">跨会话、跨工作区共享的记忆层：自动召回，显式沉淀。</p>
+
+    <div class="seg" style="margin-top:12px"><span class="on">记忆</span><span>统计</span><span>进化</span></div>
+
+    <div class="toolbar">
+      <div class="input">搜索记忆...</div>
+      <div class="select">全部类型 ▾</div>
+      <div class="select">全部范围 ▾</div>
+      <div class="select">全部状态 ▾</div>
+      <span class="btn primary">新建记忆</span>
+    </div>
+
+    <div class="mem-row">
+      <span class="t">gitignore 需忽略 .env*，防止凭据被误提交</span>
+      <span class="pill blue">事实</span><span class="pill">全局</span><span class="pill green">已证明</span>
+      <span class="pill">活跃</span><span class="pill">0.80</span><span class="hint">2 小时前</span>
+      <span class="ops"><span>编辑</span><span>归档</span><span class="del">删除</span></span>
+    </div>
+    <div class="mem-row">
+      <span class="t">插件装入 profile 用 file: 而非 link:，否则 client 路由 404</span>
+      <span class="pill blue">洞见</span><span class="pill">工作区</span>
+      <span class="pill">活跃</span><span class="pill">0.70</span><span class="hint">昨天</span>
+      <span class="ops"><span>编辑</span><span>归档</span><span class="del">删除</span></span>
+    </div>
+    <div class="mem-row">
+      <span class="t">开源发布默认选 MIT 协议</span>
+      <span class="pill amber">偏好</span><span class="pill">全局</span><span class="pill amber">未证明 · 3</span>
+      <span class="pill">活跃</span><span class="pill">0.60</span><span class="hint">3 天前</span>
+      <span class="ops"><span>编辑</span><span>归档</span><span class="del">删除</span></span>
+    </div>
+    <div class="mem-row">
+      <span class="t">任何分支不允许 force push</span>
+      <span class="pill red">约束</span><span class="pill">全局</span><span class="pill green">已证明</span>
+      <span class="pill">活跃</span><span class="pill">0.90</span><span class="hint">1 周前</span>
+      <span class="ops"><span>编辑</span><span>归档</span><span class="del">删除</span></span>
+    </div>
+
+    <div class="pagination">
+      共 128 条 · 第 1 / 13 页
+      <span class="pagenum on">1</span><span class="pagenum">2</span><span class="pagenum">3</span>
+      <span class="hint">…</span><span class="pagenum">13</span>
+      <span style="flex:1"></span>
+      <span class="select">每页 10 ▾</span>
+    </div>
+  </section>
+
+  <div class="disclaimer">以上数据均为演示数据。真实界面由各插件的 client 包渲染在 DSH 设置面板中（pnpm dev 安装到 profile 后可见）。</div>
+</div>
+</body>
+</html>
