@@ -26,6 +26,7 @@ import { en, zh, type NpmKey } from './locales.ts'
 export type { NpmSectionInjected, NpmSectionProps } from './NpmSection.tsx'
 export type {
   NpmPackageInfoView, NpmStatusView, NpmTrustStatusView, NpmLaunchScriptView,
+  NpmTokenStatusView,
 } from 'dsh-connector-npm-wire'
 export type { NpmKey } from './locales.ts'
 

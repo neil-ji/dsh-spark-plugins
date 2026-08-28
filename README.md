@@ -40,7 +40,7 @@ sh install.sh --no-profile        # 只更新源码，不重链 profile
 | dsh-connector-github | packages/dsh-github | GitHub 连接器 host（40+ 工具） |
 | dsh-connector-github-ui | packages/dsh-github-ui | GitHub 连接器 client（连接配置页） |
 | dsh-connector-wire | packages/dsh-github-wire | GitHub 连接器 wire（remote 协议定义） |
-| dsh-connector-npm | packages/dsh-npm | npm 发布管线 host（7 工具） |
+| dsh-connector-npm | packages/dsh-npm | npm 发布管线 host（8 工具，granular token 全自动首发） |
 | dsh-connector-npm-ui | packages/dsh-npm-ui | npm 发布管线 client（发布状态页） |
 | dsh-connector-npm-wire | packages/dsh-npm-wire | npm 管线 wire（remote 协议定义） |
 

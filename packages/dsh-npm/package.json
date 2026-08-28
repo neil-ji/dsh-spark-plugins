@@ -31,7 +31,8 @@
   "dependencies": {
     "dsh-connector-npm-ui": "workspace:*",
     "dsh-connector-npm-wire": "workspace:*",
-    "zod": "^4.0.0"
+    "zod": "^4.0.0",
+    "@deepseek-ai/dsh-credentials": ">=0.1.1-rc.2"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
@@ -43,7 +44,8 @@
     "@deepseek-ai/dsh-typert-registry": "^0.1.1-rc.2",
     "esbuild": "^0.25.0",
     "typescript": "^5.6.0",
-    "dsh-connector-github": "workspace:^"
+    "dsh-connector-github": "workspace:^",
+    "@deepseek-ai/dsh-credentials": "^0.1.1-rc.2"
   },
   "publishConfig": {
     "access": "public"

@@ -14,11 +14,12 @@ import type { NpmKey } from './locales.ts'
 import styles from './NpmPluginCard.module.css'
 
 /** Card fields edited by this plugin (npm settings namespace). */
-export type NpmCardFieldName = 'registry'
+export type NpmCardFieldName = 'registry' | 'tokenEnv'
 
 /** Field specs for the npm settings namespace. */
 export const NPM_CARD_SPECS: readonly CardFieldSpec[] = [
   textCardField('registry'),
+  textCardField('tokenEnv'),
 ]
 
 /** Selector hook the slot renderer synthesizes from the injected store. */
@@ -51,6 +52,7 @@ function NpmCardBody({ t, state, onEdit, onReset, onSave, onDiscard }: {
   const disabled = !shell.writable
   const blocked = !shell.dirty || shell.invalid || shell.saving
   const registry = state.fields.registry
+  const tokenEnv = state.fields.tokenEnv
 
   return (
     <div className={styles.body}>
@@ -77,6 +79,31 @@ function NpmCardBody({ t, state, onEdit, onReset, onSave, onDiscard }: {
           <p className={styles.hint}>{t('cardRegistryHint')}</p>
           {registry.overridden
             ? <button type="button" className={styles.reset} disabled={disabled} onClick={() => onReset('registry')}>{t('cardReset')}</button>
+            : null}
+        </div>
+      </div>
+
+      <div className={styles.field}>
+        <div className={styles.fieldHead}>
+          <label className={styles.fieldLabel} htmlFor="plugin-config-npm-tokenenv">{t('cardTokenEnv')}</label>
+          <span className={styles.fieldBadges}>
+            {tokenEnv.overridden ? <Pill>{t('cardOverridden')}</Pill> : null}
+            {tokenEnv.invalid ? <Pill>{t('cardInvalidText')}</Pill> : null}
+          </span>
+        </div>
+        <Input
+          id="plugin-config-npm-tokenenv"
+          className={styles.fieldInput}
+          type="text"
+          value={tokenEnv.text}
+          placeholder="NPM_TOKEN"
+          disabled={disabled}
+          onChange={(event) => onEdit('tokenEnv', event.currentTarget.value)}
+        />
+        <div className={styles.fieldFoot}>
+          <p className={styles.hint}>{t('cardTokenEnvHint')}</p>
+          {tokenEnv.overridden
+            ? <button type="button" className={styles.reset} disabled={disabled} onClick={() => onReset('tokenEnv')}>{t('cardReset')}</button>
             : null}
         </div>
       </div>

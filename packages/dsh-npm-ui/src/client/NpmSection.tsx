@@ -8,6 +8,7 @@ import type { ReactNode } from 'react'
 import { Button, Input, Pill, StateDot } from 'dsh-ui-kit'
 import type { SnapshotSelectorHook } from 'dsh-spark-plugin-kit/client'
 import type { NpmUiState, NpmUiStore } from './store.ts'
+import type { NpmTokenStatusView } from 'dsh-connector-npm-wire'
 import type { NpmKey } from './locales.ts'
 import styles from './NpmSection.module.css'
 
@@ -120,6 +121,24 @@ function Loaded({ injected }: { injected: NpmSectionInjected }): ReactNode {
         </div>
       </div>
 
+      {/* npm granular token status */}
+      <div className={styles.card}>
+        <div className={styles.row}>
+          <StateDot state={state.token?.configured === true ? 'done' : 'warning'} />
+          <span className={styles.cardTitle}>{t('tokenTitle')}</span>
+          {state.token !== undefined
+            ? <Pill>{state.token.configured ? t('tokenConfigured') : t('tokenMissing')}</Pill>
+            : null}
+          {state.token?.login !== undefined && state.token.login !== null
+            ? <span className={styles.muted}>{t('tokenAccount')}: {state.token.login}</span>
+            : null}
+          <span className={styles.muted}>{state.token?.source ?? ''}</span>
+        </div>
+        {state.token !== undefined
+          ? <p className={styles.muted}>{state.token.configured ? t('tokenHintOk') : t('tokenHintMissing')}</p>
+          : null}
+      </div>
+
       {/* Package name check + trust status */}
       <div className={styles.card}>
         <h3 className={styles.cardTitle}>{t('checkPackage')}</h3>
@@ -182,7 +201,7 @@ function Loaded({ injected }: { injected: NpmSectionInjected }): ReactNode {
       {/* First-release script */}
       <div className={styles.card}>
         <h3 className={styles.cardTitle}>{t('launchScript')}</h3>
-        <p className={styles.intro}>{t('scriptIntro')}</p>
+        <p className={styles.intro}>{state.token?.configured === true ? t('scriptIntroAuto') : t('scriptIntro')}</p>
         <ol className={styles.nextSteps}>
           <li>{t('scriptStepTag')}</li>
         </ol>

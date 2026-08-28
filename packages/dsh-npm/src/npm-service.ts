@@ -1,8 +1,14 @@
 /**
- * npm-connector capability service: registry queries (no credentials needed)
- * and npm CLI command building for OIDC trusted publishing. Publishing itself
- * is delegated to the generated GitHub Actions workflow (OIDC), so the agent
- * never holds an npm credential.
+ * npm-connector capability service: registry queries, granular access token
+ * resolution (via the credentials seam — the token value is never rendered
+ * back), and npm CLI command building for OIDC trusted publishing.
+ *
+ * Two publish paths:
+ *  - granular token configured (bypass 2FA + read/write): the agent publishes
+ *    the first release, configures the trusted publisher and tags the next
+ *    version — fully automatic.
+ *  - no token: publishing is delegated to the generated GitHub Actions
+ *    workflow (OIDC) after a one-time human first publish.
  *
  * Extends TypertRemoteService so the Web UI (dsh-npm-ui) can query package /
  * trust status and generate the first-release human script through the Typert
@@ -10,9 +16,11 @@
  * no write side effects on npm or GitHub.
  */
 import { type Context } from '@deepseek-ai/cordis'
+import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type {
-  NpmLaunchScriptView, NpmPackageInfoView, NpmStatusView, NpmTrustStatusView,
+  NpmLaunchScriptView, NpmPackageInfoView, NpmStatusView, NpmTokenStatusView,
+  NpmTrustStatusView,
 } from 'dsh-connector-npm-wire'
 import { NPM_KIT_PACKAGES } from 'dsh-connector-npm-wire'
 
@@ -20,6 +28,8 @@ import { NPM_KIT_PACKAGES } from 'dsh-connector-npm-wire'
 export interface NpmConnectorConfig {
   /** npm registry 根地址（status/package 查询目标）。 */
   registry?: string
+  /** npm 凭据引用名（granular access token 存在凭据缝里，配置只存引用名）。 */
+  tokenEnv?: string
 }
 
 /** Registry metadata projection for one package name. */
@@ -55,11 +65,37 @@ export class NpmService extends TypertRemoteService {
    * @param configSource - 读取当前连接器配置的 thunk；registry 默认值在此解析，
    *   设置命名空间热更新后立即生效。
    */
+  static inject = ['credentials']
+
   constructor(
-    _ctx: Context,
+    ctx: Context,
     private readonly configSource: () => NpmConnectorConfig = () => ({}),
   ) {
-    super(_ctx, 'npm')
+    super(ctx, 'npm')
+  }
+
+  /**
+   * 解析凭据引用指向的 npm granular access token（不回显）。
+   * 未配置或凭据缝没有该引用时返回 undefined。
+   */
+  async resolveToken(): Promise<string | undefined> {
+    const ref = credentialRef(this.configSource().tokenEnv ?? 'NPM_TOKEN')
+    return (await this.ctx.get('credentials')?.resolve(ref))?.value
+  }
+
+  /** 用 token 查询 whoami，返回登录名；token 无效返回 null。 */
+  async whoami(token: string): Promise<string | null> {
+    let response: Response
+    try {
+      response = await fetch(this.registry + '/-/whoami', {
+        headers: { Authorization: 'Bearer ' + token },
+      })
+    } catch {
+      return null
+    }
+    if (!response.ok) return null
+    const meta = await response.json().catch(() => undefined) as { username?: string } | undefined
+    return meta?.username ?? null
   }
 
   /** 当前生效的 registry 根地址。 */
@@ -97,8 +133,9 @@ export class NpmService extends TypertRemoteService {
 
   /**
    * The npm trust github command for one package. npm >= 11.10 performs the
-   * OIDC trusted-publisher setup; with a 2FA "writes" account it prompts for an
-   * OTP that an agent cannot supply, so the command is surfaced to the human.
+   * OIDC trusted-publisher setup. With a granular access token (bypass 2FA)
+   * configured the command runs non-interactively; with a 2FA "writes"
+   * account it prompts for an OTP, so it is surfaced to the human instead.
    */
   trustCommand(pkg: string, workflowFile: string, repository: string, allowPublish = true): string {
     const flags = [
@@ -161,6 +198,30 @@ export class NpmService extends TypertRemoteService {
       detail: info.exists
         ? 'trusted-publisher state is account-private; verify at ' + checkUrl
         : 'package is not published yet — publish it (first-release script) before configuring trust',
+    }
+  }
+
+  /**
+   * Granular access token status (never the token value). Resolves the
+   * credential ref and probes whoami so the UI can show whether the
+   * full-auto publish path is live.
+   */
+  @Remote('token.status')
+  async tokenStatusRemote(): Promise<NpmTokenStatusView> {
+    const source = this.configSource().tokenEnv ?? 'NPM_TOKEN'
+    const token = await this.resolveToken()
+    if (token === undefined || token === '') {
+      return {
+        configured: false, source, login: null,
+        detail: '未配置 npm granular token：首发走人工脚本（浏览器 2FA）。到 npmjs.com → Access Tokens 生成 granular token（All packages + Read and write + bypass 2FA），以凭据引用 ' + source + ' 存入凭据缝后即可全自动。',
+      }
+    }
+    const login = await this.whoami(token)
+    return {
+      configured: true, source, login,
+      detail: login !== null
+        ? 'granular token 就绪：npm_launch 将自动完成首发 + trust + tag'
+        : 'token 已配置但 whoami 未通过（过期 / 权限不足 / IP 受限），请重新生成',
     }
   }
 

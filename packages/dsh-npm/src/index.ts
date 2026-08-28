@@ -19,14 +19,15 @@ export { renderScaffold, writeScaffold, type ScaffoldOptions } from './scaffold.
 export { launchPackage, type LaunchRequest, type LaunchResult } from './launch.ts'
 
 export const name = 'dsh-connector-npm'
-export const inject = ['shell', 'tools', 'typert']
+export const inject = ['credentials', 'shell', 'tools', 'typert']
 
 /** 本插件拥有的设置命名空间（设置 → 插件 → 插件配置页可编辑）。 */
 export const NPM_SETTINGS_NAMESPACE = settingsNamespace('npm')
 
-/** 连接器配置 schema：目前只有 registry 根地址。 */
+/** 连接器配置 schema：registry 根地址 + npm 凭据引用（granular token）。 */
 const NpmConfigSchema = Schema.object({
   registry: Schema.string().default('https://registry.npmjs.org'),
+  tokenEnv: Schema.string().role('credential-ref').default('NPM_TOKEN'),
 })
 
 /**

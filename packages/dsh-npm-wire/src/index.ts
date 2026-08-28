@@ -7,8 +7,9 @@
  * the client mounts NPM_REMOTE_CONTRIBUTION through ctx.remote.$mount.
 
  * All Remote methods are READ-ONLY or generate plain-text scripts — npm
- * publishing itself always runs in CI via OIDC, so the plugin never holds an
- * npm credential and this UI performs no write side effects.
+ * publishing is executed by the agent through a configured granular access
+ * token (credential ref, never rendered back) or falls back to CI via OIDC.
+ * This UI displays token status only and performs no write side effects.
  */
 import { z } from 'zod'
 import type {
@@ -55,6 +56,18 @@ export interface NpmLaunchScriptView {
   script: string
 }
 
+/** Granular access token status (credential ref resolved, never the value). */
+export interface NpmTokenStatusView {
+  /** true when the credential ref resolved to a non-empty token. */
+  configured: boolean
+  /** The credential-ref name (e.g. NPM_TOKEN). */
+  source: string
+  /** whoami login when the token authenticates; null otherwise. */
+  login: string | null
+  /** Human hint: what works now, or how to set the token up. */
+  detail: string | null
+}
+
 export const packageInfoSchema = z.object({
   name: z.string(),
   exists: z.boolean(),
@@ -97,12 +110,20 @@ export const launchScriptValueSchema = z.object({
   script: z.string(),
 })
 
+export const tokenStatusValueSchema = z.object({
+  configured: z.boolean(),
+  source: z.string(),
+  login: z.string().nullable(),
+  detail: z.string().nullable(),
+})
+
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface TypertRemoteMap {
     'npm/status.get': () => Promise<RemoteResult<NpmStatusView>>
     'npm/package.check': (request: { name: string }) => Promise<RemoteResult<NpmPackageInfoView>>
     'npm/trust.status': (request: { pkg: string }) => Promise<RemoteResult<NpmTrustStatusView>>
     'npm/launch.script': (request: { pkg: string; repository: string; dir?: string; workflowFile?: string }) => Promise<RemoteResult<NpmLaunchScriptView>>
+    'npm/token.status': () => Promise<RemoteResult<NpmTokenStatusView>>
   }
   interface TypertRemoteNamespaceMap {
     npm: {
@@ -110,6 +131,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
       'package.check': (request: { name: string }) => Promise<RemoteResult<NpmPackageInfoView>>
       'trust.status': (request: { pkg: string }) => Promise<RemoteResult<NpmTrustStatusView>>
       'launch.script': (request: { pkg: string; repository: string; dir?: string; workflowFile?: string }) => Promise<RemoteResult<NpmLaunchScriptView>>
+      'token.status': () => Promise<RemoteResult<NpmTokenStatusView>>
     }
   }
 }
@@ -177,6 +199,16 @@ export const NPM_INVOCATIONS: readonly InvocationDescriptor[] = [
     ],
     result: { mode: 'strict', typeSymbol: 'dsh-npm#NpmLaunchScriptView', schema: launchScriptValueSchema },
   },
+  {
+    id: 'dsh-npm#npm/token.status',
+    service: 'npm',
+    namespace: 'npm',
+    method: 'token.status',
+    implementation: 'tokenStatusRemote',
+    invocation: { kind: 'direct' },
+    parameters: [],
+    result: { mode: 'strict', typeSymbol: 'dsh-npm#NpmTokenStatusView', schema: tokenStatusValueSchema },
+  },
 ]
 
 /** Host-side contribution: registered with ctx.typert.register in dsh-npm. */
@@ -188,6 +220,7 @@ export const NPM_HOST_CONTRIBUTION: TypertContribution = {
     { name: 'NpmStatusView', schema: statusViewSchema },
     { name: 'NpmTrustStatusView', schema: trustStatusValueSchema },
     { name: 'NpmLaunchScriptView', schema: launchScriptValueSchema },
+    { name: 'NpmTokenStatusView', schema: tokenStatusValueSchema },
     { name: 'PackageCheckRequest', schema: packageCheckRequestSchema },
     { name: 'TrustStatusRequest', schema: trustStatusRequestSchema },
     { name: 'LaunchScriptRequest', schema: launchScriptRequestSchema },

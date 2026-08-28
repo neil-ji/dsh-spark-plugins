@@ -9,7 +9,8 @@ import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import type { TypertRemoteNamespaceMap } from '@deepseek-ai/dsh-typert-protocol'
 import type {
-  NpmLaunchScriptView, NpmPackageInfoView, NpmStatusView, NpmTrustStatusView,
+  NpmLaunchScriptView, NpmPackageInfoView, NpmStatusView, NpmTokenStatusView,
+  NpmTrustStatusView,
 } from 'dsh-connector-npm-wire'
 
 /** The mounted npm Remote namespace (created by ctx.remote.$mount). */
@@ -26,6 +27,8 @@ export interface NpmUiState {
   trust: NpmTrustStatusView | undefined
   /** Generated first-release human script. */
   script: NpmLaunchScriptView | undefined
+  /** Granular access token status (credential ref). */
+  token: NpmTokenStatusView | undefined
 }
 
 /** Human text for a rejected wire/remote call. */
@@ -37,7 +40,7 @@ function messageOf(error: unknown): string {
 export class NpmUiStore {
   readonly store: SnapshotStore<NpmUiState> = createSnapshotStore<NpmUiState>({
     status: 'idle', error: null, statusView: undefined,
-    check: undefined, trust: undefined, script: undefined,
+    check: undefined, trust: undefined, script: undefined, token: undefined,
   })
 
   private generation = 0
@@ -63,6 +66,14 @@ export class NpmUiStore {
         s.error = null
         s.statusView = result.value
       })
+      let token: NpmTokenStatusView | undefined
+      try {
+        const tokenResult = await this.npm['token.status']()
+        if (tokenResult.ok) token = tokenResult.value
+      } catch {
+        token = undefined
+      }
+      if (generation === this.generation) this.store.update((s) => { s.token = token })
     } catch (error) {
       if (generation !== this.generation) return
       this.store.update((s) => {

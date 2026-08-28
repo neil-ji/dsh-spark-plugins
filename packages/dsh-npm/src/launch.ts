@@ -15,7 +15,8 @@
  * first publish + trust, every later release is fully automatic.
  */
 import { type Context } from '@deepseek-ai/cordis'
-import { mkdir } from 'node:fs/promises'
+import { mkdir, unlink, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import type { GitHubService } from 'dsh-connector-github'
 import type { ShellExecutor } from '@deepseek-ai/dsh-shell'
 import type { NpmService } from './npm-service.ts'
@@ -32,6 +33,8 @@ export interface LaunchRequest {
   initialVersion?: string
   /** @deprecated legacy no-op — the launch flow never runs npm trust itself. */
   skipTrust?: boolean
+  /** Set false to always return the human script even when a granular npm token is configured. Default: auto. */
+  autoPublish?: boolean
   /** 'launch' (default): scaffold + repo + push + pages, then return the human 2FA script. 'tag': create the CI-release tag after the human published + trusted. */
   stage?: 'launch' | 'tag'
   session?: unknown
@@ -42,7 +45,9 @@ export interface LaunchResult {
   repo: { fullName: string; htmlUrl: string }
   pushed: boolean
   pages: { configured: boolean; url?: string; detail?: string }
-  stage: 'awaiting-human-2fa' | 'tag-created'
+  stage: 'auto-published' | 'awaiting-human-2fa' | 'tag-created'
+  /** npm account the token resolved to (auto path only). */
+  account?: string
   /** One combined script (first publish + OIDC trust) for the human to run with browser 2FA. Present on 'awaiting-human-2fa'. */
   humanScript?: string
   trust: {
@@ -147,6 +152,42 @@ export async function launchPackage(
   // 5. enable Pages with GitHub Actions build (workflow) — no branch source needed
   const pagesResult = await createPages(ctx, github, owner, repoName)
 
+  // ---- Phase B (token): fully automatic first publish + trust + tag ----
+  // A granular access token (All packages + read/write + bypass 2FA) lets the
+  // agent run the whole first-release SOP itself: publish, configure the
+  // trusted publisher, then tag the next version so CI owns later releases.
+  // Auth goes through a transient .npmrc that is removed on every path.
+  let token: string | undefined
+  try { token = await npm.resolveToken() } catch { token = undefined }
+  if (req.autoPublish !== false && token !== undefined && token !== '') {
+    const registryHost = new URL(npm.registry).host
+    const npmrcPath = join(dir, '.npmrc')
+    await writeFile(npmrcPath, 'registry = ' + npm.registry + '\n//' + registryHost + '/:_authToken=' + token + '\n', { mode: 0o600 })
+    try {
+      const who = await runShell(ctx, 'npm whoami', dir, req.session)
+      await runShell(ctx, 'npm publish --access public', dir, req.session)
+      await runShell(ctx, npm.trustCommand(req.name, 'release.yml', owner + '/' + repoName), dir, req.session)
+      await unlink(npmrcPath).catch(() => {})
+      const autoNextVersion = bumpPatch(version)
+      const autoTagName = 'v' + autoNextVersion
+      const autoTag = await createAnnotatedTag(ctx, github, owner, repoName, autoNextVersion, autoTagName)
+      return {
+        dir,
+        repo: { fullName: owner + '/' + repoName, htmlUrl: 'https://github.com/' + owner + '/' + repoName },
+        pushed: pushed.pushed,
+        pages: pagesResult,
+        stage: 'auto-published',
+        ...(who.stdout.trim() === '' ? {} : { account: who.stdout.trim() }),
+        trust: { status: 'configured', command: npm.trustCommand(req.name, 'release.yml', owner + '/' + repoName), detail: 'trusted publisher configured with the granular token' },
+        tag: { name: autoTagName, sha: autoTag.sha },
+        next: [],
+      }
+    } catch (error) {
+      await unlink(npmrcPath).catch(() => {})
+      next.push('自动首发失败（' + String(error).slice(0, 160) + '）— 已回退到人工脚本路径；修复 token/网络后可重跑')
+    }
+  }
+
   // ---- Phase B: return the human 2FA script (first publish + OIDC trust) ----
   // npm 2FA is browser-session based; npm trust has no --otp and requires the
   // package to already exist. The agent cannot do this, so surface one script.
@@ -160,6 +201,7 @@ export async function launchPackage(
   ].join('\n')
   next.push('在终端执行上面 humanScript 里的命令(首次 npm publish + npm trust,浏览器 2FA)')
   next.push('完成后再次调用 npm_launch(stage: "tag")→ 创建 v' + nextVersion + ' tag,CI 自动发布后续版本(免 2FA)')
+  next.push('可选：配置 granular token（凭据引用 NPM_TOKEN，All packages + Read/Write + bypass 2FA）后，npm_launch 下次全自动')
 
   return {
     dir,

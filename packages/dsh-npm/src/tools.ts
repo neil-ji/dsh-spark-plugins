@@ -1,6 +1,9 @@
 /**
- * Model-facing npm tools. Publishing is delegated to the generated GitHub
- * Actions workflow (OIDC); these tools cover package check, scaffold, trusted
+ * Model-facing npm tools. Publishing runs either through a configured
+ * granular access token (credential ref NPM_TOKEN, bypass 2FA — the agent
+ * can publish and configure the trusted publisher itself) or, without a
+ * token, through the generated GitHub Actions workflow (OIDC) after a one-
+ * time human first publish. Tools cover package check, scaffold, trusted
  * publisher setup and the one-shot launch orchestration.
  */
 import type { Context } from '@deepseek-ai/cordis'
@@ -11,6 +14,9 @@ import { launchPackage } from './launch.ts'
 import { writeScaffold } from './scaffold.ts'
 import { renderScaffold } from './scaffold.ts'
 import { shellQuote } from './github-shell.ts'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 export function registerNpmTools(ctx: Context, npm: NpmService, getGithub: () => GitHubService | undefined): void {
   ctx.tools.register(defineTool({
@@ -100,8 +106,9 @@ export function registerNpmTools(ctx: Context, npm: NpmService, getGithub: () =>
     description:
       'Configure npm OIDC trusted publishing for a package (npm >= 11.10): '
       + 'the GitHub Actions workflow release.yml becomes an allowed publisher. '
-      + 'With a 2FA-writes npm account the command pauses for an OTP, so the '
-      + 'exact command is returned for you to run in a terminal.',
+      + 'Runs non-interactively when a granular access token is configured '
+      + '(credential ref NPM_TOKEN: All packages + Read/Write + bypass 2FA); '
+      + 'otherwise the exact command is returned for manual terminal execution.',
     parameters: {
       pkg: { type: 'string', required: true, description: 'npm package name.' },
       repository: { type: 'string', required: true, description: 'owner/repo on GitHub.' },
@@ -112,7 +119,7 @@ export function registerNpmTools(ctx: Context, npm: NpmService, getGithub: () =>
         type: 'object',
         additionalProperties: false,
         properties: {
-          status: { type: 'string', enum: ['configured', 'needs-otp', 'failed'], required: true },
+          status: { type: 'string', enum: ['configured', 'needs-otp', 'needs-token', 'failed'], required: true },
           command: { type: 'string' },
           detail: { type: 'string' },
         },
@@ -121,9 +128,11 @@ export function registerNpmTools(ctx: Context, npm: NpmService, getGithub: () =>
         type: 'text',
         text: value.status === 'configured'
           ? 'Trusted publisher configured for ' + _args.pkg
-          : value.status === 'needs-otp'
-            ? 'Run in a terminal (OTP required): ' + (value.command ?? '')
-            : 'npm trust failed: ' + (value.detail ?? ''),
+          : value.status === 'needs-token'
+            ? 'No granular npm token configured — set credential ref NPM_TOKEN (All packages + Read/Write + bypass 2FA), then rerun. Manual command: ' + (value.command ?? '')
+            : value.status === 'needs-otp'
+              ? 'Run in a terminal (OTP required): ' + (value.command ?? '')
+              : 'npm trust failed: ' + (value.detail ?? ''),
       }],
     },
     async execute(args, exec) {
@@ -145,16 +154,53 @@ export function registerNpmTools(ctx: Context, npm: NpmService, getGithub: () =>
   }))
 
   ctx.tools.register(defineTool({
+    name: 'npm_token_status',
+    description:
+      'Report the npm granular access token status (credential ref NPM_TOKEN, '
+      + 'value never echoed): whether it is configured, which npm account it '
+      + 'authenticates as, and granular-token setup guidance when missing.',
+    parameters: {},
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          configured: { type: 'boolean', required: true },
+          source: { type: 'string', required: true },
+          login: { type: 'string' },
+          detail: { type: 'string' },
+        },
+      },
+      render: (_args, value) => [{
+        type: 'text',
+        text: (value.configured ? 'npm token configured' : 'npm token NOT configured')
+          + ' (ref ' + value.source + ')' + (value.login ? ' as ' + value.login : '') + (value.detail ? ' — ' + value.detail : ''),
+      }],
+    },
+    async execute() {
+      const view = await npm.tokenStatusRemote()
+      return {
+        configured: view.configured,
+        source: view.source,
+        ...(view.login === null ? {} : { login: view.login }),
+        ...(view.detail === null ? {} : { detail: view.detail }),
+      }
+    },
+    presentCall: () => ({ card: 'generic', title: 'npm token status' }),
+  }))
+
+  ctx.tools.register(defineTool({
     name: 'npm_launch',
     description:
-      'Launch an open-source npm package in two stages (SOP): stage "launch" '
-      + '(default) validates the npm name, scaffolds a publishable TS package (OIDC '
-      + 'release workflow + Pages site), creates the GitHub repo, pushes the initial '
-      + 'commit and enables Pages — then returns a humanScript with the first npm '
-      + 'publish + npm trust (browser 2FA; the agent cannot do this). After the human '
-      + 'runs it, call again with stage "tag" to create the v<next> annotated tag, and '
-      + 'CI publishes future versions via OIDC with no 2FA. Requires the '
-      + 'dsh-connector-github plugin (GitHub credentials).',
+      'Launch an open-source npm package (SOP). Validates the npm name, '
+      + 'scaffolds a publishable TS package (OIDC release workflow + Pages site), '
+      + 'creates the GitHub repo, pushes the initial commit and enables Pages. '
+      + 'With a granular access token configured (credential ref NPM_TOKEN: All '
+      + 'packages + Read/Write + bypass 2FA) it then publishes the first release, '
+      + 'configures the trusted publisher and tags the next version — fully '
+      + 'automatic, one call. Without a token it returns a humanScript for the '
+      + 'browser-2FA first publish, then stage "tag" finishes the SOP. Requires '
+      + 'the dsh-connector-github plugin (GitHub credentials).',
     parameters: {
       name: { type: 'string', required: true, description: 'npm package name (also the GitHub repo name).' },
       description: { type: 'string', description: 'One-line package description.' },
@@ -163,7 +209,8 @@ export function registerNpmTools(ctx: Context, npm: NpmService, getGithub: () =>
       author: { type: 'string', description: 'Author name (LICENSE/README).' },
       dir: { type: 'string', description: 'Local output directory (defaults to ./<name>).' },
       initialVersion: { type: 'string', description: 'First release version (default 0.1.0).' },
-      stage: { type: 'string', enum: ['launch', 'tag'], description: "'launch' (default): scaffold + repo + push + pages, returns the human 2FA script (first npm publish + npm trust). 'tag': after the human ran that script, create the v<next> tag to trigger the CI OIDC release." },
+      stage: { type: 'string', enum: ['launch', 'tag'], description: "'launch' (default): scaffold + repo + push + pages, then auto publish + trust + tag when NPM_TOKEN is configured (otherwise returns the human 2FA script). 'tag': legacy manual path — create the v<next> tag after the human ran the script." },
+      autoPublish: { type: 'boolean', description: 'Set false to skip token-driven auto publish and always return the human script. Default: auto.' },
     },
     output: {
       schema: {
@@ -171,7 +218,8 @@ export function registerNpmTools(ctx: Context, npm: NpmService, getGithub: () =>
         additionalProperties: false,
         properties: {
           dir: { type: 'string', required: true },
-          stage: { type: 'string', enum: ['awaiting-human-2fa', 'tag-created'], required: true },
+          stage: { type: 'string', enum: ['auto-published', 'awaiting-human-2fa', 'tag-created'], required: true },
+          account: { type: 'string' },
           humanScript: { type: 'string' },
           repo: { type: 'object', additionalProperties: false, properties: { fullName: { type: 'string', required: true }, htmlUrl: { type: 'string', required: true } }, required: true },
           pushed: { type: 'boolean', required: true },
@@ -195,6 +243,7 @@ export function registerNpmTools(ctx: Context, npm: NpmService, getGithub: () =>
       }
       return launchPackage(ctx, github, npm, {
         name: args.name,
+        ...(args.autoPublish === undefined ? {} : { autoPublish: args.autoPublish }),
         ...(args.description === undefined ? {} : { description: args.description }),
         ...(args.owner === undefined ? {} : { owner: args.owner }),
         ...(args.visibility === undefined ? {} : { visibility: args.visibility }),
@@ -211,11 +260,11 @@ export function registerNpmTools(ctx: Context, npm: NpmService, getGithub: () =>
   ctx.tools.register(defineTool({
     name: 'npm_first_publish',
     description:
-      'Generate the human 2FA script for the first npm release of a scaffolded '
-      + 'package: npm publish + npm trust (OIDC publisher). npm 2FA is browser-'
-      + 'session based and npm trust has no --otp, so the agent cannot run this — '
-      + 'the script is returned for the human to execute in a terminal. After it '
-      + 'succeeds, call npm_launch with stage: "tag".',
+      'Fallback for accounts without a configured granular npm token: generate '
+      + 'the human 2FA script for the first release of a scaffolded package '
+      + '(npm publish + npm trust). With credential ref NPM_TOKEN set to a '
+      + 'granular token (All packages + Read/Write + bypass 2FA), npm_launch '
+      + 'publishes automatically and this tool is unnecessary.',
     parameters: {
       pkg: { type: 'string', required: true, description: 'npm package name.' },
       repository: { type: 'string', required: true, description: 'owner/repo on GitHub.' },
@@ -248,9 +297,9 @@ export function registerNpmTools(ctx: Context, npm: NpmService, getGithub: () =>
   ctx.tools.register(defineTool({
     name: 'npm_deprecate',
     description:
-      'Generate the npm deprecate command for an old package name (rename SOP): '
-      + 'marks it deprecated pointing to the new name. Requires browser 2FA, so '
-      + 'the command is returned for the human to run.',
+      'Deprecate an old package name (rename SOP): marks it deprecated pointing '
+      + 'to the new name. Executes directly with the configured granular token; '
+      + 'without one, returns the command for manual terminal execution.',
     parameters: {
       pkg: { type: 'string', required: true, description: 'Old package name to deprecate.' },
       message: { type: 'string', description: 'Deprecation message (default: renamed to <newPkg>).' },
