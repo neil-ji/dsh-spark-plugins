@@ -20,10 +20,6 @@
   "files": [
     "cordis.patch.yml"
   ],
-  "dependencies": {
-    "dsh-spark-finance": "workspace:*",
-    "dsh-spark-finance-client": "workspace:*"
-  },
   "license": "MIT",
   "scripts": {},
   "keywords": [
