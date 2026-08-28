@@ -44,7 +44,7 @@
     "access": "public"
   },
   "license": "MIT",
-  "homepage": "https://neilji.github.io/dsh-spark-plugins/",
+  "homepage": "https://neil-ji.github.io/dsh-spark-plugins/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/neil-ji/dsh-spark-plugins.git",

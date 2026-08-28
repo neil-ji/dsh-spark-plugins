@@ -2,7 +2,7 @@
 # dsh-spark-plugins 一键安装 / 更新
 #
 # 用法：
-#   curl -fsSL https://neilji.github.io/dsh-spark-plugins/install.sh | sh
+#   curl -fsSL https://neil-ji.github.io/dsh-spark-plugins/install.sh | sh
 #   sh install.sh --profile web            # 指定 dsh profile（默认 web）
 #   sh install.sh --ref v0.2.0             # 安装指定 tag/分支（默认 main）
 #   sh install.sh --dry-run                # 只打印将执行的动作

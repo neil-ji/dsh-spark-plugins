@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "description": "DSH 成本统计插件 client：财务审计设置页（余额电量、KPI 与成本图表），UI 对齐 DSH 设计系统",
   "type": "module",
-  "homepage": "https://neilji.github.io/dsh-spark-plugins/",
+  "homepage": "https://neil-ji.github.io/dsh-spark-plugins/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/neil-ji/dsh-spark-plugins.git",

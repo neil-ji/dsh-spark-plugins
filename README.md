@@ -1,13 +1,13 @@
 # dsh-spark-plugins
 
-DSH 第三方插件 monorepo（pnpm workspace）：UI/UX 与 DSH Web 官方设计系统逐像素对齐，版本兼容经两道闸体检。落地页：<https://neilji.github.io/dsh-spark-plugins/>
+DSH 第三方插件 monorepo（pnpm workspace）：UI/UX 与 DSH Web 官方设计系统逐像素对齐，版本兼容经两道闸体检。落地页：<https://neil-ji.github.io/dsh-spark-plugins/>
 
 ## 安装
 
-前置：dsh `0.1.1-rc.2`（其他版本先看[版本兼容](https://neilji.github.io/dsh-spark-plugins/#compat)）、Node.js ≥ 18 与 git（pnpm 自动引导）。
+前置：dsh `0.1.1-rc.2`（其他版本先看[版本兼容](https://neil-ji.github.io/dsh-spark-plugins/#compat)）、Node.js ≥ 18 与 git（pnpm 自动引导）。
 
 ```bash
-curl -fsSL https://neilji.github.io/dsh-spark-plugins/install.sh | sh
+curl -fsSL https://neil-ji.github.io/dsh-spark-plugins/install.sh | sh
 ```
 
 脚本幂等：重复执行 = 更新到最新。源码会被固定克隆到 `~/.dsh/spark-plugins`。
