@@ -13,7 +13,7 @@ import { rmSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { relative, resolve } from 'node:path'
 
-const PACKAGE_NAME = 'dsh-github-ui'
+const PACKAGE_NAME = 'dsh-connector-github-ui'
 
 /** 原子写：先生成临时文件再 rename，读方永远看到完整的旧文件或完整的新文件。 */
 const atomicWrite = (file, contents) => {

@@ -12,7 +12,7 @@ import { dirname, resolve as resolvePath } from 'node:path'
 import { defineConfig } from 'tsdown'
 import { transform } from 'lightningcss'
 
-const ID = 'dsh-github-ui'
+const ID = 'dsh-connector-github-ui'
 
 /** Specifiers the shell seeds into the module table (external for the bundle). */
 const PLATFORM_MODULES = [
