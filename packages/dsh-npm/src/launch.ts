@@ -1,27 +1,35 @@
 /**
- * npm_launch orchestration, three stages (SOP 2026-08):
+ * npm_launch orchestration (SOP 2026-08, token-first):
  *
  *  stage 'launch' (default): agent does check -> scaffold -> GitHub repo ->
- *    initial push -> Pages; then RETURNS a humanScript (first npm publish +
- *    OIDC trust) because npm 2FA is browser-session based and trust requires
- *    the package to already exist (E404 otherwise). The agent never holds an
- *    npm credential and cannot complete the 2FA steps.
+ *    initial push -> Pages; then, WITH a configured granular access token
+ *    (NPM_TOKEN), publishes the first release, configures the OIDC trusted
+ *    publisher and tags the next version — fully automatic, one call.
  *
- *  stage 'tag': after the human ran humanScript (published the first version
- *    and configured the trusted publisher), create the annotated tag for the
- *    NEXT version -> the CI release workflow publishes via OIDC, no 2FA.
+ *    Without a token it returns a humanScript (first npm publish + OIDC
+ *    trust, browser 2FA) and the flow finishes via stage 'tag' after the
+ *    human ran it.
  *
- * Publishing itself always runs in CI via OIDC, so after the one-time manual
- * first publish + trust, every later release is fully automatic.
+ *  stage 'tag': create the annotated tag for the NEXT version -> the CI
+ *    release workflow publishes via OIDC, no 2FA.
+ *
+ * Trust caveat (npm platform rule): GAT with bypass 2FA is not accepted by
+ * npm's trust endpoints; with a non-bypass token the registry answers 401
+ * "one-time pass". The connector surfaces that as trust.status 'needs-otp'
+ * and the caller asks the user for the OTP once, then reruns npm_trust_add
+ * with the otp parameter. Publishing itself never needs OTP with a bypass
+ * 2FA granular token.
  */
 import { type Context } from '@deepseek-ai/cordis'
-import { mkdir, unlink, writeFile } from 'node:fs/promises'
+import type { ShellExecutor } from '@deepseek-ai/dsh-shell'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { GitHubService } from 'dsh-connector-github'
-import type { ShellExecutor } from '@deepseek-ai/dsh-shell'
 import type { NpmService } from './npm-service.ts'
+import { NpmNeedsTokenError, NpmOtpError } from './npm-service.ts'
 import { renderScaffold, writeScaffold } from './scaffold.ts'
 import { shellQuote } from './github-shell.ts'
+import { publishPackage } from './publish.ts'
 
 export interface LaunchRequest {
   name: string
@@ -31,11 +39,13 @@ export interface LaunchRequest {
   author?: string
   dir?: string
   initialVersion?: string
-  /** @deprecated legacy no-op — the launch flow never runs npm trust itself. */
+  /** @deprecated legacy no-op — the launch flow calls npm trust itself (token or script). */
   skipTrust?: boolean
   /** Set false to always return the human script even when a granular npm token is configured. Default: auto. */
   autoPublish?: boolean
-  /** 'launch' (default): scaffold + repo + push + pages, then return the human 2FA script. 'tag': create the CI-release tag after the human published + trusted. */
+  /** One-time password for 2FA-guarded npm accounts (published via --otp; trust via npm-otp header). */
+  otp?: string
+  /** 'launch' (default): scaffold + repo + push + pages, then publish + trust + tag when a token is configured. 'tag': create the CI-release tag after the human published + trusted. */
   stage?: 'launch' | 'tag'
   session?: unknown
 }
@@ -51,7 +61,7 @@ export interface LaunchResult {
   /** One combined script (first publish + OIDC trust) for the human to run with browser 2FA. Present on 'awaiting-human-2fa'. */
   humanScript?: string
   trust: {
-    status: 'pending-human' | 'configured' | 'failed'
+    status: 'pending-human' | 'configured' | 'needs-otp' | 'failed' | 'needs-token' | 'skipped'
     command?: string
     detail?: string
   }
@@ -101,7 +111,7 @@ export async function launchPackage(
       pushed: true,
       pages: { configured: true, url: 'https://' + owner + '.github.io/' + repoName + '/' },
       stage: 'tag-created',
-      trust: { status: 'configured', command: npm.trustCommand(req.name, 'release.yml', owner + '/' + repoName) },
+      trust: { status: 'configured' as const, command: npm.trustCommand(req.name, 'release.yml', owner + '/' + repoName) },
       tag: { name: tagName, sha: tag.sha },
       next: [],
     }
@@ -154,20 +164,53 @@ export async function launchPackage(
 
   // ---- Phase B (token): fully automatic first publish + trust + tag ----
   // A granular access token (All packages + read/write + bypass 2FA) lets the
-  // agent run the whole first-release SOP itself: publish, configure the
-  // trusted publisher, then tag the next version so CI owns later releases.
-  // Auth goes through a transient .npmrc that is removed on every path.
+  // agent run the whole first-release SOP itself: publish (npm CLI + transient
+  // .npmrc), configure the trusted publisher (registry REST API), then tag the
+  // next version so CI owns later releases.
   let token: string | undefined
   try { token = await npm.resolveToken() } catch { token = undefined }
+  const trustCommand = npm.trustCommand(req.name, 'release.yml', owner + '/' + repoName)
+  const nextVersion = bumpPatch(version)
+
   if (req.autoPublish !== false && token !== undefined && token !== '') {
-    const registryHost = new URL(npm.registry).host
-    const npmrcPath = join(dir, '.npmrc')
-    await writeFile(npmrcPath, 'registry = ' + npm.registry + '\n//' + registryHost + '/:_authToken=' + token + '\n', { mode: 0o600 })
     try {
-      const who = await runShell(ctx, 'npm whoami', dir, req.session)
-      await runShell(ctx, 'npm publish --access public', dir, req.session)
-      await runShell(ctx, npm.trustCommand(req.name, 'release.yml', owner + '/' + repoName), dir, req.session)
-      await unlink(npmrcPath).catch(() => {})
+      await publishPackage(ctx, npm, { dir, version, ...(req.otp === undefined ? {} : { otp: req.otp }), session: req.session })
+    } catch (error) {
+      if (error instanceof NpmNeedsTokenError) {
+        // token vanished between resolve and publish — fall through to human path
+        token = undefined
+      } else if (error instanceof NpmOtpError) {
+        // The token does not bypass 2FA: publish itself needs an OTP. Surface the
+        // script + detailed instruction instead of a dead end.
+        const humanScript = [
+          '# 首次发布 + OIDC trust(浏览器 2FA,每条确认一次;完成后回来调 npm_launch stage: tag)',
+          'cd ' + shellQuote(dir),
+          'npm publish',
+          'npm trust github ' + req.name + ' --file release.yml --repository ' + owner + '/' + repoName + ' --allow-publish -y',
+        ].join('\n')
+        next.push('npm publish 需要 2FA OTP（当前 token 未勾选 bypass 2FA）— 可改用 bypass 2FA 的 granular token，或把上面 humanScript 的 npm publish 换成带 --otp 的重跑')
+        return {
+          dir,
+          repo: { fullName: repo.fullName, htmlUrl: repo.htmlUrl },
+          pushed: pushed.pushed,
+          pages: pagesResult,
+          stage: 'awaiting-human-2fa',
+          humanScript,
+          trust: { status: 'needs-otp', command: trustCommand, detail: 'npm publish 需要 OTP（token 未 bypass 2FA）；也可换 bypass 2FA token 后重跑 npm_launch' },
+          next,
+        }
+      }
+      throw error
+    }
+    // publish succeeded → never fall back to the human script from here on.
+    const account = await npm.whoami(token).catch(() => null)
+    try {
+      const trustConfig = npm.buildTrustConfig('github', {
+        repository: owner + '/' + repoName,
+        file: 'release.yml',
+        allowPublish: true,
+      })
+      await npm.createTrust(req.name, token, trustConfig, req.otp)
       const autoNextVersion = bumpPatch(version)
       const autoTagName = 'v' + autoNextVersion
       const autoTag = await createAnnotatedTag(ctx, github, owner, repoName, autoNextVersion, autoTagName)
@@ -177,22 +220,43 @@ export async function launchPackage(
         pushed: pushed.pushed,
         pages: pagesResult,
         stage: 'auto-published',
-        ...(who.stdout.trim() === '' ? {} : { account: who.stdout.trim() }),
-        trust: { status: 'configured', command: npm.trustCommand(req.name, 'release.yml', owner + '/' + repoName), detail: 'trusted publisher configured with the granular token' },
+        ...(account === null ? {} : { account }),
+        trust: { status: 'configured' as const, command: trustCommand, detail: 'trusted publisher configured with the granular token' },
         tag: { name: autoTagName, sha: autoTag.sha },
         next: [],
       }
     } catch (error) {
-      await unlink(npmrcPath).catch(() => {})
-      next.push('自动首发失败（' + String(error).slice(0, 160) + '）— 已回退到人工脚本路径；修复 token/网络后可重跑')
+      if (error instanceof NpmOtpError) {
+        next.push('trust 需要 2FA OTP（npm 平台对 trust 端点强制 2FA；bypass 2FA 的 GAT 不被 trust 端点接受）— 提供 OTP 后调用 npm_trust_add(otp=...) 完成配置，再调 npm_launch(stage: "tag") 创建 v' + nextVersion + ' tag')
+        return {
+          dir,
+          repo: { fullName: owner + '/' + repoName, htmlUrl: 'https://github.com/' + owner + '/' + repoName },
+          pushed: pushed.pushed,
+          pages: pagesResult,
+          stage: 'auto-published',
+          ...(account === null ? {} : { account }),
+          trust: { status: 'needs-otp', command: trustCommand, detail: 'first publish done; trust needs a one-time OTP (npm trust endpoints are 2FA-only)' },
+          next,
+        }
+      }
+      next.push('首发已发布，但 trust 配置失败（' + String(error).slice(0, 160) + '）— 用 npm_trust_add 修复后调 npm_launch(stage: "tag")')
+      return {
+        dir,
+        repo: { fullName: owner + '/' + repoName, htmlUrl: 'https://github.com/' + owner + '/' + repoName },
+        pushed: pushed.pushed,
+        pages: pagesResult,
+        stage: 'auto-published',
+        ...(account === null ? {} : { account }),
+        trust: { status: 'failed', command: trustCommand, detail: String(error).slice(0, 200) },
+        next,
+      }
     }
   }
 
   // ---- Phase B: return the human 2FA script (first publish + OIDC trust) ----
   // npm 2FA is browser-session based; npm trust has no --otp and requires the
-  // package to already exist. The agent cannot do this, so surface one script.
-  const trustCommand = npm.trustCommand(req.name, 'release.yml', owner + '/' + repoName)
-  const nextVersion = bumpPatch(version)
+  // package to already exist. Without a token the agent cannot do this, so
+  // surface one script.
   const humanScript = [
     '# 首次发布 + OIDC trust(浏览器 2FA,每条确认一次;完成后回来调 npm_launch stage: tag)',
     'cd ' + shellQuote(dir),
@@ -201,7 +265,7 @@ export async function launchPackage(
   ].join('\n')
   next.push('在终端执行上面 humanScript 里的命令(首次 npm publish + npm trust,浏览器 2FA)')
   next.push('完成后再次调用 npm_launch(stage: "tag")→ 创建 v' + nextVersion + ' tag,CI 自动发布后续版本(免 2FA)')
-  next.push('可选：配置 granular token（凭据引用 NPM_TOKEN，All packages + Read/Write + bypass 2FA）后，npm_launch 下次全自动')
+  next.push('推荐：到插件页填入 granular token（All packages + Read and write + bypass 2FA）并保存，npm_launch 下次全自动')
 
   return {
     dir,

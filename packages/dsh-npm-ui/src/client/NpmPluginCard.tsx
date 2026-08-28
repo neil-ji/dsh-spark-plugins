@@ -6,20 +6,32 @@
  */
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button, Input, Pill } from 'dsh-ui-kit'
+import { Button, Input, Pill, Textarea } from 'dsh-ui-kit'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import { textCardField } from 'dsh-spark-plugin-kit/client'
-import type { CardFieldSpec, StagedSettingsCardState, StagedCardActions } from 'dsh-spark-plugin-kit/client'
+import type { CardFieldSpec, CardFieldWrite, StagedSettingsCardState, StagedCardActions } from 'dsh-spark-plugin-kit/client'
 import type { NpmKey } from './locales.ts'
 import styles from './NpmPluginCard.module.css'
 
 /** Card fields edited by this plugin (npm settings namespace). */
-export type NpmCardFieldName = 'registry' | 'tokenEnv'
+export type NpmCardFieldName = 'registry' | 'tokenEnv' | 'kitPackages'
+
+/** 套件包列表字段：存储 string[]，草稿为「每行一个包名」。 */
+const kitPackagesField: CardFieldSpec = {
+  field: 'kitPackages',
+  format: (value) => Array.isArray(value) ? value.join('\n') : '',
+  parse: (text) => {
+    const names = text.split(/[\n,]/).map((s) => s.trim()).filter((s) => s !== '')
+    if (names.length === 0) return { kind: 'clear' } as CardFieldWrite
+    return { kind: 'set', value: [...new Set(names)] } as CardFieldWrite
+  },
+}
 
 /** Field specs for the npm settings namespace. */
 export const NPM_CARD_SPECS: readonly CardFieldSpec[] = [
   textCardField('registry'),
   textCardField('tokenEnv'),
+  kitPackagesField,
 ]
 
 /** Selector hook the slot renderer synthesizes from the injected store. */
@@ -53,6 +65,7 @@ function NpmCardBody({ t, state, onEdit, onReset, onSave, onDiscard }: {
   const blocked = !shell.dirty || shell.invalid || shell.saving
   const registry = state.fields.registry
   const tokenEnv = state.fields.tokenEnv
+  const kitPackages = state.fields.kitPackages
 
   return (
     <div className={styles.body}>
@@ -104,6 +117,31 @@ function NpmCardBody({ t, state, onEdit, onReset, onSave, onDiscard }: {
           <p className={styles.hint}>{t('cardTokenEnvHint')}</p>
           {tokenEnv.overridden
             ? <button type="button" className={styles.reset} disabled={disabled} onClick={() => onReset('tokenEnv')}>{t('cardReset')}</button>
+            : null}
+        </div>
+      </div>
+
+      <div className={styles.field}>
+        <div className={styles.fieldHead}>
+          <label className={styles.fieldLabel} htmlFor="plugin-config-npm-kitpackages">{t('cardKitPackages')}</label>
+          <span className={styles.fieldBadges}>
+            {kitPackages.overridden ? <Pill>{t('cardOverridden')}</Pill> : null}
+            {kitPackages.invalid ? <Pill>{t('cardInvalidText')}</Pill> : null}
+          </span>
+        </div>
+        <Textarea
+          id="plugin-config-npm-kitpackages"
+          className={styles.fieldInput}
+          rows={4}
+          placeholder={'dsh-connector-wire\ndsh-connector-github-ui'}
+          disabled={disabled}
+          value={kitPackages.text}
+          onChange={(event) => onEdit('kitPackages', event.currentTarget.value)}
+        />
+        <div className={styles.fieldFoot}>
+          <p className={styles.hint}>{t('cardKitPackagesHint')}</p>
+          {kitPackages.overridden
+            ? <button type="button" className={styles.reset} disabled={disabled} onClick={() => onReset('kitPackages')}>{t('cardReset')}</button>
             : null}
         </div>
       </div>

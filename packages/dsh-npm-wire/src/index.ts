@@ -1,15 +1,17 @@
 /**
- * Shared wire contract for the dsh-npm connector (npm one-click launch UI).
+ * Shared wire contract for the dsh-npm connector (npm release management UI).
 
  * Dependency-free of Node-only modules (only zod + Typert types) so BOTH the
  * host bundle (dsh-npm) and the browser client bundle (dsh-npm-ui) can import
  * it. The host registers NPM_HOST_CONTRIBUTION through ctx.typert.register;
  * the client mounts NPM_REMOTE_CONTRIBUTION through ctx.remote.$mount.
 
- * All Remote methods are READ-ONLY or generate plain-text scripts — npm
+ * All Remote methods are READ-ONLY or produce plain-text scripts — npm
  * publishing is executed by the agent through a configured granular access
- * token (credential ref, never rendered back) or falls back to CI via OIDC.
- * This UI displays token status only and performs no write side effects.
+ * token (credential ref NPM_TOKEN, resolved per operation, never rendered
+ * back). The Web UI tests a draft token before saving (npm/token.test, the
+ * value crosses the wire one way and is never persisted), then stores the
+ * token into the credential seam through the standard credentials API.
  */
 import { z } from 'zod'
 import type {
@@ -41,19 +43,25 @@ export interface NpmStatusView {
   packages: NpmPackageInfoView[]
 }
 
-/** Trust status for one package (account-private, so returns a check URL). */
+/** One OIDC trusted-publisher configuration entry (registry trust endpoint). */
+export interface NpmTrustEntryView {
+  id: string
+  type: string
+  claims: Record<string, unknown>
+  permissions: string[]
+}
+
+/** Trust status for one package: read through the configured token when
+ * possible, otherwise returns the exact npmjs.com URL to check. */
 export interface NpmTrustStatusView {
   pkg: string
   exists: boolean
+  /** true when the trust list was read through the token (empty list = verified none). */
   verified: boolean
+  /** Trusted-publisher entries when verified. */
+  trusts: NpmTrustEntryView[]
   checkUrl: string
   detail: string
-}
-
-/** Generated first-release human script (npm publish + npm trust, 2FA). */
-export interface NpmLaunchScriptView {
-  status: 'generated'
-  script: string
 }
 
 /** Granular access token status (credential ref resolved, never the value). */
@@ -65,6 +73,16 @@ export interface NpmTokenStatusView {
   /** whoami login when the token authenticates; null otherwise. */
   login: string | null
   /** Human hint: what works now, or how to set the token up. */
+  detail: string | null
+}
+
+/** Connection test for a draft token (before saving) or the stored token. */
+export interface NpmTokenTestView {
+  /** true when whoami answered with a username. */
+  ok: boolean
+  /** The npm account the token authenticates as; null on failure. */
+  login: string | null
+  /** Human hint when the test failed. */
   detail: string | null
 }
 
@@ -82,34 +100,6 @@ export const statusViewSchema = z.object({
   packages: z.array(packageInfoSchema),
 })
 
-export const packageCheckRequestSchema = z.object({
-  name: z.string(),
-})
-
-export const trustStatusRequestSchema = z.object({
-  pkg: z.string(),
-})
-
-export const trustStatusValueSchema = z.object({
-  pkg: z.string(),
-  exists: z.boolean(),
-  verified: z.boolean(),
-  checkUrl: z.string(),
-  detail: z.string(),
-})
-
-export const launchScriptRequestSchema = z.object({
-  pkg: z.string(),
-  repository: z.string(),
-  dir: z.string().optional(),
-  workflowFile: z.string().optional(),
-})
-
-export const launchScriptValueSchema = z.object({
-  status: z.literal('generated'),
-  script: z.string(),
-})
-
 export const tokenStatusValueSchema = z.object({
   configured: z.boolean(),
   source: z.string(),
@@ -117,21 +107,27 @@ export const tokenStatusValueSchema = z.object({
   detail: z.string().nullable(),
 })
 
+export const tokenTestRequestSchema = z.object({
+  draftToken: z.string().optional(),
+})
+
+export const tokenTestValueSchema = z.object({
+  ok: z.boolean(),
+  login: z.string().nullable(),
+  detail: z.string().nullable(),
+})
+
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface TypertRemoteMap {
     'npm/status.get': () => Promise<RemoteResult<NpmStatusView>>
-    'npm/package.check': (request: { name: string }) => Promise<RemoteResult<NpmPackageInfoView>>
-    'npm/trust.status': (request: { pkg: string }) => Promise<RemoteResult<NpmTrustStatusView>>
-    'npm/launch.script': (request: { pkg: string; repository: string; dir?: string; workflowFile?: string }) => Promise<RemoteResult<NpmLaunchScriptView>>
     'npm/token.status': () => Promise<RemoteResult<NpmTokenStatusView>>
+    'npm/token.test': (request: { draftToken?: string }) => Promise<RemoteResult<NpmTokenTestView>>
   }
   interface TypertRemoteNamespaceMap {
     npm: {
       'status.get': () => Promise<RemoteResult<NpmStatusView>>
-      'package.check': (request: { name: string }) => Promise<RemoteResult<NpmPackageInfoView>>
-      'trust.status': (request: { pkg: string }) => Promise<RemoteResult<NpmTrustStatusView>>
-      'launch.script': (request: { pkg: string; repository: string; dir?: string; workflowFile?: string }) => Promise<RemoteResult<NpmLaunchScriptView>>
       'token.status': () => Promise<RemoteResult<NpmTokenStatusView>>
+      'token.test': (request: { draftToken?: string }) => Promise<RemoteResult<NpmTokenTestView>>
     }
   }
 }
@@ -149,57 +145,6 @@ export const NPM_INVOCATIONS: readonly InvocationDescriptor[] = [
     result: { mode: 'strict', typeSymbol: 'dsh-npm#NpmStatusView', schema: statusViewSchema },
   },
   {
-    id: 'dsh-npm#npm/package.check',
-    service: 'npm',
-    namespace: 'npm',
-    method: 'package.check',
-    implementation: 'packageCheckRemote',
-    invocation: { kind: 'direct' },
-    parameters: [
-      {
-        name: 'request',
-        wire: 'request',
-        source: 'json',
-        codec: { mode: 'strict', typeSymbol: 'dsh-npm#PackageCheckRequest', schema: packageCheckRequestSchema },
-      },
-    ],
-    result: { mode: 'strict', typeSymbol: 'dsh-npm#NpmPackageInfoView', schema: packageInfoSchema },
-  },
-  {
-    id: 'dsh-npm#npm/trust.status',
-    service: 'npm',
-    namespace: 'npm',
-    method: 'trust.status',
-    implementation: 'trustStatusRemote',
-    invocation: { kind: 'direct' },
-    parameters: [
-      {
-        name: 'request',
-        wire: 'request',
-        source: 'json',
-        codec: { mode: 'strict', typeSymbol: 'dsh-npm#TrustStatusRequest', schema: trustStatusRequestSchema },
-      },
-    ],
-    result: { mode: 'strict', typeSymbol: 'dsh-npm#NpmTrustStatusView', schema: trustStatusValueSchema },
-  },
-  {
-    id: 'dsh-npm#npm/launch.script',
-    service: 'npm',
-    namespace: 'npm',
-    method: 'launch.script',
-    implementation: 'launchScriptRemote',
-    invocation: { kind: 'direct' },
-    parameters: [
-      {
-        name: 'request',
-        wire: 'request',
-        source: 'json',
-        codec: { mode: 'strict', typeSymbol: 'dsh-npm#LaunchScriptRequest', schema: launchScriptRequestSchema },
-      },
-    ],
-    result: { mode: 'strict', typeSymbol: 'dsh-npm#NpmLaunchScriptView', schema: launchScriptValueSchema },
-  },
-  {
     id: 'dsh-npm#npm/token.status',
     service: 'npm',
     namespace: 'npm',
@@ -208,6 +153,23 @@ export const NPM_INVOCATIONS: readonly InvocationDescriptor[] = [
     invocation: { kind: 'direct' },
     parameters: [],
     result: { mode: 'strict', typeSymbol: 'dsh-npm#NpmTokenStatusView', schema: tokenStatusValueSchema },
+  },
+  {
+    id: 'dsh-npm#npm/token.test',
+    service: 'npm',
+    namespace: 'npm',
+    method: 'token.test',
+    implementation: 'tokenTestRemote',
+    invocation: { kind: 'direct' },
+    parameters: [
+      {
+        name: 'request',
+        wire: 'request',
+        source: 'json',
+        codec: { mode: 'strict', typeSymbol: 'dsh-npm#TokenTestRequest', schema: tokenTestRequestSchema },
+      },
+    ],
+    result: { mode: 'strict', typeSymbol: 'dsh-npm#NpmTokenTestView', schema: tokenTestValueSchema },
   },
 ]
 
@@ -218,12 +180,9 @@ export const NPM_HOST_CONTRIBUTION: TypertContribution = {
   schemas: [
     { name: 'NpmPackageInfoView', schema: packageInfoSchema },
     { name: 'NpmStatusView', schema: statusViewSchema },
-    { name: 'NpmTrustStatusView', schema: trustStatusValueSchema },
-    { name: 'NpmLaunchScriptView', schema: launchScriptValueSchema },
     { name: 'NpmTokenStatusView', schema: tokenStatusValueSchema },
-    { name: 'PackageCheckRequest', schema: packageCheckRequestSchema },
-    { name: 'TrustStatusRequest', schema: trustStatusRequestSchema },
-    { name: 'LaunchScriptRequest', schema: launchScriptRequestSchema },
+    { name: 'NpmTokenTestView', schema: tokenTestValueSchema },
+    { name: 'TokenTestRequest', schema: tokenTestRequestSchema },
   ],
   model: { services: [], events: [], objects: [] },
   invocations: [...NPM_INVOCATIONS],

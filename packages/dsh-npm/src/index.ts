@@ -14,9 +14,10 @@ import { NpmService } from './npm-service.ts'
 import type { NpmConnectorConfig } from './npm-service.ts'
 import { registerNpmTools } from './tools.ts'
 
-export { NpmService, firstReleaseScript, type NpmPackageInfo, type NpmConnectorConfig } from './npm-service.ts'
+export { NpmService, NpmOtpError, NpmNeedsTokenError, firstReleaseScript, type NpmPackageInfo, type NpmConnectorConfig, type NpmTrustProvider } from './npm-service.ts'
 export { renderScaffold, writeScaffold, type ScaffoldOptions } from './scaffold.ts'
 export { launchPackage, type LaunchRequest, type LaunchResult } from './launch.ts'
+export { publishPackage, type PublishRequest, type PublishResult } from './publish.ts'
 
 export const name = 'dsh-connector-npm'
 export const inject = ['credentials', 'shell', 'tools', 'typert']
@@ -28,6 +29,7 @@ export const NPM_SETTINGS_NAMESPACE = settingsNamespace('npm')
 const NpmConfigSchema = Schema.object({
   registry: Schema.string().default('https://registry.npmjs.org'),
   tokenEnv: Schema.string().role('credential-ref').default('NPM_TOKEN'),
+  kitPackages: Schema.array(String),
 })
 
 /**
@@ -37,7 +39,9 @@ export function apply(ctx: Context, config: Record<string, never> = {}): void {
   // Strict host-side Remote definitions: gateway resolves npm/status.get etc.
   ctx.typert.register(NPM_HOST_CONTRIBUTION)
 
-  // 注册 npm 设置命名空间：registry 可在插件配置页编辑，热更新即时生效。
+  // 注册 npm 设置命名空间：registry / kitPackages 可在插件配置页编辑，热更新即时生效。
+  // 注意：configSource 必须经过「读外层变量」的间接层传入——setSource 会重新绑定
+  // 外层变量，若按值传入初始 thunk，后续配置修改永远不会被 NpmService 看到。
   const entry: NpmConnectorConfig = {}
   let configSource: () => NpmConnectorConfig = () => entry
   installSettingsSection(ctx, NPM_SETTINGS_NAMESPACE, NpmConfigSchema, entry, {
@@ -45,6 +49,6 @@ export function apply(ctx: Context, config: Record<string, never> = {}): void {
     onChange: () => {},
   })
 
-  const npm = new NpmService(ctx, configSource)
+  const npm = new NpmService(ctx, () => configSource())
   registerNpmTools(ctx, npm, () => ctx.get('github') as GitHubService | undefined)
 }

@@ -46,6 +46,43 @@ describe('NpmService.checkPackage', () => {
   })
 })
 
+describe('NpmService.kitPackages', () => {
+  it('falls back to the wire default when unconfigured', () => {
+    const svc = createService()
+    expect(svc.kitPackages()).toEqual([
+      'dsh-connector-wire', 'dsh-connector-github-ui', 'dsh-connector-github', 'dsh-connector-npm',
+    ])
+  })
+
+  it('returns the configured list when set', () => {
+    const svc = new NpmService(new Context(), () => ({
+      kitPackages: ['dsh-connector-npm'],
+    }))
+    expect(svc.kitPackages()).toEqual(['dsh-connector-npm'])
+  })
+
+  it('filters empty entries and falls back when the configured list is empty', () => {
+    const svc = new NpmService(new Context(), () => ({
+      kitPackages: ['', '  ', 'dsh-connector-npm'],
+    }))
+    expect(svc.kitPackages()).toEqual(['dsh-connector-npm'])
+    const empty = new NpmService(new Context(), () => ({ kitPackages: [] }))
+    expect(empty.kitPackages()).toHaveLength(4)
+  })
+
+  it('statusRemote uses the configured kit list', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify({
+      name: decodeURIComponent(url.split('/').pop() ?? ''),
+      'dist-tags': { latest: '0.1.0' }, versions: {},
+    }), { status: 200 })))
+    const svc = new NpmService(new Context(), () => ({
+      kitPackages: ['only-one'],
+    }))
+    const status = await svc.statusRemote()
+    expect(status.packages.map((p) => p.name)).toEqual(['only-one'])
+  })
+})
+
 describe('NpmService.trustCommand', () => {
   it('builds the npm trust github command with --allow-publish -y', () => {
     const svc = createService()

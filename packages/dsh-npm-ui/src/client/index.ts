@@ -25,8 +25,7 @@ import { en, zh, type NpmKey } from './locales.ts'
 
 export type { NpmSectionInjected, NpmSectionProps } from './NpmSection.tsx'
 export type {
-  NpmPackageInfoView, NpmStatusView, NpmTrustStatusView, NpmLaunchScriptView,
-  NpmTokenStatusView,
+  NpmStatusView, NpmTokenStatusView, NpmTokenTestView,
 } from 'dsh-connector-npm-wire'
 export type { NpmKey } from './locales.ts'
 
@@ -58,7 +57,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
   // read it through reflect to avoid a deadlock on its inject declaration.
   const npm = ctx.reflect.get('remote.npm') as TypertRemoteNamespaceMap['npm']
 
-  const controller = new NpmUiStore(npm)
+  const controller = new NpmUiStore(connection.api, npm)
   const useSnapshot = bindSnapshotSelector(controller.store)
   const t = ctx.locale.bind(NS)
 

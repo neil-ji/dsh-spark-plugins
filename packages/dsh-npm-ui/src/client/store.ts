@@ -1,34 +1,37 @@
 /**
- * npm release page store: joins the npm Remote namespace (status.get,
- * package.check, trust.status, launch.script) into one page snapshot. All
- * methods are read-only or generate plain-text scripts — the UI performs no
- * writes, mirroring the connector's "npm credentials never enter the plugin"
- * design.
+ * npm release page store: joins the credential state (credentials.describe),
+ * the npm Remote namespace (status.get, token.status, token.test) into one
+ * page snapshot. Token
+ * writes go through the standard credentials API (set/unset) — the value is
+ * stored host-side in the credential seam, never in the plugin UI. The draft
+ * token used for the connection test travels over the Remote one way and is
+ * never persisted by the connector.
  */
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import type { CredentialView, IApiClient } from '@deepseek-ai/dsh-api-remotes/client'
 import type { TypertRemoteNamespaceMap } from '@deepseek-ai/dsh-typert-protocol'
 import type {
-  NpmLaunchScriptView, NpmPackageInfoView, NpmStatusView, NpmTokenStatusView,
-  NpmTrustStatusView,
+  NpmStatusView, NpmTokenStatusView, NpmTokenTestView,
 } from 'dsh-connector-npm-wire'
 
 /** The mounted npm Remote namespace (created by ctx.remote.$mount). */
 type NpmNamespace = TypertRemoteNamespaceMap['npm']
+
+/** Conventional credential reference for the npm granular token. */
+export const NPM_TOKEN_REF = 'NPM_TOKEN'
 
 /** Page snapshot. */
 export interface NpmUiState {
   status: 'idle' | 'loading' | 'ready' | 'error'
   error: string | null
   statusView: NpmStatusView | undefined
-  /** Last single-package check (launch wizard). */
-  check: NpmPackageInfoView | undefined
-  /** Last trust status query (launch wizard). */
-  trust: NpmTrustStatusView | undefined
-  /** Generated first-release human script. */
-  script: NpmLaunchScriptView | undefined
+  /** Credential-seam facts for NPM_TOKEN (config/source/writable). */
+  credential: CredentialView | undefined
   /** Granular access token status (credential ref). */
   token: NpmTokenStatusView | undefined
+  /** Last connection-test result (draft token or stored token). */
+  test: NpmTokenTestView | undefined
 }
 
 /** Human text for a rejected wire/remote call. */
@@ -40,12 +43,15 @@ function messageOf(error: unknown): string {
 export class NpmUiStore {
   readonly store: SnapshotStore<NpmUiState> = createSnapshotStore<NpmUiState>({
     status: 'idle', error: null, statusView: undefined,
-    check: undefined, trust: undefined, script: undefined, token: undefined,
+    credential: undefined, token: undefined, test: undefined,
   })
 
   private generation = 0
 
-  constructor(private readonly npm: NpmNamespace) {}
+  constructor(
+    private readonly api: Pick<IApiClient, 'credentials'>,
+    private readonly npm: NpmNamespace,
+  ) {}
 
   /** Refetch only after the page has loaded once. */
   refreshIfLoaded(): void {
@@ -53,18 +59,24 @@ export class NpmUiStore {
     void this.load()
   }
 
-  /** Load the registry + kit package status panel. */
+  /** Load the registry + kit package status panel and the credential state. */
   async load(): Promise<void> {
     const generation = ++this.generation
     this.store.update((s) => { s.status = 'loading'; s.error = null })
     try {
-      const result = await this.npm['status.get']()
+      const [result, credentialResponse] = await Promise.all([
+        this.npm['status.get'](),
+        this.api.credentials.describe({ refs: [NPM_TOKEN_REF] }),
+      ])
       if (!result.ok) throw new Error(result.error.message)
+      const credentialResult = credentialResponse.result
+      if (!credentialResult.ok) throw new Error(credentialResult.error.message)
       if (generation !== this.generation) return
       this.store.update((s) => {
         s.status = 'ready'
         s.error = null
         s.statusView = result.value
+        s.credential = credentialResult.value.credentials[NPM_TOKEN_REF]
       })
       let token: NpmTokenStatusView | undefined
       try {
@@ -83,41 +95,39 @@ export class NpmUiStore {
     }
   }
 
-  /** Check one package name availability + metadata. */
-  async checkPackage(name: string): Promise<string | undefined> {
+  /**
+   * Run the connection test; an optional draft token wins over the stored
+   * one. Returns the failure text, or undefined on success.
+   */
+  async testConnection(draftToken?: string): Promise<string | undefined> {
     try {
-      const result = await this.npm['package.check']({ name })
+      const result = await this.npm['token.test'](draftToken === undefined ? {} : { draftToken })
       if (!result.ok) return result.error.message
-      this.store.update((s) => { s.check = result.value })
+      this.store.update((s) => { s.test = result.value })
+      return result.value.ok ? undefined : (result.value.detail ?? 'connection test failed')
+    } catch (error) {
+      return messageOf(error)
+    }
+  }
+
+  /** Persist the token value into the credential seam (write-only). */
+  async saveToken(value: string): Promise<string | undefined> {
+    try {
+      const response = await this.api.credentials.set({ ref: NPM_TOKEN_REF, value })
+      if (!response.result.ok) return response.result.error.message
+      await this.load()
       return undefined
     } catch (error) {
       return messageOf(error)
     }
   }
 
-  /** Query trust status for one package. */
-  async queryTrust(pkg: string): Promise<string | undefined> {
+  /** Remove the stored token. */
+  async removeToken(): Promise<string | undefined> {
     try {
-      const result = await this.npm['trust.status']({ pkg })
-      if (!result.ok) return result.error.message
-      this.store.update((s) => { s.trust = result.value })
-      return undefined
-    } catch (error) {
-      return messageOf(error)
-    }
-  }
-
-  /** Generate the first-release human script (npm publish + npm trust). */
-  async generateScript(args: {
-    pkg: string
-    repository: string
-    dir?: string
-    workflowFile?: string
-  }): Promise<string | undefined> {
-    try {
-      const result = await this.npm['launch.script'](args)
-      if (!result.ok) return result.error.message
-      this.store.update((s) => { s.script = result.value })
+      const response = await this.api.credentials.unset({ ref: NPM_TOKEN_REF })
+      if (!response.result.ok) return response.result.error.message
+      await this.load()
       return undefined
     } catch (error) {
       return messageOf(error)

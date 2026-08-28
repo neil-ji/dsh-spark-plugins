@@ -40,11 +40,13 @@ sh install.sh --no-profile        # 只更新源码，不重链 profile
 | dsh-connector-github | packages/dsh-github | GitHub 连接器 host（40+ 工具） |
 | dsh-connector-github-ui | packages/dsh-github-ui | GitHub 连接器 client（连接配置页） |
 | dsh-connector-wire | packages/dsh-github-wire | GitHub 连接器 wire（remote 协议定义） |
-| dsh-connector-npm | packages/dsh-npm | npm 发布管线 host（8 工具，granular token 全自动首发） |
-| dsh-connector-npm-ui | packages/dsh-npm-ui | npm 发布管线 client（发布状态页） |
+| dsh-connector-npm | packages/dsh-npm | npm 发布管线 host（12 工具，granular token 全权接管 npm 平台侧：publish / dist-tag / deprecate / trust） |
+| dsh-connector-npm-ui | packages/dsh-npm-ui | npm 发布管线 client（token 测试/保存 + 发布状态页） |
 | dsh-connector-npm-wire | packages/dsh-npm-wire | npm 管线 wire（remote 协议定义） |
 
 > 目录名沿用各自源码仓库的目录名（dsh-github / dsh-npm / dsh-finance），npm 包名以各包 package.json 为准；`dsh-plugin-kit` / `dsh-finance` 在 npm 被占用，故发布为 `dsh-spark-plugin-kit` / `dsh-spark-finance`。
+
+npm 连接器 token 优先使用说明（粘贴 token → 测试连接 → 保存 → agent 全权接管）见 [docs/NPM-CONNECTOR.md](docs/NPM-CONNECTOR.md)。
 
 ## dsh 升级体检（常态化追踪破坏性改动）
 
