@@ -55,6 +55,8 @@ let next = ws
 for (const d of oldEntries) {
   next = next.replace(new RegExp('^\\s*-\\s*' + esc(d) + '\\s*$', 'm'), '')
 }
+// 任何历史安装位置的本 monorepo 条目一律清掉（换克隆目录重链时防残留双挂载）
+next = next.replace(/^\s*-\s*\S*dsh-spark-plugins\/packages\/\*\s*$/m, '')
 const monoEntry = '  - ' + ROOT + '/packages/*'
 if (!next.includes(monoEntry)) {
   next = next.replace(/^packages:\s*\n/, 'packages:\n' + monoEntry + '\n')

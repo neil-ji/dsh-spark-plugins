@@ -1,19 +1,25 @@
 # dsh-spark-plugins
 
-DSH 第三方插件 monorepo（pnpm workspace）：**全部已发布 npm，`dsh plugin add` 一条命令安装**；UI/UX 与 DSH Web 官方设计系统逐像素对齐，版本兼容经两道闸体检。落地页：<https://neilji.github.io/dsh-spark-plugins/>
+DSH 第三方插件 monorepo（pnpm workspace）：UI/UX 与 DSH Web 官方设计系统逐像素对齐，版本兼容经两道闸体检。落地页：<https://neilji.github.io/dsh-spark-plugins/>
 
 ## 安装
 
-前置：dsh `0.1.1-rc.2`（其他版本先看[版本兼容](https://neilji.github.io/dsh-spark-plugins/#compat)）。
+前置：dsh `0.1.1-rc.2`（其他版本先看[版本兼容](https://neilji.github.io/dsh-spark-plugins/#compat)）、Node.js ≥ 18 与 git（pnpm 自动引导）。
 
 ```bash
-dsh plugin add dsh-connector-github --profile web        # GitHub 连接器
-dsh plugin add dsh-spark-finance-bundle --profile web    # 成本审计
-dsh plugin add dsh-hippomemo --profile web               # 跨会话记忆
-dsh plugin add dsh-connector-npm --profile web           # npm 发布管线
+curl -fsSL https://neilji.github.io/dsh-spark-plugins/install.sh | sh
 ```
 
-装完重启 dsh web，到设置页完成各插件的连接配置即可。开发插件本身用源码方式：clone 本仓库 → `pnpm install` → `pnpm install:profile`。
+脚本幂等：重复执行 = 更新到最新。源码会被固定克隆到 `~/.dsh/spark-plugins`。
+
+```bash
+# 常用变体（先 curl -o install.sh 下载后执行）
+sh install.sh --profile main      # 指定目标 dsh profile（默认 web）
+sh install.sh --ref v0.2.0        # 锁定 tag / 分支
+sh install.sh --no-profile        # 只更新源码，不重链 profile
+```
+
+装完重启 dsh web，到设置页完成各插件的连接配置即可。卸载：`dsh plugin remove <插件名>` 并删除 `~/.dsh/spark-plugins`。发布 npm 版本视需求后续提供。
 
 ## 安装后 UI 速览
 

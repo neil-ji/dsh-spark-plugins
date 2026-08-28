@@ -417,20 +417,20 @@
       <div class="step">
         <span class="n">1</span>
         <h3>确认 dsh 版本</h3>
-        <p>当前插件线适配 dsh 0.1.1-rc.2，其他版本先看上方兼容矩阵。</p>
+        <p>当前插件线适配 dsh 0.1.1-rc.2，其他版本先看上方兼容矩阵。需 Node ≥ 18 与 git。</p>
         <code>dsh --version</code>
       </div>
       <div class="step">
         <span class="n">2</span>
-        <h3>dsh plugin add</h3>
-        <p>全部插件已发布 npm，按需安装（无需 clone 仓库）：</p>
-        <code>dsh plugin add dsh-connector-github --profile web</code>
+        <h3>一键安装</h3>
+        <p>克隆到 ~/.dsh/spark-plugins、构建并链入 profile。幂等，重复执行即更新：</p>
+        <code>curl -fsSL https://neilji.github.io/dsh-spark-plugins/install.sh | sh</code>
       </div>
       <div class="step">
         <span class="n">3</span>
         <h3>重启即生效</h3>
-        <p>重启 dsh web，到设置页完成连接配置。其余：</p>
-        <code>dsh plugin add dsh-spark-finance-bundle | dsh-hippomemo | dsh-connector-npm</code>
+        <p>重启 dsh web，到设置页完成各插件连接配置。变体：</p>
+        <code>install.sh --profile main --ref v0.2.0</code>
       </div>
     </div>
   </div>
