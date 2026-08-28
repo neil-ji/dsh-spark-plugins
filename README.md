@@ -82,3 +82,6 @@ pnpm escape:init   # 只初始化/刷新，不启动；之后手动 dsh --profil
 1. `packages/<name>` 下建包（host 出 `lib/index.js`，client 出 `lib/client.js`，参考 dsh-hippomemo）。
 2. 需要 client UI 时引用 `dsh-plugin-kit` 的 `registerSettingsSection`。
 3. 在 `plugin-registry.json` 登记，`pnpm dev` 后即可在 3999 验证。
+## License
+
+[MIT](./LICENSE)
