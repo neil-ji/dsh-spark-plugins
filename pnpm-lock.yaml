@@ -179,7 +179,14 @@ importers:
         specifier: ^0.25.0
         version: 0.25.12
 
-  packages/dsh-finance-bundle: {}
+  packages/dsh-finance-bundle:
+    dependencies:
+      dsh-spark-finance:
+        specifier: workspace:*
+        version: link:../dsh-finance
+      dsh-spark-finance-client:
+        specifier: workspace:*
+        version: link:../dsh-finance-client
 
   packages/dsh-finance-client:
     dependencies:
@@ -433,8 +440,11 @@ importers:
 
   packages/dsh-npm:
     dependencies:
+      dsh-connector-npm-ui:
+        specifier: workspace:*
+        version: link:../dsh-npm-ui
       dsh-connector-npm-wire:
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../dsh-npm-wire
       zod:
         specifier: ^4.0.0
