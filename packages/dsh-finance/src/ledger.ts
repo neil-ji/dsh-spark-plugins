@@ -20,7 +20,7 @@
  * every session's log on each build cost minutes because the projection cache
  * write-back cannot persist for sessions that predate the financeUsage unit.
  *
- * @module @deepseek-ai/dsh-finance/ledger
+ * @module @deepseek-ai/dsh-spark-finance/ledger
  */
 
 import type { Context } from '@deepseek-ai/cordis'

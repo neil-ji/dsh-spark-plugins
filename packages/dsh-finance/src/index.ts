@@ -3,7 +3,7 @@
  * a cross-session cost ledger exposed as Typert Remote methods. The browser
  * finance-audit settings page consumes `finance.getBalance/getLedger/getOverview`.
  *
- * @module @deepseek-ai/dsh-finance
+ * @module @deepseek-ai/dsh-spark-finance
  */
 
 import { Context } from '@deepseek-ai/cordis'

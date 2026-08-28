@@ -47,7 +47,7 @@ const ws = await readFile(wsPath, 'utf8')
 const esc = (s) => s.replace(/[.*+?^$()|[\]\\{}]/g, '\\$&')
 const oldEntries = [
   '/Users/neilji/AIGC/dsh-github-connector/packages/*',
-  '/Users/neilji/AIGC/dsh-finance/packages/*',
+  '/Users/neilji/AIGC/dsh-spark-finance/packages/*',
   '/Users/neilji/AIGC/dsh-hippomemo',
   '/Users/neilji/AIGC/dsh-ui-kit',
 ]

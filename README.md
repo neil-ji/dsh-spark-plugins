@@ -1,6 +1,19 @@
 # dsh-spark-plugins
 
-本地自用的 DSH 插件 monorepo（pnpm workspace）。**不做 GitHub Pages，不维护 npm 发布**——所有包均为 private，通过 workspace 源码构建 + 安装到本地 dsh profile 运行。
+DSH 第三方插件 monorepo（pnpm workspace）：**全部已发布 npm，`dsh plugin add` 一条命令安装**；UI/UX 与 DSH Web 官方设计系统逐像素对齐，版本兼容经两道闸体检。落地页：<https://neilji.github.io/dsh-spark-plugins/>
+
+## 安装
+
+前置：dsh `0.1.1-rc.2`（其他版本先看[版本兼容](https://neilji.github.io/dsh-spark-plugins/#compat)）。
+
+```bash
+dsh plugin add dsh-connector-github --profile web        # GitHub 连接器
+dsh plugin add dsh-spark-finance-bundle --profile web    # 成本审计
+dsh plugin add dsh-hippomemo --profile web               # 跨会话记忆
+dsh plugin add dsh-connector-npm --profile web           # npm 发布管线
+```
+
+装完重启 dsh web，到设置页完成各插件的连接配置即可。开发插件本身用源码方式：clone 本仓库 → `pnpm install` → `pnpm install:profile`。
 
 ## 安装后 UI 速览
 
@@ -13,11 +26,11 @@
 | 包 | 目录 | 说明 |
 | --- | --- | --- |
 | dsh-hippomemo | packages/dsh-hippomemo | 跨会话/跨工作区共享记忆插件 |
-| dsh-plugin-kit | packages/dsh-plugin-kit | 公共层：client 设置页样板（settings.section / locale / CSS 注入） |
+| dsh-spark-plugin-kit | packages/dsh-plugin-kit | 公共层：client 设置页样板（settings.section / locale / CSS 注入） |
 | dsh-ui-kit | packages/dsh-ui-kit | 本地 React 组件库（复刻 DSH 设计系统，零 cordis） |
-| dsh-finance | packages/dsh-finance | 成本统计插件 host（remote/typert + 计算核心） |
-| dsh-finance-client | packages/dsh-finance-client | 成本统计插件 client（设置页 UI） |
-| dsh-finance-bundle | packages/dsh-finance-bundle | 成本统计插件安装入口（cordis.patch） |
+| dsh-spark-finance | packages/dsh-finance | 成本统计插件 host（remote/typert + 计算核心） |
+| dsh-spark-finance-client | packages/dsh-finance-client | 成本统计插件 client（设置页 UI） |
+| dsh-spark-finance-bundle | packages/dsh-finance-bundle | 成本统计插件安装入口（cordis.patch） |
 | dsh-connector-github | packages/dsh-github | GitHub 连接器 host（40+ 工具） |
 | dsh-connector-github-ui | packages/dsh-github-ui | GitHub 连接器 client（连接配置页） |
 | dsh-connector-wire | packages/dsh-github-wire | GitHub 连接器 wire（remote 协议定义） |
@@ -25,7 +38,7 @@
 | dsh-connector-npm-ui | packages/dsh-npm-ui | npm 发布管线 client（发布状态页） |
 | dsh-connector-npm-wire | packages/dsh-npm-wire | npm 管线 wire（remote 协议定义） |
 
-> 目录名沿用各自源码仓库的目录名（dsh-github / dsh-npm），npm 包名保持 dsh-connector-* 不变。
+> 目录名沿用各自源码仓库的目录名（dsh-github / dsh-npm / dsh-finance），npm 包名以各包 package.json 为准；`dsh-plugin-kit` / `dsh-finance` 在 npm 被占用，故发布为 `dsh-spark-plugin-kit` / `dsh-spark-finance`。
 
 ## dsh 升级体检（常态化追踪破坏性改动）
 
@@ -86,7 +99,7 @@ pnpm escape:init   # 只初始化/刷新，不启动；之后手动 dsh --profil
 ## 新增一个插件
 
 1. `packages/<name>` 下建包（host 出 `lib/index.js`，client 出 `lib/client.js`，参考 dsh-hippomemo）。
-2. 需要 client UI 时引用 `dsh-plugin-kit` 的 `registerSettingsSection`。
+2. 需要 client UI 时引用 `dsh-spark-plugin-kit` 的 `registerSettingsSection`。
 3. 在 `plugin-registry.json` 登记，`pnpm dev` 后即可在 3999 验证。
 ## License
 

@@ -2,7 +2,7 @@
  * DeepSeek first-party balance endpoint client. Host-only, runs with the
  * server-side credential and never returns the key.
  *
- * @module @deepseek-ai/dsh-finance/balance
+ * @module @deepseek-ai/dsh-spark-finance/balance
  */
 
 import type { FinanceBalanceView, FinanceConfig } from './types.ts'

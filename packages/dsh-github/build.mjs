@@ -1,7 +1,7 @@
 /**
  * dsh-github host build: tsc emits declarations, esbuild bundles the host
  * entry. dsh-github-wire is inlined; @deepseek-ai/* and zod stay bare imports
- * for the host runtime (same contract as dsh-finance).
+ * for the host runtime (same contract as dsh-spark-finance).
  */
 import { build } from 'esbuild'
 import { execSync } from 'node:child_process'

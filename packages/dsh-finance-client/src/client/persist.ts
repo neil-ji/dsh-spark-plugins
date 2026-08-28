@@ -14,7 +14,7 @@ export interface StoredBalancePeak {
   currency: string
 }
 
-const PEAK_KEY = 'dsh-finance.balance-peak'
+const PEAK_KEY = 'dsh-spark-finance.balance-peak'
 
 export function readBalancePeak(): StoredBalancePeak | undefined {
   try {
@@ -79,7 +79,7 @@ export const DEFAULT_FINANCE_PREFS: FinancePrefs = {
   },
 }
 
-const PREFS_KEY = 'dsh-finance.prefs'
+const PREFS_KEY = 'dsh-spark-finance.prefs'
 
 function mergePrefs(parsed: Partial<FinancePrefs> | null): FinancePrefs {
   const charts = { ...DEFAULT_FINANCE_PREFS.charts, ...(parsed?.charts ?? {}) }

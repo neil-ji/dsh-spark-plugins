@@ -1,16 +1,16 @@
 {
-  "name": "dsh-finance-client",
-  "version": "0.1.0",
-  "description": "Finance audit settings section for DeepSeek Harness web: balance, token usage, and cost charts over the dsh-finance Remote.",
+  "name": "dsh-spark-finance-client",
+  "version": "0.2.0",
+  "description": "DSH 成本统计插件 client：财务审计设置页（余额电量、KPI 与成本图表），UI 对齐 DSH 设计系统",
   "type": "module",
-  "homepage": "https://neil-ji.github.io/dsh-finance/",
+  "homepage": "https://neilji.github.io/dsh-spark-plugins/",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/neil-ji/dsh-finance.git",
+    "url": "git+https://github.com/neil-ji/dsh-spark-plugins.git",
     "directory": "packages/dsh-finance-client"
   },
   "bugs": {
-    "url": "https://github.com/neil-ji/dsh-finance/issues"
+    "url": "https://github.com/neil-ji/dsh-spark-plugins/issues"
   },
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -41,20 +41,20 @@
   ],
   "license": "MIT",
   "peerDependencies": {
-    "dsh-finance": "^0.1.0",
+    "dsh-spark-finance": "^0.1.0",
     "react": "^18.2.0",
-    "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-api-remotes": "^0.1.1-rc.2",
-    "@deepseek-ai/dsh-client-connection": "^0.1.1-rc.2",
-    "@deepseek-ai/dsh-client-locale": "^0.1.1-rc.2",
-    "@deepseek-ai/dsh-client-runtime": "^0.1.1-rc.2",
-    "@deepseek-ai/dsh-client-ui-settings": "^0.1.1-rc.2",
-    "@deepseek-ai/dsh-client-ui-settings-plugins": "0.1.1-rc.2",
-    "@deepseek-ai/dsh-client-ui-slots": "^0.1.1-rc.2"
+    "@deepseek-ai/cordis": ">=0.1.1-rc.2",
+    "@deepseek-ai/dsh-api-remotes": ">=0.1.1-rc.2",
+    "@deepseek-ai/dsh-client-connection": ">=0.1.1-rc.2",
+    "@deepseek-ai/dsh-client-locale": ">=0.1.1-rc.2",
+    "@deepseek-ai/dsh-client-runtime": ">=0.1.1-rc.2",
+    "@deepseek-ai/dsh-client-ui-settings": ">=0.1.1-rc.2",
+    "@deepseek-ai/dsh-client-ui-settings-plugins": ">=0.1.1-rc.2",
+    "@deepseek-ai/dsh-client-ui-slots": ">=0.1.1-rc.2"
   },
   "devDependencies": {
     "@types/react": "~18.3.1",
-    "dsh-finance": "workspace:^",
+    "dsh-spark-finance": "workspace:^",
     "react": "^18.2.0",
     "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/dsh-api-remotes": "^0.1.1-rc.2",
@@ -72,9 +72,16 @@
     "test": "vitest run",
     "prepack": "node build.mjs"
   },
-  "private": true,
   "dependencies": {
-    "dsh-plugin-kit": "workspace:*",
+    "dsh-spark-plugin-kit": "workspace:*",
     "dsh-ui-kit": "workspace:*"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin"
+  ],
+  "publishConfig": {
+    "access": "public"
   }
 }

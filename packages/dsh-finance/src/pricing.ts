@@ -15,7 +15,7 @@
  * When only day/totals buckets exist (no hour detail), the base (off-peak)
  * rate of the era-resolved entry is used — a documented approximation.
  *
- * @module @deepseek-ai/dsh-finance/pricing
+ * @module @deepseek-ai/dsh-spark-finance/pricing
  */
 
 import type {

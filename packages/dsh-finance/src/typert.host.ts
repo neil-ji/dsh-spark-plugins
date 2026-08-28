@@ -1,11 +1,11 @@
 /**
- * Generated-style host Typert reflection for dsh-finance, hand-authored to the
+ * Generated-style host Typert reflection for dsh-spark-finance, hand-authored to the
  * shape @deepseek-ai/dsh-typert-loader validates (package, face: 'host',
  * schemas, model, invocations). The gateway also discovers the @Remote
  * methods from the live FinanceService via SRC markers, so this manifest only
  * upgrades the boundary to strict Zod validation.
  *
- * @module dsh-finance/typert
+ * @module dsh-spark-finance/typert
  */
 
 import {
@@ -17,7 +17,7 @@ import {
 
 /** Host reflection manifest consumed by @deepseek-ai/dsh-typert-loader. */
 export const TYPERT: unknown = {
-  package: 'dsh-finance',
+  package: 'dsh-spark-finance',
   face: 'host',
   schemas: [],
   model: {
@@ -53,7 +53,7 @@ export const TYPERT: unknown = {
   },
   invocations: [
     {
-      id: 'dsh-finance#finance/getBalance',
+      id: 'dsh-spark-finance#finance/getBalance',
       service: 'finance',
       namespace: 'finance',
       method: 'getBalance',
@@ -62,13 +62,13 @@ export const TYPERT: unknown = {
       cancellation: { parameter: 'signal' },
       result: {
         mode: 'strict',
-        typeSymbol: 'dsh-finance/types#FinanceBalanceView',
+        typeSymbol: 'dsh-spark-finance/types#FinanceBalanceView',
         schema: financeBalanceViewSchema,
       },
       sourceLocation: { file: 'packages/dsh-finance/src/index.ts', line: 96, column: 3 },
     },
     {
-      id: 'dsh-finance#finance/getLedger',
+      id: 'dsh-spark-finance#finance/getLedger',
       service: 'finance',
       namespace: 'finance',
       method: 'getLedger',
@@ -77,13 +77,13 @@ export const TYPERT: unknown = {
       cancellation: { parameter: 'signal' },
       result: {
         mode: 'strict',
-        typeSymbol: 'dsh-finance/types#FinanceLedger',
+        typeSymbol: 'dsh-spark-finance/types#FinanceLedger',
         schema: financeLedgerSchema,
       },
       sourceLocation: { file: 'packages/dsh-finance/src/index.ts', line: 117, column: 3 },
     },
     {
-      id: 'dsh-finance#finance/getOverview',
+      id: 'dsh-spark-finance#finance/getOverview',
       service: 'finance',
       namespace: 'finance',
       method: 'getOverview',
@@ -92,13 +92,13 @@ export const TYPERT: unknown = {
       cancellation: { parameter: 'signal' },
       result: {
         mode: 'strict',
-        typeSymbol: 'dsh-finance/types#FinanceOverview',
+        typeSymbol: 'dsh-spark-finance/types#FinanceOverview',
         schema: financeOverviewSchema,
       },
       sourceLocation: { file: 'packages/dsh-finance/src/index.ts', line: 131, column: 3 },
     },
     {
-      id: 'dsh-finance#finance/getBackfillProgress',
+      id: 'dsh-spark-finance#finance/getBackfillProgress',
       service: 'finance',
       namespace: 'finance',
       method: 'getBackfillProgress',
@@ -107,7 +107,7 @@ export const TYPERT: unknown = {
       cancellation: { parameter: 'signal' },
       result: {
         mode: 'strict',
-        typeSymbol: 'dsh-finance/types#FinanceBackfillProgress',
+        typeSymbol: 'dsh-spark-finance/types#FinanceBackfillProgress',
         schema: financeBackfillProgressSchema,
       },
       sourceLocation: { file: 'packages/dsh-finance/src/index.ts', line: 131, column: 3 },

@@ -1,10 +1,10 @@
 /**
- * Generated-style client Remote contribution for dsh-finance, hand-authored to
+ * Generated-style client Remote contribution for dsh-spark-finance, hand-authored to
  * the exact shape @deepseek-ai/dsh-typert-generator emits (see
- * dsh-goal/lib/typert.remote-client.js). The dsh-finance-client browser bundle
- * inlines this artifact, so the browser never resolves dsh-finance at runtime.
+ * dsh-goal/lib/typert.remote-client.js). The dsh-spark-finance-client browser bundle
+ * inlines this artifact, so the browser never resolves dsh-spark-finance at runtime.
  *
- * @module dsh-finance/remote
+ * @module dsh-spark-finance/remote
  */
 
 import type {
@@ -42,12 +42,12 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
   }
 }
 
-/** The dsh-finance Remote contribution mounted by dsh-finance-client. */
+/** The dsh-spark-finance Remote contribution mounted by dsh-spark-finance-client. */
 export const TYPERT_REMOTE: TypertRemoteContribution = {
-  package: 'dsh-finance',
+  package: 'dsh-spark-finance',
   descriptors: [
     {
-      id: 'dsh-finance#finance/getBalance',
+      id: 'dsh-spark-finance#finance/getBalance',
       service: 'finance',
       namespace: 'finance',
       method: 'getBalance',
@@ -56,13 +56,13 @@ export const TYPERT_REMOTE: TypertRemoteContribution = {
       cancellation: { parameter: 'signal' },
       result: {
         mode: 'strict',
-        typeSymbol: 'dsh-finance/types#FinanceBalanceView',
+        typeSymbol: 'dsh-spark-finance/types#FinanceBalanceView',
         schema: financeBalanceViewSchema,
       },
       sourceLocation: { file: 'packages/dsh-finance/src/index.ts', line: 96, column: 3 },
     },
     {
-      id: 'dsh-finance#finance/getLedger',
+      id: 'dsh-spark-finance#finance/getLedger',
       service: 'finance',
       namespace: 'finance',
       method: 'getLedger',
@@ -71,13 +71,13 @@ export const TYPERT_REMOTE: TypertRemoteContribution = {
       cancellation: { parameter: 'signal' },
       result: {
         mode: 'strict',
-        typeSymbol: 'dsh-finance/types#FinanceLedger',
+        typeSymbol: 'dsh-spark-finance/types#FinanceLedger',
         schema: financeLedgerSchema,
       },
       sourceLocation: { file: 'packages/dsh-finance/src/index.ts', line: 117, column: 3 },
     },
     {
-      id: 'dsh-finance#finance/getOverview',
+      id: 'dsh-spark-finance#finance/getOverview',
       service: 'finance',
       namespace: 'finance',
       method: 'getOverview',
@@ -86,13 +86,13 @@ export const TYPERT_REMOTE: TypertRemoteContribution = {
       cancellation: { parameter: 'signal' },
       result: {
         mode: 'strict',
-        typeSymbol: 'dsh-finance/types#FinanceOverview',
+        typeSymbol: 'dsh-spark-finance/types#FinanceOverview',
         schema: financeOverviewSchema,
       },
       sourceLocation: { file: 'packages/dsh-finance/src/index.ts', line: 131, column: 3 },
     },
     {
-      id: 'dsh-finance#finance/getBackfillProgress',
+      id: 'dsh-spark-finance#finance/getBackfillProgress',
       service: 'finance',
       namespace: 'finance',
       method: 'getBackfillProgress',
@@ -101,7 +101,7 @@ export const TYPERT_REMOTE: TypertRemoteContribution = {
       cancellation: { parameter: 'signal' },
       result: {
         mode: 'strict',
-        typeSymbol: 'dsh-finance/types#FinanceBackfillProgress',
+        typeSymbol: 'dsh-spark-finance/types#FinanceBackfillProgress',
         schema: financeBackfillProgressSchema,
       },
       sourceLocation: { file: 'packages/dsh-finance/src/index.ts', line: 131, column: 3 },

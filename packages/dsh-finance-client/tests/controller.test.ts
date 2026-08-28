@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { FinanceAuditController } from '../src/client/controller.ts'
-import type { FinanceOverview } from 'dsh-finance/types'
+import type { FinanceOverview } from 'dsh-spark-finance/types'
 
 // The dsh-client-runtime ./client export is the browser bundle (module-scope
 // window); tests exercise the controller against a plain store instead.

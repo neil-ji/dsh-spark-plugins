@@ -7,8 +7,8 @@ import type { ClientRemote } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 // Type-only: augments ClientRemote with the generated finance namespace.
-import type {} from 'dsh-finance/remote'
-import type { FinanceBackfillProgress, FinanceBalanceView, FinanceOverview } from 'dsh-finance/types'
+import type {} from 'dsh-spark-finance/remote'
+import type { FinanceBackfillProgress, FinanceBalanceView, FinanceOverview } from 'dsh-spark-finance/types'
 import { readBalancePeak, writeBalancePeak } from './persist.ts'
 
 export interface FinanceAuditState {

@@ -4,14 +4,14 @@
  * shell / agent-loop cards: the header names the plugin; the body stages the
  * hippomemo namespace edits (capacity + recall parameters) until save.
  *
- * State model comes from dsh-plugin-kit's StagedSettingsCard (shared staged
+ * State model comes from dsh-spark-plugin-kit's StagedSettingsCard (shared staged
  * form over the settings scope); this file is pure presentation.
  */
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button, Input, Pill } from 'dsh-ui-kit'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
-import type { StagedSettingsCardState, StagedCardActions } from 'dsh-plugin-kit/client'
+import type { StagedSettingsCardState, StagedCardActions } from 'dsh-spark-plugin-kit/client'
 import type { HippomemoLocaleKey } from './locales.ts'
 
 /** Card fields edited by this plugin (hippomemo settings namespace). */

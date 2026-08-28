@@ -6,7 +6,7 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button, Input, Pill, StateDot } from 'dsh-ui-kit'
-import type { SnapshotSelectorHook } from 'dsh-plugin-kit/client'
+import type { SnapshotSelectorHook } from 'dsh-spark-plugin-kit/client'
 import type { NpmUiState, NpmUiStore } from './store.ts'
 import type { NpmKey } from './locales.ts'
 import styles from './NpmSection.module.css'

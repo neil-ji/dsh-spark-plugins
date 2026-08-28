@@ -1,5 +1,5 @@
 /**
- * dsh-finance build: emit declarations with tsc, bundle each entry with
+ * dsh-spark-finance build: emit declarations with tsc, bundle each entry with
  * esbuild (relative modules inlined, @deepseek-ai/* / zod left as bare
  * imports for the host runtime).
  */

@@ -1,5 +1,5 @@
 /**
- * 插件设置卡片共享状态模型（dsh-plugin-kit client）。
+ * 插件设置卡片共享状态模型（dsh-spark-plugin-kit client）。
  *
  * 把「设置 → 插件 → 插件配置页」（settings.plugin.item）里插件配置卡片共用的
  * staged-form 状态机收敛成一个类：卡片暂存用户输入，只有保存时才通过
@@ -7,7 +7,7 @@
  * （覆盖徽标、reset、revision 校验、保存后回读）。每个插件只需提供字段 spec
  * （format/parse）+ 自己的展示组件；本模型不关心字段长什么样。
  *
- * 参考实现：dsh-finance-client 的 FinanceCardController（rc.6 里官方
+ * 参考实现：dsh-spark-finance-client 的 FinanceCardController（rc.6 里官方
  * CardForm 未从 dsh-client-ui-settings-plugins 公开导出，这里按同一语义
  * 收敛到公共层供多插件复用）。
  */

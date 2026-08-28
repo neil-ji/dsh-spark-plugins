@@ -1,10 +1,10 @@
-/** dsh-plugin-kit 构建：host 与 client 均为普通 ESM（client 会被插件 client bundle 内联，无需 ModuleLoader wrapper）。 */
+/** dsh-spark-plugin-kit 构建：host 与 client 均为普通 ESM（client 会被插件 client bundle 内联，无需 ModuleLoader wrapper）。 */
 const EXTERNAL = [/^@deepseek-ai\//, 'react', 'react-dom', 'zod']
 
 /** @type {import('tsdown').UserConfig[]} */
 export default [
   {
-    name: 'dsh-plugin-kit/host',
+    name: 'dsh-spark-plugin-kit/host',
     entry: { index: 'src/index.ts' },
     outDir: 'lib',
     format: ['esm'],
@@ -15,7 +15,7 @@ export default [
     external: EXTERNAL,
   },
   {
-    name: 'dsh-plugin-kit/client',
+    name: 'dsh-spark-plugin-kit/client',
     entry: { 'client/index': 'src/client/index.ts' },
     outDir: 'lib',
     format: ['esm'],

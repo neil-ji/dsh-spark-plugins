@@ -1,6 +1,6 @@
 /**
  * Unit tests for the shared plugin settings-card state model
- * (dsh-plugin-kit client): staged edits, override badges, invalid blocking,
+ * (dsh-spark-plugin-kit client): staged edits, override badges, invalid blocking,
  * save write-back, reset (clear), and discard — over a mock settings scope.
  *
  * createSnapshotStore is mocked like the finance-client card tests, because

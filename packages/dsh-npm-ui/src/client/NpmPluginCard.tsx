@@ -1,15 +1,15 @@
 /**
  * npm connector configuration card for the Plugins settings section
  * ("设置 → 插件 → 插件配置页"). One disclosure card editing the npm settings
- * namespace (registry root). State model comes from dsh-plugin-kit's
+ * namespace (registry root). State model comes from dsh-spark-plugin-kit's
  * StagedSettingsCard; this file is pure presentation.
  */
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button, Input, Pill } from 'dsh-ui-kit'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
-import { textCardField } from 'dsh-plugin-kit/client'
-import type { CardFieldSpec, StagedSettingsCardState, StagedCardActions } from 'dsh-plugin-kit/client'
+import { textCardField } from 'dsh-spark-plugin-kit/client'
+import type { CardFieldSpec, StagedSettingsCardState, StagedCardActions } from 'dsh-spark-plugin-kit/client'
 import type { NpmKey } from './locales.ts'
 import styles from './NpmPluginCard.module.css'
 

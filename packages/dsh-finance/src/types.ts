@@ -3,7 +3,7 @@
  * web finance-audit surface. Types only; the projection key declaration lives
  * here so client aggregates import one face without dragging the host service.
  *
- * @module @deepseek-ai/dsh-finance/types
+ * @module @deepseek-ai/dsh-spark-finance/types
  */
 
 declare module '@deepseek-ai/dsh-session-projection/types' {

@@ -11,7 +11,7 @@
 
 import type { SettingsScope, SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
-import type { FinanceConfigInput } from 'dsh-finance/types'
+import type { FinanceConfigInput } from 'dsh-spark-finance/types'
 import { billingModesToRows, rowsToBillingModes } from './billing-modes.ts'
 import type { BillingModeRow } from './billing-modes.ts'
 import {

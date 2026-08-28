@@ -9,7 +9,7 @@
  */
 
 import { useState } from 'react'
-import type { SnapshotSelectorHook } from 'dsh-plugin-kit/client'
+import type { SnapshotSelectorHook } from 'dsh-spark-plugin-kit/client'
 import { Button, Input, Pill, SegmentedControl, Textarea } from 'dsh-ui-kit'
 import { ProviderDefaultsEditor, PriceTableEditor, RateFields } from './PriceEditors.tsx'
 import type { PriceTableDraft, ProviderDefaultsDraft, RateDraft } from './price-forms.ts'

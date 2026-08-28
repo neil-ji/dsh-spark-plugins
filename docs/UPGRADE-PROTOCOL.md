@@ -75,7 +75,7 @@ ls docs/dsh-upgrade-reports/             # 历史报告归档
 
 | dsh 版本区间 | 破坏点 | 波及插件 | 处置 |
 |---|---|---|---|
-| 0.1.0-rc.8 → 0.1.1-rc.2 | `ProjectionDefinition`：`schema/view` → `stateSchema/wire`，新增 `SessionProjectionStateMap` | dsh-finance | projection.ts 两个定义改字段；types.ts 补 StateMap 声明合并 |
+| 0.1.0-rc.8 → 0.1.1-rc.2 | `ProjectionDefinition`：`schema/view` → `stateSchema/wire`，新增 `SessionProjectionStateMap` | dsh-spark-finance | projection.ts 两个定义改字段；types.ts 补 StateMap 声明合并 |
 | 0.1.0-rc.8 → 0.1.1-rc.2 | Cordis 事件 `credentials/updated` → `credentials/reference-updated` | dsh-github-ui / dsh-npm-ui | client `ctx.remote.$on` 改事件名 |
 | 0.1.0-rc.7 → rc.8 | SQLite 存储格式不兼容 | 全体（宿主） | 升级即自动迁移，无插件侧动作 |
 | 0.1.0-rc.6 → rc.8 | apiproxy settings 命名空间改为动态 `settings.describe()` | 插件设置页 | 已随 rc.8 生效，无需动作 |

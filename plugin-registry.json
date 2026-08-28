@@ -2,12 +2,12 @@
   "profile": "web",
   "plugins": {
     "dsh-hippomemo": "packages/dsh-hippomemo",
-    "dsh-finance-bundle": "packages/dsh-finance-bundle",
-    "dsh-github": "packages/dsh-github",
-    "dsh-github-ui": "packages/dsh-github-ui",
+    "dsh-spark-finance-bundle": "packages/dsh-finance-bundle",
+    "dsh-connector-github": "packages/dsh-github",
+    "dsh-connector-github-ui": "packages/dsh-github-ui",
     "dsh-connector-npm": "packages/dsh-npm",
     "dsh-connector-npm-ui": "packages/dsh-npm-ui",
-    "dsh-finance": "packages/dsh-finance",
-    "dsh-finance-client": "packages/dsh-finance-client"
+    "dsh-spark-finance": "packages/dsh-finance",
+    "dsh-spark-finance-client": "packages/dsh-finance-client"
   }
 }

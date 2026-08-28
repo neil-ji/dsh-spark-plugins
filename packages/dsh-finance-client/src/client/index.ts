@@ -8,11 +8,11 @@
 
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ClientRemote } from '@deepseek-ai/dsh-api-remotes/client'
-import { bindSnapshotSelector } from 'dsh-plugin-kit/client'
-import type { SnapshotSelectorHook } from 'dsh-plugin-kit/client'
-import financeRemote from 'dsh-finance/remote'
+import { bindSnapshotSelector } from 'dsh-spark-plugin-kit/client'
+import type { SnapshotSelectorHook } from 'dsh-spark-plugin-kit/client'
+import financeRemote from 'dsh-spark-finance/remote'
 // Type-only: merges `ctx.remote.finance` and the locale Context merge.
-import type {} from 'dsh-finance/remote'
+import type {} from 'dsh-spark-finance/remote'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: brings the `settings.plugin.item` slot declaration into the

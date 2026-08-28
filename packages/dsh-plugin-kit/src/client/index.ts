@@ -1,5 +1,5 @@
 /**
- * dsh-plugin-kit client: DSH 插件 Web 设置页的公共样板。
+ * dsh-spark-plugin-kit client: DSH 插件 Web 设置页的公共样板。
  *
  * 把四个插件（hippomemo / finance / connector-github / connector-npm）里
  * 逐字重复的 settings.section 注册、locale 字典注册、CSS 注入收敛为一条

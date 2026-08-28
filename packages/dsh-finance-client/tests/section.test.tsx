@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { createElement } from 'react'
 import { FinanceAuditSection } from '../src/client/FinanceAuditSection.tsx'
-import type { FinanceOverview } from 'dsh-finance/types'
+import type { FinanceOverview } from 'dsh-spark-finance/types'
 
 const t = (key: string): string => key
 
@@ -231,7 +231,7 @@ describe('FinanceAuditSection', () => {
     }
     const original = (globalThis as { localStorage?: unknown }).localStorage
     ;(globalThis as { localStorage?: unknown }).localStorage = fakeStorage
-    storage.set('dsh-finance.prefs', JSON.stringify({
+    storage.set('dsh-spark-finance.prefs', JSON.stringify({
       layout: 'standard',
       charts: {
         gauge: true, kpis: true, split: true, hourOfDay: true,

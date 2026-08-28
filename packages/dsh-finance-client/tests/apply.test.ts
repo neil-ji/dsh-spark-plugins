@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { apply } from '../src/client/index.ts'
-import financeRemote from 'dsh-finance/remote'
+import financeRemote from 'dsh-spark-finance/remote'
 
 // Both imports are browser bundles (module-scope window); swap them for node-safe fakes.
 vi.mock('@deepseek-ai/dsh-client-runtime/client', () => ({
@@ -11,7 +11,7 @@ vi.mock('@deepseek-ai/dsh-client-runtime/client', () => ({
     set: () => {},
   }),
 }))
-vi.mock('dsh-plugin-kit/client', () => ({
+vi.mock('dsh-spark-plugin-kit/client', () => ({
   bindSnapshotSelector: (source: { getSnapshot: () => object }) => () => source.getSnapshot(),
 }))
 
@@ -65,7 +65,7 @@ function fakeCtx() {
   }
 }
 
-describe('dsh-finance-client apply', () => {
+describe('dsh-spark-finance-client apply', () => {
   it('mounts the finance Remote contribution', async () => {
     const { ctx } = fakeCtx()
     await apply(ctx)

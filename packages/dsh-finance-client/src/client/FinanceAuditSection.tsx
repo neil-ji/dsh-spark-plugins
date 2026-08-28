@@ -6,14 +6,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { SettingsSectionOwnerProps } from '@deepseek-ai/dsh-client-ui-settings/client'
-import type { SnapshotSelectorHook } from 'dsh-plugin-kit/client'
+import type { SnapshotSelectorHook } from 'dsh-spark-plugin-kit/client'
 import type {
   FinanceBalanceView,
   FinanceHourOfDayRow,
   FinanceLedger,
   FinanceOverview,
   FinancePeakValleySplit,
-} from 'dsh-finance/types'
+} from 'dsh-spark-finance/types'
 import type { FinanceAuditState } from './controller.ts'
 import type { FinanceKey } from './locales.ts'
 import { readFinancePrefs } from './persist.ts'
@@ -732,7 +732,7 @@ function FinanceReady({ overview, peak, t, refresh }: {
                   points={ledger.byDay.slice(-30).map(row => ({ key: row.day, label: dayShortLabel(row.day), value: row.costMicros }))}
                   ariaLabel={t('byDay')}
                   formatValue={(value) => formatAxisLabel(value, ledger.currency)}
-                  gradientId="dsh-finance-trend-grad"
+                  gradientId="dsh-spark-finance-trend-grad"
                 />
               </div>
             </section>

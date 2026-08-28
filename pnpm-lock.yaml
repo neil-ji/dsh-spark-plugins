@@ -183,7 +183,7 @@ importers:
 
   packages/dsh-finance-client:
     dependencies:
-      dsh-plugin-kit:
+      dsh-spark-plugin-kit:
         specifier: workspace:*
         version: link:../dsh-plugin-kit
       dsh-ui-kit:
@@ -217,7 +217,7 @@ importers:
       '@types/react':
         specifier: ~18.3.1
         version: 18.3.31
-      dsh-finance:
+      dsh-spark-finance:
         specifier: workspace:^
         version: link:../dsh-finance
       esbuild:
@@ -275,7 +275,7 @@ importers:
       dsh-connector-wire:
         specifier: workspace:^
         version: link:../dsh-github-wire
-      dsh-plugin-kit:
+      dsh-spark-plugin-kit:
         specifier: workspace:*
         version: link:../dsh-plugin-kit
       dsh-ui-kit:
@@ -354,7 +354,7 @@ importers:
 
   packages/dsh-hippomemo:
     dependencies:
-      dsh-plugin-kit:
+      dsh-spark-plugin-kit:
         specifier: workspace:*
         version: link:../dsh-plugin-kit
       dsh-ui-kit:
@@ -476,7 +476,7 @@ importers:
       dsh-connector-npm-wire:
         specifier: workspace:^
         version: link:../dsh-npm-wire
-      dsh-plugin-kit:
+      dsh-spark-plugin-kit:
         specifier: workspace:*
         version: link:../dsh-plugin-kit
       dsh-ui-kit:

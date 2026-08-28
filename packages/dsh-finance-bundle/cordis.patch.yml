@@ -1,11 +1,11 @@
-# dsh-finance bundle patch: appends the finance host service and its settings
+# dsh-spark-finance bundle patch: appends the finance host service and its settings
 # section over the dsh-web-app layer. Rows are addressed by id — the profile's
 # own cordis.patch.yml can override the finance config without editing this
 # file. No API key is ever written here; credentials resolve at runtime from
 # the apiKeyEnv reference.
 - insert:
     - id: finance
-      name: dsh-finance
+      name: dsh-spark-finance
       config:
         currency: CNY
         balance:
@@ -565,4 +565,4 @@
           # <<< FINANCE-COMMUNITY-PRICES-END
 
     - id: ui-finance
-      name: dsh-finance-client
+      name: dsh-spark-finance-client

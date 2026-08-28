@@ -1,7 +1,7 @@
 {
   "name": "dsh-connector-npm",
-  "version": "0.1.0",
-  "description": "Third-party DeepSeek Harness bundle: one-shot npm package launch (scaffold -> GitHub repo + CICD -> OIDC npm release + Pages)",
+  "version": "0.2.0",
+  "description": "DSH npm 发布管线 host：包名/trust 检查、OIDC 发布流程、Pages 站点上线",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -50,7 +50,16 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/neil-ji/dsh-connector-kit.git"
+    "url": "git+https://github.com/neil-ji/dsh-spark-plugins.git",
+    "directory": "packages/dsh-npm"
   },
-  "private": true
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin"
+  ],
+  "bugs": {
+    "url": "https://github.com/neil-ji/dsh-spark-plugins/issues"
+  },
+  "homepage": "https://neilji.github.io/dsh-spark-plugins/"
 }

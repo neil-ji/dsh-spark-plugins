@@ -12,7 +12,7 @@
  * cache discards rows on version mismatch, never migrates them, so a version
  * bump would replay every session log on the next ledger build.
  *
- * @module @deepseek-ai/dsh-finance/projection
+ * @module @deepseek-ai/dsh-spark-finance/projection
  */
 
 import { z } from 'zod'

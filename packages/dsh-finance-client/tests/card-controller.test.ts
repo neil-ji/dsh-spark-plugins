@@ -14,7 +14,7 @@ vi.mock('@deepseek-ai/dsh-client-runtime/client', () => ({
 
 import { FinanceCardController } from '../src/client/FinanceCardController.ts'
 import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
-import type { FinanceConfigInput } from 'dsh-finance/types'
+import type { FinanceConfigInput } from 'dsh-spark-finance/types'
 
 /** Minimal in-memory SettingsScope: applies writes to the user/value layers and notifies. */
 function makeScope(initial: {
@@ -335,7 +335,7 @@ describe('FinanceCardController', () => {
       expect(face.hooks.financeCard.getSnapshot().prefs.layout).toBe('standard')
       face.toggleChart('byModel')
       expect(face.hooks.financeCard.getSnapshot().prefs.charts.byModel).toBe(false)
-      const stored = JSON.parse(storage.get('dsh-finance.prefs') ?? '{}')
+      const stored = JSON.parse(storage.get('dsh-spark-finance.prefs') ?? '{}')
       expect(stored.layout).toBe('standard')
       expect(stored.charts.byModel).toBe(false)
     } finally {

@@ -1,7 +1,7 @@
 {
   "name": "dsh-connector-github",
-  "version": "0.1.0",
-  "description": "Third-party DeepSeek Harness bundle: GitHub connector (host-side capability, agent tools, Typert Remote)",
+  "version": "0.2.0",
+  "description": "DSH GitHub 连接器 host：仓库/提交/PR/Review/Actions/Release 等 40+ 工具，令牌只存本机凭据库",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -35,14 +35,14 @@
     "access": "public"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/schemastery": "^3.18.1",
-    "@deepseek-ai/dsh-credentials": "^0.1.1-rc.2",
-    "@deepseek-ai/dsh-settings": "^0.1.1-rc.2",
-    "@deepseek-ai/dsh-shell": "^0.1.1-rc.2",
-    "@deepseek-ai/dsh-tools": "^0.1.1-rc.2",
-    "@deepseek-ai/dsh-typert-protocol": "^0.1.1-rc.2",
-    "@deepseek-ai/dsh-typert-registry": "^0.1.1-rc.2"
+    "@deepseek-ai/cordis": ">=0.1.1-rc.2",
+    "@deepseek-ai/schemastery": ">=0.1.1-rc.2",
+    "@deepseek-ai/dsh-credentials": ">=0.1.1-rc.2",
+    "@deepseek-ai/dsh-settings": ">=0.1.1-rc.2",
+    "@deepseek-ai/dsh-shell": ">=0.1.1-rc.2",
+    "@deepseek-ai/dsh-tools": ">=0.1.1-rc.2",
+    "@deepseek-ai/dsh-typert-protocol": ">=0.1.1-rc.2",
+    "@deepseek-ai/dsh-typert-registry": ">=0.1.1-rc.2"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
@@ -60,7 +60,16 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/neil-ji/dsh-connector-kit.git"
+    "url": "git+https://github.com/neil-ji/dsh-spark-plugins.git",
+    "directory": "packages/dsh-github"
   },
-  "private": true
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin"
+  ],
+  "bugs": {
+    "url": "https://github.com/neil-ji/dsh-spark-plugins/issues"
+  },
+  "homepage": "https://neilji.github.io/dsh-spark-plugins/"
 }

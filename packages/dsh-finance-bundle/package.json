@@ -1,16 +1,16 @@
 {
-  "name": "dsh-finance-bundle",
-  "version": "0.1.0",
-  "description": "Install entry for the dsh-finance audit plugin: patches the profile composition with the finance host service and the finance audit settings section.",
+  "name": "dsh-spark-finance-bundle",
+  "version": "0.2.0",
+  "description": "DSH 成本统计插件安装入口（cordis.patch 一键挂载 host + client）",
   "type": "module",
-  "homepage": "https://neil-ji.github.io/dsh-finance/",
+  "homepage": "https://neilji.github.io/dsh-spark-plugins/",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/neil-ji/dsh-finance.git",
+    "url": "git+https://github.com/neil-ji/dsh-spark-plugins.git",
     "directory": "packages/dsh-finance-bundle"
   },
   "bugs": {
-    "url": "https://github.com/neil-ji/dsh-finance/issues"
+    "url": "https://github.com/neil-ji/dsh-spark-plugins/issues"
   },
   "dsh": {
     "bundle": {
@@ -22,5 +22,12 @@
   ],
   "license": "MIT",
   "scripts": {},
-  "private": true
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
 }

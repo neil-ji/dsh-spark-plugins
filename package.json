@@ -13,7 +13,8 @@
     "escape:init": "node scripts/escape-profile.mjs",
     "check:dsh-upgrade": "node scripts/check-dsh-upgrade.mjs --write-report",
     "dryrun:dsh-upgrade": "node scripts/dryrun-upgrade.mjs",
-    "finance:sync-prices": "node scripts/sync-finance-prices.mjs"
+    "finance:sync-prices": "node scripts/sync-finance-prices.mjs",
+    "publish:all": "node scripts/publish-all.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

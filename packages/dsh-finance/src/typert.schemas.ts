@@ -1,9 +1,9 @@
 /**
- * Shared strict boundary schemas for the dsh-finance Typert artifacts.
+ * Shared strict boundary schemas for the dsh-spark-finance Typert artifacts.
  * Hand-authored mirror of the @deepseek-ai/dsh-typert-generator output shape;
  * keeps the host reflection and the client Remote contribution on one codec.
  *
- * @module dsh-finance/typert-schemas
+ * @module dsh-spark-finance/typert-schemas
  */
 
 import { z } from 'zod'

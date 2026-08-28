@@ -5,7 +5,7 @@
  * github settings namespace edits (connection, git identity, operation
  * permissions) until save.
  *
- * State model comes from dsh-plugin-kit's StagedSettingsCard (shared staged
+ * State model comes from dsh-spark-plugin-kit's StagedSettingsCard (shared staged
  * form over the settings scope); this file is pure presentation. The token
  * VALUE itself is managed through the credential seam on the Github section
  * page — here only the env-style reference name is a setting.
@@ -14,8 +14,8 @@ import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button, Checkbox, Input, Pill, SegmentedControl } from 'dsh-ui-kit'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
-import { booleanCardField, choiceCardField, textCardField } from 'dsh-plugin-kit/client'
-import type { CardFieldSpec, StagedSettingsCardState, StagedCardActions } from 'dsh-plugin-kit/client'
+import { booleanCardField, choiceCardField, textCardField } from 'dsh-spark-plugin-kit/client'
+import type { CardFieldSpec, StagedSettingsCardState, StagedCardActions } from 'dsh-spark-plugin-kit/client'
 import type { GithubKey } from './locales.ts'
 import styles from './GithubPluginCard.module.css'
 

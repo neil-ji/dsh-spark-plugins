@@ -1,8 +1,8 @@
 /**
- * dsh-finance-client build:
+ * dsh-spark-finance-client build:
  *  - tsc emits declarations to lib/types
  *  - esbuild bundles the browser half (src/client) into lib/client.js in the
- *    vendored __ModuleLoader__ factory format, inlining dsh-finance/remote and
+ *    vendored __ModuleLoader__ factory format, inlining dsh-spark-finance/remote and
  *    its zod codecs, externalizing shell-provided modules, and turning CSS
  *    modules into hashed class-name modules with style injection
  *  - esbuild emits the trivial node half (src/index) as lib/index.js
@@ -13,7 +13,7 @@ import { rmSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { relative, resolve } from 'node:path'
 
-const PACKAGE_NAME = 'dsh-finance-client'
+const PACKAGE_NAME = 'dsh-spark-finance-client'
 
 /** 原子写：先生成临时文件再 rename，读方永远看到完整的旧文件或完整的新文件。 */
 const atomicWrite = (file, contents) => {
