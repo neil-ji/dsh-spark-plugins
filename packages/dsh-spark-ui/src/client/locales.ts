@@ -75,6 +75,12 @@ export const zh = {
   scriptResultFail: '失败',
   scriptRecordResult: '记录结果',
   scriptTriggers: '触发标签',
+  graphTab: 'Graph',
+  graphEmpty: 'No nodes to display. Capture some sparks first.',
+  graphLegend: 'Legend',
+  graphNode: 'Node',
+  graphEdgeCrystallized: 'Crystallized',
+  graphEdgeProposal: 'Proposal',
 } as const
 
 export const en: Record<SparkKey, string> = {
@@ -153,6 +159,12 @@ export const en: Record<SparkKey, string> = {
   scriptResultFail: 'Failure',
   scriptRecordResult: 'Record result',
   scriptTriggers: 'Trigger tags',
+  graphTab: 'Graph',
+  graphEmpty: 'No nodes to display. Capture some sparks first.',
+  graphLegend: 'Legend',
+  graphNode: 'Node',
+  graphEdgeCrystallized: 'Crystallized',
+  graphEdgeProposal: 'Proposal',
 }
 
 export type SparkKey = keyof typeof zh
