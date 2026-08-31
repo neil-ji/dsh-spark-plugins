@@ -127,8 +127,10 @@ export const TYPERT: unknown = {
       parameters: [
         {
           name: 'options',
-          optional: true,
-          schema: undefined,
+          wire: 'options',
+          source: 'json',
+          codec: { mode: 'src-json' },
+          acceptsUndefined: true,
         },
       ],
       cancellation: { parameter: 'signal' },

@@ -14,14 +14,18 @@ import type {
 import type {
   FinanceBackfillProgress,
   FinanceBalanceView,
+  FinanceCommunitySyncResult,
   FinanceLedger,
   FinanceOverview,
+  FinanceSyncStatus,
 } from './types.ts'
 import {
   financeBackfillProgressSchema,
   financeBalanceViewSchema,
+  financeCommunitySyncResultSchema,
   financeLedgerSchema,
   financeOverviewSchema,
+  financeSyncStatusSchema,
 } from './typert.schemas.ts'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
@@ -30,12 +34,16 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     getLedger: () => Promise<RemoteResult<FinanceLedger>>
     getOverview: () => Promise<RemoteResult<FinanceOverview>>
     getBackfillProgress: () => Promise<RemoteResult<FinanceBackfillProgress>>
+    syncCommunityPrices: (options?: { providers?: readonly string[]; fx?: number }) => Promise<RemoteResult<FinanceCommunitySyncResult>>
+    getSyncStatus: () => Promise<RemoteResult<FinanceSyncStatus | null>>
   }
   interface TypertRemoteMap {
     'finance/getBalance': () => Promise<RemoteResult<FinanceBalanceView>>
     'finance/getLedger': () => Promise<RemoteResult<FinanceLedger>>
     'finance/getOverview': () => Promise<RemoteResult<FinanceOverview>>
     'finance/getBackfillProgress': () => Promise<RemoteResult<FinanceBackfillProgress>>
+    'finance/syncCommunityPrices': (options?: { providers?: readonly string[]; fx?: number }) => Promise<RemoteResult<FinanceCommunitySyncResult>>
+    'finance/getSyncStatus': () => Promise<RemoteResult<FinanceSyncStatus | null>>
   }
   interface TypertRemoteNamespaceMap {
     'finance': TypertRemoteNamespace$66696e616e6365
@@ -105,6 +113,44 @@ export const TYPERT_REMOTE: TypertRemoteContribution = {
         schema: financeBackfillProgressSchema,
       },
       sourceLocation: { file: 'packages/dsh-finance/src/index.ts', line: 131, column: 3 },
+    },
+    {
+      id: 'dsh-spark-finance#finance/syncCommunityPrices',
+      service: 'finance',
+      namespace: 'finance',
+      method: 'syncCommunityPrices',
+      invocation: { kind: 'direct' },
+      parameters: [
+        {
+          name: 'options',
+          wire: 'options',
+          source: 'json',
+          codec: { mode: 'src-json' },
+          acceptsUndefined: true,
+        },
+      ],
+      cancellation: { parameter: 'signal' },
+      result: {
+        mode: 'strict',
+        typeSymbol: 'dsh-spark-finance/types#FinanceCommunitySyncResult',
+        schema: financeCommunitySyncResultSchema,
+      },
+      sourceLocation: { file: 'packages/dsh-finance/src/index.ts', line: 378, column: 5 },
+    },
+    {
+      id: 'dsh-spark-finance#finance/getSyncStatus',
+      service: 'finance',
+      namespace: 'finance',
+      method: 'getSyncStatus',
+      invocation: { kind: 'direct' },
+      parameters: [],
+      cancellation: { parameter: 'signal' },
+      result: {
+        mode: 'strict',
+        typeSymbol: 'dsh-spark-finance/types#FinanceSyncStatus',
+        schema: financeSyncStatusSchema,
+      },
+      sourceLocation: { file: 'packages/dsh-finance/src/index.ts', line: 433, column: 5 },
     },
   ],
 }

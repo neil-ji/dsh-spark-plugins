@@ -138,6 +138,32 @@ export const zh = {
   saving: '保存中…',
   saveFailed: '保存失败，请检查输入后重试',
   discard: '放弃',
+  // 价格同步区块（commit 5：把 defaultPrice/providerDefaults/prices 三个 JSON 表单
+  // 隐藏后，主面板只露同步按钮 + autoSync 开关 + 数据源跳转）
+  cardPriceSyncTitle: '价格同步',
+  cardPriceSyncHint: '每日自动从 models.dev（社区维护的模型价格库）拉取各供应商最新目录价。失败时落到默认价，账本不报错',
+  cardAutoSync: '自动同步最新价格',
+  cardAutoSyncHint: '默认开启。开启后客户端启动且距离上次同步超过 24 小时时，自动拉取一次；不会写 settings，重启后回到 bundle 兜底',
+  cardSyncNow: '立即同步',
+  cardSyncing: '同步中…',
+  cardSyncViewSource: '查看数据源 ↗',
+  cardSyncViewSourceHint: '打开 models.dev（社区维护的模型价格库）浏览完整价格详单',
+  cardSyncNever: '尚未同步',
+  cardSyncLast: '上次同步',
+  cardSyncKept: '更新',
+  cardSyncModels: '个模型',
+  cardSyncDropped: '略过',
+  cardSyncFailed: '上次同步失败（已保留上次结果）',
+  cardSyncRetryHint: '点击「立即同步」重试',
+  cardPriceSyncMissing: '缺少数据源',
+  cardPriceSyncSourceAt: '来自 models.dev · 汇率 CNY/USD 7.2',
+  // advanced 折叠区（commit 8：power user 仍可手工维护价格表）
+  cardAdvancedTitle: '高级配置（JSON）',
+  cardAdvancedHint: '默认折叠。需要手工维护价格表、供应商默认值、或按模型订阅打标时展开',
+  cardPricingTierTitle: '价格表',
+  cardProviderDefaultsTitle: '供应商默认值',
+  cardBillingTitle: '计费方式',
+  cardDefaultPriceTitle: '统一默认价',
 } as const
 
 export const en = {
@@ -278,6 +304,32 @@ export const en = {
   saving: 'Saving…',
   saveFailed: 'Save failed; check your input and retry',
   discard: 'Discard',
+  // Price sync section (commit 5: hide the defaultPrice/providerDefaults/prices
+  // JSON forms behind a sync action + autoSync toggle + data-source link)
+  cardPriceSyncTitle: 'Pricing sync',
+  cardPriceSyncHint: 'Daily auto-fetch of the latest list prices per provider from models.dev (community-maintained price book). Failures fall back to default rates without corrupting the ledger',
+  cardAutoSync: 'Auto-sync latest prices',
+  cardAutoSyncHint: 'On by default. When on, the client refreshes once on startup if the last sync is older than 24 hours; the layer is in-memory only and falls back to bundle defaults on restart',
+  cardSyncNow: 'Sync now',
+  cardSyncing: 'Syncing…',
+  cardSyncViewSource: 'View source ↗',
+  cardSyncViewSourceHint: 'Open models.dev (the community-maintained price book) to browse the full rate list',
+  cardSyncNever: 'Never synced',
+  cardSyncLast: 'Last sync',
+  cardSyncKept: 'kept',
+  cardSyncModels: 'models',
+  cardSyncDropped: 'dropped',
+  cardSyncFailed: 'Last sync failed (older results preserved)',
+  cardSyncRetryHint: 'Click "Sync now" to retry',
+  cardPriceSyncMissing: 'Source missing',
+  cardPriceSyncSourceAt: 'from models.dev · CNY/USD fx 7.2',
+  // Advanced disclosure (commit 8: power users can still hand-edit tables)
+  cardAdvancedTitle: 'Advanced configuration (JSON)',
+  cardAdvancedHint: 'Collapsed by default. Expand to hand-edit the price table, provider defaults, or plan/metered billing tags',
+  cardPricingTierTitle: 'Price table',
+  cardProviderDefaultsTitle: 'Provider defaults',
+  cardBillingTitle: 'Billing modes',
+  cardDefaultPriceTitle: 'Default rate',
 } as const
 
 export type FinanceKey = keyof typeof zh
