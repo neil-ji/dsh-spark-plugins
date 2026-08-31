@@ -30,6 +30,12 @@ import type {
   ProviderDefaultsDraft,
   RateDraft,
 } from './price-forms.ts'
+import {
+  providersToRows,
+  rowsToProviders,
+  seedHostKnownProviders,
+} from './provider-forms.ts'
+import type { ProviderRow } from './provider-forms.ts'
 import { readFinancePrefs, writeFinancePrefs } from './persist.ts'
 import type { FinanceChartPrefs, FinanceLayout, FinancePrefs, FinanceSyncSnapshot } from './persist.ts'
 
@@ -42,9 +48,10 @@ export type FinanceCardFieldName =
   | 'providerDefaults'
   | 'billingModes'
   | 'prices'
+  | 'providers'
 
 const BALANCE_FIELDS: readonly FinanceCardFieldName[] = ['balance.baseURL', 'balance.apiKeyEnv', 'balance.timeoutMs']
-const JSON_FIELDS: ReadonlySet<FinanceCardFieldName> = new Set(['defaultPrice', 'providerDefaults', 'billingModes', 'prices'])
+const JSON_FIELDS: ReadonlySet<FinanceCardFieldName> = new Set(['defaultPrice', 'providerDefaults', 'billingModes', 'prices', 'providers'])
 /** Threshold above which `ensureAutoSync` re-fires without a host click. */
 const ONE_DAY_MS = 24 * 60 * 60 * 1000
 
@@ -112,6 +119,14 @@ export interface FinanceCardState {
   /** Live price-table draft. */
   priceTableDraft: PriceTableDraft
   prices: FinanceCardFieldState
+  /** Per-provider configuration list (commit 13). The Form List renders one row per entry. */
+  providers: FinanceCardFieldState
+  /**
+   * Live editor rows for the per-provider form. Mirrors `billingRows` —
+   * INCLUDES in-progress empty `provider` strings (the serialized JSON drops
+   * them) so an added row survives re-renders until it is saved or reset.
+   */
+  providersList: readonly ProviderRow[]
   /** Dashboard view preferences (browser-local; apply immediately). */
   prefs: FinancePrefs
   /** Live sync state (in flight + last success/failure). */
@@ -140,6 +155,8 @@ export interface FinanceCardFace {
   toggleChart: (key: keyof FinanceChartPrefs) => void
   /** Stage the billing-mode editor rows (serialized into the staged JSON). */
   setBillingModes: (rows: readonly BillingModeRow[]) => void
+  /** Stage the per-provider editor rows (serialized into the staged JSON). */
+  setProviders: (rows: readonly ProviderRow[]) => void
   /** Stage the default-price rate draft. */
   setDefaultPrice: (draft: RateDraft) => void
   /** Stage the provider-default rows. */
@@ -187,6 +204,12 @@ export class FinanceCardController {
    * from the stored value.
    */
   private billingEditorRows: BillingModeRow[] = []
+  /**
+   * Latest editor rows passed through setProviders — kept verbatim (blank
+   * provider strings included) so an added row survives re-renders until
+   * it is saved or reset. Same shape & contract as `billingEditorRows`.
+   */
+  private providersEditorRows: ProviderRow[] = []
   /** Live drafts for the three price-form editors; null = not yet edited (seed from stored). */
   private defaultPriceDraftValue: RateDraft | null = null
   private providerDefaultsDraftValue: ProviderDefaultsDraft | null = null
@@ -241,6 +264,7 @@ export class FinanceCardController {
       case 'providerDefaults': return value.providerDefaults
       case 'billingModes': return value.billingModes
       case 'prices': return value.prices
+      case 'providers': return value.providers
     }
   }
 
@@ -265,6 +289,21 @@ export class FinanceCardController {
     if (JSON_FIELDS.has(field)) {
       let parsed: unknown
       try { parsed = JSON.parse(trimmed) } catch { return undefined }
+      // `providers` is an array; the rest are plain objects.
+      if (field === 'providers') {
+        if (!Array.isArray(parsed)) return undefined
+        for (const entry of parsed) {
+          if (!isPlainObject(entry)) return undefined
+          // Soft client-side validation — full validation lives in the host
+          // schema; we only block the obvious typos here so save fails fast.
+          if (typeof entry.provider !== 'string') return undefined
+          if (entry.billingMode !== 'metered' && entry.billingMode !== 'plan' && entry.billingMode !== 'free') return undefined
+          if (entry.currency !== 'CNY' && entry.currency !== 'USD') return undefined
+          if (typeof entry.autoFetchBalance !== 'boolean') return undefined
+          if (typeof entry.totalPriceMicros !== 'number' || entry.totalPriceMicros < 0 || entry.totalPriceMicros > 100_000_000_000) return undefined
+        }
+        return { kind: 'set', value: parsed }
+      }
       if (!isPlainObject(parsed)) return undefined
       // Billing-mode tags must carry known modes only — fail fast client-side
       // instead of letting the Host reject the whole settings write later.
@@ -379,7 +418,7 @@ export class FinanceCardController {
       }
     }
 
-    for (const field of ['defaultPrice', 'providerDefaults', 'billingModes', 'prices'] as const) {
+    for (const field of ['defaultPrice', 'providerDefaults', 'billingModes', 'prices', 'providers'] as const) {
       const staged = this.staged.get(field)
       if (staged !== undefined) pushIfChanged(field, staged, this.sectionValue(field))
     }
@@ -421,6 +460,10 @@ export class FinanceCardController {
       providerDefaultsDraft: this.staged.has('providerDefaults') ? (this.providerDefaultsDraftValue ?? seedProviderDefaults(undefined)) : this.seedJson('providerDefaults', seedProviderDefaults),
       priceTableDraft: this.staged.has('prices') ? (this.priceTableDraftValue ?? seedPriceTable(undefined)) : this.seedJson('prices', seedPriceTable),
       prices: this.fieldState('prices'),
+      providers: this.fieldState('providers'),
+      providersList: this.staged.has('providers')
+        ? this.providersEditorRows
+        : providersToRows(this.snapshot().value?.providers),
       prefs: readFinancePrefs(),
       syncState: this.syncStateValue,
       syncAvailable: this.syncAvailableValue,
@@ -489,6 +532,8 @@ export class FinanceCardController {
         if (field === 'billingModes') {
           // Reset drops the draft: reseed the live editor from the stored value.
           this.billingEditorRows = billingModesToRows(this.format(field))
+        } else if (field === 'providers') {
+          this.providersEditorRows = providersToRows(this.snapshot().value?.providers)
         } else if (field === 'defaultPrice') {
           this.defaultPriceDraftValue = null
         } else if (field === 'providerDefaults') {
@@ -523,6 +568,18 @@ export class FinanceCardController {
         // stage it as a clear so dirty stays false for a no-op edit.
         const storedAlready = this.stored('billingModes')
         this.stage('billingModes', text === '' && !storedAlready ? { text: '', clear: true } : { text, clear: text === '' })
+      },
+      setProviders: (rows) => {
+        // Same shape & contract as setBillingModes: verbatim rows in, JSON
+        // array out; blank provider strings preserved for the form but dropped
+        // from the save payload.
+        this.providersEditorRows = [...rows]
+        const payload = rowsToProviders(rows)
+        const text = JSON.stringify(payload, null, 2)
+        const storedAlready = this.stored('providers')
+        this.stage('providers', payload.length === 0 && !storedAlready
+          ? { text: '', clear: true }
+          : { text, clear: payload.length === 0 })
       },
       setDefaultPrice: (draft) => {
         this.defaultPriceDraftValue = draft

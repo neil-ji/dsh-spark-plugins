@@ -61,6 +61,8 @@ export const TYPERT: unknown = {
           { name: 'FinanceProviderBillingMode', declaration: "export type FinanceProviderBillingMode = 'metered' | 'plan' | 'free';" },
           { name: 'FinanceProviderEntry', declaration: 'export interface FinanceProviderEntry { provider: string; billingMode: FinanceProviderBillingMode; totalPriceMicros: number; currency: "CNY" | "USD"; autoFetchBalance: boolean; validity?: { startMs?: number; endMs?: number }; }' },
           { name: 'FinanceProviderBalance', declaration: 'export interface FinanceProviderBalance { status: "ok" | "missing-credential" | "unsupported" | "error"; provider: string; totalMicros?: number; currency?: "CNY" | "USD"; code?: string; message?: string; fetchedAt: number; }' },
+          // Commit 13: client-side Form List uses this to seed defaults + lock fields.
+          { name: 'FinanceHostProviderMeta', declaration: 'export interface FinanceHostProviderMeta { provider: string; defaultBillingMode: "metered" | "plan" | "free"; defaultCurrency: "CNY" | "USD"; supportsBalanceFetch: boolean; lockBillingModeAndCurrency?: boolean; }' },
         ],
       },
     ],

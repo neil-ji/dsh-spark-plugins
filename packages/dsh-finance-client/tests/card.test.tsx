@@ -32,6 +32,10 @@ function state(overrides: Partial<FinanceCardState> = {}): FinanceCardState {
     providerDefaultsDraft: { rows: [] },
     priceTableDraft: { models: [] },
     prices: field(''),
+    // Per-provider Form List (commit 13). Empty by default — most tests don't
+    // touch this surface; the provider-section cases below override as needed.
+    providers: { text: '', overridden: false, invalid: false },
+    providersList: [],
     prefs: DEFAULT_FINANCE_PREFS,
     syncState: { syncing: false, lastSync: null, lastError: null },
     syncAvailable: true,
@@ -59,6 +63,7 @@ const baseProps = {
   save: () => {},
   discard: () => {},
   setBillingModes: () => {},
+  setProviders: () => {},
   setDefaultPrice: () => {},
   setProviderDefaults: () => {},
   setPriceTable: () => {},
@@ -105,8 +110,15 @@ describe('FinanceCardBody', () => {
     onReset: () => {},
     onSave: () => {},
     onDiscard: () => {},
+    onSetBillingModes: () => {},
+    onSetProviders: () => {},
+    onSetDefaultPrice: () => {},
+    onSetProviderDefaults: () => {},
+    onSetPriceTable: () => {},
     onSetLayout: () => {},
     onToggleChart: () => {},
+    onSyncNow: () => Promise.resolve(null),
+    onSetAutoSync: () => {},
   }
 
   it('renders the billing-mode editor as rows instead of a JSON textarea', () => {
@@ -198,6 +210,72 @@ describe('FinanceCardBody', () => {
     }))
     expect(html).toContain('saveFailed')
     expect(html).toContain('role="status"')
+  })
+
+  // Per-provider Form List (commit 13): one card per row, host metadata drives
+  // lock semantics + auto-fetch toggle visibility, "+ 添加 provider" seeds from
+  // HOST_KNOWN_PROVIDER_META.
+  it('renders the section title, hint and the add-provider button when empty', () => {
+    const html = renderToStaticMarkup(createElement(FinanceCardBody, bodyProps))
+    expect(html).toContain('cardProvidersTitle')
+    expect(html).toContain('cardProvidersHint')
+    expect(html).toContain('finance-provider-add')
+    expect(html).toContain('addProvider')
+  })
+
+  it('renders a deepseek-official row with locked billing + currency + auto-fetch toggle', () => {
+    const html = renderToStaticMarkup(createElement(FinanceCardBody, {
+      ...bodyProps,
+      state: state({
+        providersList: [{
+          provider: 'deepseek-official',
+          billingMode: 'metered',
+          totalPriceMajor: 30,
+          currency: 'CNY',
+          autoFetchBalance: true,
+        }],
+      }),
+    }))
+    expect(html).toContain('deepseek-official')
+    expect(html).toContain('cardProviderHostKnown')
+    expect(html).toContain('cardProviderAutoFetch')
+    expect(html).toContain('cardProviderAutoFetchHint')
+    expect(html).toContain('cardProviderValidity')
+    expect(html).toContain('removeProviderRow')
+  })
+
+  it('renders an unknown-provider row without the auto-fetch toggle', () => {
+    const html = renderToStaticMarkup(createElement(FinanceCardBody, {
+      ...bodyProps,
+      state: state({
+        providersList: [{
+          provider: 'minimax-cn',
+          billingMode: 'plan',
+          totalPriceMajor: 99,
+          currency: 'USD',
+          autoFetchBalance: false,
+        }],
+      }),
+    }))
+    expect(html).toContain('minimax-cn')
+    expect(html).not.toContain('cardProviderHostKnown')
+    expect(html).not.toContain('cardProviderAutoFetchHint')
+  })
+
+  it('renders one card per row in providersList', () => {
+    const html = renderToStaticMarkup(createElement(FinanceCardBody, {
+      ...bodyProps,
+      state: state({
+        providersList: [
+          { provider: 'deepseek-official', billingMode: 'metered', totalPriceMajor: 30, currency: 'CNY', autoFetchBalance: true },
+          { provider: 'minimax-cn', billingMode: 'plan', totalPriceMajor: 99, currency: 'USD', autoFetchBalance: false },
+        ],
+      }),
+    }))
+    const dsMatches = html.match(/deepseek-official/g) ?? []
+    const mmMatches = html.match(/minimax-cn/g) ?? []
+    expect(dsMatches.length).toBeGreaterThanOrEqual(1)
+    expect(mmMatches.length).toBeGreaterThanOrEqual(1)
   })
 })
 

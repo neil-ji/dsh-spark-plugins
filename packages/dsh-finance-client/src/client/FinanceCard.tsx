@@ -16,7 +16,9 @@ import { useState } from 'react'
 import type { SnapshotSelectorHook } from 'dsh-spark-plugin-kit/client'
 import { Button, Input, Pill, SegmentedControl, Textarea } from 'dsh-ui-kit'
 import { ProviderDefaultsEditor, PriceTableEditor, RateFields } from './PriceEditors.tsx'
+import { ProviderListEditor } from './ProviderListEditor.tsx'
 import type { PriceTableDraft, ProviderDefaultsDraft, RateDraft } from './price-forms.ts'
+import type { ProviderRow } from './provider-forms.ts'
 import type { BillingModeRow } from './billing-modes.ts'
 import type {
   FinanceCardFace,
@@ -171,8 +173,8 @@ function PriceSyncSection({ t, state, disabled, onSyncNow, onSetAutoSync }: {
   )
 }
 
-/** The card's open body: connection + sync + plan/metered tags + (collapsed) advanced JSON + dashboard prefs + save row. */
-export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, onSetBillingModes, onSetDefaultPrice, onSetProviderDefaults, onSetPriceTable, onSetLayout, onToggleChart, onSyncNow, onSetAutoSync }: {
+/** The card's open body: connection + provider list + sync + plan/metered tags + advanced JSON + dashboard prefs + save row. */
+export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, onSetBillingModes, onSetProviders, onSetDefaultPrice, onSetProviderDefaults, onSetPriceTable, onSetLayout, onToggleChart, onSyncNow, onSetAutoSync }: {
   t: (key: FinanceKey) => string
   state: FinanceCardState
   onEdit: (field: FinanceCardFieldName, text: string) => void
@@ -180,6 +182,7 @@ export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, 
   onSave: () => void
   onDiscard: () => void
   onSetBillingModes: (rows: readonly BillingModeRow[]) => void
+  onSetProviders: (rows: readonly ProviderRow[]) => void
   onSetDefaultPrice: (draft: RateDraft) => void
   onSetProviderDefaults: (draft: ProviderDefaultsDraft) => void
   onSetPriceTable: (draft: PriceTableDraft) => void
@@ -274,6 +277,17 @@ export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, 
           />
         </div>
       ) : null}
+
+      <div className={css.section}>
+        <div className={css.sectionTitle}>{t('cardProvidersTitle')}</div>
+        <p className={css.sectionHint}>{t('cardProvidersHint')}</p>
+        <ProviderListEditor
+          rows={state.providersList}
+          disabled={disabled}
+          t={t}
+          onChange={onSetProviders}
+        />
+      </div>
 
       <div className={css.section}>
         <div className={css.sectionTitle}>{t('cardBillingTitle')}</div>
@@ -477,6 +491,7 @@ export function FinanceCard(props: FinanceCardProps) {
           onSave={props.save}
           onDiscard={props.discard}
           onSetBillingModes={props.setBillingModes}
+          onSetProviders={props.setProviders}
           onSetDefaultPrice={props.setDefaultPrice}
           onSetProviderDefaults={props.setProviderDefaults}
           onSetPriceTable={props.setPriceTable}

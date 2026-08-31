@@ -223,6 +223,42 @@ describe('FinanceCardController', () => {
     expect(writes).toEqual([{ op: 'unset', field: 'billingModes' }])
   })
 
+  // commit 13: providers Form List — same controller pattern as billing.
+  it('stages a provider list via setProviders and saves it as a JSON array', async () => {
+    const { scope, writes } = makeScope({ value: baseSection() })
+    const controller = new FinanceCardController(scope)
+    const face = controller.inject()
+    face.setProviders([
+      { provider: 'deepseek-official', billingMode: 'metered', totalPriceMajor: 30, currency: 'CNY', autoFetchBalance: true },
+      { provider: 'minimax-cn', billingMode: 'plan', totalPriceMajor: 99, currency: 'USD', autoFetchBalance: false },
+    ])
+    const staged = face.hooks.financeCard.getSnapshot()
+    expect(staged.providers.overridden).toBe(true)
+    expect(staged.dirty).toBe(true)
+    expect(staged.providersList).toHaveLength(2)
+    face.save()
+    await flush()
+    expect(writes).toEqual([{
+      op: 'set',
+      field: 'providers',
+      value: [
+        expect.objectContaining({ provider: 'deepseek-official', billingMode: 'metered', currency: 'CNY' }),
+        expect.objectContaining({ provider: 'minimax-cn', billingMode: 'plan', currency: 'USD' }),
+      ],
+    }])
+  })
+
+  it('treats empty provider list as an unset', async () => {
+    const { scope, writes } = makeScope({ value: baseSection(), user: { providers: [{ provider: 'deepseek-official', billingMode: 'metered', totalPriceMajor: 30, currency: 'CNY', autoFetchBalance: true }] } })
+    const controller = new FinanceCardController(scope)
+    const face = controller.inject()
+    face.setProviders([])
+    face.save()
+    await flush()
+    expect(writes).toEqual([{ op: 'unset', field: 'providers' }])
+  })
+
+
   it('keeps the form clean (no dirty) when nothing changed', () => {
     const { scope } = makeScope({ value: baseSection() })
     const controller = new FinanceCardController(scope)

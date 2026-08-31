@@ -164,6 +164,23 @@ export const zh = {
   cardProviderDefaultsTitle: '供应商默认值',
   cardBillingTitle: '计费方式',
   cardDefaultPriceTitle: '统一默认价',
+  // Provider 配置表单（commit 13：Form List）
+  cardProvidersTitle: 'Provider 配置',
+  cardProvidersHint: '每个 provider 一行。锁定的字段（🔒）由 host 元数据决定，用户不可改',
+  addProvider: '+ 添加 provider',
+  removeProviderRow: '删除 provider',
+  cardProviderNewRow: '（新 provider）',
+  cardProviderHostKnown: 'host 元数据',
+  cardProviderId: 'Provider',
+  cardProviderBillingMode: '付费方式',
+  cardProviderCurrency: '货币',
+  cardProviderTotalPrice: '价格',
+  cardProviderAutoFetch: '自动获取余额',
+  cardProviderAutoFetchHint: '（host 暴露余额接口时）',
+  cardProviderValidity: '有效期',
+  cardProviderValidityStart: '有效期起',
+  cardProviderValidityEnd: '有效期止',
+  modeFree: '免费',
 } as const
 
 export const en = {
@@ -330,6 +347,23 @@ export const en = {
   cardProviderDefaultsTitle: 'Provider defaults',
   cardBillingTitle: 'Billing modes',
   cardDefaultPriceTitle: 'Default rate',
+  // Provider Form List (commit 13)
+  cardProvidersTitle: 'Provider configuration',
+  cardProvidersHint: 'One row per provider. Locked fields (🔒) come from host metadata and can\'t be changed',
+  addProvider: '+ Add provider',
+  removeProviderRow: 'Remove provider',
+  cardProviderNewRow: '(new provider)',
+  cardProviderHostKnown: 'host metadata',
+  cardProviderId: 'Provider',
+  cardProviderBillingMode: 'Billing mode',
+  cardProviderCurrency: 'Currency',
+  cardProviderTotalPrice: 'Total',
+  cardProviderAutoFetch: 'Auto-fetch balance',
+  cardProviderAutoFetchHint: '(host exposes a balance endpoint)',
+  cardProviderValidity: 'Validity',
+  cardProviderValidityStart: 'Validity start',
+  cardProviderValidityEnd: 'Validity end',
+  modeFree: 'Free',
 } as const
 
 export type FinanceKey = keyof typeof zh

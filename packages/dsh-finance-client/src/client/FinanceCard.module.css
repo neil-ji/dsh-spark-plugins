@@ -428,3 +428,87 @@
   line-height: 1.5;
   margin: 4px 0 12px;
 }
+
+/* Provider Form List (commit 13)：每张卡片一个 provider。 */
+.providerList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+.providerCard {
+  background: var(--dsw-alias-surface-l1);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+.providerCardHead {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.providerName {
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+.providerHostTag {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  font-weight: 400;
+  margin-left: 6px;
+}
+.providerLocked {
+  font-size: 11px;
+  margin-left: 4px;
+}
+.providerGrid {
+  display: grid;
+  gap: 10px 14px;
+  grid-template-columns: 1fr 1fr;
+}
+.providerField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.providerLabel {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+}
+.providerInput {
+  width: 100%;
+}
+.providerPriceWrap {
+  align-items: center;
+  display: flex;
+  gap: 4px;
+}
+.providerCurrencyPrefix {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 13px;
+}
+.providerPriceInput {
+  flex: 1;
+  min-width: 0;
+}
+.providerAutoFetch {
+  align-items: center;
+  color: var(--dsw-alias-label-primary);
+  display: flex;
+  font-size: 12px;
+  gap: 6px;
+}
+.providerValidity {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+.providerValiditySep {
+  color: var(--dsw-alias-label-tertiary);
+}
+.providerDateInput {
+  flex: 1;
+  min-width: 0;
+}

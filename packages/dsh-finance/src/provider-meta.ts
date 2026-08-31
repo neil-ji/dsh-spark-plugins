@@ -34,12 +34,23 @@ export interface FinanceHostProviderMeta {
    * per-provider view is always `status: 'unsupported'`.
    */
   supportsBalanceFetch: boolean
+  /**
+   * When true, the UI locks `billingMode` and `currency` to the host defaults
+   * for this provider. Used for `deepseek-official` (metered / CNY are
+   * determined by the DeepSeek balance API contract — the user can't override
+   * them via the card). Future host-known providers can opt in the same way.
+   */
+  lockBillingModeAndCurrency?: boolean
 }
 
 /**
  * Providers the host has special knowledge of. Keyed by provider id; missing
  * keys fall through to the unsupported path in `getBalance` and the UI's
  * `plan`-mode default for unknown providers.
+ *
+ * Exposed from the package root so the client can bundle this metadata
+ * without a runtime host roundtrip — the Form List (commit 13) uses it to
+ * seed defaults and decide which fields are locked.
  */
 export const HOST_KNOWN_PROVIDER_META: Readonly<Record<string, FinanceHostProviderMeta>> = {
   'deepseek-official': {
@@ -47,10 +58,27 @@ export const HOST_KNOWN_PROVIDER_META: Readonly<Record<string, FinanceHostProvid
     defaultBillingMode: 'metered',
     defaultCurrency: 'CNY',
     supportsBalanceFetch: true,
+    lockBillingModeAndCurrency: true,
   },
 }
 
 /** Lookup helper so call sites don't sprinkle optional-chaining everywhere. */
 export function hostProviderMeta(provider: string): FinanceHostProviderMeta | undefined {
   return HOST_KNOWN_PROVIDER_META[provider]
+}
+
+/**
+ * Default row seeded when the user clicks "+ 添加 provider" for a provider
+ * the host recognises. Unknown providers get `plan` / CNY / autoFetch=false
+ * (mirrors the spec's "未知 provider 默认订阅付费" + no-balance-fetch fallback).
+ */
+export function defaultProviderEntry(provider: string): import('./types.ts').FinanceProviderEntry {
+  const meta = hostProviderMeta(provider)
+  return {
+    provider,
+    billingMode: meta?.defaultBillingMode ?? 'plan',
+    totalPriceMicros: 0,
+    currency: meta?.defaultCurrency ?? 'CNY',
+    autoFetchBalance: meta?.supportsBalanceFetch ?? false,
+  }
 }

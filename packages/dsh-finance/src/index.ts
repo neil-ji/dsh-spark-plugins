@@ -50,6 +50,9 @@ export type * from './types.ts'
 export { financeUsageHourlyProjectionDefinition, financeUsageProjectionDefinition } from './projection.ts'
 export { fetchFinanceBalance, FinanceBalanceError, microsFromDecimal } from './balance.ts'
 export { backfillFinanceHourly } from './ledger.ts'
+// Commit 13: client uses these to seed Form List defaults + lock fields.
+export { HOST_KNOWN_PROVIDER_META, defaultProviderEntry, hostProviderMeta } from './provider-meta.ts'
+export type { FinanceHostProviderMeta } from './provider-meta.ts'
 export {
   addFinanceBuckets,
   DEFAULT_PEAK_DAYS,
