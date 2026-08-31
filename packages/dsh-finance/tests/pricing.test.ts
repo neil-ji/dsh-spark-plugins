@@ -520,3 +520,70 @@ describe('mergePriceLayers', () => {
   })
 })
 
+
+
+describe('financeEntryFor bare-model fallback', () => {
+  const flat = (input: number, output: number) => [{
+    effectiveFrom: 0, kind: 'flat' as const,
+    rate: { inputMicrosPerMtok: input, outputMicrosPerMtok: output },
+  }]
+
+  it('returns undefined when neither provider/model nor bare-model exists', () => {
+    const testConfig: FinanceConfig = { ...config, prices: {} }
+    expect(financeEntryFor(testConfig, 'minimax-cn/minimax-m3', 0)).toBeUndefined()
+  })
+
+  it('hits the exact provider/model entry first', () => {
+    const testConfig: FinanceConfig = {
+      ...config,
+      prices: {
+        'minimax-cn/minimax-m3': flat(99, 199),
+        'minimax-m3': flat(1, 2),
+      },
+    }
+    expect(financeEntryFor(testConfig, 'minimax-cn/minimax-m3', 0)).toEqual(flat(99, 199)[0])
+  })
+
+  it('falls back to the bare-model key when provider/model misses', () => {
+    const testConfig: FinanceConfig = {
+      ...config,
+      prices: {
+        'minimax-m3': flat(1, 2),
+      },
+    }
+    expect(financeEntryFor(testConfig, 'minimax-cn/minimax-m3', 0)).toEqual(flat(1, 2)[0])
+  })
+
+  it('feeds the bare-model rate into financeRateAt', () => {
+    const testConfig: FinanceConfig = { ...config, prices: { 'minimax-m3': flat(2_000_000, 8_000_000) } }
+    expect(financeRateAt(testConfig, 'minimax-cn/minimax-m3', 0)).toEqual({
+      inputMicrosPerMtok: 2_000_000,
+      outputMicrosPerMtok: 8_000_000,
+    })
+  })
+
+  it('applies era-aware effectiveFrom on the bare-model fallback', () => {
+    const testConfig: FinanceConfig = { ...config, prices: {
+      'minimax-m3': [
+        { effectiveFrom: 0, kind: 'flat' as const, rate: { inputMicrosPerMtok: 1000, outputMicrosPerMtok: 2000 } },
+        { effectiveFrom: 1_700_000_000_000, kind: 'flat' as const, rate: { inputMicrosPerMtok: 5000, outputMicrosPerMtok: 9000 } },
+      ],
+    } }
+    expect(financeEntryFor(testConfig, 'minimax-cn/minimax-m3', 0)?.rate.inputMicrosPerMtok).toBe(1000)
+    expect(financeEntryFor(testConfig, 'minimax-cn/minimax-m3', 1_700_000_000_000)?.rate.inputMicrosPerMtok).toBe(5000)
+  })
+
+  it('does NOT collapse a non-provider-aware key (no slash) into itself', () => {
+    const testConfig: FinanceConfig = { ...config, prices: { 'minimax-m3': flat(1, 2) } }
+    // 'minimax-m3' has no slash → financeModelOf returns itself → fallback path is bypassed
+    expect(financeEntryFor(testConfig, 'minimax-m3', 0)).toEqual(flat(1, 2)[0])
+  })
+
+  it('falls back across providers — same model in different gateways shares the same price', () => {
+    const testConfig: FinanceConfig = { ...config, prices: { 'gpt-4o': flat(1000, 2000) } }
+    expect(financeEntryFor(testConfig, 'openai/gpt-4o', 0)?.rate.outputMicrosPerMtok).toBe(2000)
+    expect(financeEntryFor(testConfig, 'azure-openai/gpt-4o', 0)?.rate.outputMicrosPerMtok).toBe(2000)
+    expect(financeEntryFor(testConfig, 'together/gpt-4o', 0)?.rate.outputMicrosPerMtok).toBe(2000)
+  })
+})
+

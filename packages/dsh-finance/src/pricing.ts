@@ -159,8 +159,7 @@ export function financeBaseRate(entry: FinancePriceEntry): FinancePriceRate {
  * `effectiveFrom` is at or before `timeMs` (the list is sorted ascending,
  * so the first entry with a later `effectiveFrom` ends the search).
  */
-export function financeEntryFor(config: FinanceConfig, modelKey: string, timeMs: number): FinancePriceEntry | undefined {
-  const entries = config.prices[modelKey]
+function resolveEntries(entries: readonly FinancePriceEntry[] | undefined, timeMs: number): FinancePriceEntry | undefined {
   if (entries === undefined || entries.length === 0) return undefined
   let selected: FinancePriceEntry | undefined
   for (const entry of entries) {
@@ -168,6 +167,29 @@ export function financeEntryFor(config: FinanceConfig, modelKey: string, timeMs:
     selected = entry
   }
   return selected
+}
+
+/**
+ * Era-resolve a model's price entries at a moment, with a bare-model fallback.
+ * The exact `${provider}/${model}` key is consulted first; on miss, when the
+ * key contains a `/` (so `financeModelOf` differs from the input), the bare
+ * model is tried as a wildcard — a `prices['minimax-m3']` entry then prices
+ * every `${*}/minimax-m3` call until a more specific entry is added.
+ *
+ * Concretely, this is the path that lets a vendor-agnostic subscription key
+ * like `MiniMax-M3` price every `provider/minimax-m3` request without
+ * having to enumerate providers in `cordis.patch.yml`. The unknown-provider
+ * model-key call still falls through to `financeProviderDefault` after.
+ */
+export function financeEntryFor(config: FinanceConfig, modelKey: string, timeMs: number): FinancePriceEntry | undefined {
+  const exact = resolveEntries(config.prices[modelKey], timeMs)
+  if (exact !== undefined) return exact
+  const model = financeModelOf(modelKey)
+  if (model !== modelKey) {
+    const fallback = resolveEntries(config.prices[model], timeMs)
+    if (fallback !== undefined) return fallback
+  }
+  return undefined
 }
 
 /**
