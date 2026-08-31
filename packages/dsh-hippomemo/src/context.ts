@@ -2,6 +2,11 @@
  * HippoMemo automatic recall: inject relevant memories into the first step of
  * a human turn, once per agent session, and record an id-ref citation when the
  * agent actually mentions an injected memory id in its output.
+ *
+ * Phase 3: cognitive mode. When MemoryService.Config.recallMode === 'cognitive',
+ * auto-recall scores each candidate against the query (token Jaccard) and
+ * suppresses anything below the configured threshold. Firehose mode is the
+ * pre-Phase-3 default: first N matches always win.
  */
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
@@ -12,6 +17,7 @@ import type {} from './memory-service.ts'
 import type { MemoryRecord } from './types.ts'
 import { neutralizeFences } from './memory-extract.ts'
 import { filterAutoInjection } from './memory-core.ts'
+import { filterByRelevance } from './relevance.ts'
 
 export const name = 'hippomemo-context'
 export const inject = ['agents', 'memory']
@@ -64,32 +70,48 @@ export function apply(ctx: Context, config: HippomemoContextConfig = {}): void {
     const query = firstUserText(messages)
     if (query.length === 0) return decision
 
-    // Anti-pollution gate: only a *proven* global, or a memory bound to this
-    // workspace, may be auto-injected. A stale/mislabeled global degrades to
-    // workspace-bound here so it cannot pollute an unrelated workspace.
     const cwd = agent.session.header.cwd ?? undefined
+    const recallConfig = ctx.memory.getRecallConfig()
+    const isCognitive = recallConfig.recallMode === 'cognitive'
+
+    // Cognitive mode fetches more candidates than the limit so the relevance
+    // filter has something to choose from. Firehose mode keeps the old shape.
+    const searchLimit = isCognitive
+      ? recallLimit * recallConfig.cognitiveRecallMultiplier
+      : recallLimit
+
     const result = ctx.memory.search({
       q: query,
       scope: 'current',
       status: 'active',
       workspacePath: cwd,
-      limit: recallLimit,
+      limit: searchLimit,
     })
 
     const injectable = filterAutoInjection(result.items, cwd)
     if (injectable.length === 0) return decision
-    const recall = renderRecallMessage(query, injectable.map(hit => ({ record: hit.record, reason: hit.matchedReason })), maxRecallChars)
+
+    // Apply the prefrontal (cognitive) filter when in cognitive mode.
+    // If the filter drops everything below the threshold, fall back to the
+    // top match so the agent is never completely memory-blind in active
+    // sessions — the alternative is a silent failure that misleads the user.
+    let filtered = injectable
+    if (isCognitive) {
+      filtered = filterByRelevance(injectable, query, recallConfig.cognitiveRelevanceThreshold)
+      if (filtered.length === 0 && injectable.length > 0) {
+        filtered = [injectable[0]!]
+      }
+    }
+
+    const recall = renderRecallMessage(query, filtered.map(hit => ({ record: hit.record, reason: hit.matchedReason })), maxRecallChars)
     if (recall === undefined) return decision
 
-    // Track exactly the ids that were injected (renderRecallMessage may drop some on the byte budget).
     const injectedIds = (recall.source as { memoryIds?: string[] }).memoryIds
     if (injectedIds !== undefined) trackExposure(agent.session.id, injectedIds)
 
     return { kind: 'enter', messages: [...decision.messages, recall] }
   })
 
-  // Citation scan: when the agent's reply mentions an exposed memory (by id, or
-  // verbatim title as a weaker signal), record a citation. Each memory counts once per session.
   ctx.on('session/event', (session, event) => {
     if (event.type !== 'assistant/message') return
     const exposed = exposedBySession.get(session.id)
@@ -107,7 +129,6 @@ export function apply(ctx: Context, config: HippomemoContextConfig = {}): void {
         const start = Math.max(0, at - 60)
         snippet = text.slice(start, at + id.length + 60)
       } else {
-        // Weak signal: the assistant reproduced the memory's title verbatim.
         const record = ctx.memory.get(id)
         if (record === undefined) continue
         const titleAt = lower.indexOf(record.title.toLocaleLowerCase())
@@ -126,7 +147,6 @@ export function apply(ctx: Context, config: HippomemoContextConfig = {}): void {
     }
   })
 
-  // Free the exposure map when the agent (and its session) leaves the registry.
   ctx.on('agent/disposed', ({ agent }) => {
     exposedBySession.delete(agent.session.id)
     citedBySession.delete(agent.session.id)

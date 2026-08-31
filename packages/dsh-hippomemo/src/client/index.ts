@@ -8,7 +8,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: brings the `settings.plugin.item` slot declaration into the program.
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
-import { numberCardField, registerSettingsSection, StagedSettingsCard } from 'dsh-spark-plugin-kit/client'
+import { choiceCardField, numberCardField, registerSettingsSection, StagedSettingsCard } from 'dsh-spark-plugin-kit/client'
 import { createHippomemoApi } from './api.ts'
 import { HippomemoPluginCard } from './HippomemoPluginCard.tsx'
 import { MemorySection } from './MemorySection.tsx'
@@ -48,6 +48,9 @@ export function apply(ctx: ClientContext): void {
       numberCardField('maxMemories'),
       numberCardField('defaultRecallLimit'),
       numberCardField('maxRecallChars'),
+      choiceCardField('recallMode', ['firehose', 'cognitive']),
+      numberCardField('cognitiveRelevanceThreshold'),
+      numberCardField('cognitiveRecallMultiplier'),
     ],
   )
   ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({

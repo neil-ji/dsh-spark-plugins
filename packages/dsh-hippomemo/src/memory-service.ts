@@ -27,15 +27,26 @@ declare module '@deepseek-ai/cordis' {
 }
 
 export interface HippomemoConfig {
-  maxMemories?: number
-  defaultRecallLimit?: number
-  maxRecallChars?: number
+  // schemastery's ObjectS treats every field as `T | null | undefined`, so consumers
+  // may pass `null` (or omit) and the runtime defaults fill in.
+  maxMemories?: number | null
+  defaultRecallLimit?: number | null
+  maxRecallChars?: number | null
+  /** Phase 3: recall injection mode. 'firehose' (default) injects every match; 'cognitive' scores by token relevance and suppresses below threshold. */
+  recallMode?: string | null
+  /** Phase 3: cognitive-mode relevance threshold (0..1). 0 disables suppression, 1 requires exact match. Default 0.1. */
+  cognitiveRelevanceThreshold?: number | null
+  /** Phase 3: cognitive-mode candidate multiplier. Search fetches `recallLimit * multiplier` candidates, scores, then takes top `recallLimit`. Default 4. */
+  cognitiveRecallMultiplier?: number | null
 }
 
 interface ResolvedConfig {
   maxMemories: number
   defaultRecallLimit: number
   maxRecallChars: number
+  recallMode: 'firehose' | 'cognitive'
+  cognitiveRelevanceThreshold: number
+  cognitiveRecallMultiplier: number
 }
 
 /** 本插件拥有的设置命名空间（设置 → 插件 → 插件配置页可编辑）。 */
@@ -45,11 +56,33 @@ const DEFAULT_CONFIG: ResolvedConfig = {
   maxMemories: 10_000,
   defaultRecallLimit: 5,
   maxRecallChars: 8_000,
+  recallMode: 'firehose',
+  cognitiveRelevanceThreshold: 0.1,
+  cognitiveRecallMultiplier: 4,
 }
 
 function resolveConfig(config: HippomemoConfig = {}): ResolvedConfig {
-  const next = { ...DEFAULT_CONFIG, ...config }
-  for (const key of Object.keys(next) as (keyof ResolvedConfig)[]) {
+  const recallMode = (config.recallMode ?? 'firehose') as 'firehose' | 'cognitive'
+  if (recallMode !== 'firehose' && recallMode !== 'cognitive') {
+    throw new TypeError('hippomemo: recallMode must be firehose or cognitive')
+  }
+  const threshold = config.cognitiveRelevanceThreshold ?? 0.1
+  if (Number.isFinite(threshold) === false || threshold < 0 || threshold > 1) {
+    throw new TypeError('hippomemo: cognitiveRelevanceThreshold must be in [0, 1]')
+  }
+  const multiplier = config.cognitiveRecallMultiplier ?? 4
+  if (Number.isSafeInteger(multiplier) === false || multiplier < 1) {
+    throw new TypeError('hippomemo: cognitiveRecallMultiplier must be a positive safe integer')
+  }
+  const next: ResolvedConfig = {
+    maxMemories: config.maxMemories ?? DEFAULT_CONFIG.maxMemories,
+    defaultRecallLimit: config.defaultRecallLimit ?? DEFAULT_CONFIG.defaultRecallLimit,
+    maxRecallChars: config.maxRecallChars ?? DEFAULT_CONFIG.maxRecallChars,
+    recallMode,
+    cognitiveRelevanceThreshold: threshold,
+    cognitiveRecallMultiplier: multiplier,
+  }
+  for (const key of ['maxMemories', 'defaultRecallLimit', 'maxRecallChars', 'cognitiveRecallMultiplier'] as const) {
     if (Number.isSafeInteger(next[key]) === false || next[key] <= 0) {
       throw new TypeError('hippomemo: ' + key + ' must be a positive safe integer')
     }
@@ -64,6 +97,9 @@ export class MemoryService extends Service {
     maxMemories: z.number().step(1).min(1).default(DEFAULT_CONFIG.maxMemories),
     defaultRecallLimit: z.number().step(1).min(1).default(DEFAULT_CONFIG.defaultRecallLimit),
     maxRecallChars: z.number().step(1).min(1).default(DEFAULT_CONFIG.maxRecallChars),
+    recallMode: z.string().default('firehose'),
+    cognitiveRelevanceThreshold: z.number().min(0).max(1).default(DEFAULT_CONFIG.cognitiveRelevanceThreshold),
+    cognitiveRecallMultiplier: z.number().step(1).min(1).default(DEFAULT_CONFIG.cognitiveRecallMultiplier),
   })
 
   private configSource: () => ResolvedConfig
@@ -88,6 +124,22 @@ export class MemoryService extends Service {
   /** 当前生效配置（设置命名空间解析结果：默认值 → 组合层 → 用户层）。 */
   private currentConfig(): ResolvedConfig {
     return this.configSource()
+  }
+
+  /**
+   * Phase 3: expose the resolved recall config to peer services (notably
+   * hippomemo-context). Read-only, returns a frozen snapshot so callers
+   * cannot mutate the live source.
+   */
+  getRecallConfig(): Readonly<Pick<ResolvedConfig, 'recallMode' | 'cognitiveRelevanceThreshold' | 'cognitiveRecallMultiplier' | 'defaultRecallLimit' | 'maxRecallChars'>> {
+    const c = this.currentConfig()
+    return Object.freeze({
+      recallMode: c.recallMode,
+      cognitiveRelevanceThreshold: c.cognitiveRelevanceThreshold,
+      cognitiveRecallMultiplier: c.cognitiveRecallMultiplier,
+      defaultRecallLimit: c.defaultRecallLimit,
+      maxRecallChars: c.maxRecallChars,
+    })
   }
 
   protected async [Service.init](): Promise<void> {
