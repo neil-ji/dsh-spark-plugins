@@ -137,4 +137,78 @@ export function registerSparkTools(ctx: Context): void {
       return { card: 'generic', title: 'Crystallize spark', kind: 'other', rawInput: args.id }
     },
   }))
+
+  // Phase 5: spark_to_script — crystallize a procedural sequence into the script catalog.
+  ctx.tools.register(defineTool({
+    name: 'spark_to_script',
+    description: 'Persist a procedural sequence (ordered steps) as a reusable script in the cognitive-layer catalog. Use when you (the agent) have just completed a multi-step procedure that should be remembered across sessions and possibly re-invoked. Steps can be LLM instructions (kind=instruction) or tool invocations (kind=tool-call).',
+    parameters: {
+      name: { type: 'string', required: true, description: 'Short script name.' },
+      description: { type: 'string', required: true, description: 'One-sentence description of what this script does.' },
+      steps: { type: 'string', required: true, description: 'JSON array of steps: [{kind: "instruction"|"tool-call", payload: "...", note: "optional"}]. 1-50 steps.' },
+      triggers: { type: 'string', description: 'Comma-separated trigger patterns for retrieval matching.' },
+      scope: { type: 'string', enum: ['session', 'project', 'global'], description: 'Defaults to project.' },
+      sourceSparkId: { type: 'string', description: 'Optional spark id this script crystallized from.' },
+    },
+    output: TEXT_OUTPUT,
+    async execute(args, exec) {
+      const agent = exec.agent
+      const sessionId = agent?.session.id ?? 'unknown'
+      let steps: unknown
+      try { steps = JSON.parse(args.steps) } catch (err) { throw new HarnessError('spark_to_script: steps must be valid JSON: ' + String(err), 'SPARK_STEPS_INVALID') }
+      const triggers = typeof args.triggers === 'string' && args.triggers.length > 0
+        ? args.triggers.split(',').map(t => t.trim()).filter(t => t.length > 0)
+        : []
+      const created = await ctx.script.create({
+        name: args.name,
+        description: args.description,
+        steps,
+        triggers,
+        scope: args.scope ?? 'project',
+        workspacePath: agent?.session.header.cwd ?? null,
+        sourceSparkId: typeof args.sourceSparkId === 'string' ? args.sourceSparkId : null,
+      })
+      return JSON.stringify({ scriptId: created.id, name: created.name, stepCount: created.steps.length, sessionId })
+    },
+    presentCall(args) { return { card: 'generic', title: 'Crystallize script', kind: 'other', rawInput: args.name } },
+  }))
+
+  // Phase 5: spark_invoke_script — return steps for the agent to execute; track invocation.
+  ctx.tools.register(defineTool({
+    name: 'spark_invoke_script',
+    description: 'Invoke a stored procedural script: returns its ordered steps for you (the agent) to execute sequentially. After completing (or failing), call spark_record_script_result with the script id and success flag so the catalog\'s successRate stays accurate.',
+    parameters: {
+      id: { type: 'string', required: true, description: 'The script id to invoke.' },
+    },
+    output: TEXT_OUTPUT,
+    async execute(args) {
+      const result = await ctx.script.invoke(args.id)
+      return JSON.stringify({
+        scriptId: result.script.id,
+        name: result.script.name,
+        description: result.script.description,
+        steps: result.script.steps,
+        priorSuccessRate: result.successRate,
+        invocationCount: result.script.invocationCount,
+      })
+    },
+    presentCall(args) { return { card: 'generic', title: 'Invoke script', kind: 'other', rawInput: args.id } },
+  }))
+
+  // Phase 5: spark_record_script_result — close the loop on success/failure.
+  ctx.tools.register(defineTool({
+    name: 'spark_record_script_result',
+    description: 'Record the outcome (success/failure) of a previously-invoked script. Updates the catalog\'s successRate counter.',
+    parameters: {
+      id: { type: 'string', required: true, description: 'The script id that was invoked.' },
+      success: { type: 'boolean', required: true, description: 'true if all steps succeeded, false otherwise.' },
+    },
+    output: TEXT_OUTPUT,
+    async execute(args) {
+      const updated = await ctx.script.recordResult(args.id, args.success === true)
+      if (updated === null) throw new HarnessError('spark_record_script_result: unknown script id: ' + args.id, 'SCRIPT_NOT_FOUND')
+      return JSON.stringify({ scriptId: updated.id, successCount: updated.successCount, failureCount: updated.failureCount, invocationCount: updated.invocationCount })
+    },
+    presentCall(args) { return { card: 'generic', title: 'Record script result', kind: 'other', rawInput: args.id } },
+  }))
 }

@@ -1,14 +1,16 @@
 /**
- * Plugin-owned HTTP API under /sparks/* and /proposals/*.
+ * Plugin-owned HTTP API under /sparks/*, /proposals/*, and /scripts/*.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
-import type { SparkView, ProposalView } from 'dsh-spark-wire'
+import type { SparkView, ProposalView, ScriptView, ScriptInvokeResult } from 'dsh-spark-wire'
 import type { SparkService, SparkNotFoundError, SparkHippoUnavailableError } from './spark-service.ts'
 import type { EmergeService } from './emerge-service.ts'
+import type { ScriptService } from './script-service.ts'
 
 const PREFIX_SPARKS = '/sparks'
 const PREFIX_PROPOSALS = '/proposals'
+const PREFIX_SCRIPTS = '/scripts'
 const MAX_BODY_BYTES = 256 * 1024
 
 interface Envelope {
@@ -17,7 +19,7 @@ interface Envelope {
   error?: { code: string; message: string }
 }
 
-export function registerSparkHttpRoutes(ctx: Context, service: SparkService): void {
+export function registerSparkHttpRoutes(ctx: Context, service: SparkService, scriptService?: ScriptService): void {
   ctx.effect(() => ctx.webServer.register({
     kind: 'prefix',
     path: PREFIX_SPARKS,
@@ -30,7 +32,14 @@ export function registerSparkHttpRoutes(ctx: Context, service: SparkService): vo
     handler: (req, res) => { void handleProposals(ctx, req, res, service) },
   }), 'proposals.httpRoutes')
 
-  // SSE streams under /sparks/events (existing) and /proposals/events.
+  if (scriptService !== undefined) {
+    ctx.effect(() => ctx.webServer.register({
+      kind: 'prefix',
+      path: PREFIX_SCRIPTS,
+      handler: (req, res) => { void handleScripts(ctx, req, res, scriptService) },
+    }), 'scripts.httpRoutes')
+  }
+
   ctx.effect(() => ctx.webServer.register({
     kind: 'prefix',
     path: PREFIX_SPARKS + '/events',
@@ -42,6 +51,14 @@ export function registerSparkHttpRoutes(ctx: Context, service: SparkService): vo
     path: PREFIX_PROPOSALS + '/events',
     handler: (req, res) => { handleProposalsEvents(ctx, req, res) },
   }), 'proposals.eventsStream')
+
+  if (scriptService !== undefined) {
+    ctx.effect(() => ctx.webServer.register({
+      kind: 'prefix',
+      path: PREFIX_SCRIPTS + '/events',
+      handler: (req, res) => { handleScriptsEvents(ctx, req, res) },
+    }), 'scripts.eventsStream')
+  }
 }
 
 async function handleSparks(
@@ -55,7 +72,6 @@ async function handleSparks(
       send(res, 403, errorEnvelope('FORBIDDEN', 'cross-origin request rejected'))
       return
     }
-
     const url = new URL(req.url ?? '/', 'http://x')
     const sub = url.pathname.slice(PREFIX_SPARKS.length)
 
@@ -64,21 +80,18 @@ async function handleSparks(
       send(res, 200, okEnvelope(list))
       return
     }
-
     if (req.method === 'GET' && sub.startsWith('/')) {
       const id = decodeURIComponent(sub.slice(1))
       const record = await service.get(id as Parameters<typeof service.get>[0])
       send(res, record === null ? 404 : 200, okEnvelope(record))
       return
     }
-
     if (req.method === 'POST' && sub === '') {
       const body = await readJsonBody(req)
       const record = await service.capture(body)
       send(res, 200, okEnvelope(record))
       return
     }
-
     if (req.method === 'POST' && /\/crystallize$/.test(sub)) {
       const id = decodeURIComponent(sub.slice(1, -'/crystallize'.length))
       const body = await readJsonBody(req).catch(() => ({}))
@@ -86,12 +99,10 @@ async function handleSparks(
         const result = await service.crystallize(id as Parameters<typeof service.crystallize>[0], body)
         send(res, 200, okEnvelope(result))
       } catch (error) {
-        const status = errorStatusFor(error)
-        send(res, status, errorEnvelope(errorCodeOf(error), errorMessageOf(error)))
+        send(res, errorStatusFor(error), errorEnvelope(errorCodeOf(error), errorMessageOf(error)))
       }
       return
     }
-
     if (req.method === 'PATCH' && sub.startsWith('/')) {
       const id = decodeURIComponent(sub.slice(1))
       const body = await readJsonBody(req)
@@ -99,14 +110,12 @@ async function handleSparks(
       send(res, record === null ? 404 : 200, okEnvelope(record))
       return
     }
-
     if (req.method === 'DELETE' && sub.startsWith('/')) {
       const id = decodeURIComponent(sub.slice(1))
       const removed = await service.remove(id as Parameters<typeof service.remove>[0])
       send(res, removed ? 200 : 404, okEnvelope({ removed }))
       return
     }
-
     send(res, 404, errorEnvelope('NOT_FOUND', 'unknown spark endpoint'))
   } catch (error) {
     send(res, 400, errorEnvelope('BAD_REQUEST', error instanceof Error ? error.message : String(error)))
@@ -124,7 +133,6 @@ async function handleProposals(
       send(res, 403, errorEnvelope('FORBIDDEN', 'cross-origin request rejected'))
       return
     }
-
     const url = new URL(req.url ?? '/', 'http://x')
     const sub = url.pathname.slice(PREFIX_PROPOSALS.length)
     const emerge = ctx.emerge as EmergeService
@@ -154,7 +162,6 @@ async function handleProposals(
       return
     }
 
-    // POST /proposals/:id/resolve  body: { status: 'accepted' | 'dismissed' }
     if (req.method === 'POST' && /\/resolve$/.test(sub)) {
       const id = decodeURIComponent(sub.slice(1, -'/resolve'.length))
       const body = await readJsonBody(req)
@@ -169,6 +176,80 @@ async function handleProposals(
     }
 
     send(res, 404, errorEnvelope('NOT_FOUND', 'unknown proposals endpoint'))
+  } catch (error) {
+    send(res, 400, errorEnvelope('BAD_REQUEST', error instanceof Error ? error.message : String(error)))
+  }
+}
+
+async function handleScripts(
+  ctx: Context,
+  req: IncomingMessage,
+  res: ServerResponse,
+  service: ScriptService,
+): Promise<void> {
+  try {
+    if (isTrustedBrowserRequest(req) === false) {
+      send(res, 403, errorEnvelope('FORBIDDEN', 'cross-origin request rejected'))
+      return
+    }
+    const url = new URL(req.url ?? '/', 'http://x')
+    const sub = url.pathname.slice(PREFIX_SCRIPTS.length)
+
+    if (req.method === 'GET' && sub === '') {
+      const scope = url.searchParams.get('scope') ?? undefined
+      const q = url.searchParams.get('q') ?? undefined
+      const limitStr = url.searchParams.get('limit')
+      const limit = limitStr !== null ? Number(limitStr) : 100
+      const query: { scope?: 'session' | 'project' | 'global'; q?: string; limit: number } = { limit }
+      if (scope === 'session' || scope === 'project' || scope === 'global') query.scope = scope
+      if (q !== undefined && q.length > 0) query.q = q
+      const list = await service.list(query)
+      send(res, 200, okEnvelope(list))
+      return
+    }
+
+    if (req.method === 'GET' && sub.startsWith('/')) {
+      const id = decodeURIComponent(sub.slice(1))
+      const record = await service.get(id)
+      send(res, record === null ? 404 : 200, okEnvelope(record))
+      return
+    }
+
+    if (req.method === 'POST' && sub === '') {
+      const body = await readJsonBody(req)
+      const created = await service.create(body)
+      send(res, 200, okEnvelope(created))
+      return
+    }
+
+    if (req.method === 'POST' && /\/invoke$/.test(sub)) {
+      const id = decodeURIComponent(sub.slice(1, -'/invoke'.length))
+      try {
+        const result = await service.invoke(id)
+        send(res, 200, okEnvelope(result))
+      } catch (error) {
+        send(res, 404, errorEnvelope('SCRIPT_NOT_FOUND', error instanceof Error ? error.message : String(error)))
+      }
+      return
+    }
+
+    if (req.method === 'POST' && /\/result$/.test(sub)) {
+      const id = decodeURIComponent(sub.slice(1, -'/result'.length))
+      const body = await readJsonBody(req)
+      const success = (body as { success?: boolean }).success === true
+      const updated = await service.recordResult(id, success)
+      send(res, updated === null ? 404 : 200, okEnvelope(updated))
+      return
+    }
+
+    if (req.method === 'DELETE' && sub.startsWith('/')) {
+      const id = decodeURIComponent(sub.slice(1))
+      const removed = await service.delete(id)
+      send(res, removed ? 200 : 404, okEnvelope({ removed }))
+      return
+    }
+
+    send(res, 404, errorEnvelope('NOT_FOUND', 'unknown scripts endpoint'))
   } catch (error) {
     send(res, 400, errorEnvelope('BAD_REQUEST', error instanceof Error ? error.message : String(error)))
   }
@@ -195,6 +276,19 @@ function handleProposalsEvents(ctx: Context, req: IncomingMessage, res: ServerRe
   })
   res.write(': connected\n\n')
   const dispose = ctx.on('proposals/changed', (change) => {
+    res.write('data: ' + JSON.stringify(change) + '\n\n')
+  })
+  req.on('close', () => { dispose() })
+}
+
+function handleScriptsEvents(ctx: Context, req: IncomingMessage, res: ServerResponse): void {
+  res.writeHead(200, {
+    'content-type': 'text/event-stream; charset=utf-8',
+    'cache-control': 'no-cache, no-transform',
+    'connection': 'keep-alive',
+  })
+  res.write(': connected\n\n')
+  const dispose = ctx.on('scripts/changed', (change) => {
     res.write('data: ' + JSON.stringify(change) + '\n\n')
   })
   req.on('close', () => { dispose() })
@@ -292,4 +386,4 @@ function errorMessageOf(error: unknown): string {
 }
 
 /** Reserved types for future phases. */
-type _Reserved = SparkView | ProposalView | SparkNotFoundError | SparkHippoUnavailableError
+type _Reserved = SparkView | ProposalView | ScriptView | ScriptInvokeResult | SparkNotFoundError | SparkHippoUnavailableError
