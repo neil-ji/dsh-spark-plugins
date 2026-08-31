@@ -23,6 +23,10 @@
       "types": "./lib/types/types.d.ts",
       "default": "./lib/types/types.js"
     },
+    "./sync": {
+      "types": "./lib/types/sync/community-prices.d.ts",
+      "default": "./lib/sync/community-prices.js"
+    },
     "./typert": {
       "types": "./lib/types/typert.host.d.ts",
       "default": "./lib/typert.host.js"

@@ -14,6 +14,7 @@ await build({
   entryPoints: {
     'index': 'src/index.ts',
     'types/types': 'src/types.ts',
+    'sync/community-prices': 'src/sync/community-prices.ts',
     'typert.host': 'src/typert.host.ts',
     'typert.remote-client': 'src/typert.remote-client.ts',
   },
