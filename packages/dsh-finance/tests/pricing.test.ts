@@ -20,6 +20,7 @@ import {
   financeWindowInfo,
   isPeakLocalDay,
   isPeakLocalHour,
+  mergePriceLayers,
   normalizeFinanceConfig,
   normalizeFinancePrices,
 } from '../src/pricing.ts'
@@ -435,3 +436,87 @@ describe('financeWindowedSince', () => {
     expect(financeWindowedSince(custom)).toBe(ERA_B)
   })
 })
+
+
+describe('mergePriceLayers', () => {
+  const flat = (input: number, output: number) => [{
+    effectiveFrom: 0,
+    kind: 'flat' as const,
+    rate: { inputMicrosPerMtok: input, outputMicrosPerMtok: output },
+  }]
+  const windows = (peak: number, offPeak: number) => [{
+    effectiveFrom: 0,
+    kind: 'windowed' as const,
+    rate: { peak: { inputMicrosPerMtok: peak, outputMicrosPerMtok: peak * 2 }, offPeak: { inputMicrosPerMtok: offPeak, outputMicrosPerMtok: offPeak * 2 } },
+  }]
+
+  it('returns empty when every tier is empty', () => {
+    expect(mergePriceLayers(undefined, undefined, undefined)).toEqual({})
+  })
+
+  it('lets the user tier win over composition for shared keys', () => {
+    const merged = mergePriceLayers(
+      { 'openai/gpt-4o': flat(1, 2) },
+      undefined,
+      { 'openai/gpt-4o': flat(99, 99) },
+    )
+    expect(merged['openai/gpt-4o']).toEqual(flat(99, 99))
+  })
+
+  it('lets the user tier win over community for shared keys', () => {
+    const merged = mergePriceLayers(
+      { 'openai/gpt-4o': flat(1, 2) },
+      { 'openai/gpt-4o': flat(50, 50) },
+      { 'openai/gpt-4o': flat(99, 99) },
+    )
+    expect(merged['openai/gpt-4o']).toEqual(flat(99, 99))
+  })
+
+  it('lets the community tier win over composition for shared keys', () => {
+    const merged = mergePriceLayers(
+      { 'openai/gpt-4o': flat(1, 2) },
+      { 'openai/gpt-4o': flat(50, 50) },
+      undefined,
+    )
+    expect(merged['openai/gpt-4o']).toEqual(flat(50, 50))
+  })
+
+  it('preserves keys that are unique to each tier', () => {
+    const merged = mergePriceLayers(
+      { 'deepseek-official/v4-flash': flat(1, 2) },
+      { 'openai/gpt-4o': flat(50, 50) },
+      { 'anthropic/claude-opus': flat(99, 99) },
+    )
+    expect(Object.keys(merged).sort()).toEqual([
+      'anthropic/claude-opus',
+      'deepseek-official/v4-flash',
+      'openai/gpt-4o',
+    ])
+  })
+
+  it('round-trips into normalizeFinanceConfig and feeds financeRateAt', () => {
+    const merged = mergePriceLayers(
+      { 'openai/gpt-4o': flat(1_000_000, 2_000_000) },
+      { 'openai/gpt-4o': flat(7_200_000, 14_400_000), 'zai/glm-4.6': flat(4_320_000, 15_840_000) },
+      undefined,
+    )
+    const config = normalizeFinanceConfig({ prices: merged })
+    expect(financeRateAt(config, 'openai/gpt-4o', 0)).toEqual({ inputMicrosPerMtok: 7_200_000, outputMicrosPerMtok: 14_400_000 })
+    expect(financeRateAt(config, 'zai/glm-4.6', 0)).toEqual({ inputMicrosPerMtok: 4_320_000, outputMicrosPerMtok: 15_840_000 })
+  })
+
+  it('skips the community and user tiers when they are empty objects', () => {
+    const merged = mergePriceLayers({ 'openai/gpt-4o': flat(1, 2) }, {}, {})
+    expect(merged['openai/gpt-4o']).toEqual(flat(1, 2))
+  })
+
+  it('preserves the windowed shape across tiers', () => {
+    const merged = mergePriceLayers(
+      { 'deepseek-official/v4-flash': flat(1, 2) },
+      { 'deepseek-official/v4-flash': windows(99, 99) },
+      undefined,
+    )
+    expect((merged['deepseek-official/v4-flash'] as Array<{ kind: string }>)[0].kind).toBe('windowed')
+  })
+})
+

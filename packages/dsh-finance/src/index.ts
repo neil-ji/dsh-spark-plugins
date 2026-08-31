@@ -18,7 +18,7 @@ import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { fetchFinanceBalance, FinanceBalanceError } from './balance.ts'
 import { backfillFinanceHourly, buildFinanceLedger } from './ledger.ts'
 import { financeUsageHourlyProjectionDefinition, financeUsageProjectionDefinition } from './projection.ts'
-import { DEFAULT_PRICE, normalizeFinanceConfig } from './pricing.ts'
+import { DEFAULT_PRICE, mergePriceLayers, normalizeFinanceConfig } from './pricing.ts'
 import type {
   FinanceBackfillProgress,
   FinanceBalanceView,
@@ -60,8 +60,33 @@ export {
   normalizeFinancePrices,
 } from './pricing.ts'
 
-/** Settings namespace for user-editable price and balance connection facts. */
+/** Settings namespace for user-editable price and base/balance connection facts. */
 const NS = settingsNamespace('finance')
+
+/**
+ * Pull `prices` out of one side (base / user) of the active settings
+ * descriptor for our namespace. Returns `{}` when the settings service has
+ * not yet been installed, when the descriptor has no entry for `ns`, or when
+ * the side carries no `prices` field.
+ *
+ * Detached — never returns the live object the descriptor holds, so a caller
+ * can mutate the result without aliasing the settings store.
+ */
+function readDescriptorPrices(
+  ctx: Context,
+  ns: ReturnType<typeof settingsNamespace>,
+  side: 'base' | 'user',
+): FinanceConfigInput['prices'] {
+  const settings = (ctx as { settings?: { describe: () => Array<{ ns: typeof ns; base?: unknown; user?: unknown }> } }).settings
+  if (settings === undefined || typeof settings.describe !== 'function') return {}
+  const descriptor = settings.describe().find(d => d.ns === ns)
+  if (descriptor === undefined) return {}
+  const sideValue = descriptor[side]
+  if (sideValue === undefined || sideValue === null || typeof sideValue !== 'object' || !('prices' in sideValue)) return {}
+  const prices = (sideValue as { prices?: unknown }).prices
+  if (prices === undefined || prices === null || typeof prices !== 'object') return {}
+  return prices as FinanceConfigInput['prices']
+}
 
 /** One rate line in integer micros per million tokens. Cache fields optional. */
 const priceRate: z<FinancePriceRate> = z.object({
@@ -119,13 +144,39 @@ export class FinanceService extends TypertRemoteService {
   private hourlyBackfill: Promise<void> | undefined
   /** Live progress of the running backfill, polled by the loading UI. */
   private backfillProgress: FinanceBackfillProgress | undefined
+  /**
+   * Composition-layer `prices` captured at registration: the cordis.patch.yml
+   * defaults the host installed (`FinanceService.Config`'s `entry`). Read by
+   * `currentConfig` to anchor the three-tier merge.
+   */
+  private compositionPrices: FinanceConfigInput['prices'] = {}
+  /**
+   * User-layer `prices` read from the settings descriptor (`descriptor.user`).
+   * Refreshed on `setSource` and `onChange` so a write at any other surface
+   * surfaces into the next ledger build.
+   */
+  private userPrices: FinanceConfigInput['prices'] = {}
+  /**
+   * In-memory community-prices layer populated by `@Remote syncCommunityPrices`.
+   * Empty by default (no override). Cleared by setting to `{}`; absent on the
+   * settings document so a restart means bundle defaults take over until the
+   * next sync (or auto-sync).
+   */
+  private communityPrices: FinanceConfigInput['prices'] = {}
 
   constructor(ctx: Context, config: FinanceConfigInput = {}) {
     super(ctx, 'finance')
     this.configSource = () => config
+    this.compositionPrices = config.prices ?? {}
     installSettingsSection(ctx, NS, FinanceService.Config, config, {
-      setSource: source => { this.configSource = source },
-      onChange: () => { this.ledgerCache = undefined },
+      setSource: source => {
+        this.configSource = source
+        this.refreshLayerCaches()
+      },
+      onChange: () => {
+        this.ledgerCache = undefined
+        this.refreshLayerCaches()
+      },
     })
 
     // Projection registration is optional: headless compositions without the
@@ -136,9 +187,49 @@ export class FinanceService extends TypertRemoteService {
     })
   }
 
-  /** The resolved config: raw settings normalized into era-sorted price lists. */
+  /**
+   * Replace the in-memory community-prices layer. Empty `{}` clears it
+   * (composition + user layers are untouched). Used by `@Remote
+   * syncCommunityPrices` after a successful fetch, but kept as a regular
+   * method so tests and plugins can populate it directly.
+   */
+  setCommunityPrices(prices: FinanceConfigInput['prices']): void {
+    this.communityPrices = prices ?? {}
+    this.ledgerCache = undefined
+  }
+
+  /**
+   * Latest community-prices snapshot, detached from the live map. Returns an
+   * empty object when no sync has populated the layer yet.
+   */
+  getCommunityPrices(): FinanceConfigInput['prices'] {
+    return { ...this.communityPrices }
+  }
+
+  /**
+   * Pull the user-overlay `prices` out of the active settings descriptor.
+   * Needed because `installSettingsSection`'s resolved view folds user into
+   * composition, hiding which keys the user explicitly set.
+   */
+  private refreshLayerCaches(): void {
+    this.userPrices = readDescriptorPrices(this.ctx, NS, 'user')
+    // `descriptor.base` is the composition entry; re-capture too in case the
+    // settings section was re-registered with a different entry.
+    this.compositionPrices = readDescriptorPrices(this.ctx, NS, 'base')
+  }
+
+  /**
+   * The resolved config: raw settings normalized into era-sorted price lists.
+   * Price tables are merged across three tiers (composition ⊆ community ⊆ user)
+   * before normalization so the ledger sees the right rate for every model.
+   */
   private currentConfig(): FinanceConfig {
-    return normalizeFinanceConfig(this.configSource())
+    const raw = this.configSource()
+    const compositionPrices = this.compositionPrices
+    const communityPrices = this.communityPrices
+    const userPrices = this.userPrices
+    const mergedPrices = mergePriceLayers(compositionPrices, communityPrices, userPrices)
+    return normalizeFinanceConfig({ ...raw, prices: mergedPrices })
   }
 
   /** Fetch the first-party balance now. The API key never leaves the host. */

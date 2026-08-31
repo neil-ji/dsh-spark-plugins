@@ -330,6 +330,29 @@ export function normalizeFinancePrices(
   return out
 }
 
+/**
+ * Three-tier merge of price tables: `composition` ⊆ `community` ⊆ `user`. Each
+ * tier is a raw key→entry/entry-history shape; their strings keys are merged
+ * with later-wins (composition < community < user). The result feeds back into
+ * `normalizeFinanceConfig` so pricing.ts stays the single owner of price-table
+ * shape. Used by `FinanceService.currentConfig` to fold the in-memory community
+ * layer between the cordis.patch.yml defaults and the user overlay.
+ *
+ * Iteration is explicit (no `Object.assign`) so callers can audit each tier in
+ * isolation. Empty tiers are skipped — no allocation for absent layers.
+ */
+export function mergePriceLayers(
+  composition: FinanceConfigInput['prices'] | undefined,
+  community: FinanceConfigInput['prices'] | undefined,
+  user: FinanceConfigInput['prices'] | undefined,
+): Record<string, FinanceConfigInput['prices'] extends infer T ? (T extends Record<string, infer V> ? V : never) : never> {
+  const merged: Record<string, unknown> = {}
+  if (composition !== undefined) Object.assign(merged, composition)
+  if (community !== undefined) Object.assign(merged, community)
+  if (user !== undefined) Object.assign(merged, user)
+  return merged as Record<string, FinanceConfigInput['prices'] extends infer T ? (T extends Record<string, infer V> ? V : never) : never>
+}
+
 /** Normalize a raw config into the resolved `FinanceConfig` the ledger prices with. */
 export function normalizeFinanceConfig(raw: FinanceConfigInput | FinanceConfig): FinanceConfig {
   const base = raw as FinanceConfig
