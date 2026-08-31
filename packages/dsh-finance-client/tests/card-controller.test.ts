@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@deepseek-ai/dsh-client-runtime/client', () => ({
   createSnapshotStore: (init: object) => {
@@ -403,3 +403,142 @@ describe('FinanceCardController', () => {
     expect(writes).toEqual([{ op: 'unset', field: 'prices' }])
   })
 })
+
+
+class FakeStorage {
+  private store = new Map<string, string>()
+  getItem(key: string): string | null { return this.store.has(key) ? this.store.get(key)! : null }
+  setItem(key: string, value: string): void { this.store.set(key, String(value)) }
+  removeItem(key: string): void { this.store.delete(key) }
+  clear(): void { this.store.clear() }
+  key(index: number): string | null { return [...this.store.keys()][index] ?? null }
+  get length(): number { return this.store.size }
+}
+
+interface FakeFinanceSyncRemote {
+  syncCommunityPrices: ReturnType<typeof vi.fn>
+  getSyncStatus: ReturnType<typeof vi.fn>
+}
+
+function makeSyncRemote(): FakeFinanceSyncRemote {
+  return {
+    syncCommunityPrices: vi.fn(async () => ({
+      ok: true as const,
+      value: {
+        ok: true as const,
+        source: 'https://models.dev/api.json',
+        appliedAt: 1_700_000_000_000,
+        fx: 7.2,
+        requestedProviders: ['openai', 'anthropic', 'google', 'zai', 'volcengine'],
+        requestedMissing: [],
+        kept: 12,
+        droppedDated: 0,
+        droppedNonToken: 0,
+        droppedNoCost: 0,
+        providers: ['openai', 'zai'],
+      },
+    })),
+    getSyncStatus: vi.fn(async () => ({ ok: true as const, value: null })),
+  }
+}
+
+describe('FinanceCardController community sync', () => {
+  beforeEach(() => {
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: new FakeStorage() })
+  })
+  afterEach(() => {
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: undefined })
+  })
+
+  it('exposes syncAvailable=false when no remote was injected', () => {
+    const { scope } = makeScope()
+    const controller = new FinanceCardController(scope)
+    const state = controller.inject().hooks.financeCard.getSnapshot()
+    expect(state.syncAvailable).toBe(false)
+    expect(state.syncState.syncing).toBe(false)
+    expect(state.syncState.lastSync).toBeNull()
+  })
+
+  it('syncing transitions through syncing=true then syncing=false + lastSync populated', async () => {
+    const { scope } = makeScope()
+    const remote = makeSyncRemote()
+    const controller = new FinanceCardController(scope, remote as never)
+    const face = controller.inject()
+    const before = face.hooks.financeCard.getSnapshot()
+    expect(before.syncAvailable).toBe(true)
+    const inflight = face.syncNow()
+    // syncing becomes true synchronously inside syncNow
+    const mid = face.hooks.financeCard.getSnapshot()
+    expect(mid.syncState.syncing).toBe(true)
+    await inflight
+    const after = face.hooks.financeCard.getSnapshot()
+    expect(after.syncState.syncing).toBe(false)
+    expect(after.syncState.lastSync?.appliedAt).toBe(1_700_000_000_000)
+    expect(remote.syncCommunityPrices).toHaveBeenCalledTimes(1)
+  })
+
+  it('persists lastSync across controller instances via localStorage', async () => {
+    const { scope } = makeScope()
+    const remote = makeSyncRemote()
+    const controller = new FinanceCardController(scope, remote as never)
+    await controller.inject().syncNow()
+    const persisted = JSON.parse(localStorage.getItem('dsh-spark-finance.prefs')!)
+    expect(persisted.lastSync.kept).toBe(12)
+    expect(persisted.lastSync.fx).toBe(7.2)
+
+    // New instance picks up the persisted snapshot via constructor seed
+    const secondScope = makeScope()
+    const second = new FinanceCardController(secondScope.scope, makeSyncRemote() as never)
+    const state = second.inject().hooks.financeCard.getSnapshot()
+    expect(state.syncState.lastSync?.kept).toBe(12)
+  })
+
+  it('setAutoSync writes through to prefs without round-tripping the host', () => {
+    const { scope } = makeScope()
+    const remote = makeSyncRemote()
+    const controller = new FinanceCardController(scope, remote as never)
+    const face = controller.inject()
+    face.setAutoSync(false)
+    const state = face.hooks.financeCard.getSnapshot()
+    expect(state.prefs.autoSync).toBe(false)
+    expect(remote.syncCommunityPrices).not.toHaveBeenCalled()
+  })
+
+  it('ensureAutoSync fires syncNow only when prefs.autoSync is on AND lastSync is older than 24h', async () => {
+    const { scope } = makeScope()
+    const remote = makeSyncRemote()
+    // Seed a stale lastSync 49h old
+    localStorage.setItem('dsh-spark-finance.prefs', JSON.stringify({
+      layout: 'compact',
+      charts: {}, // merged with defaults by readFinancePrefs
+      autoSync: true,
+      lastSync: {
+        appliedAt: Date.now() - 49 * 60 * 60 * 1000,
+        source: 'https://models.dev/api.json',
+        kept: 1,
+        providers: [],
+        fx: 7.2,
+      },
+    }))
+    const controller = new FinanceCardController(scope, remote as never)
+    controller.ensureAutoSync()
+    await flush()
+    expect(remote.syncCommunityPrices).toHaveBeenCalledTimes(1)
+  })
+
+  it('ensureAutoSync skips when prefs.autoSync is false', async () => {
+    const { scope } = makeScope()
+    const remote = makeSyncRemote()
+    localStorage.setItem('dsh-spark-finance.prefs', JSON.stringify({
+      layout: 'compact',
+      charts: {},
+      autoSync: false,
+      lastSync: null,
+    }))
+    const controller = new FinanceCardController(scope, remote as never)
+    controller.ensureAutoSync()
+    await flush()
+    expect(remote.syncCommunityPrices).not.toHaveBeenCalled()
+  })
+})
+

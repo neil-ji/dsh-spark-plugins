@@ -11,7 +11,8 @@
 
 import type { SettingsScope, SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
-import type { FinanceConfigInput } from 'dsh-spark-finance/types'
+import type { ClientRemote } from '@deepseek-ai/dsh-api-remotes/client'
+import type { FinanceCommunitySyncResult, FinanceConfigInput, FinanceSyncStatus } from 'dsh-spark-finance/types'
 import { billingModesToRows, rowsToBillingModes } from './billing-modes.ts'
 import type { BillingModeRow } from './billing-modes.ts'
 import {
@@ -30,7 +31,7 @@ import type {
   RateDraft,
 } from './price-forms.ts'
 import { readFinancePrefs, writeFinancePrefs } from './persist.ts'
-import type { FinanceChartPrefs, FinanceLayout, FinancePrefs } from './persist.ts'
+import type { FinanceChartPrefs, FinanceLayout, FinancePrefs, FinanceSyncSnapshot } from './persist.ts'
 
 export type FinanceCardFieldName =
   | 'currency'
@@ -44,6 +45,8 @@ export type FinanceCardFieldName =
 
 const BALANCE_FIELDS: readonly FinanceCardFieldName[] = ['balance.baseURL', 'balance.apiKeyEnv', 'balance.timeoutMs']
 const JSON_FIELDS: ReadonlySet<FinanceCardFieldName> = new Set(['defaultPrice', 'providerDefaults', 'billingModes', 'prices'])
+/** Threshold above which `ensureAutoSync` re-fires without a host click. */
+const ONE_DAY_MS = 24 * 60 * 60 * 1000
 
 // Re-exported so existing consumers (tests, faces) keep one import face; the
 // implementations live in billing-modes.ts, which stays free of the
@@ -59,6 +62,22 @@ export interface FinanceCardFieldState {
   /** Whether the draft is not a value this field accepts, which blocks saving. */
   invalid: boolean
 }
+
+/**
+ * Live state of the community-price sync action. Distinct from the persisted
+ * `prefs.lastSync`: this is what the Sync now button renders against
+ * (syncing / last-result / last-error). The persisted snapshot is a subset.
+ */
+export interface FinanceSyncState {
+  /** A `syncCommunityPrices` call is in flight. */
+  syncing: boolean
+  /** Last successful sync the client knows about (host snapshot OR local prefs). */
+  lastSync: FinanceSyncSnapshot | null
+  /** Last failure message; cleared the next time a sync succeeds. */
+  lastError: string | null
+}
+
+const INITIAL_SYNC_STATE: FinanceSyncState = { syncing: false, lastSync: null, lastError: null }
 
 export interface FinanceCardState {
   /** False while the finance namespace is not served to this client; the card renders nothing. */
@@ -95,6 +114,10 @@ export interface FinanceCardState {
   prices: FinanceCardFieldState
   /** Dashboard view preferences (browser-local; apply immediately). */
   prefs: FinancePrefs
+  /** Live sync state (in flight + last success/failure). */
+  syncState: FinanceSyncState
+  /** Whether the price sync UI is supported by the host (true once `finance.syncCommunityPrices` is reachable). */
+  syncAvailable: boolean
 }
 
 /** The registration-side face the finance card's slot entry injects. */
@@ -123,6 +146,20 @@ export interface FinanceCardFace {
   setProviderDefaults: (draft: ProviderDefaultsDraft) => void
   /** Stage the price-table draft. */
   setPriceTable: (draft: PriceTableDraft) => void
+  /**
+   * Pull the upstream community-price table once, replacing the host's
+   * in-memory community layer and updating `state.syncState`. Resolves to the
+   * raw sync result; UI reads `syncState.syncing` to disable the button.
+   */
+  syncNow: () => Promise<FinanceCommunitySyncResult | null>
+  /**
+   * Flip the auto-sync preference (browser-local; persisted under prefs).
+   * Effective the next time the controller decides whether to auto-fire.
+   */
+  setAutoSync: (next: boolean) => void
+  /** Bootstrap pull: kick off a sync if `prefs.autoSync` is true AND the
+   * persisted snapshot is older than 24h (or absent). Idempotent across mounts. */
+  ensureAutoSync: () => void
 }
 
 type PlannedWrite = { run: (() => Promise<boolean>) | undefined }
@@ -154,12 +191,39 @@ export class FinanceCardController {
   private defaultPriceDraftValue: RateDraft | null = null
   private providerDefaultsDraftValue: ProviderDefaultsDraft | null = null
   private priceTableDraftValue: PriceTableDraft | null = null
+  /** Live sync state: in-flight flag + last result. Updated by syncNow(). */
+  private syncStateValue: FinanceSyncState = INITIAL_SYNC_STATE
+  /** Whether the host exposes the sync Remote. False = host predates commit 4. */
+  private syncAvailableValue = false
+  /** Single-flight guard so concurrent syncNow() calls don't double-fetch. */
+  private syncInFlight: Promise<FinanceCommunitySyncResult | null> | null = null
+  /** Auto-sync bootstrap state: once-only so we don't refetch on every settings doc update. */
+  private autoSyncAttempted = false
 
-  /** @param scope - the bound settings scope for the `finance` namespace. */
-  constructor(private readonly scope: SettingsScope<FinanceConfigInput>) {
+  /**
+   * @param scope - bound settings scope for the `finance` namespace.
+   * @param financeRemote - host Remote for community sync. Absent on hosts
+   *   that pre-date the sync Remote (older plugin builds): the card keeps
+   *   working but hides the sync section (`syncAvailableValue` stays false).
+   */
+  constructor(
+    private readonly scope: SettingsScope<FinanceConfigInput>,
+    financeRemote?: Pick<ClientRemote['finance'], 'syncCommunityPrices' | 'getSyncStatus'>,
+  ) {
+    if (financeRemote !== undefined) {
+      this.financeRemote = financeRemote
+      this.syncAvailableValue = true
+      // Seed lastSync from prefs (cheap; the dashboard's first paint shows the
+      // prior sync without waiting for the host ping).
+      this.syncStateValue = { ...this.syncStateValue, lastSync: readFinancePrefs().lastSync }
+    }
     this.store = createSnapshotStore<FinanceCardState>(this.projection())
     scope.subscribe(() => this.publish())
+    if (financeRemote !== undefined) {
+      this.refreshSyncStatus()
+    }
   }
+  private readonly financeRemote?: Pick<ClientRemote['finance'], 'syncCommunityPrices' | 'getSyncStatus'>
 
   private snapshot() {
     return this.scope.getSnapshot()
@@ -358,6 +422,8 @@ export class FinanceCardController {
       priceTableDraft: this.staged.has('prices') ? (this.priceTableDraftValue ?? seedPriceTable(undefined)) : this.seedJson('prices', seedPriceTable),
       prices: this.fieldState('prices'),
       prefs: readFinancePrefs(),
+      syncState: this.syncStateValue,
+      syncAvailable: this.syncAvailableValue,
     }
   }
 
@@ -470,6 +536,120 @@ export class FinanceCardController {
         this.priceTableDraftValue = draft
         this.stagePriceResult('prices', serializePriceTableDraft(draft))
       },
+      syncNow: () => this.syncNow(),
+      setAutoSync: (next) => this.setAutoSync(next),
+      ensureAutoSync: () => this.ensureAutoSync(),
     }
+  }
+
+  // -------- community sync --------
+
+  /**
+   * Single-flight `syncNow`: collapse concurrent calls onto one inflight
+   * promise so a held-down button does not hammer the host. Returns the
+   * resolved result (or null when the host has no sync Remote) and surfaces
+   * `syncing`/`lastSync`/`lastError` on `state.syncState`.
+   */
+  private syncNow(): Promise<FinanceCommunitySyncResult | null> {
+    const remote = this.financeRemote
+    if (remote === undefined) return Promise.resolve(null)
+    if (this.syncInFlight !== null) return this.syncInFlight
+    this.syncStateValue = { ...this.syncStateValue, syncing: true, lastError: null }
+    this.publish()
+    const promise = (async (): Promise<FinanceCommunitySyncResult | null> => {
+      try {
+        const remoteResult = await remote.syncCommunityPrices()
+        if (!remoteResult.ok) {
+          this.syncStateValue = {
+            syncing: false,
+            lastSync: this.syncStateValue.lastSync,
+            lastError: remoteResult.error.message,
+          }
+          return null
+        }
+        const value = remoteResult.value
+        const snapshot: FinanceSyncSnapshot = {
+          appliedAt: value.appliedAt ?? 0,
+          source: value.source,
+          kept: value.kept,
+          providers: value.providers,
+          fx: value.fx,
+        }
+        this.persistLastSync(snapshot)
+        this.syncStateValue = { syncing: false, lastSync: snapshot, lastError: null }
+        return value
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        this.syncStateValue = { ...this.syncStateValue, syncing: false, lastError: message }
+        return null
+      } finally {
+        this.syncInFlight = null
+        this.publish()
+      }
+    })()
+    this.syncInFlight = promise
+    return promise
+  }
+
+  /**
+   * Flip the auto-sync preference. Persists via `writeFinancePrefs` so the
+   * value travels across page reloads; the next `ensureAutoSync` consults
+   * it before any fetch. Pass-through to a no-op when no sync Remote exists.
+   */
+  private setAutoSync(next: boolean): void {
+    const prefs = readFinancePrefs()
+    if (prefs.autoSync === next) return
+    writeFinancePrefs({ ...prefs, autoSync: next })
+    this.publish()
+  }
+
+  /**
+   * Auto-sync bootstrap: if `prefs.autoSync` is true and the persisted
+   * snapshot is older than 24h (or missing), fire a single syncNow. Idempotent
+   * per controller instance so settings doc updates don't re-trigger.
+   */
+  ensureAutoSync(): void {
+    if (this.autoSyncAttempted) return
+    this.autoSyncAttempted = true
+    if (this.financeRemote === undefined) return
+    const prefs = readFinancePrefs()
+    if (!prefs.autoSync) return
+    const lastApplied = prefs.lastSync?.appliedAt ?? 0
+    const stale = lastApplied === 0 || (Date.now() - lastApplied) > ONE_DAY_MS
+    if (stale) void this.syncNow()
+  }
+
+  /**
+   * Fire-and-forget host status probe. Used to surface a real `kept` count
+   * shortly after mount when the local prefs.lastSync is null or stale.
+   */
+  private refreshSyncStatus(): void {
+    const remote = this.financeRemote
+    if (remote === undefined) return
+    void remote.getSyncStatus().then((result) => {
+      if (!result.ok) return
+      const value: FinanceSyncStatus | null = result.value
+      if (value === null) return
+      const snapshot: FinanceSyncSnapshot = {
+        appliedAt: value.appliedAt,
+        source: value.source,
+        kept: value.kept,
+        providers: value.providers,
+        fx: value.fx,
+      }
+      const current = readFinancePrefs().lastSync
+      // Don't overwrite a fresher local snapshot with an older one.
+      if (current && current.appliedAt >= snapshot.appliedAt) return
+      this.persistLastSync(snapshot)
+      this.syncStateValue = { ...this.syncStateValue, lastSync: snapshot }
+      this.publish()
+    })
+  }
+
+  /** Persist the snapshot into prefs via localStorage (single source of truth in the client). */
+  private persistLastSync(snapshot: FinanceSyncSnapshot): void {
+    const prefs = readFinancePrefs()
+    if (JSON.stringify(prefs.lastSync) === JSON.stringify(snapshot)) return
+    writeFinancePrefs({ ...prefs, lastSync: snapshot })
   }
 }

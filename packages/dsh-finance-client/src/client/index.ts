@@ -57,6 +57,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   // $mount above). Reflect reads it without the inject requirement.
   const finance = ctx.reflect.get('remote.finance') as ClientRemote['finance']
   const controller = new FinanceAuditController(finance)
+
   const useSnapshot = bindSnapshotSelector(controller.store) as SnapshotSelectorHook<FinanceAuditState>
   const t = ctx.locale.bind(NS) as (key: FinanceKey) => string
   const refresh = (): void => { void controller.load() }
@@ -78,8 +79,13 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
 
   // Plugin configuration card in 设置 → 插件 → 插件配置页. Bound to the
   // `finance` settings namespace the host service registers; rendered only
-  // while that namespace is served to this client.
-  const cardController = new FinanceCardController(ctx.settingsScope.bind({ namespace: 'finance' }))
+  // while that namespace is served to this client. Carries the finance
+  // Remote too so the price-sync section reaches `syncCommunityPrices`.
+  const cardController = new FinanceCardController(
+    ctx.settingsScope.bind({ namespace: 'finance' }),
+    finance as unknown as Pick<ClientRemote['finance'], 'syncCommunityPrices' | 'getSyncStatus'>,
+  )
+  cardController.ensureAutoSync()
   ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
     name: 'settings.plugin.item',
     key: 'finance',

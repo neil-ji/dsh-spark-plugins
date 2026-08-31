@@ -1,6 +1,21 @@
 import { describe, expect, it, vi } from 'vitest'
 import { apply } from '../src/client/index.ts'
 import financeRemote from 'dsh-spark-finance/remote'
+import type { FinanceCommunitySyncResult } from 'dsh-spark-finance/types'
+
+const stubOkSync: FinanceCommunitySyncResult = {
+  ok: true,
+  source: 'https://models.dev/api.json',
+  appliedAt: 0,
+  fx: 7.2,
+  requestedProviders: [],
+  requestedMissing: [],
+  kept: 0,
+  droppedDated: 0,
+  droppedNonToken: 0,
+  droppedNoCost: 0,
+  providers: [],
+}
 
 // Both imports are browser bundles (module-scope window); swap them for node-safe fakes.
 vi.mock('@deepseek-ai/dsh-client-runtime/client', () => ({
@@ -32,6 +47,8 @@ function fakeCtx() {
         getOverview: vi.fn(),
         getBalance: vi.fn(),
         getLedger: vi.fn(),
+        syncCommunityPrices: vi.fn(async () => ({ ok: true, value: stubOkSync })),
+        getSyncStatus: vi.fn(async () => ({ ok: true, value: null })),
       })),
     },
     slots: {

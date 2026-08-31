@@ -48,8 +48,30 @@ function overview(): FinanceOverview {
   }
 }
 
-function fakeRemote(getOverview = vi.fn(), getBalance = vi.fn(), getBackfillProgress = vi.fn()) {
-  return { getOverview, getBalance, getBackfillProgress } as never
+function fakeRemote(
+  getOverview = vi.fn(),
+  getBalance = vi.fn(),
+  getBackfillProgress = vi.fn(),
+  syncCommunityPrices = vi.fn(async () => ({ ok: true as const, value: stubOkSync })),
+  getSyncStatus = vi.fn(async () => ({ ok: true as const, value: null })),
+) {
+  return { getOverview, getBalance, getBackfillProgress, syncCommunityPrices, getSyncStatus } as never
+}
+
+import type { FinanceCommunitySyncResult } from 'dsh-spark-finance/types'
+
+const stubOkSync: FinanceCommunitySyncResult = {
+  ok: true,
+  source: 'https://models.dev/api.json',
+  appliedAt: 0,
+  fx: 7.2,
+  requestedProviders: [],
+  requestedMissing: [],
+  kept: 0,
+  droppedDated: 0,
+  droppedNonToken: 0,
+  droppedNoCost: 0,
+  providers: [],
 }
 
 describe('FinanceAuditController', () => {
