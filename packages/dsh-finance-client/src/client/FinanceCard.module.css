@@ -326,3 +326,105 @@
   outline: 2px solid var(--dsw-alias-brand-primary);
   outline-offset: 1px;
 }
+
+/* 价格同步区块（commit 8 主面板：从手工编辑的 defaultPrice/providerDefaults/prices 拿掉
+   后只留这一段同步接口 + 数据源跳转） */
+.syncBlock {
+  flex-direction: column;
+  gap: 8px;
+  display: flex;
+}
+.syncRow {
+  align-items: center;
+  gap: 10px;
+  display: flex;
+}
+.syncToggle {
+  align-items: center;
+  gap: 8px;
+  display: inline-flex;
+}
+.syncToggleLabel {
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.syncStatusRow {
+  align-items: center;
+  gap: 8px;
+  display: flex;
+  flex-wrap: wrap;
+}
+.syncBadge {
+  background: var(--dsw-alias-bg-module-platform);
+  color: var(--dsw-alias-label-secondary);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 17px;
+}
+.syncBadgeFailed {
+  background: var(--dsw-alias-bg-module-platform);
+  color: var(--dsw-alias-state-error-primary);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 17px;
+}
+.syncBadgeMuted {
+  background: var(--dsw-alias-bg-module-platform);
+  color: var(--dsw-alias-label-tertiary);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 17px;
+}
+.syncMeta {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.syncLink {
+  color: var(--dsw-alias-label-secondary);
+  text-decoration: none;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.syncLink:hover {
+  color: var(--dsw-alias-brand-primary);
+  text-decoration: underline;
+}
+.syncError {
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 4px 0 0;
+}
+
+/* "高级配置（JSON）" 折叠区（commit 8：默认折叠，需要进入高级模式才能看到手工表单） */
+.advancedDetails {
+  border-top: 1px solid var(--dsw-alias-border-l2);
+  margin-top: 16px;
+  padding-top: 12px;
+}
+.advancedDetails[open] {
+  margin-bottom: 12px;
+}
+.advancedSummary {
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  list-style: none;
+  padding: 4px 0;
+}
+.advancedSummary::-webkit-details-marker { display: none; }
+.advancedSummary::marker { display: none; content: ''; }
+.advancedHint {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 4px 0 12px;
+}

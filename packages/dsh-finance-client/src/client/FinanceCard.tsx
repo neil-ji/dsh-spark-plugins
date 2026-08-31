@@ -2,10 +2,14 @@
  * Finance plugin configuration card for the Plugins settings section
  * ("设置 → 插件 → 插件配置页"). One disclosure card like the shell/agent-loop
  * cards: the header names the plugin and what its settings govern; the body
- * stages the finance namespace edits (balance connection + price facts) until
- * save, and applies the dashboard view preferences immediately. Pure
- * presentation over the controller's snapshot; the body is a separate export
- * so tests can render it directly.
+ * stages the finance namespace edits (balance connection + plan/metered route
+ * tags) until save, and exposes the community-price sync block
+ * (autoSync toggle + Sync now button + last-sync badge + data-source link).
+ *
+ * The three price-shape JSON forms (defaultPrice / providerDefaults / prices)
+ * live behind a collapsed <details> called "高级配置（JSON）" so regular users
+ * never see them — they're for power users who really want to maintain the
+ * table by hand. The dashboard view prefs always stay visible at the bottom.
  */
 
 import { useState } from 'react'
@@ -68,8 +72,107 @@ function Field({ id, label, hint, state, multiline, disabled, invalidLabel, over
   )
 }
 
-/** The card's open body: connection/pricing fields, view-preferences, and the save row. */
-export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, onSetBillingModes, onSetDefaultPrice, onSetProviderDefaults, onSetPriceTable, onSetLayout, onToggleChart }: {
+/**
+ * Format an epoch-ms moment as a short relative phrase so the "Last sync" badge
+ * reads "3 min ago" instead of an absolute timestamp. Falls back to absolute
+ * time once the gap passes a week.
+ */
+function relativeTime(ms: number): string {
+  const diff = Date.now() - ms
+  if (diff < 0) return 'just now'
+  const minute = 60_000
+  const hour = 60 * minute
+  const day = 24 * hour
+  if (diff < minute) return 'just now'
+  if (diff < hour) return `${Math.floor(diff / minute)} min ago`
+  if (diff < day) return `${Math.floor(diff / hour)} h ago`
+  if (diff < 7 * day) return `${Math.floor(diff / day)} d ago`
+  return new Date(ms).toISOString().slice(0, 16).replace('T', ' ')
+}
+
+/**
+ * The "价格同步" block. Replaces the three hand-edited price forms with
+ * autoSync toggle + Sync now button + last-sync badge + data-source link.
+ * Renders nothing when the host predates the sync Remote (syncAvailable=false).
+ */
+function PriceSyncSection({ t, state, disabled, onSyncNow, onSetAutoSync }: {
+  t: (key: FinanceKey) => string
+  state: FinanceCardState
+  disabled: boolean
+  onSyncNow: () => Promise<unknown>
+  onSetAutoSync: (next: boolean) => void
+}) {
+  const { syncState, syncAvailable, prefs } = state
+  if (!syncAvailable) return null
+  const { lastSync, syncing, lastError } = syncState
+  return (
+    <div className={css.syncBlock}>
+      <div className={css.syncStatusRow}>
+        {syncing
+          ? <span className={css.syncBadge}>{t('cardSyncing')}</span>
+          : null}
+        {!syncing && lastError !== null
+          ? <span className={css.syncBadgeFailed}>{t('cardSyncFailed')}</span>
+          : null}
+        {!syncing && lastError === null && lastSync !== null
+          ? (
+            <span className={css.syncBadge}>
+              {t('cardSyncLast')}: {relativeTime(lastSync.appliedAt)} · {lastSync.kept} {t('cardSyncModels')} · fx {lastSync.fx.toFixed(1)}
+            </span>
+          )
+          : null}
+        {!syncing && lastError === null && lastSync === null
+          ? <span className={css.syncBadgeMuted}>{t('cardSyncNever')}</span>
+          : null}
+        <a
+          className={css.syncLink}
+          href="https://models.dev"
+          target="_blank"
+          rel="noopener noreferrer"
+          title={t('cardSyncViewSourceHint')}
+        >
+          {t('cardSyncViewSource')}
+        </a>
+      </div>
+
+      <div className={css.syncRow}>
+        <label className={css.syncToggle}>
+          <input
+            type="checkbox"
+            checked={prefs.autoSync}
+            disabled={disabled}
+            onChange={(e) => onSetAutoSync(e.currentTarget.checked)}
+            aria-label={t('cardAutoSync')}
+          />
+          <span className={css.syncToggleLabel}>{t('cardAutoSync')}</span>
+        </label>
+        <Button
+          variant="primary"
+          disabled={disabled || syncing}
+          onClick={() => { void onSyncNow() }}
+          data-testid="finance-sync-now"
+        >
+          {syncing ? t('cardSyncing') : t('cardSyncNow')}
+        </Button>
+      </div>
+
+      <p className={css.hint}>{t('cardPriceSyncHint')}</p>
+      <p className={css.hint}>{t('cardAutoSyncHint')}</p>
+
+      {lastError !== null
+        ? (
+          <p className={css.syncError} role="status">
+            {lastError} · {t('cardSyncRetryHint')}
+          </p>
+        )
+        : null}
+      <p className={css.syncMeta}>{t('cardPriceSyncSourceAt')}</p>
+    </div>
+  )
+}
+
+/** The card's open body: connection + sync + plan/metered tags + (collapsed) advanced JSON + dashboard prefs + save row. */
+export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, onSetBillingModes, onSetDefaultPrice, onSetProviderDefaults, onSetPriceTable, onSetLayout, onToggleChart, onSyncNow, onSetAutoSync }: {
   t: (key: FinanceKey) => string
   state: FinanceCardState
   onEdit: (field: FinanceCardFieldName, text: string) => void
@@ -82,6 +185,8 @@ export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, 
   onSetPriceTable: (draft: PriceTableDraft) => void
   onSetLayout: (layout: FinanceLayout) => void
   onToggleChart: (key: keyof FinanceChartPrefs) => void
+  onSyncNow: () => Promise<unknown>
+  onSetAutoSync: (next: boolean) => void
 }) {
   const disabled = !state.writable
   const blocked = !state.dirty || state.invalid || state.saving
@@ -155,42 +260,23 @@ export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, 
           onEdit={(text) => onEdit('balance.timeoutMs', text)}
           onReset={() => onReset('balance.timeoutMs')}
         />
-        <div className={css.field}>
-          <div className={css.fieldHead}>
-            <label className={css.fieldLabel} htmlFor="plugin-config-finance-default-price">{t('cardDefaultPrice')}</label>
-            <span className={css.fieldBadges}>{state.defaultPrice.overridden ? <Pill>{t('overridden')}</Pill> : null}</span>
-          </div>
-          <RateFields
-            rate={state.defaultPriceDraft}
-            idPrefix="plugin-config-finance-default-price"
+      </div>
+
+      {state.syncAvailable ? (
+        <div className={css.section}>
+          <div className={css.sectionTitle}>{t('cardPriceSyncTitle')}</div>
+          <PriceSyncSection
             t={t}
-            onChange={onSetDefaultPrice}
-          />
-          <div className={css.fieldFoot}>
-            <p className={css.hint}>{t('cardDefaultPriceHint')}</p>
-            {state.defaultPrice.overridden
-              ? <button type="button" className={css.reset} disabled={disabled} onClick={() => onReset('defaultPrice')}>{t('reset')}</button>
-              : null}
-          </div>
-        </div>
-        <div className={css.field}>
-          <div className={css.fieldHead}>
-            <label className={css.fieldLabel} htmlFor="plugin-config-finance-provider-defaults">{t('cardProviderDefaults')}</label>
-            <span className={css.fieldBadges}>{state.providerDefaults.overridden ? <Pill>{t('overridden')}</Pill> : null}</span>
-          </div>
-          <ProviderDefaultsEditor
-            value={state.providerDefaultsDraft}
+            state={state}
             disabled={disabled}
-            t={t}
-            onChange={onSetProviderDefaults}
+            onSyncNow={onSyncNow}
+            onSetAutoSync={onSetAutoSync}
           />
-          <div className={css.fieldFoot}>
-            <p className={css.hint}>{t('cardProviderDefaultsHint')}</p>
-            {state.providerDefaults.overridden
-              ? <button type="button" className={css.reset} disabled={disabled} onClick={() => onReset('providerDefaults')}>{t('reset')}</button>
-              : null}
-          </div>
         </div>
+      ) : null}
+
+      <div className={css.section}>
+        <div className={css.sectionTitle}>{t('cardBillingTitle')}</div>
         <div className={css.field}>
           <div className={css.fieldHead}>
             <label className={css.fieldLabel} htmlFor="plugin-config-finance-billing-modes">{t('cardBillingModes')}</label>
@@ -209,24 +295,64 @@ export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, 
               : null}
           </div>
         </div>
-        <div className={css.field}>
-          <div className={css.fieldHead}>
-            <label className={css.fieldLabel} htmlFor="plugin-config-finance-prices">{t('cardPrices')}</label>
-            <span className={css.fieldBadges}>{state.prices.overridden ? <Pill>{t('overridden')}</Pill> : null}</span>
+        <details className={css.advancedDetails}>
+          <summary className={css.advancedSummary}>{t('cardAdvancedTitle')}</summary>
+          <p className={css.advancedHint}>{t('cardAdvancedHint')}</p>
+          <div className={css.field}>
+            <div className={css.fieldHead}>
+              <label className={css.fieldLabel} htmlFor="plugin-config-finance-default-price">{t('cardDefaultPriceTitle')}</label>
+              <span className={css.fieldBadges}>{state.defaultPrice.overridden ? <Pill>{t('overridden')}</Pill> : null}</span>
+            </div>
+            <RateFields
+              rate={state.defaultPriceDraft}
+              idPrefix="plugin-config-finance-default-price"
+              t={t}
+              onChange={onSetDefaultPrice}
+            />
+            <div className={css.fieldFoot}>
+              <p className={css.hint}>{t('cardDefaultPriceHint')}</p>
+              {state.defaultPrice.overridden
+                ? <button type="button" className={css.reset} disabled={disabled} onClick={() => onReset('defaultPrice')}>{t('reset')}</button>
+                : null}
+            </div>
           </div>
-          <PriceTableEditor
-            value={state.priceTableDraft}
-            disabled={disabled}
-            t={t}
-            onChange={onSetPriceTable}
-          />
-          <div className={css.fieldFoot}>
-            <p className={css.hint}>{t('cardPricesHint')}</p>
-            {state.prices.overridden
-              ? <button type="button" className={css.reset} disabled={disabled} onClick={() => onReset('prices')}>{t('reset')}</button>
-              : null}
+          <div className={css.field}>
+            <div className={css.fieldHead}>
+              <label className={css.fieldLabel} htmlFor="plugin-config-finance-provider-defaults">{t('cardProviderDefaultsTitle')}</label>
+              <span className={css.fieldBadges}>{state.providerDefaults.overridden ? <Pill>{t('overridden')}</Pill> : null}</span>
+            </div>
+            <ProviderDefaultsEditor
+              value={state.providerDefaultsDraft}
+              disabled={disabled}
+              t={t}
+              onChange={onSetProviderDefaults}
+            />
+            <div className={css.fieldFoot}>
+              <p className={css.hint}>{t('cardProviderDefaultsHint')}</p>
+              {state.providerDefaults.overridden
+                ? <button type="button" className={css.reset} disabled={disabled} onClick={() => onReset('providerDefaults')}>{t('reset')}</button>
+                : null}
+            </div>
           </div>
-        </div>
+          <div className={css.field}>
+            <div className={css.fieldHead}>
+              <label className={css.fieldLabel} htmlFor="plugin-config-finance-prices">{t('cardPricingTierTitle')}</label>
+              <span className={css.fieldBadges}>{state.prices.overridden ? <Pill>{t('overridden')}</Pill> : null}</span>
+            </div>
+            <PriceTableEditor
+              value={state.priceTableDraft}
+              disabled={disabled}
+              t={t}
+              onChange={onSetPriceTable}
+            />
+            <div className={css.fieldFoot}>
+              <p className={css.hint}>{t('cardPricesHint')}</p>
+              {state.prices.overridden
+                ? <button type="button" className={css.reset} disabled={disabled} onClick={() => onReset('prices')}>{t('reset')}</button>
+                : null}
+            </div>
+          </div>
+        </details>
       </div>
 
       <div className={css.section}>
@@ -356,6 +482,8 @@ export function FinanceCard(props: FinanceCardProps) {
           onSetPriceTable={props.setPriceTable}
           onSetLayout={props.setLayout}
           onToggleChart={props.toggleChart}
+          onSyncNow={props.syncNow}
+          onSetAutoSync={props.setAutoSync}
         />
       )}
     </li>
