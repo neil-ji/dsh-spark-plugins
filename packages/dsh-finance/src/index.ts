@@ -19,14 +19,28 @@ import { fetchFinanceBalance, FinanceBalanceError } from './balance.ts'
 import { backfillFinanceHourly, buildFinanceLedger } from './ledger.ts'
 import { financeUsageHourlyProjectionDefinition, financeUsageProjectionDefinition } from './projection.ts'
 import { DEFAULT_PRICE, mergePriceLayers, normalizeFinanceConfig } from './pricing.ts'
+import {
+  DEFAULT_FX as COMMUNITY_SYNC_DEFAULT_FX,
+  DEFAULT_PROVIDERS as COMMUNITY_SYNC_DEFAULT_PROVIDERS,
+  SOURCE_URL as COMMUNITY_SYNC_SOURCE_URL,
+  fetchCommunityPrices,
+} from './sync/community-prices.ts'
+import type { CommunityPriceRow } from './sync/community-prices.ts'
+import {
+  financeCommunitySyncResultSchema,
+  financeSyncStatusSchema,
+} from './typert.schemas.ts'
 import type {
   FinanceBackfillProgress,
   FinanceBalanceView,
+  FinanceCommunitySyncResult,
   FinanceConfig,
   FinanceConfigInput,
   FinanceLedger,
   FinanceOverview,
+  FinancePriceEntryInput,
   FinancePriceRate,
+  FinanceSyncStatus,
 } from './types.ts'
 
 export type * from './types.ts'
@@ -163,6 +177,13 @@ export class FinanceService extends TypertRemoteService {
    * next sync (or auto-sync).
    */
   private communityPrices: FinanceConfigInput['prices'] = {}
+  /**
+   * Result of the last sync (success or failure). Distinct from the per-call
+   * return value: stored here so the dashboard can poll it without re-firing
+   * the upstream fetch. Updated by `syncCommunityPrices`; surfaced via
+   * `getSyncStatus`.
+   */
+  private lastSyncStatus: FinanceCommunitySyncResult | null = null
 
   constructor(ctx: Context, config: FinanceConfigInput = {}) {
     super(ctx, 'finance')
@@ -308,6 +329,117 @@ export class FinanceService extends TypertRemoteService {
       this.getLedger(signal),
     ])
     return { balance, ledger }
+  }
+
+  /**
+   * Options forwarded to the community sync; kept loose because the underlying
+   * `collectRows` accepts the same shape. `providers` defaults to the same set
+   * as the bundle-side `pnpm finance:sync-prices` script. `fx` overrides the
+   * CNY-USD rate applied during conversion (default `COMMUNITY_SYNC_DEFAULT_FX`).
+   */
+  private defaultSyncOptions(): { providers: readonly string[]; fx: number } {
+    return { providers: [...COMMUNITY_SYNC_DEFAULT_PROVIDERS], fx: COMMUNITY_SYNC_DEFAULT_FX }
+  }
+
+  /**
+   * Resolve the `{provider}/{model}` rows from a sync result into the
+   * `FinanceConfig['prices']` raw shape (`Record<modelKey, singleEntry>`). Each
+   * flat rate becomes one entry with `effectiveFrom = 0` (always-applies era)
+   * so a later community re-sync overrides it without leaving an era history.
+   * The result feeds straight into `mergePriceLayers`/`normalizeFinanceConfig`
+   * upstream — the inner entries are READ-WRITE (just like what the user
+   * hand-edits in advanced), not normalized yet.
+   */
+  private rowsToPrices(rows: readonly CommunityPriceRow[]): FinanceConfigInput['prices'] {
+    const out: Record<string, FinancePriceEntryInput> = {}
+    for (const { modelKey, rate } of rows) {
+      out[modelKey] = {
+        effectiveFrom: 0,
+        inputMicrosPerMtok: rate.inputMicrosPerMtok,
+        outputMicrosPerMtok: rate.outputMicrosPerMtok,
+        ...(rate.cacheReadMicrosPerMtok !== undefined ? { cacheReadMicrosPerMtok: rate.cacheReadMicrosPerMtok } : {}),
+        ...(rate.cacheWriteMicrosPerMtok !== undefined ? { cacheWriteMicrosPerMtok: rate.cacheWriteMicrosPerMtok } : {}),
+      }
+    }
+    return out
+  }
+
+  /**
+   * Pull the latest upstream price table from `models.dev/api.json`, convert
+   * to finance rates, and replace the in-memory community-prices layer.
+   *
+   * Failure is reported as `ok: false` and never touches the layer: the prior
+   * status stays current so the dashboard keeps showing the last good sync.
+   * Concretely: HTTP non-2xx, JSON parse failure, and abort signals all flow
+   * through the same path. The optional `signal` lets the client cancel a
+   * hanging `fetch` when the user closes the dialog.
+   */
+  @Remote
+  async syncCommunityPrices(
+    options?: { providers?: readonly string[]; fx?: number },
+    signal?: AbortSignal,
+  ): Promise<FinanceCommunitySyncResult> {
+    const requested = options?.providers ?? this.defaultSyncOptions().providers
+    const fx = options?.fx ?? this.defaultSyncOptions().fx
+    try {
+      const { rows, stats } = await fetchCommunityPrices(
+        { providers: requested, fx },
+        fetch,
+        signal,
+      )
+      const prices = this.rowsToPrices(rows)
+      const appliedAt = Date.now()
+      this.setCommunityPrices(prices)
+      const result: FinanceCommunitySyncResult = {
+        ok: true,
+        source: COMMUNITY_SYNC_SOURCE_URL,
+        appliedAt,
+        fx,
+        requestedProviders: [...requested],
+        requestedMissing: [...stats.requestedMissing],
+        kept: stats.kept,
+        droppedDated: stats.droppedDated,
+        droppedNonToken: stats.droppedNonToken,
+        droppedNoCost: stats.droppedNoCost,
+        providers: [...stats.providers],
+      }
+      this.lastSyncStatus = result
+      return result
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      return {
+        ok: false,
+        source: COMMUNITY_SYNC_SOURCE_URL,
+        fx,
+        requestedProviders: [...requested],
+        requestedMissing: [],
+        kept: 0,
+        droppedDated: 0,
+        droppedNonToken: 0,
+        droppedNoCost: 0,
+        providers: [],
+        error: { message },
+      }
+    }
+  }
+
+  /**
+   * Snapshot of the last successful community sync (independent of the result
+   * returned by an individual `syncCommunityPrices` call). The host retains
+   * `null` until the user (or auto-sync) runs at least one successful sync,
+   * so the client can distinguish "never synced yet" from "synced at T".
+   */
+  @Remote
+  async getSyncStatus(): Promise<FinanceSyncStatus | null> {
+    return this.lastSyncStatus
+      ? {
+          source: this.lastSyncStatus.source,
+          appliedAt: this.lastSyncStatus.appliedAt ?? 0,
+          kept: this.lastSyncStatus.kept,
+          providers: [...this.lastSyncStatus.providers],
+          fx: this.lastSyncStatus.fx,
+        }
+      : null
   }
 }
 

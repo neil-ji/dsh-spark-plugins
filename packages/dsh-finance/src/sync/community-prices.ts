@@ -145,7 +145,6 @@ export function collectRows(
     if (!entry || typeof entry !== 'object') continue
     const models = (entry as { models?: unknown }).models
     if (!models || typeof models !== 'object') continue
-    providerSets.add(sourceProvider)
     for (const [modelId, model] of Object.entries(models as Record<string, unknown>)) {
       if (NON_TOKEN.test(modelId)) {
         stats.droppedNonToken += 1
@@ -166,6 +165,7 @@ export function collectRows(
       }
       rows.push({ modelKey: `${sourceProvider}/${modelId}`, rate })
       stats.kept += 1
+      providerSets.add(sourceProvider)
     }
   }
   for (const requestedName of requested) {

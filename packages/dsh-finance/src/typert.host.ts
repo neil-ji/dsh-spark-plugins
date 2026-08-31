@@ -11,8 +11,10 @@
 import {
   financeBackfillProgressSchema,
   financeBalanceViewSchema,
+  financeCommunitySyncResultSchema,
   financeLedgerSchema,
   financeOverviewSchema,
+  financeSyncStatusSchema,
 } from './typert.schemas.ts'
 
 /** Host reflection manifest consumed by @deepseek-ai/dsh-typert-loader. */
@@ -34,9 +36,13 @@ export const TYPERT: unknown = {
           { name: 'getLedger', signature: 'getLedger(signal?: AbortSignal): Promise<FinanceLedger>', kind: 'method' },
           { name: 'getOverview', signature: 'getOverview(signal?: AbortSignal): Promise<FinanceOverview>', kind: 'method' },
           { name: 'getBackfillProgress', signature: 'getBackfillProgress(): Promise<FinanceBackfillProgress>', kind: 'method' },
+          { name: 'syncCommunityPrices', signature: 'syncCommunityPrices(options?: { providers?: readonly string[]; fx?: number }, signal?: AbortSignal): Promise<FinanceCommunitySyncResult>', kind: 'method' },
+          { name: 'getSyncStatus', signature: 'getSyncStatus(): Promise<FinanceSyncStatus | null>', kind: 'method' },
         ],
         types: [
           { name: 'FinanceBalanceView', declaration: 'export interface FinanceBalanceView { status: FinanceBalanceStatus; updatedAt: number; isAvailable?: boolean; currency?: string; totalMicros?: number; grantedMicros?: number; toppedUpMicros?: number; code?: string; message?: string; }' },
+          { name: 'FinanceCommunitySyncResult', declaration: 'export interface FinanceCommunitySyncResult { ok: boolean; source: string; appliedAt?: number; fx: number; requestedProviders: readonly string[]; requestedMissing: readonly string[]; kept: number; droppedDated: number; droppedNonToken: number; droppedNoCost: number; providers: readonly string[]; error?: { message: string }; }' },
+          { name: 'FinanceSyncStatus', declaration: 'export interface FinanceSyncStatus { source: string; appliedAt: number; kept: number; providers: readonly string[]; fx: number; }' },
           { name: 'FinanceTokenBuckets', declaration: 'export interface FinanceTokenBuckets { uncachedInputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; outputTokens: number; }' },
           { name: 'FinanceHourOfDayRow', declaration: 'export interface FinanceHourOfDayRow { localHour: number; usage: FinanceTokenBuckets; costMicros: number; peakCostMicros: number; flatCostMicros: number; shiftSavingsMicros: number; }' },
           { name: 'FinancePeakValleySplit', declaration: 'export interface FinancePeakValleySplit { peakCostMicros: number; offPeakCostMicros: number; flatCostMicros: number; unclassifiedCostMicros: number; legacyCostMicros: number; shiftSavingsMicros: number; }' },
@@ -111,6 +117,42 @@ export const TYPERT: unknown = {
         schema: financeBackfillProgressSchema,
       },
       sourceLocation: { file: 'packages/dsh-finance/src/index.ts', line: 131, column: 3 },
+    },
+    {
+      id: 'dsh-spark-finance#finance/syncCommunityPrices',
+      service: 'finance',
+      namespace: 'finance',
+      method: 'syncCommunityPrices',
+      invocation: { kind: 'direct' },
+      parameters: [
+        {
+          name: 'options',
+          optional: true,
+          schema: undefined,
+        },
+      ],
+      cancellation: { parameter: 'signal' },
+      result: {
+        mode: 'strict',
+        typeSymbol: 'dsh-spark-finance/types#FinanceCommunitySyncResult',
+        schema: financeCommunitySyncResultSchema,
+      },
+      sourceLocation: { file: 'packages/dsh-finance/src/index.ts', line: 378, column: 5 },
+    },
+    {
+      id: 'dsh-spark-finance#finance/getSyncStatus',
+      service: 'finance',
+      namespace: 'finance',
+      method: 'getSyncStatus',
+      invocation: { kind: 'direct' },
+      parameters: [],
+      cancellation: { parameter: 'signal' },
+      result: {
+        mode: 'strict',
+        typeSymbol: 'dsh-spark-finance/types#FinanceSyncStatus',
+        schema: financeSyncStatusSchema,
+      },
+      sourceLocation: { file: 'packages/dsh-finance/src/index.ts', line: 433, column: 5 },
     },
   ],
 }
