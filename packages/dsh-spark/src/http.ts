@@ -8,7 +8,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
 import type { SparkView } from 'dsh-spark-wire'
-import type { SparkService } from './spark-service.ts'
+import type { SparkService, SparkNotFoundError, SparkHippoUnavailableError } from './spark-service.ts'
 
 const PREFIX = '/sparks'
 const MAX_BODY_BYTES = 256 * 1024
@@ -67,6 +67,19 @@ async function handle(
       return
     }
 
+    if (req.method === 'POST' && /\/crystallize$/.test(sub)) {
+      const id = decodeURIComponent(sub.slice(1, -'/crystallize'.length))
+      const body = await readJsonBody(req).catch(() => ({}))
+      try {
+        const result = await service.crystallize(id as Parameters<typeof service.crystallize>[0], body)
+        send(res, 200, okEnvelope(result))
+      } catch (error) {
+        const status = errorStatusFor(error)
+        send(res, status, errorEnvelope(errorCodeOf(error), errorMessageOf(error)))
+      }
+      return
+    }
+
     if (req.method === 'PATCH' && sub.startsWith('/')) {
       const id = decodeURIComponent(sub.slice(1))
       const body = await readJsonBody(req)
@@ -114,7 +127,7 @@ function queryFromUrl(url: URL): Record<string, unknown> {
 
 function readJsonBody(req: IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
-    const contentType = req.headers['content-type'] ?? '' 
+    const contentType = req.headers['content-type'] ?? ''
     if (contentType.includes('application/json') === false) {
       reject(new Error('Content-Type must be application/json'))
       return
@@ -171,8 +184,26 @@ function send(res: ServerResponse, status: number, body: Envelope): void {
   res.end(JSON.stringify(body))
 }
 
-/**
- * Suppress the unused-import warning on SparkView; reserved for Phase 2 when
- * the SSE payload may include a richer record type after crystallize lands.
- */
-type _Reserved = SparkView
+function errorStatusFor(error: unknown): number {
+  if (error instanceof Object && 'code' in error) {
+    const code = (error as { code: unknown }).code
+    if (code === 'SPARK_NOT_FOUND') return 404
+    if (code === 'SPARK_HIPPO_UNAVAILABLE') return 412
+  }
+  return 400
+}
+
+function errorCodeOf(error: unknown): string {
+  if (error instanceof Object && 'code' in error) {
+    const code = (error as { code: unknown }).code
+    if (typeof code === 'string') return code
+  }
+  return 'BAD_REQUEST'
+}
+
+function errorMessageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+/** Reserved: SparkView type referenced for future SSE payload expansion (Phase 4). */
+type _Reserved = SparkView | SparkNotFoundError | SparkHippoUnavailableError

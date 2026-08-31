@@ -7,15 +7,15 @@ import { SparkService } from './spark-service.ts'
 import type { SparkConfig } from './spark-service.ts'
 import { registerSparkTools } from './tool.ts'
 
-export { SparkService } from './spark-service.ts'
+export { SparkService, SparkNotFoundError, SparkHippoUnavailableError } from './spark-service.ts'
 export type { SparkConfig } from './spark-service.ts'
 export { JsonlSparkStorage } from './storage.ts'
-export type { SparkStorage, SparkChangedEvent, SparkRecordId } from './types.ts'
-export { deriveTitle } from './types.ts'
+export type { SparkStorage, SparkChangedEvent, SparkRecordId, HippoPutInput } from './types.ts'
+export { deriveTitle, buildHippoInputFromSpark } from './types.ts'
 export { registerSparkHttpRoutes } from './http.ts'
 export { registerSparkTools } from './tool.ts'
 
-export type { SparkView, SparkCapture, SparkPatch, SparkId, SparkScope, SparkStatus } from 'dsh-spark-wire'
+export type { SparkView, SparkCapture, SparkPatch, SparkCrystallize, SparkCrystallized, SparkId, SparkScope, SparkStatus } from 'dsh-spark-wire'
 
 export const name = 'dsh-spark'
 export const inject = ['webServer'] as const

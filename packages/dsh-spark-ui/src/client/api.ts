@@ -1,7 +1,7 @@
 /**
  * Tiny fetch wrapper for the plugin-owned /sparks API.
  */
-import type { SparkView, SparkCapture } from 'dsh-spark-wire'
+import type { SparkView, SparkCapture, SparkCrystallize } from 'dsh-spark-wire'
 
 interface Envelope {
   ok: boolean
@@ -20,9 +20,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const body = (await response.json()) as Envelope
   if (response.ok === false || body.ok === false) {
     const message = body.error?.message ?? 'sparks request failed'
-    throw new Error(message)
+    const code = body.error?.code ?? 'BAD_REQUEST'
+    const err = new Error(message) as Error & { code?: string; httpStatus?: number }
+    err.code = code
+    err.httpStatus = response.status
+    throw err
   }
   return body.value as T
+}
+
+export interface CrystallizeResult {
+  spark: SparkView
+  record: { id: string; kind: 'insight' | 'decision' | 'fact' | 'preference' | 'constraint' }
 }
 
 export interface SparksApi {
@@ -31,6 +40,7 @@ export interface SparksApi {
   capture(input: SparkCapture): Promise<SparkView>
   archive(id: string): Promise<SparkView>
   delete(id: string): Promise<void>
+  crystallize(id: string, opts?: Partial<SparkCrystallize>): Promise<CrystallizeResult>
   subscribe(onChange: () => void): () => void
 }
 
@@ -48,7 +58,7 @@ export function createSparksApi(): SparksApi {
       try {
         return await request<SparkView | null>('/sparks/' + encodeURIComponent(id))
       } catch (error) {
-        if (error instanceof Error && /NOT_FOUND/.test(error.message)) return null
+        if (error instanceof Error && (error as Error & { code?: string }).code === 'NOT_FOUND') return null
         throw error
       }
     },
@@ -61,8 +71,10 @@ export function createSparksApi(): SparksApi {
     async delete(id) {
       await request<{ removed: boolean }>('/sparks/' + encodeURIComponent(id), { method: 'DELETE' })
     },
+    async crystallize(id, opts: Partial<SparkCrystallize> = {}) {
+      return await request<CrystallizeResult>('/sparks/' + encodeURIComponent(id) + '/crystallize', { method: 'POST', body: JSON.stringify(opts) })
+    },
     subscribe(onChange) {
-      // SSE listener; auto-reconnect on close.
       let stopped = false
       let es: EventSource | null = null
       const connect = (): void => {

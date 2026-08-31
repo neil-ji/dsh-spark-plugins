@@ -1,14 +1,14 @@
 /**
  * dsh-spark-ui settings section: list of sparks with manual capture, archive,
- * delete, and live SSE updates.
+ * delete, crystallize, and live SSE updates.
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Button, Input, Pill, Textarea } from 'dsh-ui-kit'
 import { bindSnapshotSelector, type SnapshotSelectorHook } from 'dsh-spark-plugin-kit/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
-import type { SparkView, SparkScope } from 'dsh-spark-wire'
-import { createSparksApi, type SparksApi } from './api.ts'
+import type { SparkView, SparkScope, SparkCrystallize } from 'dsh-spark-wire'
+import { createSparksApi, type CrystallizeResult, type SparksApi } from './api.ts'
 import type { SparkKey } from './locales.ts'
 
 type Translate = (key: SparkKey) => string
@@ -46,7 +46,6 @@ export class SparkController {
     void this.loadAsync()
   }
 
-  /** Refresh only after the page has loaded once. */
   refreshIfLoaded(): void {
     if (this.store.getSnapshot().status === 'idle') return
     void this.loadAsync()
@@ -98,6 +97,16 @@ export class SparkController {
     await this.loadAsync()
   }
 
+  /**
+   * Crystallize a spark into HippoMemo. Returns the result so the UI can
+   * surface the new hippoId / kind for deep-linking.
+   */
+  async crystallize(id: string, opts: SparkCrystallize = { kind: 'insight', importance: 0.5, globalProven: false }): Promise<CrystallizeResult> {
+    const result = await this.api.crystallize(id, opts)
+    await this.loadAsync()
+    return result
+  }
+
   dispose(): void {
     this.generation += 1
     if (this.unsubscribe !== null) {
@@ -128,6 +137,8 @@ function Loaded({ injected }: { injected: SparkSectionInjected }): ReactNode {
   const [formTags, setFormTags] = useState('')
   const [formScope, setFormScope] = useState<SparkScope>('project')
   const [formError, setFormError] = useState<string | null>(null)
+  const [crystallizeError, setCrystallizeError] = useState<string | null>(null)
+  const [crystallizeInfo, setCrystallizeInfo] = useState<{ id: string; kind: string } | null>(null)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -175,6 +186,28 @@ function Loaded({ injected }: { injected: SparkSectionInjected }): ReactNode {
     setBusy(true)
     try { await controller.delete(id) }
     finally { setBusy(false) }
+  }, [controller, t])
+
+  const onCrystallize = useCallback(async (spark: SparkView): Promise<void> => {
+    if (typeof window !== 'undefined' && window.confirm !== undefined) {
+      if (!window.confirm(t('crystallizeConfirm'))) return
+    }
+    setBusy(true)
+    setCrystallizeError(null)
+    try {
+      const result = await controller.crystallize(spark.id)
+      setCrystallizeInfo({ id: result.record.id, kind: result.record.kind })
+      setTimeout(() => setCrystallizeInfo(null), 6000)
+    } catch (error) {
+      const err = error as Error & { code?: string; httpStatus?: number }
+      if (err.code === 'SPARK_HIPPO_UNAVAILABLE') {
+        setCrystallizeError(t('crystallizeHippoUnavailable'))
+      } else {
+        setCrystallizeError(err.message || t('crystallizeFailed'))
+      }
+    } finally {
+      setBusy(false)
+    }
   }, [controller, t])
 
   if (state.status === 'error') {
@@ -265,6 +298,13 @@ function Loaded({ injected }: { injected: SparkSectionInjected }): ReactNode {
         </form>
       ) : null}
 
+      {crystallizeError !== null ? <div className="spark-error">{crystallizeError}</div> : null}
+      {crystallizeInfo !== null ? (
+        <div className="spark-error" style={{ color: 'var(--dsw-alias-state-success-primary, var(--dsw-static-green-500))', borderColor: 'var(--dsw-alias-state-success-primary, var(--dsw-static-green-500))' }}>
+          {t('crystallizeSuccess') + ': ' + t('crystallizeHippo') + ' = ' + crystallizeInfo.id + ' (' + t('crystallizeKind') + ' = ' + crystallizeInfo.kind + ')'}
+        </div>
+      ) : null}
+
       {filtered.length === 0 ? (
         <div className="spark-empty">{state.sparks.length === 0 ? t('empty') : t('emptyFiltered')}</div>
       ) : (
@@ -272,11 +312,16 @@ function Loaded({ injected }: { injected: SparkSectionInjected }): ReactNode {
           {filtered.map(spark => (
             <article
               key={spark.id}
-              className={'spark-card' + (spark.status === 'archived' ? ' spark-card-archived' : '')}
+              className={'spark-card' + (spark.status === 'archived' ? ' spark-card-archived' : '') + (spark.crystallized !== null ? ' spark-card-crystallized' : '')}
             >
               <header className="spark-card-head">
                 <h3 className="spark-card-title">{spark.title}</h3>
                 <div className="spark-card-actions">
+                  {spark.crystallized === null && spark.status === 'active' ? (
+                    <Button variant="outline" disabled={busy} onClick={() => { void onCrystallize(spark) }}>
+                      {t('crystallize')}
+                    </Button>
+                  ) : null}
                   {spark.status === 'active' ? (
                     <Button variant="outline" disabled={busy} onClick={() => { void onArchive(spark.id) }}>
                       {t('archive')}
@@ -291,6 +336,7 @@ function Loaded({ injected }: { injected: SparkSectionInjected }): ReactNode {
               <footer className="spark-card-meta">
                 <Pill>{spark.status === 'active' ? t('active') : t('archived')}</Pill>
                 <Pill>{spark.scope}</Pill>
+                {spark.crystallized !== null ? <span className="spark-crystallized-badge">{t('crystallizedBadge')}</span> : null}
                 {spark.tags.map(tag => <Pill key={tag}>{tag}</Pill>)}
                 <span>{new Date(spark.createdAt).toLocaleString()}</span>
               </footer>

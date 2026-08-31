@@ -1,8 +1,11 @@
 /**
- * Agent-facing spark tools (Phase 1: just spark_capture).
+ * Agent-facing spark tools.
+ *
+ * Phase 1: spark_capture (capture a spark).
+ * Phase 2: spark_crystallize (promote a spark into HippoMemo MemoryRecord).
  *
  * registerSparkTools is invoked from src/index.ts apply() right after the
- * SparkService is mounted. The tool delegates to ctx.spark for persistence.
+ * SparkService is mounted.
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
@@ -18,7 +21,9 @@ const TEXT_OUTPUT = {
 const GUIDANCE = [
   'Use spark_capture to persist an inspiration, sudden association, or TODO-adjacent thought that just surfaced mid-conversation.',
   'Sparks are episodic (time-stamped, tied to the current session/workspace). They are NOT todos; do not capture concrete tasks with spark_capture — use the regular task tool for that.',
-  'Sparks are NOT durable cross-session memory; do not capture finished conclusions here — use memory_remember (hippo) for that. Crystallize (Phase 2) will be the explicit bridge when the user wants a spark to graduate.',
+  'Sparks are NOT durable cross-session memory by default. When a spark has matured into a stable fact, decision, or preference, promote it to durable memory with spark_crystallize (Phase 2). Crystallize is idempotent — calling twice on the same spark returns the same hippoId without creating a duplicate.',
+  'Crystallize requires HippoMemo (dsh-hippomemo) to be loaded. If the tool returns SPARK_HIPPO_UNAVAILABLE, the user must install HippoMemo first.',
+  'Pick `kind` based on the spark\'s nature: insight (realized understanding), decision (a choice made), fact (objective truth), preference (user\'s taste/habit), constraint (an external rule). Default is insight when unsure.',
   'Keep titles short (<= 60 chars). Content can be longer (full sentence or two). Tags are optional keywords.',
   'Default scope is "project" (bound to the current workspace). Use "session" for truly ephemeral, "global" only when the inspiration clearly crosses project boundaries.',
 ].join('\n')
@@ -66,6 +71,44 @@ export function registerSparkTools(ctx: Context): void {
     },
     presentCall(args) {
       return { card: 'generic', title: 'Capture spark', kind: 'other', rawInput: args.title }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'spark_crystallize',
+    description: 'Promote one captured spark into a durable HippoMemo memory record. Idempotent: calling twice on the same spark returns the existing hippoId without creating a duplicate. Use when a spark has matured into a stable insight, decision, fact, preference, or constraint that should survive across sessions and workspaces. Requires dsh-hippomemo to be installed.',
+    parameters: {
+      id: { type: 'string', required: true, description: 'The spark id to crystallize.' },
+      kind: { type: 'string', enum: ['insight', 'decision', 'fact', 'preference', 'constraint'], description: 'Which HippoMemo kind to file the memory under. Defaults to insight.' },
+      importance: { type: 'number', description: '0 to 1. Defaults to 0.5.' },
+      scope: { type: 'string', enum: ['session', 'project', 'global'], description: 'Override the destination memory scope. session maps to project (hippo has no session scope).' },
+      globalProven: { type: 'boolean', description: 'Set true only when the crystallized fact is genuinely useful across every workspace. Defaults to false; an unproven global degrades to workspace-bound for auto-injection.' },
+    },
+    output: TEXT_OUTPUT,
+    async execute(args, exec) {
+      const agent = exec.agent
+      if (agent === undefined) {
+        throw new HarnessError('spark_crystallize requires a calling agent', 'SPARK_AGENT_REQUIRED')
+      }
+      const id = typeof args.id === 'string' ? args.id.trim() : ''
+      if (id.length === 0) {
+        throw new HarnessError('spark_crystallize requires an id', 'SPARK_ID_REQUIRED')
+      }
+      const opts: Record<string, unknown> = {}
+      if (typeof args.kind === 'string') opts.kind = args.kind
+      if (typeof args.importance === 'number') opts.importance = args.importance
+      if (typeof args.scope === 'string') opts.scope = args.scope
+      if (typeof args.globalProven === 'boolean') opts.globalProven = args.globalProven
+      const result = await ctx.spark.crystallize(id, opts)
+      return JSON.stringify({
+        hippoId: result.record.id,
+        kind: result.record.kind,
+        sparkId: result.spark.id,
+        crystallizedAt: result.spark.crystallized?.at ?? null,
+      })
+    },
+    presentCall(args) {
+      return { card: 'generic', title: 'Crystallize spark', kind: 'other', rawInput: args.id }
     },
   }))
 }

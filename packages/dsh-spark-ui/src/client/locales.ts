@@ -2,7 +2,7 @@
 export const zh = {
   nav: '火花',
   title: '火花流（Sparks）',
-  intro: '火花是 AI 协作中突发的灵感、关联、直觉。手动捕获、按主题浏览、归档已完成的想法。Phase 1 仅支持手动捕获与列表（不接 LLM 启发器，不画图）。',
+  intro: '火花是 AI 协作中突发的灵感、关联、直觉。手动捕获、按主题浏览、归档已完成的想法。Phase 2 支持将成熟的火花结晶为 HippoMemo 持久记忆（跨会话可复用）。',
   capture: '捕获新火花',
   captureTitle: '标题',
   captureTitlePlaceholder: '一句话标题（≤ 60 字）',
@@ -31,12 +31,20 @@ export const zh = {
   emptyFiltered: '当前筛选下没有火花。',
   liveOn: '实时同步开启',
   liveOff: '实时同步断开',
+  crystallize: '结晶',
+  crystallizeConfirm: '把这条火花沉淀为 HippoMemo 持久记忆？结晶后不可逆（但幂等：再结晶同一火花不会重复创建）。',
+  crystallizeSuccess: '已结晶',
+  crystallizeHippo: '记忆 ID',
+  crystallizeKind: '记忆类型',
+  crystallizeFailed: '结晶失败',
+  crystallizeHippoUnavailable: '需要先安装 HippoMemo（dsh-hippomemo）才能结晶火花。',
+  crystallizedBadge: '已结晶',
 } as const
 
 export const en: Record<SparkKey, string> = {
   nav: 'Sparks',
   title: 'Spark stream',
-  intro: 'Sparks are inspirations, associations, and hunches that surface mid-conversation with an AI agent. Capture manually, browse by theme, archive when settled. Phase 1 is manual capture and list only — no LLM heuristic, no graph.',
+  intro: 'Sparks are inspirations, associations, and hunches that surface mid-conversation with an AI agent. Capture manually, browse by theme, archive when settled. Phase 2 supports crystallizing mature sparks into HippoMemo durable memory (cross-session, reusable).',
   capture: 'Capture a spark',
   captureTitle: 'Title',
   captureTitlePlaceholder: 'One-line title (<= 60 chars)',
@@ -65,6 +73,14 @@ export const en: Record<SparkKey, string> = {
   emptyFiltered: 'No sparks match the current filter.',
   liveOn: 'Live updates connected',
   liveOff: 'Live updates disconnected',
+  crystallize: 'Crystallize',
+  crystallizeConfirm: 'Promote this spark into HippoMemo durable memory? Crystallize is irreversible (but idempotent: re-crystallizing the same spark does not duplicate).',
+  crystallizeSuccess: 'Crystallized',
+  crystallizeHippo: 'Memory id',
+  crystallizeKind: 'Memory kind',
+  crystallizeFailed: 'Crystallize failed',
+  crystallizeHippoUnavailable: 'Install HippoMemo (dsh-hippomemo) first to crystallize sparks.',
+  crystallizedBadge: 'Crystallized',
 }
 
 export type SparkKey = keyof typeof zh

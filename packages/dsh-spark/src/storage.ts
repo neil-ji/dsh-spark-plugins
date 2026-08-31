@@ -13,7 +13,6 @@ import { dirname } from 'node:path'
 import type { SparkPatch, SparkView } from 'dsh-spark-wire'
 import type { SparkRecordId, SparkStorage } from './types.ts'
 
-/** Empty file parses to zero records. */
 function parseLines(text: string): SparkView[] {
   const records: SparkView[] = []
   for (const raw of text.split('\n')) {
@@ -25,7 +24,7 @@ function parseLines(text: string): SparkView[] {
         records.push(parsed as SparkView)
       }
     } catch {
-      // Skip malformed line; do not let one bad row brick the whole store.
+      // ignore malformed line
     }
   }
   return records
@@ -39,7 +38,6 @@ export class JsonlSparkStorage implements SparkStorage {
     this.filePath = filePath
   }
 
-  /** Serialize every write through one promise chain so concurrent append/patch do not interleave. */
   private async serialize<T>(work: () => Promise<T>): Promise<T> {
     const previous = this.chain
     let release: () => void = () => {}
@@ -85,27 +83,18 @@ export class JsonlSparkStorage implements SparkStorage {
       const current = all[index]!
       const merged = applyPatch(current, patch, now)
       all[index] = merged
-      await this.writeAll(all)
+      await this.writeAllRaw(all)
       return merged
     })
   }
 
-  async remove(id: SparkRecordId): Promise<boolean> {
-    return this.serialize(async () => {
-      const all = await this.readAll()
-      const next = all.filter(r => r.id !== id)
-      if (next.length === all.length) return false
-      await this.writeAll(next)
-      return true
+  async writeAll(records: SparkView[]): Promise<void> {
+    await this.serialize(async () => {
+      await this.writeAllRaw(records)
     })
   }
 
-  /**
-   * Atomic rewrite: write to <file>.tmp, fsync, rename. Rename is atomic on
-   * the same filesystem, so readers always see a complete file or the previous
-   * one — never a half-written state.
-   */
-  private async writeAll(records: SparkView[]): Promise<void> {
+  private async writeAllRaw(records: SparkView[]): Promise<void> {
     await fs.mkdir(dirname(this.filePath), { recursive: true })
     const tmp = this.filePath + '.tmp'
     const text = records.map(r => JSON.stringify(r)).join('\n') + (records.length > 0 ? '\n' : '')
@@ -118,9 +107,18 @@ export class JsonlSparkStorage implements SparkStorage {
     }
     await fs.rename(tmp, this.filePath)
   }
+
+  async remove(id: SparkRecordId): Promise<boolean> {
+    return this.serialize(async () => {
+      const all = await this.readAll()
+      const next = all.filter(r => r.id !== id)
+      if (next.length === all.length) return false
+      await this.writeAllRaw(next)
+      return true
+    })
+  }
 }
 
-/** Merge a SparkPatch onto a SparkView, bumping updatedAt and resolvedAt when applicable. */
 function applyPatch(current: SparkView, patch: SparkPatch, now: number): SparkView {
   const merged: SparkView = {
     ...current,
@@ -131,7 +129,6 @@ function applyPatch(current: SparkView, patch: SparkPatch, now: number): SparkVi
     ...(patch.status !== undefined ? { status: patch.status } : {}),
     updatedAt: now,
   }
-  // status flips to archived → stamp resolvedAt so the UI can sort by "recently resolved".
   if (patch.status === 'archived' && current.status !== 'archived') {
     merged.resolvedAt = now
   }
