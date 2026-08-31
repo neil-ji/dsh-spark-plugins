@@ -98,7 +98,20 @@ function readDescriptorPrices(
   ns: ReturnType<typeof settingsNamespace>,
   side: 'base' | 'user',
 ): FinanceConfigInput['prices'] {
-  const settings = (ctx as { settings?: { describe: () => Array<{ ns: typeof ns; base?: unknown; user?: unknown }> } }).settings
+  // A cordis context throws (instead of returning undefined) when a service
+  // property is read without the service being injectable in that context.
+  // FinanceService's own ctx never injects 'settings', so a bare read here
+  // throws; when that happens inside installSettingsSection's onChange hook
+  // (within the settings inject callback), it aborts the callback and rolls
+  // back the just-registered namespace -- the plugin config card disappears.
+  // Guard the read so a non-injectable context degrades to the documented
+  // "no descriptor" fallback instead of throwing.
+  let settings: { describe: () => Array<{ ns: typeof ns; base?: unknown; user?: unknown }> } | undefined
+  try {
+    settings = (ctx as { settings?: { describe: () => Array<{ ns: typeof ns; base?: unknown; user?: unknown }> } }).settings
+  } catch {
+    return {}
+  }
   if (settings === undefined || typeof settings.describe !== 'function') return {}
   const descriptor = settings.describe().find(d => d.ns === ns)
   if (descriptor === undefined) return {}
