@@ -495,6 +495,18 @@ export interface FinanceBackfillProgress {
 }
 
 /**
+ * Optional inputs to `finance.syncCommunityPrices`: a provider allow-list and
+ * a CNY-USD FX override. Both keys are optional; omitted keys fall back to the
+ * host-side defaults (`COMMUNITY_SYNC_DEFAULT_PROVIDERS` / `COMMUNITY_SYNC_DEFAULT_FX`).
+ */
+export interface FinanceSyncOptions {
+  /** Providers to restrict the sync to. */
+  providers?: readonly string[]
+  /** CNY micros per USD applied to the conversion. */
+  fx?: number
+}
+
+/**
  * Per-call outcome of one `finance.syncCommunityPrices` invocation.
  * `ok: true` means the fetched rows were applied to the in-memory
  * community-prices layer (and the ledger cache was invalidated so the next

@@ -43,6 +43,7 @@ import type {
   FinancePriceRate,
   FinanceProviderBalance,
   FinanceProviderEntry,
+  FinanceSyncOptions,
   FinanceSyncStatus,
 } from './types.ts'
 
@@ -501,7 +502,7 @@ export class FinanceService extends TypertRemoteService {
    */
   @Remote
   async syncCommunityPrices(
-    options?: { providers?: readonly string[]; fx?: number },
+    options?: FinanceSyncOptions,
     signal?: AbortSignal,
   ): Promise<FinanceCommunitySyncResult> {
     const requested = options?.providers ?? this.defaultSyncOptions().providers

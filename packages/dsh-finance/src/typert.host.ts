@@ -16,6 +16,7 @@ import {
   financeOverviewSchema,
   financeProviderBalanceSchema,
   financeProviderEntrySchema,
+  financeSyncOptionsSchema,
   financeSyncStatusSchema,
 } from './typert.schemas.ts'
 
@@ -141,7 +142,11 @@ export const TYPERT: unknown = {
           name: 'options',
           wire: 'options',
           source: 'json',
-          codec: { mode: 'src-json' },
+          codec: {
+            mode: 'strict',
+            typeSymbol: 'dsh-spark-finance/types#FinanceSyncOptions',
+            schema: financeSyncOptionsSchema,
+          },
           acceptsUndefined: true,
         },
       ],
@@ -164,7 +169,7 @@ export const TYPERT: unknown = {
       result: {
         mode: 'strict',
         typeSymbol: 'dsh-spark-finance/types#FinanceSyncStatus',
-        schema: financeSyncStatusSchema,
+        schema: financeSyncStatusSchema.nullable(),
       },
       sourceLocation: { file: 'packages/dsh-finance/src/index.ts', line: 433, column: 5 },
     },

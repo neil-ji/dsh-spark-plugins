@@ -178,6 +178,16 @@ export const financeBackfillProgressSchema = z.object({
 })
 
 /**
+ * Strict-boundary schema for the `finance.syncCommunityPrices` `options`
+ * parameter. Mirrors `FinanceSyncOptions` from types.ts; both keys optional,
+ * each validated when present.
+ */
+export const financeSyncOptionsSchema = z.object({
+  providers: z.array(z.string()).optional(),
+  fx: z.number().optional(),
+})
+
+/**
  * Strict-boundary schema for the `finance.syncCommunityPrices` return shape.
  * Mirrors `FinanceCommunitySyncResult` from types.ts; kept duplicate-on-purpose
  * because the @Remote browser face must not reach the host-only types file

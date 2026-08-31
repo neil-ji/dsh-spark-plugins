@@ -17,6 +17,7 @@ import type {
   FinanceCommunitySyncResult,
   FinanceLedger,
   FinanceOverview,
+  FinanceSyncOptions,
   FinanceSyncStatus,
 } from './types.ts'
 import {
@@ -25,6 +26,7 @@ import {
   financeCommunitySyncResultSchema,
   financeLedgerSchema,
   financeOverviewSchema,
+  financeSyncOptionsSchema,
   financeSyncStatusSchema,
 } from './typert.schemas.ts'
 
@@ -34,7 +36,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     getLedger: () => Promise<RemoteResult<FinanceLedger>>
     getOverview: () => Promise<RemoteResult<FinanceOverview>>
     getBackfillProgress: () => Promise<RemoteResult<FinanceBackfillProgress>>
-    syncCommunityPrices: (options?: { providers?: readonly string[]; fx?: number }) => Promise<RemoteResult<FinanceCommunitySyncResult>>
+    syncCommunityPrices: (options?: FinanceSyncOptions) => Promise<RemoteResult<FinanceCommunitySyncResult>>
     getSyncStatus: () => Promise<RemoteResult<FinanceSyncStatus | null>>
   }
   interface TypertRemoteMap {
@@ -42,7 +44,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'finance/getLedger': () => Promise<RemoteResult<FinanceLedger>>
     'finance/getOverview': () => Promise<RemoteResult<FinanceOverview>>
     'finance/getBackfillProgress': () => Promise<RemoteResult<FinanceBackfillProgress>>
-    'finance/syncCommunityPrices': (options?: { providers?: readonly string[]; fx?: number }) => Promise<RemoteResult<FinanceCommunitySyncResult>>
+    'finance/syncCommunityPrices': (options?: FinanceSyncOptions) => Promise<RemoteResult<FinanceCommunitySyncResult>>
     'finance/getSyncStatus': () => Promise<RemoteResult<FinanceSyncStatus | null>>
   }
   interface TypertRemoteNamespaceMap {
@@ -125,7 +127,11 @@ export const TYPERT_REMOTE: TypertRemoteContribution = {
           name: 'options',
           wire: 'options',
           source: 'json',
-          codec: { mode: 'src-json' },
+          codec: {
+            mode: 'strict',
+            typeSymbol: 'dsh-spark-finance/types#FinanceSyncOptions',
+            schema: financeSyncOptionsSchema,
+          },
           acceptsUndefined: true,
         },
       ],
@@ -148,7 +154,7 @@ export const TYPERT_REMOTE: TypertRemoteContribution = {
       result: {
         mode: 'strict',
         typeSymbol: 'dsh-spark-finance/types#FinanceSyncStatus',
-        schema: financeSyncStatusSchema,
+        schema: financeSyncStatusSchema.nullable(),
       },
       sourceLocation: { file: 'packages/dsh-finance/src/index.ts', line: 433, column: 5 },
     },
