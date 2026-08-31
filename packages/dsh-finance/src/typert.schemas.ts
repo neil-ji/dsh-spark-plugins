@@ -132,3 +132,37 @@ export const financeBackfillProgressSchema = z.object({
   rescanned: z.number(),
   startedAt: z.number(),
 })
+
+/**
+ * Strict-boundary schema for the `finance.syncCommunityPrices` return shape.
+ * Mirrors `FinanceCommunitySyncResult` from types.ts; kept duplicate-on-purpose
+ * because the @Remote browser face must not reach the host-only types file
+ * unchanged (it gets serialized over the wire). Mirror drift is caught by
+ * tests asserting structural equality.
+ */
+export const financeCommunitySyncResultSchema = z.object({
+  ok: z.boolean(),
+  source: z.string(),
+  appliedAt: z.number().optional(),
+  fx: z.number(),
+  requestedProviders: z.array(z.string()),
+  requestedMissing: z.array(z.string()),
+  kept: z.number(),
+  droppedDated: z.number(),
+  droppedNonToken: z.number(),
+  droppedNoCost: z.number(),
+  providers: z.array(z.string()),
+  error: z.object({ message: z.string() }).optional(),
+})
+
+/**
+ * Strict-boundary schema for the `finance.getSyncStatus` return shape.
+ * Mirrors `FinanceSyncStatus` from types.ts.
+ */
+export const financeSyncStatusSchema = z.object({
+  source: z.string(),
+  appliedAt: z.number(),
+  kept: z.number(),
+  providers: z.array(z.string()),
+  fx: z.number(),
+})

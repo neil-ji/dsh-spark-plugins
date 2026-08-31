@@ -417,3 +417,56 @@ export interface FinanceBackfillProgress {
   rescanned: number
   startedAt: number
 }
+
+/**
+ * Per-call outcome of one `finance.syncCommunityPrices` invocation.
+ * `ok: true` means the fetched rows were applied to the in-memory
+ * community-prices layer (and the ledger cache was invalidated so the next
+ * `getLedger` rebuilds at the new rates). `ok: false` means the fetch or
+ * parse failed; the layer was left untouched and the prior status stays
+ * current — `getSyncStatus` continues to report the last successful sync.
+ */
+export interface FinanceCommunitySyncResult {
+  ok: boolean
+  /** Where the data came from (the upstream dataset URL). */
+  source: string
+  /** Epoch ms when the layer was updated. Undefined on `ok: false`. */
+  appliedAt?: number
+  /** CNY micros per USD applied to the conversion. */
+  fx: number
+  /** Providers the sync attempted to ingest. */
+  requestedProviders: readonly string[]
+  /** Providers in `requestedProviders` that the upstream dataset did NOT expose. */
+  requestedMissing: readonly string[]
+  /** Final per-model-key count that landed in the community layer. */
+  kept: number
+  /** Dated release snapshots dropped because an undated sibling exists. */
+  droppedDated: number
+  /** Non-token product variants skipped (TTS / realtime / transcription). */
+  droppedNonToken: number
+  /** Models dropped because the upstream cost had no usable input/output pair. */
+  droppedNoCost: number
+  /** Provider-set actually written (subset of `requestedProviders` ∩ upstream). */
+  providers: readonly string[]
+  /** Error tag + message when `ok: false`. */
+  error?: { message: string }
+}
+
+/**
+ * Snapshot of the last successful community-sync. Distinct from the result of
+ * a particular call: `syncCommunityPrices` returns once, the dashboard polls
+ * `getSyncStatus` continuously. Absent until the user (or auto-sync) runs at
+ * least one successful sync.
+ */
+export interface FinanceSyncStatus {
+  /** Source URL of the last successful sync. */
+  source: string
+  /** Epoch ms of the last successful sync. */
+  appliedAt: number
+  /** Final kept count at that sync. */
+  kept: number
+  /** Providers written at that sync. */
+  providers: readonly string[]
+  /** CNY-USD FX used by that sync (informational). */
+  fx: number
+}
