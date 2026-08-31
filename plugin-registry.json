@@ -8,6 +8,9 @@
     "dsh-connector-npm": "packages/dsh-npm",
     "dsh-connector-npm-ui": "packages/dsh-npm-ui",
     "dsh-spark-finance": "packages/dsh-finance",
-    "dsh-spark-finance-client": "packages/dsh-finance-client"
+    "dsh-spark-finance-client": "packages/dsh-finance-client",
+    "dsh-spark": "packages/dsh-spark",
+    "dsh-spark-ui": "packages/dsh-spark-ui",
+    "dsh-spark-wire": "packages/dsh-spark-wire"
   }
 }

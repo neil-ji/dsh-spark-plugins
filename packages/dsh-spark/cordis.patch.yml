@@ -1,0 +1,8 @@
+# dsh-spark bundle patch.
+# Inserts both the host row (registers ctx.spark service) and the Web UI row
+# (loads the dsh-spark-ui client bundle into the settings modal).
+- insert:
+    - id: spark
+      name: 'dsh-spark'
+    - id: spark-ui
+      name: 'dsh-spark-ui'
