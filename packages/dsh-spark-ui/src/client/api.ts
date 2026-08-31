@@ -1,7 +1,7 @@
 /**
- * Tiny fetch wrapper for the plugin-owned /sparks API.
+ * Tiny fetch wrapper for the plugin-owned /sparks and /proposals API.
  */
-import type { SparkView, SparkCapture, SparkCrystallize } from 'dsh-spark-wire'
+import type { SparkView, SparkCapture, SparkCrystallize, ProposalView, ProposalStatus, ProposalType } from 'dsh-spark-wire'
 
 interface Envelope {
   ok: boolean
@@ -34,6 +34,12 @@ export interface CrystallizeResult {
   record: { id: string; kind: 'insight' | 'decision' | 'fact' | 'preference' | 'constraint' }
 }
 
+export interface ReflectResult {
+  newProposals: ProposalView[]
+  candidatesGenerated: number
+  skippedDuplicate: number
+}
+
 export interface SparksApi {
   list(query?: { status?: 'active' | 'archived'; scope?: 'session' | 'project' | 'global'; limit?: number }): Promise<SparkView[]>
   get(id: string): Promise<SparkView | null>
@@ -41,7 +47,11 @@ export interface SparksApi {
   archive(id: string): Promise<SparkView>
   delete(id: string): Promise<void>
   crystallize(id: string, opts?: Partial<SparkCrystallize>): Promise<CrystallizeResult>
+  listProposals(query?: { status?: ProposalStatus; type?: ProposalType; limit?: number }): Promise<ProposalView[]>
+  resolveProposal(id: string, status: 'accepted' | 'dismissed'): Promise<ProposalView>
+  reflect(opts?: { candidateLimit?: number; linkThreshold?: number; clusterMinSharedTags?: number; pruneStaleDays?: number }): Promise<ReflectResult>
   subscribe(onChange: () => void): () => void
+  subscribeProposals(onChange: () => void): () => void
 }
 
 export function createSparksApi(): SparksApi {
@@ -71,8 +81,22 @@ export function createSparksApi(): SparksApi {
     async delete(id) {
       await request<{ removed: boolean }>('/sparks/' + encodeURIComponent(id), { method: 'DELETE' })
     },
-    async crystallize(id, opts: Partial<SparkCrystallize> = {}) {
+    async crystallize(id, opts = {}) {
       return await request<CrystallizeResult>('/sparks/' + encodeURIComponent(id) + '/crystallize', { method: 'POST', body: JSON.stringify(opts) })
+    },
+    async listProposals(query = {}) {
+      const params = new URLSearchParams()
+      if (query.status !== undefined) params.set('status', query.status)
+      if (query.type !== undefined) params.set('type', query.type)
+      if (query.limit !== undefined) params.set('limit', String(query.limit))
+      const qs = params.toString()
+      return request<ProposalView[]>('/proposals' + (qs.length > 0 ? '?' + qs : ''))
+    },
+    async resolveProposal(id, status) {
+      return await request<ProposalView>('/proposals/' + encodeURIComponent(id) + '/resolve', { method: 'POST', body: JSON.stringify({ status }) })
+    },
+    async reflect(opts = {}) {
+      return await request<ReflectResult>('/proposals/reflect', { method: 'POST', body: JSON.stringify(opts) })
     },
     subscribe(onChange) {
       let stopped = false
@@ -81,16 +105,22 @@ export function createSparksApi(): SparksApi {
         if (stopped) return
         es = new EventSource('/sparks/events')
         es.onmessage = () => { onChange() }
-        es.onerror = () => {
-          if (es !== null) es.close()
-          if (!stopped) setTimeout(connect, 2000)
-        }
+        es.onerror = () => { if (es !== null) es.close(); if (!stopped) setTimeout(connect, 2000) }
       }
       connect()
-      return () => {
-        stopped = true
-        if (es !== null) es.close()
+      return () => { stopped = true; if (es !== null) es.close() }
+    },
+    subscribeProposals(onChange) {
+      let stopped = false
+      let es: EventSource | null = null
+      const connect = (): void => {
+        if (stopped) return
+        es = new EventSource('/proposals/events')
+        es.onmessage = () => { onChange() }
+        es.onerror = () => { if (es !== null) es.close(); if (!stopped) setTimeout(connect, 2000) }
       }
+      connect()
+      return () => { stopped = true; if (es !== null) es.close() }
     },
   }
 }

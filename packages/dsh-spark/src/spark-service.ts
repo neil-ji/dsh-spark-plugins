@@ -149,6 +149,11 @@ export class SparkService extends Service {
     return merged
   }
 
+  /** Archive a spark (convenience over patch with status='archived'). */
+  async archive(id: SparkId, now: number = Date.now()): Promise<SparkView | null> {
+    return this.patch(id, { status: 'archived' }, now)
+  }
+
   async remove(id: SparkId, now: number = Date.now()): Promise<boolean> {
     const removed = await this.storage.remove(id)
     if (!removed) return false

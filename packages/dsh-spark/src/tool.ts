@@ -74,6 +74,32 @@ export function registerSparkTools(ctx: Context): void {
     },
   }))
 
+  // Phase 4: spark_reflect — DMN-style trigger of rule-based emergence.
+  // Phase 4.5 will layer LLM-backed proposals on top.
+  ctx.tools.register(defineTool({
+    name: 'spark_reflect',
+    description: 'Run the emergence engine over the active spark set. Returns new proposals persisted to the proposals inbox. Use this when you (the agent) or the user want to surface cross-spark associations, themes, or stale items to clean up. Phase 4 MVP is rule-based (title-token Jaccard for links, shared-tag clustering, staleness for prune); Phase 4.5 will add LLM-backed semantic and contradict proposals.',
+    parameters: {
+      candidateLimit: { type: 'number', description: 'Cap on candidate sparks to consider. Defaults to 30.' },
+      linkThreshold: { type: 'number', description: 'Min title-token Jaccard for link proposals. 0..1. Defaults to 0.5.' },
+      clusterMinSharedTags: { type: 'number', description: 'Min shared tags for cluster proposals. Defaults to 2.' },
+      pruneStaleDays: { type: 'number', description: 'Days untouched for prune proposals. Defaults to 14.' },
+    },
+    output: TEXT_OUTPUT,
+    async execute(args) {
+      const opts: Record<string, unknown> = {}
+      if (typeof args.candidateLimit === 'number') opts.candidateLimit = args.candidateLimit
+      if (typeof args.linkThreshold === 'number') opts.linkThreshold = args.linkThreshold
+      if (typeof args.clusterMinSharedTags === 'number') opts.clusterMinSharedTags = args.clusterMinSharedTags
+      if (typeof args.pruneStaleDays === 'number') opts.pruneStaleDays = args.pruneStaleDays
+      const result = await ctx.emerge.reflect(opts)
+      return JSON.stringify(result)
+    },
+    presentCall() {
+      return { card: 'generic', title: 'Reflect (run emergence)', kind: 'other', rawInput: 'emergence' }
+    },
+  }))
+
   ctx.tools.register(defineTool({
     name: 'spark_crystallize',
     description: 'Promote one captured spark into a durable HippoMemo memory record. Idempotent: calling twice on the same spark returns the existing hippoId without creating a duplicate. Use when a spark has matured into a stable insight, decision, fact, preference, or constraint that should survive across sessions and workspaces. Requires dsh-hippomemo to be installed.',

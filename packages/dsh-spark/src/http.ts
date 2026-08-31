@@ -1,16 +1,14 @@
 /**
- * Plugin-owned HTTP API under /sparks/*.
- *
- * A third-party bundle does not edit the official api-remotes assembly, so the
- * settings page talks to this same-origin route instead of ctx.remote. Mirrors
- * dsh-hippomemo's envelope shape (`{ ok, value?, error? }`).
+ * Plugin-owned HTTP API under /sparks/* and /proposals/*.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
-import type { SparkView } from 'dsh-spark-wire'
+import type { SparkView, ProposalView } from 'dsh-spark-wire'
 import type { SparkService, SparkNotFoundError, SparkHippoUnavailableError } from './spark-service.ts'
+import type { EmergeService } from './emerge-service.ts'
 
-const PREFIX = '/sparks'
+const PREFIX_SPARKS = '/sparks'
+const PREFIX_PROPOSALS = '/proposals'
 const MAX_BODY_BYTES = 256 * 1024
 
 interface Envelope {
@@ -22,12 +20,31 @@ interface Envelope {
 export function registerSparkHttpRoutes(ctx: Context, service: SparkService): void {
   ctx.effect(() => ctx.webServer.register({
     kind: 'prefix',
-    path: PREFIX,
-    handler: (req, res) => { void handle(ctx, req, res, service) },
+    path: PREFIX_SPARKS,
+    handler: (req, res) => { void handleSparks(ctx, req, res, service) },
   }), 'spark.httpRoutes')
+
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'prefix',
+    path: PREFIX_PROPOSALS,
+    handler: (req, res) => { void handleProposals(ctx, req, res, service) },
+  }), 'proposals.httpRoutes')
+
+  // SSE streams under /sparks/events (existing) and /proposals/events.
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'prefix',
+    path: PREFIX_SPARKS + '/events',
+    handler: (req, res) => { handleSparksEvents(ctx, req, res) },
+  }), 'spark.eventsStream')
+
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'prefix',
+    path: PREFIX_PROPOSALS + '/events',
+    handler: (req, res) => { handleProposalsEvents(ctx, req, res) },
+  }), 'proposals.eventsStream')
 }
 
-async function handle(
+async function handleSparks(
   ctx: Context,
   req: IncomingMessage,
   res: ServerResponse,
@@ -40,14 +57,9 @@ async function handle(
     }
 
     const url = new URL(req.url ?? '/', 'http://x')
-    const sub = url.pathname.slice(PREFIX.length)
+    const sub = url.pathname.slice(PREFIX_SPARKS.length)
 
-    if (req.method === 'GET' && sub === '/events') {
-      handleEvents(ctx, req, res)
-      return
-    }
-
-    if (req.method === 'GET' && sub === '/') {
+    if (req.method === 'GET' && sub === '') {
       const list = await service.list(queryFromUrl(url))
       send(res, 200, okEnvelope(list))
       return
@@ -60,7 +72,7 @@ async function handle(
       return
     }
 
-    if (req.method === 'POST' && sub === '/') {
+    if (req.method === 'POST' && sub === '') {
       const body = await readJsonBody(req)
       const record = await service.capture(body)
       send(res, 200, okEnvelope(record))
@@ -101,7 +113,68 @@ async function handle(
   }
 }
 
-function handleEvents(ctx: Context, req: IncomingMessage, res: ServerResponse): void {
+async function handleProposals(
+  ctx: Context,
+  req: IncomingMessage,
+  res: ServerResponse,
+  _service: SparkService,
+): Promise<void> {
+  try {
+    if (isTrustedBrowserRequest(req) === false) {
+      send(res, 403, errorEnvelope('FORBIDDEN', 'cross-origin request rejected'))
+      return
+    }
+
+    const url = new URL(req.url ?? '/', 'http://x')
+    const sub = url.pathname.slice(PREFIX_PROPOSALS.length)
+    const emerge = ctx.emerge as EmergeService
+
+    if (req.method === 'GET' && sub === '') {
+      const status = url.searchParams.get('status') ?? undefined
+      const type = url.searchParams.get('type') ?? undefined
+      const limitStr = url.searchParams.get('limit')
+      const limit = limitStr !== null ? Number(limitStr) : 100
+      const all = await emerge.list()
+      let filtered = all
+      if (status === 'pending' || status === 'accepted' || status === 'dismissed') {
+        filtered = filtered.filter(p => p.status === status)
+      }
+      if (type === 'link' || type === 'cluster' || type === 'prune') {
+        filtered = filtered.filter(p => p.type === type)
+      }
+      filtered = filtered.slice(0, Number.isFinite(limit) ? limit : 100)
+      send(res, 200, okEnvelope(filtered))
+      return
+    }
+
+    if (req.method === 'POST' && sub === '/reflect') {
+      const body = await readJsonBody(req).catch(() => ({}))
+      const result = await emerge.reflect(body)
+      send(res, 200, okEnvelope(result))
+      return
+    }
+
+    // POST /proposals/:id/resolve  body: { status: 'accepted' | 'dismissed' }
+    if (req.method === 'POST' && /\/resolve$/.test(sub)) {
+      const id = decodeURIComponent(sub.slice(1, -'/resolve'.length))
+      const body = await readJsonBody(req)
+      const status = (body as { status?: string }).status
+      if (status !== 'accepted' && status !== 'dismissed') {
+        send(res, 400, errorEnvelope('BAD_REQUEST', 'status must be accepted or dismissed'))
+        return
+      }
+      const updated = await emerge.resolve(id, status)
+      send(res, updated === null ? 404 : 200, okEnvelope(updated))
+      return
+    }
+
+    send(res, 404, errorEnvelope('NOT_FOUND', 'unknown proposals endpoint'))
+  } catch (error) {
+    send(res, 400, errorEnvelope('BAD_REQUEST', error instanceof Error ? error.message : String(error)))
+  }
+}
+
+function handleSparksEvents(ctx: Context, req: IncomingMessage, res: ServerResponse): void {
   res.writeHead(200, {
     'content-type': 'text/event-stream; charset=utf-8',
     'cache-control': 'no-cache, no-transform',
@@ -109,6 +182,19 @@ function handleEvents(ctx: Context, req: IncomingMessage, res: ServerResponse): 
   })
   res.write(': connected\n\n')
   const dispose = ctx.on('sparks/changed', (change) => {
+    res.write('data: ' + JSON.stringify(change) + '\n\n')
+  })
+  req.on('close', () => { dispose() })
+}
+
+function handleProposalsEvents(ctx: Context, req: IncomingMessage, res: ServerResponse): void {
+  res.writeHead(200, {
+    'content-type': 'text/event-stream; charset=utf-8',
+    'cache-control': 'no-cache, no-transform',
+    'connection': 'keep-alive',
+  })
+  res.write(': connected\n\n')
+  const dispose = ctx.on('proposals/changed', (change) => {
     res.write('data: ' + JSON.stringify(change) + '\n\n')
   })
   req.on('close', () => { dispose() })
@@ -205,5 +291,5 @@ function errorMessageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-/** Reserved: SparkView type referenced for future SSE payload expansion (Phase 4). */
-type _Reserved = SparkView | SparkNotFoundError | SparkHippoUnavailableError
+/** Reserved types for future phases. */
+type _Reserved = SparkView | ProposalView | SparkNotFoundError | SparkHippoUnavailableError

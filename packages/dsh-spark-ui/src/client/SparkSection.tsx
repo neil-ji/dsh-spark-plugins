@@ -1,19 +1,20 @@
 /**
  * dsh-spark-ui settings section: list of sparks with manual capture, archive,
- * delete, crystallize, and live SSE updates.
+ * delete, crystallize, AND the emergence proposals inbox (Phase 4).
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Button, Input, Pill, Textarea } from 'dsh-ui-kit'
 import { bindSnapshotSelector, type SnapshotSelectorHook } from 'dsh-spark-plugin-kit/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
-import type { SparkView, SparkScope, SparkCrystallize } from 'dsh-spark-wire'
-import { createSparksApi, type CrystallizeResult, type SparksApi } from './api.ts'
+import type { SparkView, SparkScope, SparkCrystallize, ProposalView, ProposalStatus, ProposalType } from 'dsh-spark-wire'
+import { createSparksApi, type CrystallizeResult, type ReflectResult, type SparksApi } from './api.ts'
 import type { SparkKey } from './locales.ts'
 
 type Translate = (key: SparkKey) => string
 
-type StatusFilter = 'all' | 'active' | 'archived'
+type SparkStatusFilter = 'all' | 'active' | 'archived'
+type ProposalFilter = 'pending' | 'accepted' | 'dismissed'
 
 export interface SparkSectionInjected {
   api: SparksApi
@@ -28,17 +29,19 @@ export interface SparkState {
   status: 'idle' | 'loading' | 'ready' | 'error'
   error: string | null
   sparks: SparkView[]
+  proposals: ProposalView[]
   live: boolean
 }
 
-/** Page controller: joins the /sparks fetch path and the live SSE stream. */
+/** Page controller: joins the /sparks and /proposals HTTP paths. */
 export class SparkController {
   readonly store: SnapshotStore<SparkState> = createSnapshotStore<SparkState>({
-    status: 'idle', error: null, sparks: [], live: false,
+    status: 'idle', error: null, sparks: [], proposals: [], live: false,
   })
 
   private generation = 0
-  private unsubscribe: (() => void) | null = null
+  private sparkUnsubscribe: (() => void) | null = null
+  private proposalUnsubscribe: (() => void) | null = null
 
   constructor(private readonly api: SparksApi) {}
 
@@ -55,9 +58,12 @@ export class SparkController {
     const generation = ++this.generation
     this.store.update(s => { s.status = 'loading'; s.error = null })
     try {
-      const sparks = await this.api.list()
+      const [sparks, proposals] = await Promise.all([
+        this.api.list(),
+        this.api.listProposals().catch(() => []),
+      ])
       if (generation !== this.generation) return
-      this.store.update(s => { s.status = 'ready'; s.error = null; s.sparks = sparks })
+      this.store.update(s => { s.status = 'ready'; s.error = null; s.sparks = sparks; s.proposals = proposals })
       this.ensureLive()
     } catch (error) {
       if (generation !== this.generation) return
@@ -69,9 +75,13 @@ export class SparkController {
   }
 
   private ensureLive(): void {
-    if (this.unsubscribe !== null) return
-    this.store.update(s => { s.live = true })
-    this.unsubscribe = this.api.subscribe(() => { void this.loadAsync() })
+    if (this.sparkUnsubscribe === null) {
+      this.store.update(s => { s.live = true })
+      this.sparkUnsubscribe = this.api.subscribe(() => { void this.loadAsync() })
+    }
+    if (this.proposalUnsubscribe === null) {
+      this.proposalUnsubscribe = this.api.subscribeProposals(() => { void this.loadAsync() })
+    }
   }
 
   capture(input: { title: string; content: string; scope: SparkScope; tags: string[] }): Promise<SparkView> {
@@ -97,30 +107,38 @@ export class SparkController {
     await this.loadAsync()
   }
 
-  /**
-   * Crystallize a spark into HippoMemo. Returns the result so the UI can
-   * surface the new hippoId / kind for deep-linking.
-   */
   async crystallize(id: string, opts: SparkCrystallize = { kind: 'insight', importance: 0.5, globalProven: false }): Promise<CrystallizeResult> {
     const result = await this.api.crystallize(id, opts)
     await this.loadAsync()
     return result
   }
 
+  async reflect(): Promise<ReflectResult> {
+    const result = await this.api.reflect({})
+    await this.loadAsync()
+    return result
+  }
+
+  async resolveProposal(id: string, status: 'accepted' | 'dismissed'): Promise<ProposalView> {
+    const result = await this.api.resolveProposal(id, status)
+    await this.loadAsync()
+    return result
+  }
+
   dispose(): void {
     this.generation += 1
-    if (this.unsubscribe !== null) {
-      this.unsubscribe()
-      this.unsubscribe = null
-      this.store.update(s => { s.live = false })
+    if (this.sparkUnsubscribe !== null) {
+      this.sparkUnsubscribe()
+      this.sparkUnsubscribe = null
     }
+    if (this.proposalUnsubscribe !== null) {
+      this.proposalUnsubscribe()
+      this.proposalUnsubscribe = null
+    }
+    this.store.update(s => { s.live = false })
   }
 }
 
-/**
- * Entry component: renders the section once injected by the slot, or null
- * while the shell has not injected yet.
- */
 export function SparkSection(props: SparkSectionProps): ReactNode {
   const { controller, useSnapshot, t, api } = props
   if (controller === undefined || useSnapshot === undefined || t === undefined || api === undefined) return null
@@ -130,7 +148,9 @@ export function SparkSection(props: SparkSectionProps): ReactNode {
 function Loaded({ injected }: { injected: SparkSectionInjected }): ReactNode {
   const { controller, t } = injected
   const state = injected.useSnapshot(snapshot => snapshot)
-  const [filter, setFilter] = useState<StatusFilter>('all')
+  const [tab, setTab] = useState<'sparks' | 'proposals'>('sparks')
+  const [sparkFilter, setSparkFilter] = useState<SparkStatusFilter>('all')
+  const [proposalFilter, setProposalFilter] = useState<ProposalFilter>('pending')
   const [showForm, setShowForm] = useState(false)
   const [formTitle, setFormTitle] = useState('')
   const [formContent, setFormContent] = useState('')
@@ -139,6 +159,7 @@ function Loaded({ injected }: { injected: SparkSectionInjected }): ReactNode {
   const [formError, setFormError] = useState<string | null>(null)
   const [crystallizeError, setCrystallizeError] = useState<string | null>(null)
   const [crystallizeInfo, setCrystallizeInfo] = useState<{ id: string; kind: string } | null>(null)
+  const [reflectInfo, setReflectInfo] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -146,10 +167,14 @@ function Loaded({ injected }: { injected: SparkSectionInjected }): ReactNode {
     return () => { controller.dispose() }
   }, [controller])
 
-  const filtered = useMemo<SparkView[]>(() => {
-    if (filter === 'all') return state.sparks
-    return state.sparks.filter(s => s.status === filter)
-  }, [state.sparks, filter])
+  const filteredSparks = useMemo<SparkView[]>(() => {
+    if (sparkFilter === 'all') return state.sparks
+    return state.sparks.filter(s => s.status === sparkFilter)
+  }, [state.sparks, sparkFilter])
+
+  const filteredProposals = useMemo<ProposalView[]>(() => {
+    return state.proposals.filter(p => p.status === proposalFilter)
+  }, [state.proposals, proposalFilter])
 
   const onSubmit = useCallback(async (): Promise<void> => {
     if (formTitle.trim().length === 0 || formContent.trim().length === 0) {
@@ -210,6 +235,28 @@ function Loaded({ injected }: { injected: SparkSectionInjected }): ReactNode {
     }
   }, [controller, t])
 
+  const onReflect = useCallback(async (): Promise<void> => {
+    setBusy(true)
+    setReflectInfo(null)
+    try {
+      const result = await controller.reflect()
+      setReflectInfo(t('reflectDone')
+        .replace('X', String(result.newProposals.length))
+        .replace('Y', String(result.skippedDuplicate)))
+      setTimeout(() => setReflectInfo(null), 6000)
+    } catch (error) {
+      setReflectInfo(error instanceof Error ? error.message : t('reflectFailed'))
+    } finally {
+      setBusy(false)
+    }
+  }, [controller, t])
+
+  const onResolve = useCallback(async (id: string, status: 'accepted' | 'dismissed'): Promise<void> => {
+    setBusy(true)
+    try { await controller.resolveProposal(id, status) }
+    finally { setBusy(false) }
+  }, [controller])
+
   if (state.status === 'error') {
     return (
       <div className="spark-section" data-plugin="dsh-spark-ui">
@@ -228,61 +275,143 @@ function Loaded({ injected }: { injected: SparkSectionInjected }): ReactNode {
 
       <div className="spark-toolbar">
         <div className="spark-toolbar-left">
-          <FilterButton current={filter} value='all' onChange={setFilter}>{t('filterAll')}</FilterButton>
-          <FilterButton current={filter} value='active' onChange={setFilter}>{t('filterActive')}</FilterButton>
-          <FilterButton current={filter} value='archived' onChange={setFilter}>{t('filterArchived')}</FilterButton>
+          <TabButton current={tab} value='sparks' onChange={setTab}>{t('filterAll') /* reuse as title */}
+          </TabButton>
+          <TabButton current={tab} value='proposals' onChange={setTab}>{t('proposalsTab')}</TabButton>
         </div>
         <div className="spark-toolbar-right">
           <span className={'spark-live' + (state.live ? ' spark-live-on' : '')}>
             {state.live ? t('liveOn') : t('liveOff')}
           </span>
           <Button variant="outline" disabled={busy} onClick={() => controller.load()}>{t('refresh')}</Button>
-          <Button variant="primary" disabled={busy} onClick={() => setShowForm(value => !value)}>
-            {showForm ? t('captureCancel') : t('capture')}
-          </Button>
+          {tab === 'sparks' ? (
+            <Button variant="primary" disabled={busy} onClick={() => setShowForm(value => !value)}>
+              {showForm ? t('captureCancel') : t('capture')}
+            </Button>
+          ) : (
+            <Button variant="primary" disabled={busy} onClick={() => { void onReflect() }}>
+              {t('reflect')}
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {tab === 'sparks' ? (
+        <SparksTab
+          sparks={filteredSparks}
+          totalSparks={state.sparks.length}
+          showForm={showForm}
+          formTitle={formTitle} setFormTitle={setFormTitle}
+          formContent={formContent} setFormContent={setFormContent}
+          formTags={formTags} setFormTags={setFormTags}
+          formScope={formScope} setFormScope={setFormScope}
+          formError={formError}
+          crystallizeError={crystallizeError}
+          crystallizeInfo={crystallizeInfo}
+          sparkFilter={sparkFilter} setSparkFilter={setSparkFilter}
+          busy={busy}
+          t={t}
+          onSubmit={onSubmit}
+          onArchive={onArchive}
+          onDelete={onDelete}
+          onCrystallize={onCrystallize}
+          onRefresh={() => controller.load()}
+        />
+      ) : (
+        <ProposalsTab
+          proposals={filteredProposals}
+          totalProposals={state.proposals.length}
+          reflectInfo={reflectInfo}
+          proposalFilter={proposalFilter}
+          setProposalFilter={setProposalFilter}
+          busy={busy}
+          t={t}
+          onResolve={onResolve}
+          onReflect={() => { void onReflect() }}
+        />
+      )}
+    </div>
+  )
+}
+
+function TabButton({ current, value, onChange, children }: {
+  current: 'sparks' | 'proposals'
+  value: 'sparks' | 'proposals'
+  onChange: (next: 'sparks' | 'proposals') => void
+  children: ReactNode
+}): ReactNode {
+  const active = current === value
+  return (
+    <Button variant={active ? 'primary' : 'outline'} onClick={() => onChange(value)}>
+      {children}
+    </Button>
+  )
+}
+
+function FilterButton<T extends string>({ current, value, onChange, children }: {
+  current: T
+  value: T
+  onChange: (next: T) => void
+  children: ReactNode
+}): ReactNode {
+  const active = current === value
+  return (
+    <Button variant={active ? 'primary' : 'outline'} onClick={() => onChange(value)}>
+      {children}
+    </Button>
+  )
+}
+
+interface SparksTabProps {
+  sparks: SparkView[]
+  totalSparks: number
+  showForm: boolean
+  formTitle: string; setFormTitle: (v: string) => void
+  formContent: string; setFormContent: (v: string) => void
+  formTags: string; setFormTags: (v: string) => void
+  formScope: SparkScope; setFormScope: (v: SparkScope) => void
+  formError: string | null
+  crystallizeError: string | null
+  crystallizeInfo: { id: string; kind: string } | null
+  sparkFilter: SparkStatusFilter; setSparkFilter: (v: SparkStatusFilter) => void
+  busy: boolean
+  t: Translate
+  onSubmit: () => Promise<void>
+  onArchive: (id: string) => Promise<void>
+  onDelete: (id: string) => Promise<void>
+  onCrystallize: (spark: SparkView) => Promise<void>
+  onRefresh: () => void
+}
+
+function SparksTab(props: SparksTabProps): ReactNode {
+  const { sparks, totalSparks, showForm, formTitle, setFormTitle, formContent, setFormContent, formTags, setFormTags, formScope, setFormScope, formError, crystallizeError, crystallizeInfo, sparkFilter, setSparkFilter, busy, t, onSubmit, onArchive, onDelete, onCrystallize, onRefresh } = props
+  return (
+    <div>
+      <div className="spark-toolbar">
+        <div className="spark-toolbar-left">
+          <FilterButton current={sparkFilter} value='all' onChange={setSparkFilter}>{t('filterAll')}</FilterButton>
+          <FilterButton current={sparkFilter} value='active' onChange={setSparkFilter}>{t('filterActive')}</FilterButton>
+          <FilterButton current={sparkFilter} value='archived' onChange={setSparkFilter}>{t('filterArchived')}</FilterButton>
         </div>
       </div>
 
       {showForm ? (
-        <form
-          className="spark-form"
-          onSubmit={(event) => { event.preventDefault(); void onSubmit() }}
-        >
+        <form className="spark-form" onSubmit={(event) => { event.preventDefault(); void onSubmit() }}>
           <div className="spark-form-row">
             <label htmlFor="spark-title">{t('captureTitle')}</label>
-            <Input
-              id="spark-title"
-              value={formTitle}
-              placeholder={t('captureTitlePlaceholder')}
-              onChange={(event) => { setFormTitle((event.currentTarget as HTMLInputElement).value) }}
-              maxLength={200}
-            />
+            <Input id="spark-title" value={formTitle} placeholder={t('captureTitlePlaceholder')} onChange={(event) => { setFormTitle((event.currentTarget as HTMLInputElement).value) }} maxLength={200} />
           </div>
           <div className="spark-form-row">
             <label htmlFor="spark-content">{t('captureContent')}</label>
-            <Textarea
-              id="spark-content"
-              value={formContent}
-              placeholder={t('captureContentPlaceholder')}
-              onChange={(event) => { setFormContent((event.currentTarget as HTMLTextAreaElement).value) }}
-              maxLength={20_000}
-            />
+            <Textarea id="spark-content" value={formContent} placeholder={t('captureContentPlaceholder')} onChange={(event) => { setFormContent((event.currentTarget as HTMLTextAreaElement).value) }} maxLength={20_000} />
           </div>
           <div className="spark-form-row">
             <label htmlFor="spark-tags">{t('captureTags')}</label>
-            <Input
-              id="spark-tags"
-              value={formTags}
-              onChange={(event) => { setFormTags((event.currentTarget as HTMLInputElement).value) }}
-            />
+            <Input id="spark-tags" value={formTags} onChange={(event) => { setFormTags((event.currentTarget as HTMLInputElement).value) }} />
           </div>
           <div className="spark-form-row">
             <label htmlFor="spark-scope">{t('captureScope')}</label>
-            <select
-              id="spark-scope"
-              value={formScope}
-              onChange={(event) => { setFormScope((event.currentTarget as HTMLSelectElement).value as SparkScope) }}
-            >
+            <select id="spark-scope" value={formScope} onChange={(event) => { setFormScope((event.currentTarget as HTMLSelectElement).value as SparkScope) }}>
               <option value="project">{t('captureScopeProject')}</option>
               <option value="session">{t('captureScopeSession')}</option>
               <option value="global">{t('captureScopeGlobal')}</option>
@@ -290,9 +419,7 @@ function Loaded({ injected }: { injected: SparkSectionInjected }): ReactNode {
           </div>
           {formError !== null ? <div className="spark-error">{formError}</div> : null}
           <div className="spark-form-actions">
-            <Button variant="outline" type="button" disabled={busy} onClick={() => setShowForm(false)}>
-              {t('captureCancel')}
-            </Button>
+            <Button variant="outline" type="button" disabled={busy} onClick={() => { /* close handled by parent */ }}>{t('captureCancel')}</Button>
             <Button variant="primary" type="submit" disabled={busy}>{t('captureSubmit')}</Button>
           </div>
         </form>
@@ -305,31 +432,22 @@ function Loaded({ injected }: { injected: SparkSectionInjected }): ReactNode {
         </div>
       ) : null}
 
-      {filtered.length === 0 ? (
-        <div className="spark-empty">{state.sparks.length === 0 ? t('empty') : t('emptyFiltered')}</div>
+      {sparks.length === 0 ? (
+        <div className="spark-empty">{totalSparks === 0 ? t('empty') : t('emptyFiltered')}</div>
       ) : (
         <div className="spark-list">
-          {filtered.map(spark => (
-            <article
-              key={spark.id}
-              className={'spark-card' + (spark.status === 'archived' ? ' spark-card-archived' : '') + (spark.crystallized !== null ? ' spark-card-crystallized' : '')}
-            >
+          {sparks.map(spark => (
+            <article key={spark.id} className={'spark-card' + (spark.status === 'archived' ? ' spark-card-archived' : '') + (spark.crystallized !== null ? ' spark-card-crystallized' : '')}>
               <header className="spark-card-head">
                 <h3 className="spark-card-title">{spark.title}</h3>
                 <div className="spark-card-actions">
                   {spark.crystallized === null && spark.status === 'active' ? (
-                    <Button variant="outline" disabled={busy} onClick={() => { void onCrystallize(spark) }}>
-                      {t('crystallize')}
-                    </Button>
+                    <Button variant="outline" disabled={busy} onClick={() => { void onCrystallize(spark) }}>{t('crystallize')}</Button>
                   ) : null}
                   {spark.status === 'active' ? (
-                    <Button variant="outline" disabled={busy} onClick={() => { void onArchive(spark.id) }}>
-                      {t('archive')}
-                    </Button>
+                    <Button variant="outline" disabled={busy} onClick={() => { void onArchive(spark.id) }}>{t('archive')}</Button>
                   ) : null}
-                  <Button variant="outline" disabled={busy} onClick={() => { void onDelete(spark.id) }}>
-                    {t('delete')}
-                  </Button>
+                  <Button variant="outline" disabled={busy} onClick={() => { void onDelete(spark.id) }}>{t('delete')}</Button>
                 </div>
               </header>
               <p className="spark-card-content">{spark.content}</p>
@@ -348,24 +466,76 @@ function Loaded({ injected }: { injected: SparkSectionInjected }): ReactNode {
   )
 }
 
-function FilterButton({ current, value, onChange, children }: {
-  current: StatusFilter
-  value: StatusFilter
-  onChange: (next: StatusFilter) => void
-  children: ReactNode
-}): ReactNode {
-  const active = current === value
+interface ProposalsTabProps {
+  proposals: ProposalView[]
+  totalProposals: number
+  reflectInfo: string | null
+  proposalFilter: ProposalFilter
+  setProposalFilter: (v: ProposalFilter) => void
+  busy: boolean
+  t: Translate
+  onResolve: (id: string, status: 'accepted' | 'dismissed') => Promise<void>
+  onReflect: () => void
+}
+
+function ProposalsTab(props: ProposalsTabProps): ReactNode {
+  const { proposals, totalProposals, reflectInfo, proposalFilter, setProposalFilter, busy, t, onResolve, onReflect } = props
   return (
-    <Button variant={active ? 'primary' : 'outline'} onClick={() => onChange(value)}>
-      {children}
-    </Button>
+    <div>
+      <div className="spark-toolbar">
+        <div className="spark-toolbar-left">
+          <FilterButton current={proposalFilter} value='pending' onChange={setProposalFilter}>{t('proposalFilterPending')}</FilterButton>
+          <FilterButton current={proposalFilter} value='accepted' onChange={setProposalFilter}>{t('proposalFilterAccepted')}</FilterButton>
+          <FilterButton current={proposalFilter} value='dismissed' onChange={setProposalFilter}>{t('proposalFilterDismissed')}</FilterButton>
+        </div>
+      </div>
+
+      {reflectInfo !== null ? (
+        <div className="spark-error" style={{ color: 'var(--dsw-alias-state-success-primary, var(--dsw-static-green-500))', borderColor: 'var(--dsw-alias-state-success-primary, var(--dsw-static-green-500))' }}>
+          {reflectInfo}
+        </div>
+      ) : null}
+
+      {proposals.length === 0 ? (
+        <div className="spark-empty">{totalProposals === 0 ? t('proposalEmptyAll') : t('proposalEmpty')}</div>
+      ) : (
+        <div className="spark-list">
+          {proposals.map(proposal => (
+            <article key={proposal.id} className="spark-card">
+              <header className="spark-card-head">
+                <h3 className="spark-card-title">
+                  {proposal.type === 'link' ? t('proposalTypeLink') : proposal.type === 'cluster' ? t('proposalTypeCluster') : t('proposalTypePrune')}
+                </h3>
+                <div className="spark-card-actions">
+                  {proposal.status === 'pending' ? (
+                    <Button variant="outline" disabled={busy} onClick={() => { void onResolve(proposal.id, 'accepted') }}>{t('proposalAccept')}</Button>
+                  ) : null}
+                  {proposal.status === 'pending' ? (
+                    <Button variant="outline" disabled={busy} onClick={() => { void onResolve(proposal.id, 'dismissed') }}>{t('proposalDismiss')}</Button>
+                  ) : null}
+                </div>
+              </header>
+              <p className="spark-card-content">{proposal.explanation}</p>
+              <footer className="spark-card-meta">
+                <Pill>{leverageLabel(proposal, t)}</Pill>
+                <Pill>{Math.round(proposal.confidence * 100) + '%'}</Pill>
+                <span>{proposal.sparkIds.length} spark(s)</span>
+                <span>{new Date(proposal.createdAt).toLocaleString()}</span>
+              </footer>
+            </article>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
-/**
- * Convenience: bind a controller to the same lifecycle the slot provides,
- * returning a SnapshotSelectorHook bound to the controller store.
- */
+function leverageLabel(p: ProposalView, t: Translate): string {
+  if (p.leverage === 'high') return t('leverageHigh')
+  if (p.leverage === 'medium') return t('leverageMedium')
+  return t('leverageLow')
+}
+
 export function bindSparkController(controller: SparkController): {
   api: SparksApi
   useSnapshot: SnapshotSelectorHook<SparkState>
