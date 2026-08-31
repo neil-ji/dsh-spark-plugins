@@ -15,6 +15,26 @@ export const financeTokenBucketsSchema = z.object({
   outputTokens: z.number(),
 })
 
+/**
+ * Strict-boundary schema for one per-provider balance view. Mirrors
+ * `FinanceProviderBalance` from types.ts. The `status` union adds
+ * `unsupported` (for providers the host cannot fetch) on top of the legacy
+ * `FinanceBalanceStatus`. `code` is a stable lower-kebab tag (`auth`,
+ * `http`, `unsupported-provider`, ...); `message` is human-readable copy.
+ *
+ * Declared BEFORE `financeBalanceViewSchema` so the balance view's `providers`
+ * map can reference this schema directly without a lazy trampoline.
+ */
+export const financeProviderBalanceSchema = z.object({
+  status: z.enum(['ok', 'missing-credential', 'unsupported', 'error']),
+  provider: z.string(),
+  totalMicros: z.number().optional(),
+  currency: z.enum(['CNY', 'USD']).optional(),
+  code: z.string().optional(),
+  message: z.string().optional(),
+  fetchedAt: z.number(),
+})
+
 export const financeBalanceViewSchema = z.object({
   status: z.enum(['ok', 'missing-credential', 'error']),
   updatedAt: z.number(),
@@ -25,6 +45,30 @@ export const financeBalanceViewSchema = z.object({
   toppedUpMicros: z.number().optional(),
   code: z.string().optional(),
   message: z.string().optional(),
+  // Rolling-upgrade allowance: older hosts omit the per-provider map. Clients
+  // fall back to the legacy single-provider fields above as the DeepSeek view
+  // until commit 12 starts populating this. Strict-zod shape mirrors
+  // `FinanceBalanceView.providers` from types.ts.
+  providers: z.record(z.string(), financeProviderBalanceSchema).optional(),
+})
+
+/**
+ * Strict-boundary schema for one row in the per-provider configuration list.
+ * Mirrors `FinanceProviderEntry` from types.ts. The schema range on
+ * `totalPriceMicros` is 0..100_000_000_000 (i.e. 0..100,000 in major units),
+ * matching the documented UI cap. `validity` is optional; both bounds inside
+ * it are independent and optional (empty = 永久).
+ */
+export const financeProviderEntrySchema = z.object({
+  provider: z.string(),
+  billingMode: z.enum(['metered', 'plan', 'free']),
+  totalPriceMicros: z.number().min(0).max(100_000_000_000),
+  currency: z.enum(['CNY', 'USD']),
+  autoFetchBalance: z.boolean(),
+  validity: z.object({
+    startMs: z.number().optional(),
+    endMs: z.number().optional(),
+  }).optional(),
 })
 
 export const financeHourOfDayRowSchema = z.object({

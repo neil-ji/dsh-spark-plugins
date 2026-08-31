@@ -385,5 +385,6 @@ export function normalizeFinanceConfig(raw: FinanceConfigInput | FinanceConfig):
     providerDefaults: base.providerDefaults ?? {},
     billingModes: base.billingModes ?? {},
     prices: normalizeFinancePrices(base.prices),
+    providers: base.providers ?? [],
   }
 }

@@ -135,6 +135,24 @@ const priceEntries = z.union([
   z.array(z.union([flatPriceEntry, windowedPriceEntry])),
 ])
 
+/**
+ * One row in the per-provider configuration list (commit 11, additive).
+ * Mirrors `FinanceProviderEntry` from types.ts. The schemastery validator
+ * rejects unknown fields via its default 'remove' mode; nothing here has
+ * non-trivial coercion so the shape stays flat.
+ */
+const providerEntry = z.object({
+  provider: z.string().required(),
+  billingMode: z.union(['metered', 'plan', 'free']).required(),
+  totalPriceMicros: z.number().step(1).min(0).max(100_000_000_000).required(),
+  currency: z.union(['CNY', 'USD']).required(),
+  autoFetchBalance: z.boolean().required(),
+  validity: z.object({
+    startMs: z.number().step(1),
+    endMs: z.number().step(1),
+  }),
+})
+
 /** Service class exported for Cordis default loading; Typert generates the Remote face. */
 export class FinanceService extends TypertRemoteService {
   static inject = ['sessionPersistence', 'sessionProjectionCache', 'workspaceRegistry', 'credentials']
@@ -150,6 +168,13 @@ export class FinanceService extends TypertRemoteService {
     providerDefaults: z.dict(priceRate).default({}),
     billingModes: z.dict(z.union(['metered', 'plan'])).default({}),
     prices: z.dict(priceEntries).default({}),
+    /**
+     * Per-provider configuration list (commit 11, additive). Empty by default
+     * — host-known metadata seeds it from `cordis.patch.yml` once commit 12
+     * lands the `provider-meta.ts` registry. The user overlay is the same
+     * shape and wins on key-by-key merge.
+     */
+    providers: z.array(providerEntry).default([]),
   })
 
   private configSource: () => FinanceConfigInput

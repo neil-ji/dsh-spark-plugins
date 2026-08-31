@@ -348,6 +348,41 @@ describe('pricing', () => {
     expect(normalizeFinanceConfig({}).providerDefaults).toEqual({})
     expect(normalizeFinanceConfig(config).providerDefaults).toEqual({})
   })
+
+  // commit 11: per-provider configuration list (default empty when unset,
+  // preserved verbatim when set). Additive zero-behavior: the resolved shape
+  // always carries a providers array, so downstream code can read without an
+  // optional-chain dance.
+  it('normalizeFinanceConfig carries an empty providers list by default', () => {
+    expect(normalizeFinanceConfig({}).providers).toEqual([])
+    expect(normalizeFinanceConfig(config).providers).toEqual([])
+    expect(normalizeFinanceConfig({ providers: undefined }).providers).toEqual([])
+  })
+
+  it('normalizeFinanceConfig preserves the providers list verbatim', () => {
+    const entries = [
+      {
+        provider: 'deepseek-official',
+        billingMode: 'metered' as const,
+        totalPriceMicros: 30_000_000,
+        currency: 'CNY' as const,
+        autoFetchBalance: true,
+      },
+      {
+        provider: 'minimax-cn',
+        billingMode: 'plan' as const,
+        totalPriceMicros: 100_000_000,
+        currency: 'USD' as const,
+        autoFetchBalance: false,
+        validity: { startMs: 1_750_000_000_000, endMs: 1_850_000_000_000 },
+      },
+    ]
+    const normalized = normalizeFinanceConfig({ providers: entries })
+    expect(normalized.providers).toEqual(entries)
+    // freeze-style: list identity is preserved (no defensive copy needed at the
+    // normalization boundary; downstream code is expected to be read-only).
+    expect(normalized.providers).toBe(entries)
+  })
 })
 
 describe('financeWindowInfo', () => {

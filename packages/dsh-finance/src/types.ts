@@ -146,6 +146,67 @@ export interface FinanceConfigInput {
   billingModes?: Record<string, 'metered' | 'plan'>
   /** One price entry per model key, or an era history list of entries. */
   prices?: Record<string, FinancePriceEntryInput | FinancePriceEntryInput[]>
+  /**
+   * Per-provider configuration entries — one row per provider the user wants
+   * to track (DeepSeek-official, MiniMax-M3, OpenAI, ...). Each row carries
+   * billing mode, plan/top-up budget, currency, optional auto-fetch flag, and
+   * an optional validity range. Empty array = no per-provider tracking yet;
+   * commit 12 will start filling this from settings + host-known metadata.
+   * The schema upper bound for `totalPriceMicros` is 100_000_000_000 (i.e.
+   * 100,000 CNY/USD in micros), matching the 0-100,000 UI range.
+   */
+  providers?: FinanceProviderEntry[]
+}
+
+/**
+ * Per-provider billing classification surfaced in the provider config card.
+ * `metered` = pay-as-you-go wallet (the historical DeepSeek default);
+ * `plan` = subscription (cost is a list-price equivalent, never cash flow);
+ * `free` = no money changes hands at all. The `free` value is rendered in the
+ * card but never produces a balance view (auto-fetch is hidden, plan window
+ * does not apply).
+ */
+export type FinanceProviderBillingMode = 'metered' | 'plan' | 'free'
+
+/**
+ * One row in the per-provider configuration list. `totalPriceMicros` is in
+ * currency micros (CNY or USD depending on `currency`) and is interpreted as
+ * either the subscription total (`plan`) or the topped-up wallet amount
+ * (`metered`). `validity` is optional: when absent the provider is treated as
+ * permanent (typical for `metered`). Auto-fetch is currently only honoured by
+ * `deepseek-official`; the host-known provider metadata decides whether the
+ * field is even rendered.
+ */
+export interface FinanceProviderEntry {
+  /** Provider id, matches the leading path segment of `modelKey` (`provider/model`). */
+  provider: string
+  billingMode: FinanceProviderBillingMode
+  /** Currency micros; UI displays in major units (元 / $). Capped at 100,000. */
+  totalPriceMicros: number
+  currency: 'CNY' | 'USD'
+  /** Persisted user toggle; the host actually fires the balance fetch. */
+  autoFetchBalance: boolean
+  /** Optional validity window in epoch ms. Both bounds optional; absent = 永久. */
+  validity?: { startMs?: number; endMs?: number }
+}
+
+/**
+ * Balance view for one provider. The current host only fetches DeepSeek; other
+ * providers surface as `status: 'unsupported'` with a stable `code` so the UI
+ * can pick a sensible empty state. `totalMicros` is in the provider's declared
+ * currency (CNY or USD depending on the corresponding entry's `currency`).
+ */
+export interface FinanceProviderBalance {
+  status: 'ok' | 'missing-credential' | 'unsupported' | 'error'
+  provider: string
+  totalMicros?: number
+  currency?: 'CNY' | 'USD'
+  /** Stable lower-kebab code (e.g. 'auth', 'http', 'unsupported-provider'). */
+  code?: string
+  /** Human-readable message; UI may show or hide depending on the code. */
+  message?: string
+  /** Epoch ms when this view was produced; never reused across calls. */
+  fetchedAt: number
 }
 
 /** Resolved finance configuration (prices normalized to era-sorted entries). */
@@ -161,11 +222,20 @@ export interface FinanceConfig {
   /** Route-level billing classification; absent = 'metered' at lookup time. */
   billingModes: Record<string, 'metered' | 'plan'>
   prices: Record<string, readonly FinancePriceEntry[]>
+  /** Resolved per-provider list (defaults to [] when settings omit it). */
+  providers: readonly FinanceProviderEntry[]
 }
 
 export type FinanceBalanceStatus = 'ok' | 'missing-credential' | 'error'
 
-/** Host-only projection of the DeepSeek balance endpoint. Never carries a key. */
+/**
+ * Host-only projection of the DeepSeek balance endpoint. The legacy
+ * single-provider fields (currency / totalMicros / ...) remain the DeepSeek
+ * view: the host still fetches DeepSeek first and copies that into the
+ * `providers.deepseek-official` slot of `providers` (commit 12). Other
+ * providers carry their own per-provider view there. `providers` is optional
+ * so older hosts and older settings can stay zero-dependency.
+ */
 export interface FinanceBalanceView {
   status: FinanceBalanceStatus
   updatedAt: number
@@ -176,6 +246,12 @@ export interface FinanceBalanceView {
   toppedUpMicros?: number
   code?: string
   message?: string
+  /**
+   * Per-provider balance views keyed by provider id. Present once the host
+   * has provider-aware balance fetching (commit 12). The DeepSeek-official
+   * entry is the same shape as the legacy single fields above.
+   */
+  providers?: Record<string, FinanceProviderBalance>
 }
 
 export interface FinanceSessionRow {

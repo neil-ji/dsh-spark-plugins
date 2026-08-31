@@ -14,6 +14,8 @@ import {
   financeCommunitySyncResultSchema,
   financeLedgerSchema,
   financeOverviewSchema,
+  financeProviderBalanceSchema,
+  financeProviderEntrySchema,
   financeSyncStatusSchema,
 } from './typert.schemas.ts'
 
@@ -51,6 +53,14 @@ export const TYPERT: unknown = {
           { name: 'FinanceLedger', declaration: 'export interface FinanceLedger { generatedAt: number; currency: string; totals: FinanceTokenBuckets; totalCostMicros: number; meteredCostMicros?: number; planEquivalentCostMicros?: number; sessionCount: number; workspaceCount: number; taskCount: number; windowedSinceMs: number | null; hourOfDayWindowStartMs: number; byDay: readonly FinanceDayRow[]; byModel: readonly FinanceModelRow[]; byProvider: readonly FinanceProviderRow[]; byWorkspace: readonly FinanceWorkspaceRow[]; tasks: readonly FinanceTaskRow[]; sessions: readonly FinanceSessionRow[]; byHourOfDay: readonly FinanceHourOfDayRow[]; peakValley: FinancePeakValleySplit; }' },
           { name: 'FinanceOverview', declaration: 'export interface FinanceOverview { balance: FinanceBalanceView; ledger: FinanceLedger; }' },
           { name: 'FinanceBackfillProgress', declaration: 'export interface FinanceBackfillProgress { phase: "idle" | "backfill" | "done"; scanned: number; total: number; rescanned: number; startedAt: number; }' },
+          // Per-provider configuration + balance (commit 11 additive). The
+          // host does not yet fill these in `getBalance` (commit 12 wires the
+          // host-known metadata + DeepSeek fetch into `providers`), but the
+          // types are published now so the client UI / future @Remote can
+          // consume them without a manifest bump.
+          { name: 'FinanceProviderBillingMode', declaration: "export type FinanceProviderBillingMode = 'metered' | 'plan' | 'free';" },
+          { name: 'FinanceProviderEntry', declaration: 'export interface FinanceProviderEntry { provider: string; billingMode: FinanceProviderBillingMode; totalPriceMicros: number; currency: "CNY" | "USD"; autoFetchBalance: boolean; validity?: { startMs?: number; endMs?: number }; }' },
+          { name: 'FinanceProviderBalance', declaration: 'export interface FinanceProviderBalance { status: "ok" | "missing-credential" | "unsupported" | "error"; provider: string; totalMicros?: number; currency?: "CNY" | "USD"; code?: string; message?: string; fetchedAt: number; }' },
         ],
       },
     ],
