@@ -60,9 +60,37 @@ export interface FinanceChartPrefs {
   byDay: boolean
 }
 
+/**
+ * Snapshot of the most recent successful community sync as seen by the client.
+ * Mirrors a subset of `FinanceSyncStatus` from `dsh-spark-finance/types`:
+ * purely informational, fed by `getSyncStatus` so the dashboard can label the
+ * price-sync row without re-firing `syncCommunityPrices`. Persisted alongside
+ * the dashboard prefs so a returning browser still knows "we synced 6h ago".
+ */
+export interface FinanceSyncSnapshot {
+  /** Epoch ms when the host applied the sync. */
+  appliedAt: number
+  /** Source URL (currently always models.dev). */
+  source: string
+  /** Final kept count from the sync. */
+  kept: number
+  /** Providers written. */
+  providers: readonly string[]
+  /** CNY/USD fx applied. */
+  fx: number
+}
+
 export interface FinancePrefs {
   layout: FinanceLayout
   charts: FinanceChartPrefs
+  /**
+   * Whether the client should auto-sync the community price table on startup
+   * when the last sync is older than the threshold (currently 24h). Defaults
+   * to `true`: the user has to opt out to keep the auto-pull off.
+   */
+  autoSync: boolean
+  /** Last successful sync the client has seen, if any. */
+  lastSync: FinanceSyncSnapshot | null
 }
 
 export const DEFAULT_FINANCE_PREFS: FinancePrefs = {
@@ -77,15 +105,36 @@ export const DEFAULT_FINANCE_PREFS: FinancePrefs = {
     byWorkspace: true,
     byDay: true,
   },
+  // autoSync defaults to TRUE: the whole point of the simplification is "users
+  // do not hand-edit prices, the host fetches them". Opt-out is per-browser.
+  autoSync: true,
+  lastSync: null,
 }
 
 const PREFS_KEY = 'dsh-spark-finance.prefs'
+
+function isSyncSnapshot(value: unknown): value is FinanceSyncSnapshot {
+  if (value === null || typeof value !== 'object') return false
+  const v = value as Partial<FinanceSyncSnapshot>
+  return (
+    typeof v.appliedAt === 'number' &&
+    typeof v.source === 'string' &&
+    typeof v.kept === 'number' &&
+    Array.isArray(v.providers) &&
+    v.providers.every((p) => typeof p === 'string') &&
+    typeof v.fx === 'number'
+  )
+}
 
 function mergePrefs(parsed: Partial<FinancePrefs> | null): FinancePrefs {
   const charts = { ...DEFAULT_FINANCE_PREFS.charts, ...(parsed?.charts ?? {}) }
   return {
     layout: parsed?.layout === 'standard' ? 'standard' : DEFAULT_FINANCE_PREFS.layout,
     charts,
+    // Default to true so older browser storage (without these keys) silently
+    // enables auto-sync on first read; users can opt out per browser.
+    autoSync: parsed?.autoSync === false ? false : DEFAULT_FINANCE_PREFS.autoSync,
+    lastSync: isSyncSnapshot(parsed?.lastSync) ? parsed.lastSync : DEFAULT_FINANCE_PREFS.lastSync,
   }
 }
 
