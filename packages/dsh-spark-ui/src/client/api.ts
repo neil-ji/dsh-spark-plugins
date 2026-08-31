@@ -1,7 +1,7 @@
 /**
- * Tiny fetch wrapper for the plugin-owned /sparks and /proposals API.
+ * Tiny fetch wrapper for the plugin-owned /sparks, /proposals, and /scripts API.
  */
-import type { SparkView, SparkCapture, SparkCrystallize, ProposalView, ProposalStatus, ProposalType } from 'dsh-spark-wire'
+import type { SparkView, SparkCapture, SparkCrystallize, ProposalView, ProposalStatus, ProposalType, ScriptView, ScriptCapture, ScriptStep } from 'dsh-spark-wire'
 
 interface Envelope {
   ok: boolean
@@ -40,6 +40,11 @@ export interface ReflectResult {
   skippedDuplicate: number
 }
 
+export interface ScriptInvokeResult {
+  script: ScriptView
+  successRate: number
+}
+
 export interface SparksApi {
   list(query?: { status?: 'active' | 'archived'; scope?: 'session' | 'project' | 'global'; limit?: number }): Promise<SparkView[]>
   get(id: string): Promise<SparkView | null>
@@ -52,6 +57,13 @@ export interface SparksApi {
   reflect(opts?: { candidateLimit?: number; linkThreshold?: number; clusterMinSharedTags?: number; pruneStaleDays?: number }): Promise<ReflectResult>
   subscribe(onChange: () => void): () => void
   subscribeProposals(onChange: () => void): () => void
+  listScripts(query?: { scope?: 'session' | 'project' | 'global'; q?: string; limit?: number }): Promise<ScriptView[]>
+  getScript(id: string): Promise<ScriptView | null>
+  createScript(input: ScriptCapture): Promise<ScriptView>
+  invokeScript(id: string): Promise<ScriptInvokeResult>
+  recordScriptResult(id: string, success: boolean): Promise<ScriptView>
+  deleteScript(id: string): Promise<void>
+  subscribeScripts(onChange: () => void): () => void
 }
 
 export function createSparksApi(): SparksApi {
@@ -98,6 +110,34 @@ export function createSparksApi(): SparksApi {
     async reflect(opts = {}) {
       return await request<ReflectResult>('/proposals/reflect', { method: 'POST', body: JSON.stringify(opts) })
     },
+    async listScripts(query = {}) {
+      const params = new URLSearchParams()
+      if (query.scope !== undefined) params.set('scope', query.scope)
+      if (query.q !== undefined && query.q.length > 0) params.set('q', query.q)
+      if (query.limit !== undefined) params.set('limit', String(query.limit))
+      const qs = params.toString()
+      return request<ScriptView[]>('/scripts' + (qs.length > 0 ? '?' + qs : ''))
+    },
+    async getScript(id) {
+      try {
+        return await request<ScriptView | null>('/scripts/' + encodeURIComponent(id))
+      } catch (error) {
+        if (error instanceof Error && (error as Error & { code?: string }).code === 'NOT_FOUND') return null
+        throw error
+      }
+    },
+    async createScript(input) {
+      return await request<ScriptView>('/scripts', { method: 'POST', body: JSON.stringify(input) })
+    },
+    async invokeScript(id) {
+      return await request<ScriptInvokeResult>('/scripts/' + encodeURIComponent(id) + '/invoke', { method: 'POST' })
+    },
+    async recordScriptResult(id, success) {
+      return await request<ScriptView>('/scripts/' + encodeURIComponent(id) + '/result', { method: 'POST', body: JSON.stringify({ success }) })
+    },
+    async deleteScript(id) {
+      await request<{ removed: boolean }>('/scripts/' + encodeURIComponent(id), { method: 'DELETE' })
+    },
     subscribe(onChange) {
       let stopped = false
       let es: EventSource | null = null
@@ -116,6 +156,18 @@ export function createSparksApi(): SparksApi {
       const connect = (): void => {
         if (stopped) return
         es = new EventSource('/proposals/events')
+        es.onmessage = () => { onChange() }
+        es.onerror = () => { if (es !== null) es.close(); if (!stopped) setTimeout(connect, 2000) }
+      }
+      connect()
+      return () => { stopped = true; if (es !== null) es.close() }
+    },
+    subscribeScripts(onChange) {
+      let stopped = false
+      let es: EventSource | null = null
+      const connect = (): void => {
+        if (stopped) return
+        es = new EventSource('/scripts/events')
         es.onmessage = () => { onChange() }
         es.onerror = () => { if (es !== null) es.close(); if (!stopped) setTimeout(connect, 2000) }
       }

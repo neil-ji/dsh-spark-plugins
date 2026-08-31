@@ -1,20 +1,22 @@
 /**
  * dsh-spark-ui settings section: list of sparks with manual capture, archive,
- * delete, crystallize, AND the emergence proposals inbox (Phase 4).
+ * delete, crystallize; emergence proposals inbox; procedural scripts catalog.
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Button, Input, Pill, Textarea } from 'dsh-ui-kit'
 import { bindSnapshotSelector, type SnapshotSelectorHook } from 'dsh-spark-plugin-kit/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
-import type { SparkView, SparkScope, SparkCrystallize, ProposalView, ProposalStatus, ProposalType } from 'dsh-spark-wire'
+import type { SparkView, SparkScope, SparkCrystallize, ProposalView, ProposalStatus, ProposalType, ScriptView, ScriptScope, ScriptCapture, ScriptStep, ScriptInvokeResult } from 'dsh-spark-wire'
 import { createSparksApi, type CrystallizeResult, type ReflectResult, type SparksApi } from './api.ts'
 import type { SparkKey } from './locales.ts'
 
 type Translate = (key: SparkKey) => string
 
+type Tab = 'sparks' | 'proposals' | 'scripts'
 type SparkStatusFilter = 'all' | 'active' | 'archived'
 type ProposalFilter = 'pending' | 'accepted' | 'dismissed'
+type ScriptFilter = 'all' | 'project' | 'global'
 
 export interface SparkSectionInjected {
   api: SparksApi
@@ -30,24 +32,24 @@ export interface SparkState {
   error: string | null
   sparks: SparkView[]
   proposals: ProposalView[]
+  scripts: ScriptView[]
   live: boolean
 }
 
-/** Page controller: joins the /sparks and /proposals HTTP paths. */
+/** Page controller: joins the /sparks, /proposals, and /scripts HTTP paths. */
 export class SparkController {
   readonly store: SnapshotStore<SparkState> = createSnapshotStore<SparkState>({
-    status: 'idle', error: null, sparks: [], proposals: [], live: false,
+    status: 'idle', error: null, sparks: [], proposals: [], scripts: [], live: false,
   })
 
   private generation = 0
-  private sparkUnsubscribe: (() => void) | null = null
-  private proposalUnsubscribe: (() => void) | null = null
+  private sparkUnsub: (() => void) | null = null
+  private proposalUnsub: (() => void) | null = null
+  private scriptUnsub: (() => void) | null = null
 
   constructor(private readonly api: SparksApi) {}
 
-  load(): void {
-    void this.loadAsync()
-  }
+  load(): void { void this.loadAsync() }
 
   refreshIfLoaded(): void {
     if (this.store.getSnapshot().status === 'idle') return
@@ -58,12 +60,13 @@ export class SparkController {
     const generation = ++this.generation
     this.store.update(s => { s.status = 'loading'; s.error = null })
     try {
-      const [sparks, proposals] = await Promise.all([
-        this.api.list(),
+      const [sparks, proposals, scripts] = await Promise.all([
+        this.api.list().catch(() => []),
         this.api.listProposals().catch(() => []),
+        this.api.listScripts().catch(() => []),
       ])
       if (generation !== this.generation) return
-      this.store.update(s => { s.status = 'ready'; s.error = null; s.sparks = sparks; s.proposals = proposals })
+      this.store.update(s => { s.status = 'ready'; s.error = null; s.sparks = sparks; s.proposals = proposals; s.scripts = scripts })
       this.ensureLive()
     } catch (error) {
       if (generation !== this.generation) return
@@ -75,66 +78,44 @@ export class SparkController {
   }
 
   private ensureLive(): void {
-    if (this.sparkUnsubscribe === null) {
+    if (this.sparkUnsub === null) {
       this.store.update(s => { s.live = true })
-      this.sparkUnsubscribe = this.api.subscribe(() => { void this.loadAsync() })
+      this.sparkUnsub = this.api.subscribe(() => { void this.loadAsync() })
     }
-    if (this.proposalUnsubscribe === null) {
-      this.proposalUnsubscribe = this.api.subscribeProposals(() => { void this.loadAsync() })
+    if (this.proposalUnsub === null) {
+      this.proposalUnsub = this.api.subscribeProposals(() => { void this.loadAsync() })
+    }
+    if (this.scriptUnsub === null) {
+      this.scriptUnsub = this.api.subscribeScripts(() => { void this.loadAsync() })
     }
   }
 
   capture(input: { title: string; content: string; scope: SparkScope; tags: string[] }): Promise<SparkView> {
     return this.api.capture({
-      title: input.title,
-      content: input.content,
-      scope: input.scope,
-      tags: input.tags,
-      workspacePath: null,
-      sourceSessionId: 'web-ui',
-      sourceAgentId: null,
-      sourceTurn: null,
+      title: input.title, content: input.content, scope: input.scope, tags: input.tags,
+      workspacePath: null, sourceSessionId: 'web-ui', sourceAgentId: null, sourceTurn: null,
     })
   }
-
-  async archive(id: string): Promise<void> {
-    await this.api.archive(id)
-    await this.loadAsync()
-  }
-
-  async delete(id: string): Promise<void> {
-    await this.api.delete(id)
-    await this.loadAsync()
-  }
-
+  async archive(id: string): Promise<void> { await this.api.archive(id); await this.loadAsync() }
+  async delete(id: string): Promise<void> { await this.api.delete(id); await this.loadAsync() }
   async crystallize(id: string, opts: SparkCrystallize = { kind: 'insight', importance: 0.5, globalProven: false }): Promise<CrystallizeResult> {
-    const result = await this.api.crystallize(id, opts)
-    await this.loadAsync()
-    return result
+    const result = await this.api.crystallize(id, opts); await this.loadAsync(); return result
   }
-
-  async reflect(): Promise<ReflectResult> {
-    const result = await this.api.reflect({})
-    await this.loadAsync()
-    return result
-  }
-
+  async reflect(): Promise<ReflectResult> { const result = await this.api.reflect({}); await this.loadAsync(); return result }
   async resolveProposal(id: string, status: 'accepted' | 'dismissed'): Promise<ProposalView> {
-    const result = await this.api.resolveProposal(id, status)
-    await this.loadAsync()
-    return result
+    const result = await this.api.resolveProposal(id, status); await this.loadAsync(); return result
   }
+  async invokeScript(id: string): Promise<ScriptInvokeResult> { return await this.api.invokeScript(id) }
+  async recordScriptResult(id: string, success: boolean): Promise<ScriptView> {
+    const result = await this.api.recordScriptResult(id, success); await this.loadAsync(); return result
+  }
+  async deleteScript(id: string): Promise<void> { await this.api.deleteScript(id); await this.loadAsync() }
 
   dispose(): void {
     this.generation += 1
-    if (this.sparkUnsubscribe !== null) {
-      this.sparkUnsubscribe()
-      this.sparkUnsubscribe = null
-    }
-    if (this.proposalUnsubscribe !== null) {
-      this.proposalUnsubscribe()
-      this.proposalUnsubscribe = null
-    }
+    if (this.sparkUnsub !== null) { this.sparkUnsub(); this.sparkUnsub = null }
+    if (this.proposalUnsub !== null) { this.proposalUnsub(); this.proposalUnsub = null }
+    if (this.scriptUnsub !== null) { this.scriptUnsub(); this.scriptUnsub = null }
     this.store.update(s => { s.live = false })
   }
 }
@@ -148,9 +129,10 @@ export function SparkSection(props: SparkSectionProps): ReactNode {
 function Loaded({ injected }: { injected: SparkSectionInjected }): ReactNode {
   const { controller, t } = injected
   const state = injected.useSnapshot(snapshot => snapshot)
-  const [tab, setTab] = useState<'sparks' | 'proposals'>('sparks')
+  const [tab, setTab] = useState<Tab>('sparks')
   const [sparkFilter, setSparkFilter] = useState<SparkStatusFilter>('all')
   const [proposalFilter, setProposalFilter] = useState<ProposalFilter>('pending')
+  const [scriptFilter, setScriptFilter] = useState<ScriptFilter>('all')
   const [showForm, setShowForm] = useState(false)
   const [formTitle, setFormTitle] = useState('')
   const [formContent, setFormContent] = useState('')
@@ -160,6 +142,8 @@ function Loaded({ injected }: { injected: SparkSectionInjected }): ReactNode {
   const [crystallizeError, setCrystallizeError] = useState<string | null>(null)
   const [crystallizeInfo, setCrystallizeInfo] = useState<{ id: string; kind: string } | null>(null)
   const [reflectInfo, setReflectInfo] = useState<string | null>(null)
+  const [scriptResultInfo, setScriptResultInfo] = useState<string | null>(null)
+  const [expandedScriptId, setExpandedScriptId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -176,6 +160,11 @@ function Loaded({ injected }: { injected: SparkSectionInjected }): ReactNode {
     return state.proposals.filter(p => p.status === proposalFilter)
   }, [state.proposals, proposalFilter])
 
+  const filteredScripts = useMemo<ScriptView[]>(() => {
+    if (scriptFilter === 'all') return state.scripts
+    return state.scripts.filter(s => s.scope === scriptFilter)
+  }, [state.scripts, scriptFilter])
+
   const onSubmit = useCallback(async (): Promise<void> => {
     if (formTitle.trim().length === 0 || formContent.trim().length === 0) {
       setFormError(t('captureFailed'))
@@ -186,22 +175,15 @@ function Loaded({ injected }: { injected: SparkSectionInjected }): ReactNode {
     try {
       const tags = formTags.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0)
       await controller.capture({ title: formTitle.trim(), content: formContent.trim(), scope: formScope, tags })
-      setFormTitle('')
-      setFormContent('')
-      setFormTags('')
-      setFormScope('project')
-      setShowForm(false)
+      setFormTitle(''); setFormContent(''); setFormTags(''); setFormScope('project'); setShowForm(false)
     } catch (error) {
       setFormError(error instanceof Error ? error.message : String(error))
-    } finally {
-      setBusy(false)
-    }
+    } finally { setBusy(false) }
   }, [controller, formTitle, formContent, formTags, formScope, t])
 
   const onArchive = useCallback(async (id: string): Promise<void> => {
     setBusy(true)
-    try { await controller.archive(id) }
-    finally { setBusy(false) }
+    try { await controller.archive(id) } finally { setBusy(false) }
   }, [controller])
 
   const onDelete = useCallback(async (id: string): Promise<void> => {
@@ -209,8 +191,7 @@ function Loaded({ injected }: { injected: SparkSectionInjected }): ReactNode {
       if (!window.confirm(t('deleteConfirm'))) return
     }
     setBusy(true)
-    try { await controller.delete(id) }
-    finally { setBusy(false) }
+    try { await controller.delete(id) } finally { setBusy(false) }
   }, [controller, t])
 
   const onCrystallize = useCallback(async (spark: SparkView): Promise<void> => {
@@ -224,15 +205,13 @@ function Loaded({ injected }: { injected: SparkSectionInjected }): ReactNode {
       setCrystallizeInfo({ id: result.record.id, kind: result.record.kind })
       setTimeout(() => setCrystallizeInfo(null), 6000)
     } catch (error) {
-      const err = error as Error & { code?: string; httpStatus?: number }
+      const err = error as Error & { code?: string }
       if (err.code === 'SPARK_HIPPO_UNAVAILABLE') {
         setCrystallizeError(t('crystallizeHippoUnavailable'))
       } else {
         setCrystallizeError(err.message || t('crystallizeFailed'))
       }
-    } finally {
-      setBusy(false)
-    }
+    } finally { setBusy(false) }
   }, [controller, t])
 
   const onReflect = useCallback(async (): Promise<void> => {
@@ -246,16 +225,44 @@ function Loaded({ injected }: { injected: SparkSectionInjected }): ReactNode {
       setTimeout(() => setReflectInfo(null), 6000)
     } catch (error) {
       setReflectInfo(error instanceof Error ? error.message : t('reflectFailed'))
-    } finally {
-      setBusy(false)
-    }
+    } finally { setBusy(false) }
   }, [controller, t])
 
   const onResolve = useCallback(async (id: string, status: 'accepted' | 'dismissed'): Promise<void> => {
     setBusy(true)
-    try { await controller.resolveProposal(id, status) }
-    finally { setBusy(false) }
+    try { await controller.resolveProposal(id, status) } finally { setBusy(false) }
   }, [controller])
+
+  const onInvokeScript = useCallback(async (id: string): Promise<void> => {
+    setBusy(true)
+    setScriptResultInfo(null)
+    try {
+      const result = await controller.invokeScript(id)
+      // Show the steps briefly as a result hint. The agent would normally drive execution;
+      // here we just confirm the invocation was recorded.
+      setScriptResultInfo(t('scriptInvoke') + ' OK (' + result.script.invocationCount + 'x, ' + Math.round(result.successRate * 100) + '%)')
+      setTimeout(() => setScriptResultInfo(null), 6000)
+    } catch (error) {
+      setScriptResultInfo(error instanceof Error ? error.message : 'error')
+    } finally { setBusy(false) }
+  }, [controller, t])
+
+  const onRecordScriptResult = useCallback(async (id: string, success: boolean): Promise<void> => {
+    setBusy(true)
+    try {
+      await controller.recordScriptResult(id, success)
+      setScriptResultInfo(t('scriptRecordResult') + ': ' + (success ? t('scriptResultOk') : t('scriptResultFail')))
+      setTimeout(() => setScriptResultInfo(null), 6000)
+    } finally { setBusy(false) }
+  }, [controller, t])
+
+  const onDeleteScript = useCallback(async (id: string, name: string): Promise<void> => {
+    if (typeof window !== 'undefined' && window.confirm !== undefined) {
+      if (!window.confirm(t('scriptDeleteConfirm').replace('{name}', name))) return
+    }
+    setBusy(true)
+    try { await controller.deleteScript(id) } finally { setBusy(false) }
+  }, [controller, t])
 
   if (state.status === 'error') {
     return (
@@ -275,9 +282,9 @@ function Loaded({ injected }: { injected: SparkSectionInjected }): ReactNode {
 
       <div className="spark-toolbar">
         <div className="spark-toolbar-left">
-          <TabButton current={tab} value='sparks' onChange={setTab}>{t('filterAll') /* reuse as title */}
-          </TabButton>
+          <TabButton current={tab} value='sparks' onChange={setTab}>{t('filterAll').replace('All', 'Sparks').replace('全部', '火花')}</TabButton>
           <TabButton current={tab} value='proposals' onChange={setTab}>{t('proposalsTab')}</TabButton>
+          <TabButton current={tab} value='scripts' onChange={setTab}>{t('scriptsTab')}</TabButton>
         </div>
         <div className="spark-toolbar-right">
           <span className={'spark-live' + (state.live ? ' spark-live-on' : '')}>
@@ -315,9 +322,8 @@ function Loaded({ injected }: { injected: SparkSectionInjected }): ReactNode {
           onArchive={onArchive}
           onDelete={onDelete}
           onCrystallize={onCrystallize}
-          onRefresh={() => controller.load()}
         />
-      ) : (
+      ) : tab === 'proposals' ? (
         <ProposalsTab
           proposals={filteredProposals}
           totalProposals={state.proposals.length}
@@ -327,44 +333,47 @@ function Loaded({ injected }: { injected: SparkSectionInjected }): ReactNode {
           busy={busy}
           t={t}
           onResolve={onResolve}
-          onReflect={() => { void onReflect() }}
+        />
+      ) : (
+        <ScriptsTab
+          scripts={filteredScripts}
+          totalScripts={state.scripts.length}
+          scriptResultInfo={scriptResultInfo}
+          scriptFilter={scriptFilter}
+          setScriptFilter={setScriptFilter}
+          expandedScriptId={expandedScriptId}
+          setExpandedScriptId={setExpandedScriptId}
+          busy={busy}
+          t={t}
+          onInvoke={onInvokeScript}
+          onRecordResult={onRecordScriptResult}
+          onDelete={onDeleteScript}
         />
       )}
     </div>
   )
 }
 
-function TabButton({ current, value, onChange, children }: {
-  current: 'sparks' | 'proposals'
-  value: 'sparks' | 'proposals'
-  onChange: (next: 'sparks' | 'proposals') => void
-  children: ReactNode
+function TabButton<T extends string>({ current, value, onChange, children }: {
+  current: T, value: T, onChange: (next: T) => void, children: ReactNode
 }): ReactNode {
   const active = current === value
   return (
-    <Button variant={active ? 'primary' : 'outline'} onClick={() => onChange(value)}>
-      {children}
-    </Button>
+    <Button variant={active ? 'primary' : 'outline'} onClick={() => onChange(value)}>{children}</Button>
   )
 }
 
 function FilterButton<T extends string>({ current, value, onChange, children }: {
-  current: T
-  value: T
-  onChange: (next: T) => void
-  children: ReactNode
+  current: T, value: T, onChange: (next: T) => void, children: ReactNode
 }): ReactNode {
   const active = current === value
   return (
-    <Button variant={active ? 'primary' : 'outline'} onClick={() => onChange(value)}>
-      {children}
-    </Button>
+    <Button variant={active ? 'primary' : 'outline'} onClick={() => onChange(value)}>{children}</Button>
   )
 }
 
 interface SparksTabProps {
-  sparks: SparkView[]
-  totalSparks: number
+  sparks: SparkView[]; totalSparks: number
   showForm: boolean
   formTitle: string; setFormTitle: (v: string) => void
   formContent: string; setFormContent: (v: string) => void
@@ -380,11 +389,10 @@ interface SparksTabProps {
   onArchive: (id: string) => Promise<void>
   onDelete: (id: string) => Promise<void>
   onCrystallize: (spark: SparkView) => Promise<void>
-  onRefresh: () => void
 }
 
 function SparksTab(props: SparksTabProps): ReactNode {
-  const { sparks, totalSparks, showForm, formTitle, setFormTitle, formContent, setFormContent, formTags, setFormTags, formScope, setFormScope, formError, crystallizeError, crystallizeInfo, sparkFilter, setSparkFilter, busy, t, onSubmit, onArchive, onDelete, onCrystallize, onRefresh } = props
+  const { sparks, totalSparks, showForm, formTitle, setFormTitle, formContent, setFormContent, formTags, setFormTags, formScope, setFormScope, formError, crystallizeError, crystallizeInfo, sparkFilter, setSparkFilter, busy, t, onSubmit, onArchive, onDelete, onCrystallize } = props
   return (
     <div>
       <div className="spark-toolbar">
@@ -419,7 +427,7 @@ function SparksTab(props: SparksTabProps): ReactNode {
           </div>
           {formError !== null ? <div className="spark-error">{formError}</div> : null}
           <div className="spark-form-actions">
-            <Button variant="outline" type="button" disabled={busy} onClick={() => { /* close handled by parent */ }}>{t('captureCancel')}</Button>
+            <Button variant="outline" type="button" disabled={busy} onClick={() => { setFormTitle(''); setFormContent(''); setFormTags('') }}>{t('captureCancel')}</Button>
             <Button variant="primary" type="submit" disabled={busy}>{t('captureSubmit')}</Button>
           </div>
         </form>
@@ -467,19 +475,15 @@ function SparksTab(props: SparksTabProps): ReactNode {
 }
 
 interface ProposalsTabProps {
-  proposals: ProposalView[]
-  totalProposals: number
+  proposals: ProposalView[]; totalProposals: number
   reflectInfo: string | null
-  proposalFilter: ProposalFilter
-  setProposalFilter: (v: ProposalFilter) => void
-  busy: boolean
-  t: Translate
+  proposalFilter: ProposalFilter; setProposalFilter: (v: ProposalFilter) => void
+  busy: boolean; t: Translate
   onResolve: (id: string, status: 'accepted' | 'dismissed') => Promise<void>
-  onReflect: () => void
 }
 
 function ProposalsTab(props: ProposalsTabProps): ReactNode {
-  const { proposals, totalProposals, reflectInfo, proposalFilter, setProposalFilter, busy, t, onResolve, onReflect } = props
+  const { proposals, totalProposals, reflectInfo, proposalFilter, setProposalFilter, busy, t, onResolve } = props
   return (
     <div>
       <div className="spark-toolbar">
@@ -517,7 +521,7 @@ function ProposalsTab(props: ProposalsTabProps): ReactNode {
               </header>
               <p className="spark-card-content">{proposal.explanation}</p>
               <footer className="spark-card-meta">
-                <Pill>{leverageLabel(proposal, t)}</Pill>
+                <Pill>{proposal.leverage === 'high' ? t('leverageHigh') : proposal.leverage === 'medium' ? t('leverageMedium') : t('leverageLow')}</Pill>
                 <Pill>{Math.round(proposal.confidence * 100) + '%'}</Pill>
                 <span>{proposal.sparkIds.length} spark(s)</span>
                 <span>{new Date(proposal.createdAt).toLocaleString()}</span>
@@ -530,10 +534,85 @@ function ProposalsTab(props: ProposalsTabProps): ReactNode {
   )
 }
 
-function leverageLabel(p: ProposalView, t: Translate): string {
-  if (p.leverage === 'high') return t('leverageHigh')
-  if (p.leverage === 'medium') return t('leverageMedium')
-  return t('leverageLow')
+interface ScriptsTabProps {
+  scripts: ScriptView[]; totalScripts: number
+  scriptResultInfo: string | null
+  scriptFilter: ScriptFilter; setScriptFilter: (v: ScriptFilter) => void
+  expandedScriptId: string | null; setExpandedScriptId: (v: string | null) => void
+  busy: boolean; t: Translate
+  onInvoke: (id: string) => Promise<void>
+  onRecordResult: (id: string, success: boolean) => Promise<void>
+  onDelete: (id: string, name: string) => Promise<void>
+}
+
+function ScriptsTab(props: ScriptsTabProps): ReactNode {
+  const { scripts, totalScripts, scriptResultInfo, scriptFilter, setScriptFilter, expandedScriptId, setExpandedScriptId, busy, t, onInvoke, onRecordResult, onDelete } = props
+  return (
+    <div>
+      <div className="spark-toolbar">
+        <div className="spark-toolbar-left">
+          <FilterButton current={scriptFilter} value='all' onChange={setScriptFilter}>{t('scriptFilterAll')}</FilterButton>
+          <FilterButton current={scriptFilter} value='project' onChange={setScriptFilter}>{t('scriptFilterProject')}</FilterButton>
+          <FilterButton current={scriptFilter} value='global' onChange={setScriptFilter}>{t('scriptFilterGlobal')}</FilterButton>
+        </div>
+      </div>
+
+      {scriptResultInfo !== null ? (
+        <div className="spark-error" style={{ color: 'var(--dsw-alias-state-success-primary, var(--dsw-static-green-500))', borderColor: 'var(--dsw-alias-state-success-primary, var(--dsw-static-green-500))' }}>
+          {scriptResultInfo}
+        </div>
+      ) : null}
+
+      {scripts.length === 0 ? (
+        <div className="spark-empty">{totalScripts === 0 ? t('scriptEmptyAll') : t('scriptEmpty')}</div>
+      ) : (
+        <div className="spark-list">
+          {scripts.map(script => {
+            const expanded = expandedScriptId === script.id
+            const successRate = script.invocationCount === 0 ? 0 : script.successCount / script.invocationCount
+            return (
+              <article key={script.id} className="spark-card">
+                <header className="spark-card-head">
+                  <h3 className="spark-card-title">{script.name}</h3>
+                  <div className="spark-card-actions">
+                    <Button variant="outline" disabled={busy} onClick={() => { void onInvoke(script.id) }}>{t('scriptInvoke')}</Button>
+                    <Button variant="outline" disabled={busy} onClick={() => setExpandedScriptId(expanded ? null : script.id)}>{expanded ? '−' : '+'}</Button>
+                    <Button variant="outline" disabled={busy} onClick={() => { void onDelete(script.id, script.name) }}>{t('scriptDelete')}</Button>
+                  </div>
+                </header>
+                <p className="spark-card-content">{script.description}</p>
+                <footer className="spark-card-meta">
+                  <Pill>{script.scope}</Pill>
+                  <Pill>{t('scriptSteps') + ': ' + script.steps.length}</Pill>
+                  <Pill>{t('scriptSuccessRate') + ': ' + Math.round(successRate * 100) + '%'}</Pill>
+                  <Pill>{t('scriptInvocations') + ': ' + script.invocationCount}</Pill>
+                  {script.triggers.length > 0 ? <Pill>{t('scriptTriggers') + ': ' + script.triggers.join(', ')}</Pill> : null}
+                  <span>{new Date(script.createdAt).toLocaleString()}</span>
+                </footer>
+                {expanded ? (
+                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--dsw-alias-border-l1)' }}>
+                    <ol style={{ paddingLeft: 20, margin: 0 }}>
+                      {script.steps.map((step, i) => (
+                        <li key={i} style={{ fontSize: 13, lineHeight: '20px', color: 'var(--dsw-alias-label-primary)', marginBottom: 4 }}>
+                          <Pill>{step.kind === 'instruction' ? t('scriptStepInstruction') : t('scriptStepToolCall')}</Pill>
+                          {' '}{step.payload}
+                          {step.note !== undefined ? <span style={{ opacity: 0.6 }}>  ({step.note})</span> : null}
+                        </li>
+                      ))}
+                    </ol>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                      <Button variant="outline" disabled={busy} onClick={() => { void onRecordResult(script.id, true) }}>{t('scriptResultOk')}</Button>
+                      <Button variant="outline" disabled={busy} onClick={() => { void onRecordResult(script.id, false) }}>{t('scriptResultFail')}</Button>
+                    </div>
+                  </div>
+                ) : null}
+              </article>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export function bindSparkController(controller: SparkController): {
@@ -542,11 +621,7 @@ export function bindSparkController(controller: SparkController): {
   controller: SparkController
 } {
   const api = createSparksApi()
-  return {
-    api,
-    useSnapshot: bindSnapshotSelector(controller.store),
-    controller,
-  }
+  return { api, useSnapshot: bindSnapshotSelector(controller.store), controller }
 }
 
 
