@@ -30,6 +30,7 @@ import {
   financeCommunitySyncResultSchema,
   financeSyncStatusSchema,
 } from './typert.schemas.ts'
+import { hostProviderMeta } from './provider-meta.ts'
 import type {
   FinanceBackfillProgress,
   FinanceBalanceView,
@@ -40,6 +41,8 @@ import type {
   FinanceOverview,
   FinancePriceEntryInput,
   FinancePriceRate,
+  FinanceProviderBalance,
+  FinanceProviderEntry,
   FinanceSyncStatus,
 } from './types.ts'
 
@@ -282,6 +285,65 @@ export class FinanceService extends TypertRemoteService {
   @Remote
   async getBalance(signal?: AbortSignal): Promise<FinanceBalanceView> {
     const config = this.currentConfig()
+    const entries = config.providers
+    const fetchedAt = Date.now()
+    const providers: Record<string, FinanceProviderBalance> = {}
+
+    // Resolve the deepseek-official slot up-front: empty providers list keeps
+    // the legacy behavior (auto-fetch, as if autoFetchBalance=true); an
+    // explicit entry respects its `autoFetchBalance` + `billingMode`. Other
+    // entries populate below with `status: 'unsupported'`.
+    const dsEntry = entries.find(e => e.provider === 'deepseek-official')
+    const shouldFetchDeepseek = entries.length === 0
+      || (dsEntry !== undefined
+        && dsEntry.billingMode !== 'free'
+        && dsEntry.autoFetchBalance
+        && (hostProviderMeta(dsEntry.provider)?.supportsBalanceFetch ?? false))
+
+    let legacyResult: FinanceBalanceView
+    if (shouldFetchDeepseek) {
+      legacyResult = await this.fetchDeepSeekBalance(config, signal)
+      providers['deepseek-official'] = this.deepSeekSlot(legacyResult, fetchedAt)
+    } else {
+      legacyResult = { status: 'missing-credential', updatedAt: fetchedAt }
+      if (dsEntry !== undefined) {
+        providers['deepseek-official'] = dsEntry.billingMode === 'free'
+          ? this.unsupportedSlot(dsEntry, fetchedAt, 'free-provider', 'free providers do not track a balance')
+          : this.unsupportedSlot(dsEntry, fetchedAt, 'auto-fetch-disabled', 'balance fetch is disabled for this entry')
+      }
+    }
+
+    // Populate every other configured entry. The host can only fetch
+    // deepseek-official today; everything else lands as 'unsupported' with a
+    // stable code (commit 12's contract — future commits add more providers
+    // to the host-known registry as their APIs land).
+    for (const entry of entries) {
+      if (entry.provider === 'deepseek-official') continue
+      const meta = hostProviderMeta(entry.provider)
+      if (entry.billingMode === 'free') {
+        providers[entry.provider] = this.unsupportedSlot(entry, fetchedAt, 'free-provider', 'free providers do not track a balance')
+      } else if (meta === undefined) {
+        providers[entry.provider] = this.unsupportedSlot(entry, fetchedAt, 'unsupported-provider', `host has no balance endpoint registered for ${entry.provider}`)
+      } else if (!meta.supportsBalanceFetch) {
+        providers[entry.provider] = this.unsupportedSlot(entry, fetchedAt, 'no-balance-fetch', `host does not support balance fetch for ${entry.provider} yet`)
+      } else {
+        // Host CAN fetch but the user disabled autoFetchBalance for this entry.
+        providers[entry.provider] = this.unsupportedSlot(entry, fetchedAt, 'auto-fetch-disabled', 'balance fetch is disabled for this entry')
+      }
+    }
+
+    return { ...legacyResult, providers }
+  }
+
+  /**
+   * Core DeepSeek balance fetch — pure function on the resolved config + key.
+   * Factored out of `getBalance` so the legacy single-provider view and the
+   * new `providers.deepseek-official` slot share one implementation.
+   */
+  private async fetchDeepSeekBalance(
+    config: FinanceConfig,
+    signal?: AbortSignal,
+  ): Promise<FinanceBalanceView> {
     const ref = credentialRef(config.balance.apiKeyEnv)
     const credential = await this.ctx.credentials.resolve(ref)
     if (credential === undefined) {
@@ -295,6 +357,41 @@ export class FinanceService extends TypertRemoteService {
       }
       throw error
     }
+  }
+
+  /** Map a legacy `FinanceBalanceView` into the per-provider slot. */
+  private deepSeekSlot(view: FinanceBalanceView, fetchedAt: number): FinanceProviderBalance {
+    if (view.status === 'ok') {
+      return {
+        status: 'ok',
+        provider: 'deepseek-official',
+        ...view.totalMicros !== undefined ? { totalMicros: view.totalMicros } : {},
+        ...view.currency !== undefined && (view.currency === 'CNY' || view.currency === 'USD')
+          ? { currency: view.currency }
+          : {},
+        fetchedAt,
+      }
+    }
+    if (view.status === 'missing-credential') {
+      return { status: 'missing-credential', provider: 'deepseek-official', fetchedAt }
+    }
+    return {
+      status: 'error',
+      provider: 'deepseek-official',
+      ...view.code !== undefined ? { code: view.code } : {},
+      ...view.message !== undefined ? { message: view.message } : {},
+      fetchedAt,
+    }
+  }
+
+  /** Build an `unsupported` provider slot with a stable code + message. */
+  private unsupportedSlot(
+    entry: FinanceProviderEntry,
+    fetchedAt: number,
+    code: string,
+    message: string,
+  ): FinanceProviderBalance {
+    return { status: 'unsupported', provider: entry.provider, code, message, fetchedAt }
   }
 
   /**
