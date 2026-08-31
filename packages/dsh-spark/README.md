@@ -4,7 +4,7 @@ Host plane for the dsh-spark cognitive-layer plugin (Phase 1 of the [7-phase cog
 
 This package is the host half: it owns the in-memory `ctx.spark` service, persists sparks to a JSONL file under `$DSH_HOME/storages/`, mounts the `/sparks/*` HTTP API the Web UI talks to, and registers the agent-facing `spark_capture` tool.
 
-## Phase 1+2+4+5 surface
+## Phase 1+2+4+5+6 surface
 
 - **`SparkService`** extends cordis `Service`; declared on `ctx.spark` via the cordis module merge.
 - **`JsonlSparkStorage`** — append-only JSONL backend with atomic read-modify-write for patches and removes. Phase 2 exposes `writeAll` (system use) for crystallize + enforceLimit.
@@ -18,6 +18,7 @@ This package is the host half: it owns the in-memory `ctx.spark` service, persis
 - **`ScriptService` (cordis `ctx.script`)** (Phase 5) — create/list/get/invoke/recordResult/delete + emits `scripts/changed`. Success/failure counters per script drive `successRate = successCount / invocationCount`.
 - **`/scripts` HTTP routes** (Phase 5) — GET list (scope + q search), GET :id, POST create, POST :id/invoke, POST :id/result (record success/failure), DELETE, GET /scripts/events SSE.
 - **`sparks/changed` cordis event** — emitted after every mutation (operation ∈ capture/patch/archive/delete/crystallize); future subsystems hook in here.
+- **`ValenceService` (cordis `ctx.valence`)** (Phase 6) — amygdala-style emotional signal mining. Subscribes to `session/event` for user messages; when `detectIntensity` crosses the threshold (default 0.4), `extractPreferences` parses latent preferences ("don't touch X" / "总是 X" / "always Y" / "never Z" in zh/en) and persists them as HippoMemo `kind='preference'` records via `ctx.memory.put`. `decayImportance` (Phase 6.5+) ages them with a 30-day decay that never drops below 40% to avoid the failure mode "懂用户 → 误读用户".
 
 ## Storage layout
 
@@ -37,9 +38,8 @@ Each line in the JSONL file is one full `SparkView` JSON object. Patches and rem
 
 Covers JSONL round-trip, malformed-line tolerance, atomic patch/remove, concurrent-append serialization, and the storage limit enforcer.
 
-## Future phases (NOT in Phase 1+2+4+5)
+## Future phases (NOT in Phase 1+2+4+5+6)
 
 - **Phase 4.5** — Periodic scheduler (intervalMs) for EmergeService + LLM-backed proposals (semantic similarity, contradict detection).
-- **Phase 5.5** — UI scripts tab (catalog view + invoke flow). Also: trigger-pattern auto-suggest when an agent's recent tool sequence matches a script's triggers.
-- **Phase 6** — Amygdala valence mining (user emotional signal → `PreferenceRecord` crystallize).
+- **Phase 6.5** — ValenceService feedback loop: mined preferences participate in Phase 3 cognitive filter (boost matching preferences, suppress stale ones via decay).
 - **Phase 7** — Force-directed graph view in `dsh-spark-ui` with ghost-edges for pending proposals.
