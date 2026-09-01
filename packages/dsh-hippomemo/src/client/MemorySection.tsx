@@ -16,8 +16,8 @@ import {
   BarChart, Button, DonutChart, IconBranchOutline16, IconChevronDownOutline14,
   IconChevronLeftOutline14, IconChevronRightOutline14, IconChevronUpOutline14,
   IconEditOutline16, IconPlusOutline16, IconThinkOutline16, IconTrashOutline16,
-  IconWarningOutline16, Input, Menu, Modal, Pill, SearchInput, SegmentedControl,
-  StateDot, Textarea, TrendChart,
+  IconWarningOutline16, Input, ListRow, Menu, Modal, Pill, SearchInput,
+  SegmentedControl, StateDot, Textarea, TrendChart,
 } from 'dsh-ui-kit'
 import type { ChartDatum } from 'dsh-ui-kit'
 import type { HippomemoApi, MemoryTagCount } from './api.ts'
@@ -511,49 +511,52 @@ function MemoryListPanel({ t, api, detailId, onDetail }: {
             meta.push(t('importanceLabel') + ' ' + record.importance.toFixed(2));
             meta.push(formatDate(record.updatedAt));
             return (
-              <div className={'hippomemo-row' + (archived ? ' hippomemo-row-archived' : '')} key={record.id}>
-                <button type='button' className='hippomemo-row-main' onClick={() => { onDetail(record.id); }} title={record.title}>
-                  <span className='hippomemo-row-title-wrap'>
-                    <span className='hippomemo-row-title'>{record.title}</span>
-                    <span className='hippomemo-row-meta'>
-                      {record.kind !== 'preference' ? (
-                        <Pill className={'hippomemo-kind-pill hippomemo-kind-' + record.kind}>{t(record.kind)}</Pill>
-                      ) : null}
-                      {meta.map((part, index) => (
-                        <span key={index}>
-                          {index > 0 ? <span className='hippomemo-row-meta-sep'>·</span> : null}
-                          {part}
-                        </span>
-                      ))}
-                    </span>
-                  </span>
-                </button>
-                <div className='hippomemo-row-actions'>
-                  {record.kind === 'preference' ? (
-                    <Pill className='hippomemo-pill hippomemo-pill-preference'>
-                      <IconThinkOutline16 size={12} />
-                      {t('preference')}
-                    </Pill>
-                  ) : null}
-                  {record.sourceSparkId !== undefined && record.sourceSparkId !== null && record.sourceSparkId.length > 0 ? (
-                    <span className='hippomemo-row-spark' title={t('sourceSparkHint')}>
-                      <IconBranchOutline16 size={14} />
-                    </span>
-                  ) : null}
-                  <Button size='sm' variant='ghost' title={t('edit')} aria-label={t('edit')}
-                    className='hippomemo-icon-btn'
-                    onClick={() => { onDetail(record.id); }}
-                    icon={<IconEditOutline16 size={14} />} />
-                  <Button size='sm' variant='ghost' title={t('delete')} aria-label={t('delete')}
-                    className='hippomemo-icon-btn hippomemo-icon-btn-danger'
-                    onClick={async () => {
-                      if (window.confirm(t('confirmDelete')) === false) return;
-                      await api.remove(record.id);
-                      reload();
-                    }}
-                    icon={<IconTrashOutline16 size={14} />} />
-                </div>
-              </div>
+              <ListRow
+                key={record.id}
+                title={record.title}
+                muted={archived}
+                onClick={() => { onDetail(record.id); }}
+                meta={(
+                  <>
+                    {record.kind !== 'preference' ? (
+                      <Pill className={'hippomemo-kind-pill hippomemo-kind-' + record.kind}>{t(record.kind)}</Pill>
+                    ) : null}
+                    {meta.map((part, index) => (
+                      <span key={index}>
+                        {index > 0 ? <span className='hippomemo-row-meta-sep'>·</span> : null}
+                        {part}
+                      </span>
+                    ))}
+                  </>
+                )}
+                trailing={(
+                  <>
+                    {record.kind === 'preference' ? (
+                      <Pill className='hippomemo-pill hippomemo-pill-preference'>
+                        <IconThinkOutline16 size={12} />
+                        {t('preference')}
+                      </Pill>
+                    ) : null}
+                    {record.sourceSparkId !== undefined && record.sourceSparkId !== null && record.sourceSparkId.length > 0 ? (
+                      <span className='hippomemo-row-spark' title={t('sourceSparkHint')}>
+                        <IconBranchOutline16 size={14} />
+                      </span>
+                    ) : null}
+                    <Button size='sm' variant='ghost' title={t('edit')} aria-label={t('edit')}
+                      className='hippomemo-icon-btn'
+                      onClick={() => { onDetail(record.id); }}
+                      icon={<IconEditOutline16 size={14} />} />
+                    <Button size='sm' variant='ghost' title={t('delete')} aria-label={t('delete')}
+                      className='hippomemo-icon-btn hippomemo-icon-btn-danger'
+                      onClick={async () => {
+                        if (window.confirm(t('confirmDelete')) === false) return;
+                        await api.remove(record.id);
+                        reload();
+                      }}
+                      icon={<IconTrashOutline16 size={14} />} />
+                  </>
+                )}
+              />
             );
           })}
         </div>

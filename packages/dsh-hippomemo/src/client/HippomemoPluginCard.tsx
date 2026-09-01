@@ -9,7 +9,7 @@
  */
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button, DisclosureRow, IconThinkOutline16, Input, Pill } from 'dsh-ui-kit'
+import { Button, DisclosureRow, IconThinkOutline16, Input, Pill, SettingsCardHeader } from 'dsh-ui-kit'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import type { StagedSettingsCardState, StagedCardActions } from 'dsh-spark-plugin-kit/client'
 import type { HippomemoLocaleKey } from './locales.ts'
@@ -254,20 +254,15 @@ export function HippomemoPluginCard(props: HippomemoPluginCardProps): ReactNode 
   return (
     <div data-plugin="dsh-hippomemo">
       <li className={open ? 'hippomemo-card hippomemo-card-open' : 'hippomemo-card'}>
-        <button
-          type="button"
-          className="hippomemo-card-header"
-          aria-expanded={open}
-          aria-label={(open ? t('cardCollapse') : t('cardExpand')) + ': ' + t('cardTitle')}
-          onClick={() => setOpen(!open)}
-        >
-          <span className="hippomemo-card-head-text">
-            <span className="hippomemo-card-name">{t('cardTitle')}</span>
-            <span className="hippomemo-card-description">{t('cardDescription')}</span>
-          </span>
-          {state.shell.dirty ? <span className="hippomemo-card-pending">{t('cardUnsaved')}</span> : null}
-          <span className={open ? 'hippomemo-card-chev hippomemo-card-chev-open' : 'hippomemo-card-chev'} aria-hidden="true" />
-        </button>
+        <SettingsCardHeader
+          title={t('cardTitle')}
+          description={t('cardDescription')}
+          open={open}
+          onToggle={() => setOpen(!open)}
+          trailing={state.shell.dirty ? <span className="hippomemo-card-pending">{t('cardUnsaved')}</span> : null}
+          expandLabel={t('cardExpand')}
+          collapseLabel={t('cardCollapse')}
+        />
         {open ? (
           <HippomemoCardBody
             t={t}

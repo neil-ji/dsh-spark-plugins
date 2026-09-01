@@ -15,6 +15,7 @@ test('dist 导出齐全（基础组件 + 工具 + 主题）', () => {
     'OnboardingSurface', 'RiskConfirmation', 'FishLogo', 'BrandWordmark',
     'CodeBlock', 'JsonBlock', 'MarkdownText', 'MessageText',
     'Checkbox', 'Textarea', 'SegmentedControl', 'SearchInput',
+    'ListRow', 'SettingsCardHeader',
     'setThemePreference', 'useIsDark', 'extractMarkdownPlainText',
     'writeClipboard',
   ]) {
@@ -76,4 +77,21 @@ test('DisclosureRow 支持 description/trailing', () => {
     open: false, expandable: true, onToggle: () => {},
   }))
   assert.ok(html.includes('finance 配置') && html.includes('连接与价格') && html.includes('未保存'))
+})
+
+test('ListRow / SettingsCardHeader SSR 渲染', () => {
+  const row = renderToStaticMarkup(React.createElement(kit.ListRow, {
+    title: '记忆标题',
+    meta: React.createElement('span', null, '全局 · 0.8'),
+    muted: true,
+    onClick: () => {},
+    trailing: React.createElement('button', null, 'x'),
+  }))
+  assert.ok(row.includes('记忆标题') && row.includes('全局 · 0.8'))
+  const header = renderToStaticMarkup(React.createElement(kit.SettingsCardHeader, {
+    title: '记忆插件', description: '容量与召回参数', open: false, onToggle: () => {},
+    trailing: React.createElement('span', null, '未保存'),
+    expandLabel: '展开', collapseLabel: '收起',
+  }))
+  assert.ok(header.includes('记忆插件') && header.includes('容量与召回参数') && header.includes('未保存'))
 })
