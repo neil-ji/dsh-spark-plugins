@@ -107,9 +107,10 @@ export const zh = {
   cardReset: '重置',
   cardInvalidNumber: '需为正整数',
   cardInvalidText: '输入无效',
+  tabOverview: '总览',
   tabMemories: '记忆',
-  tabUsage: '统计',
-  tabEvolve: '进化',
+  tabPreferences: '偏好',
+  tabEvolution: '进化',
   kpiTotalLabel: '总记忆',
   kpiTotalHint: '活跃',
   kpiRecalledLabel: '已召回',
@@ -143,6 +144,16 @@ export const zh = {
   chartCitationsTrendTitle: '引用趋势（按天）',
   chartTotal: '总数',
   chartNoData: '暂无数据',
+
+  // ---- v3 UI: 概览 tab 子标题 ----
+  overviewLiveActivity: '最近活动',
+  overviewEmptyActivity: '还没有召回记录',
+  overviewBrainHint: '四个脑区的实时状态',
+
+  // ---- v3 UI: 进化 tab 子标题 ----
+  evolutionCandidatesTitle: '需要我处理',
+  evolutionStatsTitle: '使用统计',
+  evolutionChartsTitle: '图表',
 
   // ---- v3 UI: 脑区状态条 ----
   brainRegionPfc: '前额叶',
@@ -328,9 +339,10 @@ export const en: Record<keyof typeof zh, string> = {
   cardReset: 'Reset',
   cardInvalidNumber: 'Must be a positive integer',
   cardInvalidText: 'Invalid input',
+  tabOverview: 'Overview',
   tabMemories: 'Memories',
-  tabUsage: 'Usage',
-  tabEvolve: 'Evolution',
+  tabPreferences: 'Preferences',
+  tabEvolution: 'Evolution',
   kpiTotalLabel: 'Total memories',
   kpiTotalHint: 'active',
   kpiRecalledLabel: 'Recalled',
@@ -364,6 +376,16 @@ export const en: Record<keyof typeof zh, string> = {
   chartCitationsTrendTitle: 'Citations by day',
   chartTotal: 'total',
   chartNoData: 'No data',
+
+  // ---- v3 UI: Overview tab subsections ----
+  overviewLiveActivity: 'Recent activity',
+  overviewEmptyActivity: 'No recall events yet',
+  overviewBrainHint: 'Real-time status of the four regions',
+
+  // ---- v3 UI: Evolution tab subsections ----
+  evolutionCandidatesTitle: 'Needs my attention',
+  evolutionStatsTitle: 'Usage',
+  evolutionChartsTitle: 'Charts',
 
   // ---- v3 UI: brain strip ----
   brainRegionPfc: 'Prefrontal',

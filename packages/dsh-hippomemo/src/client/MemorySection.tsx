@@ -1058,9 +1058,97 @@ function EvolvePanel({ api, t }: { api: HippomemoApi; t: Translate }): ReactNode
 }
 
 // ========== Main Entry ==========
-type SectionTab = 'dashboard' | 'usage' | 'evolve';
+type SectionTab = 'overview' | 'memories' | 'preferences' | 'evolution';
+
+function OverviewTab({ t, stats, usage, preferences, candidates, narrative, citations, now }: {
+  t: Translate; stats: MemoryStats | null; usage: MemoryUsageStats | null;
+  preferences: PreferenceListResult | null; candidates: PendingCandidateListResult | null;
+  narrative: RecallNarrative | null; citations: CitationRecord[]; now: number;
+}): ReactNode {
+  return (
+    <div className='hippomemo-tab'>
+      <BrainStrip t={t} stats={stats} usage={usage}
+        preferences={preferences} candidates={candidates}
+        narrative={narrative} reloadKey={0} />
+      <section className='hippomemo-section-card'>
+        <div className='hippomemo-section-head'>
+          <h3 className='hippomemo-section-title'>{t('overviewLiveActivity')}</h3>
+          <Pill className='hippomemo-pill'>{t('recallTitle')}</Pill>
+        </div>
+        <RecallQuadrant t={t} citations={citations} narrative={narrative} now={now} />
+      </section>
+    </div>
+  )
+}
+
+function PreferencesTab({ t, preferences, usage, onAction }: {
+  t: Translate; preferences: PreferenceListResult | null;
+  usage: MemoryUsageStats | null;
+  onAction: (action: 'confirm' | 'revise' | 'forget', id: string) => void;
+}): ReactNode {
+  return (
+    <div className='hippomemo-tab'>
+      <PreferenceQuadrant t={t} items={preferences?.items ?? []}
+        totalRecall={usage?.recalled ?? 0} onAction={onAction} />
+    </div>
+  )
+}
+
+function EvolutionTab({ t, stats, usage, candidates, now, onResolve, api, reloadKey }: {
+  t: Translate; stats: MemoryStats | null; usage: MemoryUsageStats | null;
+  candidates: PendingCandidateListResult | null; now: number;
+  onResolve: (item: PendingCandidate) => void;
+  api: HippomemoApi; reloadKey: number;
+}): ReactNode {
+  return (
+    <div className='hippomemo-tab'>
+      <section className='hippomemo-section-card'>
+        <div className='hippomemo-section-head'>
+          <h3 className='hippomemo-section-title'>{t('evolutionCandidatesTitle')}</h3>
+          <Pill className='hippomemo-pill'>{t('todoTitle')}</Pill>
+          <span className='hippomemo-panel-count'>{candidates?.total ?? 0} 项</span>
+        </div>
+        <TodoQuadrantImpl t={t} items={candidates?.items ?? []} now={now} onResolve={onResolve} />
+      </section>
+      <section className='hippomemo-section-card'>
+        <div className='hippomemo-section-head'>
+          <h3 className='hippomemo-section-title'>{t('evolutionStatsTitle')}</h3>
+          <Pill className='hippomemo-pill'>{t('usage')}</Pill>
+        </div>
+        {stats !== null ? (
+          <div className='hippomemo-meta'>
+            <span>{t('total')} {stats.total} {t('results')}</span>
+            <span>{t('activeCount')} {stats.active}</span>
+            <span>{t('archivedCount')} {stats.archived}</span>
+          </div>
+        ) : null}
+        {usage !== null ? (
+          <div className='hippomemo-usage'>
+            <span className='hippomemo-usage-label'>{t('usage')}</span>
+            <span title={t('usageRecalled')}>{t('usageRecalled')} {usage.recalled}/{usage.total}</span>
+            <span>{t('usageCited')} {usage.cited}</span>
+            <span>{t('usageNeverRecalled')} {usage.neverRecalled}</span>
+            <span>{t('usageStale')} {usage.staleCount}</span>
+            <span>{t('usageRecallRate')} {(usage.recallRate * 100).toFixed(0)}%</span>
+            <span>{t('usageCitationRate')} {(usage.citationRate * 100).toFixed(0)}%</span>
+            <span>{t('usageConversion')} {(usage.conversionRate * 100).toFixed(0)}%</span>
+            {usage.staleCount > 0 ? <span className='hippomemo-usage-hint'>{t('usageStaleHint')}</span> : null}
+          </div>
+        ) : null}
+      </section>
+      <section className='hippomemo-section-card'>
+        <div className='hippomemo-section-head'>
+          <h3 className='hippomemo-section-title'>{t('evolutionChartsTitle')}</h3>
+        </div>
+        <MemoryCharts api={api} t={t} stats={stats} reloadKey={reloadKey} />
+      </section>
+      <EvolvePanel api={api} t={t} />
+    </div>
+  )
+}
+
 export function MemorySection({ api, t }: MemorySectionProps): ReactNode {
-  const [tab, setTab] = useState<SectionTab>('dashboard');
+  const [tab, setTab] = useState<SectionTab>('overview');
   const [stats, setStats] = useState<MemoryStats | null>(null);
   const [usage, setUsage] = useState<MemoryUsageStats | null>(null);
   const [preferences, setPreferences] = useState<PreferenceListResult | null>(null);
@@ -1116,53 +1204,28 @@ export function MemorySection({ api, t }: MemorySectionProps): ReactNode {
         ariaLabel='hippomemo section'
         value={tab} onChange={setTab}
         options={[
-          { value: 'dashboard', label: t('title') },
-          { value: 'usage', label: t('tabUsage') },
-          { value: 'evolve', label: t('tabEvolve') },
+          { value: 'overview', label: t('tabOverview') },
+          { value: 'memories', label: t('tabMemories') },
+          { value: 'preferences', label: t('tabPreferences') },
+          { value: 'evolution', label: t('tabEvolution') },
         ]}
       />
-      {tab === 'dashboard' ? (
-        <div className='hippomemo-dashboard'>
-          <BrainStrip t={t} stats={stats} usage={usage}
-            preferences={preferences} candidates={candidates}
-            narrative={narrative} reloadKey={reloadKey} />
-          <div className='hippomemo-quadrants'>
-            <TodoQuadrantImpl t={t} items={candidates?.items ?? []} now={now}
-              onResolve={(item) => { void resolveCandidate(item); }} />
-            <RecallQuadrant t={t} citations={citations} narrative={narrative} now={now} />
-          </div>
-          <PreferenceQuadrant t={t} items={preferences?.items ?? []}
-            totalRecall={usage?.recalled ?? 0}
-            onAction={(action, id) => { void prefAction(action, id); }} />
+      {tab === 'overview' ? (
+        <OverviewTab t={t} stats={stats} usage={usage}
+          preferences={preferences} candidates={candidates}
+          narrative={narrative} citations={citations} now={now} />
+      ) : tab === 'memories' ? (
+        <div className='hippomemo-tab'>
           <MemoryListPanel t={t} api={api} detailId={detailId}
             onDetail={(id) => { if (id === 'new') setEditorTarget('new'); else setDetailId(id); }} />
         </div>
-      ) : tab === 'usage' ? (
-        <div className='hippomemo-panel'>
-          {stats !== null ? (
-            <div className='hippomemo-meta'>
-              <span>{t('total')} {stats.total} {t('results')}</span>
-              <span>{t('activeCount')} {stats.active}</span>
-              <span>{t('archivedCount')} {stats.archived}</span>
-            </div>
-          ) : null}
-          {usage !== null ? (
-            <div className='hippomemo-usage'>
-              <span className='hippomemo-usage-label'>{t('usage')}</span>
-              <span title={t('usageRecalled')}>{t('usageRecalled')} {usage.recalled}/{usage.total}</span>
-              <span>{t('usageCited')} {usage.cited}</span>
-              <span>{t('usageNeverRecalled')} {usage.neverRecalled}</span>
-              <span>{t('usageStale')} {usage.staleCount}</span>
-              <span>{t('usageRecallRate')} {(usage.recallRate * 100).toFixed(0)}%</span>
-              <span>{t('usageCitationRate')} {(usage.citationRate * 100).toFixed(0)}%</span>
-              <span>{t('usageConversion')} {(usage.conversionRate * 100).toFixed(0)}%</span>
-              {usage.staleCount > 0 ? <span className='hippomemo-usage-hint'>{t('usageStaleHint')}</span> : null}
-            </div>
-          ) : null}
-          <MemoryCharts api={api} t={t} stats={stats} reloadKey={reloadKey} />
-        </div>
+      ) : tab === 'preferences' ? (
+        <PreferencesTab t={t} preferences={preferences} usage={usage}
+          onAction={(action, id) => { void prefAction(action, id); }} />
       ) : (
-        <EvolvePanel api={api} t={t} />
+        <EvolutionTab t={t} stats={stats} usage={usage} candidates={candidates}
+          now={now} api={api} reloadKey={reloadKey}
+          onResolve={(item) => { void resolveCandidate(item); }} />
       )}
       {detailId !== null ? (
         <MemoryDetailModal api={api} t={t} id={detailId} refreshKey={reloadKey}
