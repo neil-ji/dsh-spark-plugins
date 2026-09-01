@@ -7,14 +7,23 @@
  * The `balance` sub-fields are edited as one group: the settings wire writes
  * top-level section fields only, so saving a staged baseURL/apiKeyEnv/timeout
  * change writes the whole `balance` object (preserving untouched members).
+ *
+ * The Provider configuration section (commit 13's editable Form List) has
+ * been replaced by a read-only view driven entirely by `finance.listProviders`
+ * — the host is the single source of truth for which providers exist, and
+ * the user no longer maintains the list by hand. See `ProviderListView.tsx`.
  */
 
 import type { SettingsScope, SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ClientRemote } from '@deepseek-ai/dsh-api-remotes/client'
-import type { FinanceCommunitySyncResult, FinanceConfigInput, FinanceSyncStatus } from 'dsh-spark-finance/types'
-import { billingModesToRows, rowsToBillingModes } from './billing-modes.ts'
-import type { BillingModeRow } from './billing-modes.ts'
+import type {
+  FinanceCommunitySyncResult,
+  FinanceConfigInput,
+  FinanceListProvidersEntry,
+  FinanceListProvidersResult,
+  FinanceSyncStatus,
+} from 'dsh-spark-finance/types'
 import {
   EMPTY_RATE,
   seedPriceTable,
@@ -30,14 +39,8 @@ import type {
   ProviderDefaultsDraft,
   RateDraft,
 } from './price-forms.ts'
-import {
-  providersToRows,
-  rowsToProviders,
-  seedHostKnownProviders,
-} from './provider-forms.ts'
-import type { ProviderRow } from './provider-forms.ts'
-import { readFinancePrefs, writeFinancePrefs } from './persist.ts'
-import type { FinanceChartPrefs, FinanceLayout, FinancePrefs, FinanceSyncSnapshot } from './persist.ts'
+import { readAllDshProviderOverrides, readFinancePrefs, writeDshProviderOverride, writeFinancePrefs } from './persist.ts'
+import type { DshProviderOverride, FinanceChartPrefs, FinanceLayout, FinancePrefs, FinanceSyncSnapshot } from './persist.ts'
 
 export type FinanceCardFieldName =
   | 'currency'
@@ -46,20 +49,12 @@ export type FinanceCardFieldName =
   | 'balance.timeoutMs'
   | 'defaultPrice'
   | 'providerDefaults'
-  | 'billingModes'
   | 'prices'
-  | 'providers'
 
 const BALANCE_FIELDS: readonly FinanceCardFieldName[] = ['balance.baseURL', 'balance.apiKeyEnv', 'balance.timeoutMs']
-const JSON_FIELDS: ReadonlySet<FinanceCardFieldName> = new Set(['defaultPrice', 'providerDefaults', 'billingModes', 'prices', 'providers'])
+const JSON_FIELDS: ReadonlySet<FinanceCardFieldName> = new Set(['defaultPrice', 'providerDefaults', 'prices'])
 /** Threshold above which `ensureAutoSync` re-fires without a host click. */
 const ONE_DAY_MS = 24 * 60 * 60 * 1000
-
-// Re-exported so existing consumers (tests, faces) keep one import face; the
-// implementations live in billing-modes.ts, which stays free of the
-// client-runtime dependency for SSR-safe rendering.
-export { billingModesToRows, rowsToBillingModes } from './billing-modes.ts'
-export type { BillingModeRow } from './billing-modes.ts'
 
 export interface FinanceCardFieldState {
   /** Draft text the control renders. */
@@ -105,13 +100,6 @@ export interface FinanceCardState {
   balanceTimeoutMs: FinanceCardFieldState
   defaultPrice: FinanceCardFieldState
   providerDefaults: FinanceCardFieldState
-  billingModes: FinanceCardFieldState
-  /**
-   * Live editor rows for the billing-mode form (INCLUDING in-progress
-   * blank routes the serialized JSON drops). Controlled from the controller
-   * so an added row survives re-renders until it is saved or reset.
-   */
-  billingRows: readonly BillingModeRow[]
   /** Live default-price rate draft (never shown as raw JSON). */
   defaultPriceDraft: RateDraft
   /** Live provider-default rows. */
@@ -119,20 +107,62 @@ export interface FinanceCardState {
   /** Live price-table draft. */
   priceTableDraft: PriceTableDraft
   prices: FinanceCardFieldState
-  /** Per-provider configuration list (commit 13). The Form List renders one row per entry. */
-  providers: FinanceCardFieldState
-  /**
-   * Live editor rows for the per-provider form. Mirrors `billingRows` —
-   * INCLUDES in-progress empty `provider` strings (the serialized JSON drops
-   * them) so an added row survives re-renders until it is saved or reset.
-   */
-  providersList: readonly ProviderRow[]
   /** Dashboard view preferences (browser-local; apply immediately). */
   prefs: FinancePrefs
   /** Live sync state (in flight + last success/failure). */
   syncState: FinanceSyncState
   /** Whether the price sync UI is supported by the host (true once `finance.syncCommunityPrices` is reachable). */
   syncAvailable: boolean
+  /**
+   * Read-only provider list snapshot from `finance.listProviders`. The Provider
+   * configuration section consumes this directly via `ProviderListView`;
+   * `undefined` while the first fetch is still in flight.
+   */
+  providerList: FinanceListProvidersResult | undefined
+  /**
+   * Per-provider rows derived from `providerList` (dsh-llm runtime snapshot
+   * — the only source of truth for which providers exist) merged with the
+   * user's localStorage overlay (price + autoFetch + validity). The view
+   * binds to this; underlying dsh-llm registries are NEVER written back.
+   */
+  dshProviderRows: readonly FinanceDshProviderRow[] | undefined
+}
+
+/**
+ * One row in the Provider configuration list, as rendered in the read-only
+ * view. Derived from a `FinanceListProvidersEntry` (host-owned facts:
+ * provider id, sources, hostMeta, balance slot) plus the optional
+ * `DshProviderOverride` (user-owned business fields: price, autoFetch,
+ * validity). The two halves never conflict — the host's
+ * `FinanceListProvidersEntry.userEntry` slot stays at `undefined` for
+ * dsh-only providers, and the localStorage overlay stays scoped to our
+ * own business fields.
+ */
+export interface FinanceDshProviderRow {
+  /** dsh-llm runtime provider id; unique per row. */
+  provider: string
+  /**
+   * Human-readable display name sourced from the dsh-llm runtime, falling
+   * back to the provider id when the runtime omits a name.
+   */
+  name: string
+  /** Sources from the host's `listProviders` snapshot. */
+  sources: readonly string[]
+  /** Host-known metadata; undefined for runtime-only providers. */
+  hostMeta?: {
+    defaultBillingMode: 'metered' | 'plan' | 'free'
+    defaultCurrency: 'CNY' | 'USD'
+    supportsBalanceFetch: boolean
+    lockBillingModeAndCurrency?: boolean
+  }
+  /**
+   * The user-overlaid business fields, sourced from localStorage. Absent
+   * when the user has not set one — the view falls back to safe defaults
+   * (price 0, autoFetch off) so a fresh browser still renders a usable row.
+   */
+  override: { totalPriceMicros: number; autoFetchBalance: boolean; validityStartMs?: number; validityEndMs?: number } | undefined
+  /** Live balance slot from the host (no override — the host owns this). */
+  balance: FinanceListProvidersEntry['balance']
 }
 
 /** The registration-side face the finance card's slot entry injects. */
@@ -141,10 +171,10 @@ export interface FinanceCardFace {
     /** Card snapshot bound by the renderer as useFinanceCard. */
     financeCard: SnapshotStore<FinanceCardState>
   }
-  /** Stage draft text for one field. */
-  edit: (field: FinanceCardFieldName, text: string) => void
   /** Stage a clear, so saving lets the field re-inherit the composition layer. */
   resetField: (field: FinanceCardFieldName) => void
+  /** Stage draft text for one field. */
+  edit: (field: FinanceCardFieldName, text: string) => void
   /** Write every staged edit, then re-seed from what the Host accepted. */
   save: () => void
   /** Drop every staged edit. */
@@ -153,10 +183,6 @@ export interface FinanceCardFace {
   setLayout: (layout: FinanceLayout) => void
   /** Toggle one dashboard chart's visibility immediately. */
   toggleChart: (key: keyof FinanceChartPrefs) => void
-  /** Stage the billing-mode editor rows (serialized into the staged JSON). */
-  setBillingModes: (rows: readonly BillingModeRow[]) => void
-  /** Stage the per-provider editor rows (serialized into the staged JSON). */
-  setProviders: (rows: readonly ProviderRow[]) => void
   /** Stage the default-price rate draft. */
   setDefaultPrice: (draft: RateDraft) => void
   /** Stage the provider-default rows. */
@@ -177,6 +203,18 @@ export interface FinanceCardFace {
   /** Bootstrap pull: kick off a sync if `prefs.autoSync` is true AND the
    * persisted snapshot is older than 24h (or absent). Idempotent across mounts. */
   ensureAutoSync: () => void
+  /**
+   * Save the user-overlay business fields for one dsh-llm provider
+   * (totalPriceMicros, autoFetchBalance, optional validity window). The
+   * dsh-llm runtime registry is NEVER written — this is a localStorage-only
+   * store keyed by provider id. Re-publishes so the row re-renders at once.
+   */
+  setDshProviderOverride: (provider: string, override: DshProviderOverride) => void
+  /**
+   * Remove the user-overlay for one provider; the row reverts to the dsh
+   * snapshot's defaults. Idempotent when no override exists.
+   */
+  clearDshProviderOverride: (provider: string) => void
 }
 
 type PlannedWrite = { run: (() => Promise<boolean>) | undefined }
@@ -192,24 +230,23 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+/**
+ * Pick the host Remote methods the controller depends on. `listProviders` was
+ * added for the read-only Provider configuration view (commit on top of the
+ * sync Remote); every method is optional so legacy hosts that lack the
+ * newer endpoints keep working (the read-only provider section falls back
+ * to a loading slot, the sync section stays hidden).
+ */
+export type FinanceRemote = Partial<Pick<
+  ClientRemote['finance'],
+  'listProviders' | 'syncCommunityPrices' | 'getSyncStatus' | 'refreshBalance'
+>>
+
 export class FinanceCardController {
   private readonly staged = new Map<FinanceCardFieldName, StagedEdit>()
   private readonly store: SnapshotStore<FinanceCardState>
   private saving = false
   private failed = false
-  /**
-   * Latest editor rows passed through setBillingModes — kept verbatim (blank
-   * routes included) so the form never eats a row mid-edit. Only consulted
-   * while a billingModes draft is staged; otherwise the projection reseeds
-   * from the stored value.
-   */
-  private billingEditorRows: BillingModeRow[] = []
-  /**
-   * Latest editor rows passed through setProviders — kept verbatim (blank
-   * provider strings included) so an added row survives re-renders until
-   * it is saved or reset. Same shape & contract as `billingEditorRows`.
-   */
-  private providersEditorRows: ProviderRow[] = []
   /** Live drafts for the three price-form editors; null = not yet edited (seed from stored). */
   private defaultPriceDraftValue: RateDraft | null = null
   private providerDefaultsDraftValue: ProviderDefaultsDraft | null = null
@@ -222,20 +259,37 @@ export class FinanceCardController {
   private syncInFlight: Promise<FinanceCommunitySyncResult | null> | null = null
   /** Auto-sync bootstrap state: once-only so we don't refetch on every settings doc update. */
   private autoSyncAttempted = false
+  /**
+   * Latest snapshot of `finance.listProviders`. Populated once on construction
+   * (and on each settings-doc update, since the host-known set can grow
+   * without a separate signal). The Provider configuration view binds to this.
+   */
+  private providerListValue: FinanceListProvidersResult | undefined
+  /**
+   * User-maintained business fields per dsh-llm provider, kept in localStorage
+   * (NOT in the host settings namespace — the dsh-llm runtime registry is
+   * the single source of truth for which providers exist, and we never
+   * write back to it). Cached in-memory on construction and re-read on
+   * every write so the projection sees the latest values without re-reading
+   * the persisted state on every `publish()`.
+   */
+  private dshOverridesCache: Record<string, DshProviderOverride> = readAllDshProviderOverrides()
 
   /**
    * @param scope - bound settings scope for the `finance` namespace.
-   * @param financeRemote - host Remote for community sync. Absent on hosts
-   *   that pre-date the sync Remote (older plugin builds): the card keeps
-   *   working but hides the sync section (`syncAvailableValue` stays false).
+   * @param financeRemote - host Remote for community sync + provider list.
+   *   `listProviders` is required for the read-only Provider configuration
+   *   section; `syncCommunityPrices`/`getSyncStatus`/`refreshBalance` stay
+   *   optional so a legacy host without the sync Remote keeps working (the
+   *   sync section stays hidden, just like before).
    */
   constructor(
     private readonly scope: SettingsScope<FinanceConfigInput>,
-    financeRemote?: Pick<ClientRemote['finance'], 'syncCommunityPrices' | 'getSyncStatus'>,
+    financeRemote?: FinanceRemote,
   ) {
     if (financeRemote !== undefined) {
       this.financeRemote = financeRemote
-      this.syncAvailableValue = true
+      this.syncAvailableValue = financeRemote.syncCommunityPrices !== undefined
       // Seed lastSync from prefs (cheap; the dashboard's first paint shows the
       // prior sync without waiting for the host ping).
       this.syncStateValue = { ...this.syncStateValue, lastSync: readFinancePrefs().lastSync }
@@ -244,9 +298,12 @@ export class FinanceCardController {
     scope.subscribe(() => this.publish())
     if (financeRemote !== undefined) {
       this.refreshSyncStatus()
+      // Pull the merged provider list once on mount; cheap because it's the
+      // same Remote call the dashboard's BalanceGrid makes independently.
+      void this.loadList()
     }
   }
-  private readonly financeRemote?: Pick<ClientRemote['finance'], 'syncCommunityPrices' | 'getSyncStatus'>
+  private readonly financeRemote?: FinanceRemote
 
   private snapshot() {
     return this.scope.getSnapshot()
@@ -262,9 +319,7 @@ export class FinanceCardController {
       case 'balance.timeoutMs': return value.balance?.timeoutMs
       case 'defaultPrice': return value.defaultPrice
       case 'providerDefaults': return value.providerDefaults
-      case 'billingModes': return value.billingModes
       case 'prices': return value.prices
-      case 'providers': return value.providers
     }
   }
 
@@ -289,29 +344,7 @@ export class FinanceCardController {
     if (JSON_FIELDS.has(field)) {
       let parsed: unknown
       try { parsed = JSON.parse(trimmed) } catch { return undefined }
-      // `providers` is an array; the rest are plain objects.
-      if (field === 'providers') {
-        if (!Array.isArray(parsed)) return undefined
-        for (const entry of parsed) {
-          if (!isPlainObject(entry)) return undefined
-          // Soft client-side validation — full validation lives in the host
-          // schema; we only block the obvious typos here so save fails fast.
-          if (typeof entry.provider !== 'string') return undefined
-          if (entry.billingMode !== 'metered' && entry.billingMode !== 'plan' && entry.billingMode !== 'free') return undefined
-          if (entry.currency !== 'CNY' && entry.currency !== 'USD') return undefined
-          if (typeof entry.autoFetchBalance !== 'boolean') return undefined
-          if (typeof entry.totalPriceMicros !== 'number' || entry.totalPriceMicros < 0 || entry.totalPriceMicros > 100_000_000_000) return undefined
-        }
-        return { kind: 'set', value: parsed }
-      }
       if (!isPlainObject(parsed)) return undefined
-      // Billing-mode tags must carry known modes only — fail fast client-side
-      // instead of letting the Host reject the whole settings write later.
-      if (field === 'billingModes') {
-        for (const mode of Object.values(parsed)) {
-          if (mode !== 'metered' && mode !== 'plan') return undefined
-        }
-      }
       return { kind: 'set', value: parsed }
     }
     return { kind: 'set', value: trimmed }
@@ -418,7 +451,7 @@ export class FinanceCardController {
       }
     }
 
-    for (const field of ['defaultPrice', 'providerDefaults', 'billingModes', 'prices', 'providers'] as const) {
+    for (const field of ['defaultPrice', 'providerDefaults', 'prices'] as const) {
       const staged = this.staged.get(field)
       if (staged !== undefined) pushIfChanged(field, staged, this.sectionValue(field))
     }
@@ -454,20 +487,69 @@ export class FinanceCardController {
       balanceTimeoutMs: this.fieldState('balance.timeoutMs'),
       defaultPrice: this.fieldState('defaultPrice'),
       providerDefaults: this.fieldState('providerDefaults'),
-      billingModes: this.fieldState('billingModes'),
-      billingRows: this.staged.has('billingModes') ? this.billingEditorRows : billingModesToRows(this.format('billingModes')),
       defaultPriceDraft: this.staged.has('defaultPrice') ? (this.defaultPriceDraftValue ?? { ...EMPTY_RATE }) : this.seedJson('defaultPrice', value => seedRateDraft(value)),
       providerDefaultsDraft: this.staged.has('providerDefaults') ? (this.providerDefaultsDraftValue ?? seedProviderDefaults(undefined)) : this.seedJson('providerDefaults', seedProviderDefaults),
       priceTableDraft: this.staged.has('prices') ? (this.priceTableDraftValue ?? seedPriceTable(undefined)) : this.seedJson('prices', seedPriceTable),
       prices: this.fieldState('prices'),
-      providers: this.fieldState('providers'),
-      providersList: this.staged.has('providers')
-        ? this.providersEditorRows
-        : providersToRows(this.snapshot().value?.providers),
       prefs: readFinancePrefs(),
       syncState: this.syncStateValue,
       syncAvailable: this.syncAvailableValue,
+      providerList: this.providerListValue,
+      dshProviderRows: this.buildDshProviderRows(),
     }
+  }
+
+  /**
+   * Merge the host's `finance.listProviders` snapshot with the user's
+   * localStorage overlay to produce the rows the view renders. Stable
+   * order: host-known first, then user-config, then ledger-observed, then
+   * llm-runtime — same ranking the host uses internally. A provider with
+   * no `hostMeta` (runtime-only, no dsh-llm registration) just gets a
+   * sensible default (`plan` / `CNY` / `autoFetch off`).
+   */
+  private buildDshProviderRows(): readonly FinanceDshProviderRow[] | undefined {
+    const list = this.providerListValue
+    if (list === undefined) return undefined
+    return list.providers.map((entry) => {
+      const override = this.dshOverridesCache[entry.provider]
+      return {
+        provider: entry.provider,
+        name: entry.provider,
+        sources: entry.sources,
+        ...entry.hostMeta !== undefined
+          ? { hostMeta: { ...entry.hostMeta } }
+          : {},
+        override,
+        balance: entry.balance,
+      }
+    })
+  }
+
+  /**
+   * Write one provider's dsh-overlay entry to localStorage and refresh the
+   * in-memory cache so the next `publish()` re-renders with the new row.
+   * The host's dsh-llm runtime registry is NEVER touched — this is a
+   * pure client-side store keyed by `providerId`.
+   */
+  setDshProviderOverride(provider: string, override: DshProviderOverride): void {
+    writeDshProviderOverride(provider, override)
+    this.dshOverridesCache = { ...this.dshOverridesCache, [provider]: override }
+    this.publish()
+  }
+
+  /**
+   * Remove one provider's dsh-overlay entry. The row reverts to dsh-llm
+   * runtime defaults on the next projection. Idempotent — clearing a
+   * non-existent entry is a no-op (the host's `listProviders` will simply
+   * surface the next dsh-llm-sourced entry without an override).
+   */
+  clearDshProviderOverride(provider: string): void {
+    if (this.dshOverridesCache[provider] === undefined) return
+    writeDshProviderOverride(provider, undefined)
+    const next = { ...this.dshOverridesCache }
+    delete next[provider]
+    this.dshOverridesCache = next
+    this.publish()
   }
 
   private publish(): void {
@@ -529,12 +611,7 @@ export class FinanceCardController {
       hooks: { financeCard: this.store },
       edit: (field, text) => this.stage(field, { text, clear: false }),
       resetField: (field) => {
-        if (field === 'billingModes') {
-          // Reset drops the draft: reseed the live editor from the stored value.
-          this.billingEditorRows = billingModesToRows(this.format(field))
-        } else if (field === 'providers') {
-          this.providersEditorRows = providersToRows(this.snapshot().value?.providers)
-        } else if (field === 'defaultPrice') {
+        if (field === 'defaultPrice') {
           this.defaultPriceDraftValue = null
         } else if (field === 'providerDefaults') {
           this.providerDefaultsDraftValue = null
@@ -559,28 +636,6 @@ export class FinanceCardController {
         writeFinancePrefs({ ...prefs, charts: { ...prefs.charts, [key]: !prefs.charts[key] } })
         this.publish()
       },
-      setBillingModes: (rows) => {
-        // Keep the verbatim rows (blank routes included) for the live form;
-        // only the serialized JSON drops blanks and stays the save payload.
-        this.billingEditorRows = [...rows]
-        const text = rowsToBillingModes(rows)
-        // An empty serialization means 'inherit again' when nothing is stored:
-        // stage it as a clear so dirty stays false for a no-op edit.
-        const storedAlready = this.stored('billingModes')
-        this.stage('billingModes', text === '' && !storedAlready ? { text: '', clear: true } : { text, clear: text === '' })
-      },
-      setProviders: (rows) => {
-        // Same shape & contract as setBillingModes: verbatim rows in, JSON
-        // array out; blank provider strings preserved for the form but dropped
-        // from the save payload.
-        this.providersEditorRows = [...rows]
-        const payload = rowsToProviders(rows)
-        const text = JSON.stringify(payload, null, 2)
-        const storedAlready = this.stored('providers')
-        this.stage('providers', payload.length === 0 && !storedAlready
-          ? { text: '', clear: true }
-          : { text, clear: payload.length === 0 })
-      },
       setDefaultPrice: (draft) => {
         this.defaultPriceDraftValue = draft
         this.stagePriceResult('defaultPrice', serializeDefaultPriceDraft(draft))
@@ -596,6 +651,8 @@ export class FinanceCardController {
       syncNow: () => this.syncNow(),
       setAutoSync: (next) => this.setAutoSync(next),
       ensureAutoSync: () => this.ensureAutoSync(),
+      setDshProviderOverride: (provider, override) => this.setDshProviderOverride(provider, override),
+      clearDshProviderOverride: (provider) => this.clearDshProviderOverride(provider),
     }
   }
 
@@ -609,13 +666,22 @@ export class FinanceCardController {
    */
   private syncNow(): Promise<FinanceCommunitySyncResult | null> {
     const remote = this.financeRemote
-    if (remote === undefined) return Promise.resolve(null)
+    const sync = remote?.syncCommunityPrices
+    if (sync === undefined) return Promise.resolve(null)
     if (this.syncInFlight !== null) return this.syncInFlight
     this.syncStateValue = { ...this.syncStateValue, syncing: true, lastError: null }
     this.publish()
     const promise = (async (): Promise<FinanceCommunitySyncResult | null> => {
       try {
-        const remoteResult = await remote.syncCommunityPrices()
+        // The host `@Remote syncCommunityPrices` descriptor always declares
+        // `options` as a business arg (even though it is optional on the
+        // implementation: `options?`), so the apiproxy gate refuses a zero-arg
+        // call with `expected 1 business argument(s) plus an optional AbortSignal`.
+        // Pass an empty options object to signal "use defaults"; the host's
+        // `defaultSyncOptions()` fills in `providers` + `fx` when these are
+        // undefined, so this is semantically identical to the previous no-arg
+        // call but satisfies the contract.
+        const remoteResult = await sync({})
         if (!remoteResult.ok) {
           this.syncStateValue = {
             syncing: false,
@@ -668,7 +734,8 @@ export class FinanceCardController {
   ensureAutoSync(): void {
     if (this.autoSyncAttempted) return
     this.autoSyncAttempted = true
-    if (this.financeRemote === undefined) return
+    const remote = this.financeRemote
+    if (remote === undefined || remote.syncCommunityPrices === undefined) return
     const prefs = readFinancePrefs()
     if (!prefs.autoSync) return
     const lastApplied = prefs.lastSync?.appliedAt ?? 0
@@ -677,12 +744,31 @@ export class FinanceCardController {
   }
 
   /**
+   * Pull the merged provider list once. Failure is silent (the view renders a
+   * loading slot until the next successful fetch); the previous good
+   * snapshot, if any, stays in place so the user never sees the section
+   * disappear.
+   */
+  private async loadList(): Promise<void> {
+    const list = this.financeRemote?.listProviders
+    if (list === undefined) return
+    try {
+      const result = await list()
+      if (!result.ok) return
+      this.providerListValue = result.value
+      this.publish()
+    } catch {
+      // Best-effort: the section keeps rendering its previous state.
+    }
+  }
+
+  /**
    * Fire-and-forget host status probe. Used to surface a real `kept` count
    * shortly after mount when the local prefs.lastSync is null or stale.
    */
   private refreshSyncStatus(): void {
     const remote = this.financeRemote
-    if (remote === undefined) return
+    if (remote === undefined || remote.getSyncStatus === undefined) return
     void remote.getSyncStatus().then((result) => {
       if (!result.ok) return
       const value: FinanceSyncStatus | null = result.value

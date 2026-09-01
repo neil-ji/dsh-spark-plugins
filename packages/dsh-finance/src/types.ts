@@ -239,12 +239,23 @@ export type FinanceBalanceStatus = 'ok' | 'missing-credential' | 'error'
 export interface FinanceBalanceView {
   status: FinanceBalanceStatus
   updatedAt: number
+  /**
+   * @deprecated Commit 19: prefer `providers.deepseek-official.totalMicros`.
+   * Kept populated for clients that haven't migrated to the per-provider view
+   * yet; will be removed once the dashboard reads only `providers`.
+   */
   isAvailable?: boolean
+  /** @deprecated Commit 19: prefer `providers.deepseek-official.currency`. */
   currency?: string
+  /** @deprecated Commit 19: prefer `providers.deepseek-official.totalMicros`. */
   totalMicros?: number
+  /** @deprecated Commit 19: prefer `providers.deepseek-official` extras. */
   grantedMicros?: number
+  /** @deprecated Commit 19: prefer `providers.deepseek-official` extras. */
   toppedUpMicros?: number
+  /** @deprecated Commit 19: prefer `providers.deepseek-official.code/message`. */
   code?: string
+  /** @deprecated Commit 19: prefer `providers.deepseek-official.message`. */
   message?: string
   /**
    * Per-provider balance views keyed by provider id. Present once the host
@@ -252,6 +263,78 @@ export interface FinanceBalanceView {
    * entry is the same shape as the legacy single fields above.
    */
   providers?: Record<string, FinanceProviderBalance>
+}
+
+/**
+ * Source flag for one row in the merged provider list returned by
+ * `finance.listProviders`. A single provider id can appear under several
+ * sources (e.g. host-known + user-config + ledger-observed).
+ *
+ * - `host-known`: the provider is in `HOST_KNOWN_PROVIDER_META` (the host has
+ *   special metadata for it: default billing/currency, balance-fetch capability,
+ *   etc).
+ * - `user-config`: the user added a `FinanceProviderEntry` row in
+ *   `config.providers` for this id.
+ * - `ledger-observed`: at least one persisted session observed a model under
+ *   this provider (the ledger's `byProvider` rollup surfaced it).
+ * - `llm-runtime`: the local dsh-llm runtime has a configured provider with
+ *   this id (e.g. a `cordis.patch.yml` provider block that the user has set
+ *   up but has not yet used). Surfaced only when the runtime exposes a
+ *   list-providers surface; absent otherwise.
+ */
+export type FinanceProviderSource = 'host-known' | 'user-config' | 'ledger-observed' | 'llm-runtime'
+
+/**
+ * One row in the merged provider list. Every entry carries a `balance` slot
+ * (the same shape as `FinanceProviderBalance`), populated lazily:
+ * - For fetch-capable providers with `autoFetchBalance=true`, the host actually
+ *   fires the upstream request.
+ * - For everything else, the slot is `status: 'unsupported'` with a stable code
+ *   (`free-provider` / `unsupported-provider` / `no-balance-fetch` /
+ *   `auto-fetch-disabled`) so a sensible empty state is renderable client-side.
+ */
+export interface FinanceListProvidersEntry {
+  provider: string
+  /** Source flags. Always at least one. */
+  sources: readonly FinanceProviderSource[]
+  /**
+   * Host-known metadata, when the provider id is in
+   * `HOST_KNOWN_PROVIDER_META`. Fields mirror `FinanceHostProviderMeta` minus
+   * the `provider` echo.
+   */
+  hostMeta?: {
+    defaultBillingMode: FinanceProviderBillingMode
+    defaultCurrency: 'CNY' | 'USD'
+    supportsBalanceFetch: boolean
+    lockBillingModeAndCurrency?: boolean
+  }
+  /** User-configured entry, when present in `config.providers`. */
+  userEntry?: FinanceProviderEntry
+  /** Latest Balance view for this provider (fetched or unsupported). */
+  balance: FinanceProviderBalance
+}
+
+/**
+ * Result of `finance.listProviders`: the merged provider set with per-provider
+ * balance snapshots. `generatedAt` lets the dashboard tell a fresh list apart
+ * from a cached one without trusting local clocks for ordering.
+ */
+export interface FinanceListProvidersResult {
+  /** One entry per id seen (de-duplicated by provider). */
+  providers: readonly FinanceListProvidersEntry[]
+  /** Epoch ms the snapshot was produced. */
+  generatedAt: number
+}
+
+/**
+ * Request body for `finance.refreshBalance`: re-fetch the balance for one
+ * provider. The provider id must match a row in `FinanceListProvidersResult`
+ * (or one that the host can resolve from `HOST_KNOWN_PROVIDER_META` /
+ * `config.providers`). Unknown ids return an `unsupported` slot rather than
+ * throwing.
+ */
+export interface FinanceRefreshBalanceRequest {
+  provider: string
 }
 
 export interface FinanceSessionRow {

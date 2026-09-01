@@ -220,3 +220,45 @@ export const financeSyncStatusSchema = z.object({
   providers: z.array(z.string()),
   fx: z.number(),
 })
+
+/**
+ * Commit 19: per-row source flag for the merged provider list. One entry can
+ * carry several sources (e.g. `host-known` + `user-config` + `ledger-observed`).
+ */
+export const financeProviderSourceSchema = z.enum(['host-known', 'user-config', 'ledger-observed', 'llm-runtime'])
+
+/**
+ * Strict-boundary schema for one row in the merged provider list. Mirrors
+ * `FinanceListProvidersEntry` from types.ts. Both `hostMeta` and `userEntry`
+ * are optional because not every provider has both surfaces (e.g. a brand new
+ * provider only observed in the ledger has neither).
+ */
+export const financeListProvidersEntrySchema = z.object({
+  provider: z.string(),
+  sources: z.array(financeProviderSourceSchema),
+  hostMeta: z.object({
+    defaultBillingMode: z.enum(['metered', 'plan', 'free']),
+    defaultCurrency: z.enum(['CNY', 'USD']),
+    supportsBalanceFetch: z.boolean(),
+    lockBillingModeAndCurrency: z.boolean().optional(),
+  }).optional(),
+  userEntry: financeProviderEntrySchema.optional(),
+  balance: financeProviderBalanceSchema,
+})
+
+/**
+ * Strict-boundary schema for the `finance.listProviders` return shape.
+ * Mirrors `FinanceListProvidersResult` from types.ts.
+ */
+export const financeListProvidersResultSchema = z.object({
+  providers: z.array(financeListProvidersEntrySchema),
+  generatedAt: z.number(),
+})
+
+/**
+ * Strict-boundary schema for the `finance.refreshBalance` argument. Mirrors
+ * `FinanceRefreshBalanceRequest` from types.ts.
+ */
+export const financeRefreshBalanceRequestSchema = z.object({
+  provider: z.string(),
+})

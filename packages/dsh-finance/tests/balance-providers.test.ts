@@ -105,7 +105,11 @@ describe('FinanceService.getBalance providers map', () => {
       providers: [dsEntry({ autoFetchBalance: false })],
     })
     const view = await service.getBalance()
-    expect(view.status).toBe('missing-credential')
+    // Commit 19: the legacy view derives from the canonical per-provider slot,
+    // so an unsupported slot surfaces as legacy `status: 'error'` with the
+    // slot's code preserved (more accurate than the old `missing-credential`).
+    expect(view.status).toBe('error')
+    expect(view.code).toBe('auto-fetch-disabled')
     expect(view.providers!['deepseek-official']).toEqual({
       status: 'unsupported',
       provider: 'deepseek-official',
@@ -123,7 +127,9 @@ describe('FinanceService.getBalance providers map', () => {
       providers: [dsEntry({ billingMode: 'free', autoFetchBalance: true })],
     })
     const view = await service.getBalance()
-    expect(view.status).toBe('missing-credential')
+    // Commit 19: free-provider surfaces as legacy `status: 'error'`.
+    expect(view.status).toBe('error')
+    expect(view.code).toBe('free-provider')
     expect(view.providers!['deepseek-official']).toMatchObject({
       status: 'unsupported',
       provider: 'deepseek-official',
@@ -153,7 +159,15 @@ describe('FinanceService.getBalance providers map', () => {
     expect(view.providers!['minimax-cn']!.message).toContain('minimax-cn')
     // No deepseek entry, so no fetch should fire either.
     expect(fake).not.toHaveBeenCalled()
-    expect(view.providers!['deepseek-official']).toBeUndefined()
+    // Commit 19: the canonical surface always carries a deepseek-official slot,
+    // even when the user has no per-provider entry — the dashboard can render
+    // a coherent "you have not configured this provider" empty state instead
+    // of an undefined slot.
+    expect(view.providers!['deepseek-official']).toMatchObject({
+      status: 'unsupported',
+      provider: 'deepseek-official',
+      code: 'unsupported-provider',
+    })
   })
 
   it('marks free unknown providers as free-provider', async () => {

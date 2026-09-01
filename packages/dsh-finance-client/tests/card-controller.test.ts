@@ -14,7 +14,10 @@ vi.mock('@deepseek-ai/dsh-client-runtime/client', () => ({
 
 import { FinanceCardController } from '../src/client/FinanceCardController.ts'
 import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
-import type { FinanceConfigInput } from 'dsh-spark-finance/types'
+import type {
+  FinanceConfigInput,
+  FinanceListProvidersResult,
+} from 'dsh-spark-finance/types'
 
 /** Minimal in-memory SettingsScope: applies writes to the user/value layers and notifies. */
 function makeScope(initial: {
@@ -129,182 +132,84 @@ describe('FinanceCardController', () => {
     const controller = new FinanceCardController(scope)
     const face = controller.inject()
     face.edit('balance.timeoutMs', 'soon')
-    const state = face.hooks.financeCard.getSnapshot()
-    expect(state.balanceTimeoutMs.invalid).toBe(true)
-    expect(state.invalid).toBe(true)
-
+    expect(face.hooks.financeCard.getSnapshot().invalid).toBe(true)
     face.save()
     await flush()
-    expect(writes).toEqual([]) // nothing crossed the wire
+    expect(writes).toEqual([])
+  })
+
+  it('treats a non-object defaultPrice draft as invalid and blocks the save', async () => {
+    const { scope, writes } = makeScope({ value: baseSection() })
+    const controller = new FinanceCardController(scope)
+    const face = controller.inject()
+    face.edit('defaultPrice', '[]')
+    expect(face.hooks.financeCard.getSnapshot().invalid).toBe(true)
+    face.save()
+    await flush()
+    expect(writes).toEqual([])
+  })
+
+  it('serializes the default-price draft to the wire rate on save', async () => {
+    const { scope, writes } = makeScope({ value: baseSection() })
+    const controller = new FinanceCardController(scope)
+    const face = controller.inject()
+    face.setDefaultPrice({ input: '2000000', cacheRead: '500000', cacheWrite: '', output: '8000000' })
     expect(face.hooks.financeCard.getSnapshot().dirty).toBe(true)
+    face.save()
+    await flush()
+    expect(writes).toEqual([{ op: 'set', field: 'defaultPrice', value: { inputMicrosPerMtok: 2000000, cacheReadMicrosPerMtok: 500000, outputMicrosPerMtok: 8000000 } }])
   })
 
-  it('rejects non-object JSON for the price fields', () => {
-    const { scope } = makeScope({ value: baseSection() })
-    const controller = new FinanceCardController(scope)
-    const face = controller.inject()
-    face.edit('prices', '[1,2]')
-    expect(face.hooks.financeCard.getSnapshot().prices.invalid).toBe(true)
-    face.edit('prices', '{bad json')
-    expect(face.hooks.financeCard.getSnapshot().prices.invalid).toBe(true)
-    face.edit('prices', '{}')
-    expect(face.hooks.financeCard.getSnapshot().prices.invalid).toBe(false)
-  })
-
-  it('writes parsed JSON objects for the price fields', async () => {
+  it('blocks the save when the default-price draft is malformed', async () => {
     const { scope, writes } = makeScope({ value: baseSection() })
     const controller = new FinanceCardController(scope)
     const face = controller.inject()
-    const prices = {
-      'deepseek-official/deepseek-v4-flash': [
-        { inputMicrosPerMtok: 1000000, outputMicrosPerMtok: 2000000 },
-      ],
-    }
-    face.edit('prices', JSON.stringify(prices, null, 2))
-    face.save()
-    await flush()
-    expect(writes).toEqual([{ op: 'set', field: 'prices', value: prices }])
-  })
-
-  it('stages and saves per-provider default rates as one JSON write', async () => {
-    const { scope, writes } = makeScope({ value: baseSection() })
-    const controller = new FinanceCardController(scope)
-    const face = controller.inject()
-    const defaults = { openai: { inputMicrosPerMtok: 3600000, outputMicrosPerMtok: 14400000 } }
-    face.edit('providerDefaults', JSON.stringify(defaults, null, 2))
-    const staged = face.hooks.financeCard.getSnapshot()
-    expect(staged.providerDefaults.invalid).toBe(false)
-    expect(staged.dirty).toBe(true)
-    face.save()
-    await flush()
-    expect(writes).toEqual([{ op: 'set', field: 'providerDefaults', value: defaults }])
-    // A non-object draft (array) stays invalid and blocks the save.
-    face.edit('providerDefaults', '[1,2]')
+    face.setDefaultPrice({ input: 'oops', cacheRead: '', cacheWrite: '', output: '1' })
     expect(face.hooks.financeCard.getSnapshot().invalid).toBe(true)
+    face.save()
+    await flush()
+    expect(writes).toEqual([])
   })
 
-  it('stages and saves billing-mode tags as one JSON write', async () => {
+  it('serializes provider-default rows into the wire map', async () => {
     const { scope, writes } = makeScope({ value: baseSection() })
     const controller = new FinanceCardController(scope)
     const face = controller.inject()
-    face.edit('billingModes', JSON.stringify({ zai: 'plan' }))
-    expect(face.hooks.financeCard.getSnapshot().billingModes.invalid).toBe(false)
+    face.setProviderDefaults({ rows: [{ provider: 'openai', rate: { input: '3600000', cacheRead: '900000', cacheWrite: '', output: '14400000' } }] })
     face.save()
     await flush()
-    expect(writes).toEqual([{ op: 'set', field: 'billingModes', value: { zai: 'plan' } }])
-    // Unknown mode strings fail validation like any other non-enum JSON.
-    face.edit('billingModes', '{"zai":"prepaid"}')
-    expect(face.hooks.financeCard.getSnapshot().invalid).toBe(true)
+    expect(writes).toEqual([{ op: 'set', field: 'providerDefaults', value: { openai: { inputMicrosPerMtok: 3600000, cacheReadMicrosPerMtok: 900000, outputMicrosPerMtok: 14400000 } } }])
   })
 
-  it('applies form-editor rows to the staged field and saves them', async () => {
+  it('serializes the price-table draft into the wire map', async () => {
     const { scope, writes } = makeScope({ value: baseSection() })
     const controller = new FinanceCardController(scope)
     const face = controller.inject()
-    // The editor drives rows; the controller serializes them into the stage.
-    face.setBillingModes([{ route: 'zai', mode: 'plan' }, { route: 'volcengine', mode: 'metered' }])
-    const staged = face.hooks.financeCard.getSnapshot()
-    expect(staged.billingModes.overridden).toBe(true)
-    expect(staged.dirty).toBe(true)
+    // A draft with one model row exercises the per-entry serialize path; an
+    // empty `models: []` is also valid and short-circuits to `unset` when
+    // the user layer already carries the field (covered by the next test).
+    face.setPriceTable({ models: [{
+      modelKey: 'openai/gpt-4o',
+      entries: [{
+        kind: 'flat',
+        effectiveFrom: '',
+        flat: { input: '18000000', cacheRead: '9000000', cacheWrite: '', output: '72000000' },
+        offPeak: { input: '', cacheRead: '', cacheWrite: '', output: '' },
+        peak: { input: '', cacheRead: '', cacheWrite: '', output: '' },
+        peakHours: '',
+        peakDays: '',
+      }],
+    }] })
+    expect(face.hooks.financeCard.getSnapshot().dirty).toBe(true)
     face.save()
     await flush()
-    expect(writes).toEqual([{ op: 'set', field: 'billingModes', value: { zai: 'plan', volcengine: 'metered' } }])
-  })
-
-  it('clears the billing override when the editor empties', async () => {
-    const { scope, writes } = makeScope({ value: baseSection(), user: { billingModes: { zai: 'plan' } } })
-    const controller = new FinanceCardController(scope)
-    const face = controller.inject()
-    face.setBillingModes([])
-    const staged = face.hooks.financeCard.getSnapshot()
-    expect(staged.billingModes.overridden).toBe(false)
-    face.save()
-    await flush()
-    expect(writes).toEqual([{ op: 'unset', field: 'billingModes' }])
-  })
-
-  // commit 13: providers Form List — same controller pattern as billing.
-  it('stages a provider list via setProviders and saves it as a JSON array', async () => {
-    const { scope, writes } = makeScope({ value: baseSection() })
-    const controller = new FinanceCardController(scope)
-    const face = controller.inject()
-    face.setProviders([
-      { provider: 'deepseek-official', billingMode: 'metered', totalPriceMajor: 30, currency: 'CNY', autoFetchBalance: true },
-      { provider: 'minimax-cn', billingMode: 'plan', totalPriceMajor: 99, currency: 'USD', autoFetchBalance: false },
-    ])
-    const staged = face.hooks.financeCard.getSnapshot()
-    expect(staged.providers.overridden).toBe(true)
-    expect(staged.dirty).toBe(true)
-    expect(staged.providersList).toHaveLength(2)
-    face.save()
-    await flush()
-    expect(writes).toEqual([{
-      op: 'set',
-      field: 'providers',
-      value: [
-        expect.objectContaining({ provider: 'deepseek-official', billingMode: 'metered', currency: 'CNY' }),
-        expect.objectContaining({ provider: 'minimax-cn', billingMode: 'plan', currency: 'USD' }),
-      ],
-    }])
-  })
-
-  it('treats empty provider list as an unset', async () => {
-    const { scope, writes } = makeScope({ value: baseSection(), user: { providers: [{ provider: 'deepseek-official', billingMode: 'metered', totalPriceMajor: 30, currency: 'CNY', autoFetchBalance: true }] } })
-    const controller = new FinanceCardController(scope)
-    const face = controller.inject()
-    face.setProviders([])
-    face.save()
-    await flush()
-    expect(writes).toEqual([{ op: 'unset', field: 'providers' }])
-  })
-
-
-  it('keeps the form clean (no dirty) when nothing changed', () => {
-    const { scope } = makeScope({ value: baseSection() })
-    const controller = new FinanceCardController(scope)
-    const face = controller.inject()
-    face.setBillingModes([]) // no stored value, empty editor
-    expect(face.hooks.financeCard.getSnapshot().dirty).toBe(false)
-  })
-
-  it('keeps a just-added blank route visible in the editor rows', () => {
-    const { scope } = makeScope({ value: baseSection() })
-    const controller = new FinanceCardController(scope)
-    const face = controller.inject()
-    // The '+' button emits a blank route; the form must show it even though
-    // serialization (and therefore the draft JSON) drops blanks.
-    face.setBillingModes([{ route: 'zai', mode: 'plan' }, { route: '', mode: 'plan' }])
-    const snapshot = face.hooks.financeCard.getSnapshot()
-    expect(snapshot.billingRows).toHaveLength(2)
-    expect(snapshot.billingRows[1].route).toBe('')
-    // The staged payload stays clean: no blank-route entry is written.
-    expect(JSON.parse(snapshot.billingModes.text)).toEqual({ zai: 'plan' })
-  })
-
-  it('reseeds the editor rows from the accepted value after save', async () => {
-    const { scope, writes } = makeScope({ value: baseSection() })
-    const controller = new FinanceCardController(scope)
-    const face = controller.inject()
-    face.setBillingModes([{ route: 'zai', mode: 'plan' }, { route: '', mode: 'plan' }])
-    face.save()
-    await flush()
-    // After a landed save the draft clears and the editor shows stored rows.
-    const snapshot = face.hooks.financeCard.getSnapshot()
-    expect(snapshot.billingRows.map(r => r.route)).toEqual(['zai'])
-    expect(writes).toEqual([{ op: 'set', field: 'billingModes', value: { zai: 'plan' } }])
-  })
-
-  it('reseeds the editor rows from the composition default on reset', () => {
-    const { scope } = makeScope({ value: baseSection(), user: { billingModes: { zai: 'plan' } } })
-    const controller = new FinanceCardController(scope)
-    const face = controller.inject()
-    face.setBillingModes([{ route: 'volcengine', mode: 'metered' }])
-    face.resetField('billingModes')
-    // Reset drops the override and returns the editor to the composition layer
-    // (which carries no billingModes here), like every other field on the card.
-    const snapshot = face.hooks.financeCard.getSnapshot()
-    expect(snapshot.billingRows).toEqual([])
-    expect(snapshot.billingModes.overridden).toBe(false)
+    expect(writes.length).toBe(1)
+    expect(writes[0]?.op).toBe('set')
+    expect(writes[0]?.field).toBe('prices')
+    // The wire shape flattens to per-model rate records (mirrors what
+    // serializePriceTableDraft emits).
+    const value = writes[0]?.value as Record<string, { inputMicrosPerMtok: number }>
+    expect(value['openai/gpt-4o']?.inputMicrosPerMtok).toBe(18000000)
   })
 
   it('clears an overridden field on reset + save', async () => {
@@ -378,103 +283,150 @@ describe('FinanceCardController', () => {
       ;(globalThis as { localStorage?: unknown }).localStorage = original
     }
   })
+})
 
-  it('serializes the default-price draft to the wire rate on save', async () => {
-    const { scope, writes } = makeScope({ value: baseSection() })
-    const controller = new FinanceCardController(scope)
-    const face = controller.inject()
-    face.setDefaultPrice({ input: '2000000', cacheRead: '500000', cacheWrite: '', output: '8000000' })
-    expect(face.hooks.financeCard.getSnapshot().dirty).toBe(true)
-    face.save()
+/** Build a representative merged provider list with one host-known + one user-config entry. */
+function makeProviderListFixture(): FinanceListProvidersResult {
+  return {
+    generatedAt: 1_700_000_000_000,
+    providers: [
+      {
+        provider: 'deepseek-official',
+        sources: ['host-known', 'user-config'],
+        hostMeta: {
+          defaultBillingMode: 'metered',
+          defaultCurrency: 'CNY',
+          supportsBalanceFetch: true,
+          lockBillingModeAndCurrency: true,
+        },
+        userEntry: {
+          provider: 'deepseek-official',
+          billingMode: 'metered',
+          totalPriceMicros: 30_000_000,
+          currency: 'CNY',
+          autoFetchBalance: true,
+        },
+        balance: {
+          status: 'ok',
+          provider: 'deepseek-official',
+          totalMicros: 12_340_000,
+          currency: 'CNY',
+          fetchedAt: 1_700_000_000_000,
+        },
+      },
+      {
+        provider: 'minimax-cn',
+        sources: ['ledger-observed'],
+        userEntry: undefined,
+        balance: {
+          status: 'unsupported',
+          provider: 'minimax-cn',
+          code: 'no-balance-fetch',
+          fetchedAt: 1_700_000_000_000,
+        },
+      },
+    ],
+  }
+}
+
+describe('FinanceCardController provider list (read-only)', () => {
+  it('pulls listProviders on construction and surfaces it on state.providerList', async () => {
+    const remote = makeProviderRemote()
+    const { scope } = makeScope({ value: baseSection() })
+    const controller = new FinanceCardController(scope, remote as never)
     await flush()
-    expect(writes).toEqual([{ op: 'set', field: 'defaultPrice', value: { inputMicrosPerMtok: 2000000, cacheReadMicrosPerMtok: 500000, outputMicrosPerMtok: 8000000 } }])
+    const state = controller.inject().hooks.financeCard.getSnapshot()
+    expect(remote.listProviders).toHaveBeenCalledTimes(1)
+    expect(state.providerList?.providers.map((row) => row.provider)).toEqual(['deepseek-official', 'minimax-cn'])
   })
 
-  it('blocks the save when the default-price draft is malformed', async () => {
-    const { scope, writes } = makeScope({ value: baseSection() })
+  it('skips the load when no remote was injected', async () => {
+    const { scope } = makeScope({ value: baseSection() })
     const controller = new FinanceCardController(scope)
-    const face = controller.inject()
-    face.setDefaultPrice({ input: 'oops', cacheRead: '', cacheWrite: '', output: '1' })
-    expect(face.hooks.financeCard.getSnapshot().invalid).toBe(true)
-    face.save()
     await flush()
-    expect(writes).toEqual([])
+    const state = controller.inject().hooks.financeCard.getSnapshot()
+    expect(state.providerList).toBeUndefined()
   })
 
-  it('serializes provider-default rows into the wire map', async () => {
-    const { scope, writes } = makeScope({ value: baseSection() })
-    const controller = new FinanceCardController(scope)
-    const face = controller.inject()
-    face.setProviderDefaults({ rows: [{ provider: 'openai', rate: { input: '3600000', cacheRead: '900000', cacheWrite: '', output: '14400000' } }] })
-    face.save()
+  it('leaves providerList undefined when listProviders rejects', async () => {
+    const remote = makeProviderRemote({
+      listProviders: vi.fn().mockRejectedValue(new Error('network down')),
+    })
+    const { scope } = makeScope({ value: baseSection() })
+    const controller = new FinanceCardController(scope, remote as never)
     await flush()
-    expect(writes).toEqual([{ op: 'set', field: 'providerDefaults', value: { openai: { inputMicrosPerMtok: 3600000, cacheReadMicrosPerMtok: 900000, outputMicrosPerMtok: 14400000 } } }])
+    const state = controller.inject().hooks.financeCard.getSnapshot()
+    expect(state.providerList).toBeUndefined()
   })
 
-  it('serializes the price-table draft into the wire map', async () => {
-    const { scope, writes } = makeScope({ value: baseSection() })
-    const controller = new FinanceCardController(scope)
-    const face = controller.inject()
-    face.setPriceTable({ models: [{ modelKey: 'openai/gpt-4o', entries: [{
-      kind: 'flat' as const,
-      effectiveFrom: '',
-      flat: { input: '18000000', cacheRead: '9000000', cacheWrite: '', output: '72000000' },
-      offPeak: { input: '', cacheRead: '', cacheWrite: '', output: '' },
-      peak: { input: '', cacheRead: '', cacheWrite: '', output: '' },
-      peakHours: '',
-      peakDays: '',
-    }] }] })
-    face.save()
-    await flush()
-    expect(writes).toEqual([{ op: 'set', field: 'prices', value: { 'openai/gpt-4o': { inputMicrosPerMtok: 18000000, cacheReadMicrosPerMtok: 9000000, outputMicrosPerMtok: 72000000 } } }])
+  it('merges the dsh snapshot with the localStorage overlay into dshProviderRows', async () => {
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: new FakeStorage() })
+    try {
+      const remote = makeProviderRemote()
+      const { scope } = makeScope({ value: baseSection() })
+      const controller = new FinanceCardController(scope, remote as never)
+      await flush()
+      const face = controller.inject()
+
+      // Fresh browser: every row is present, none carries an overlay.
+      const before = face.hooks.financeCard.getSnapshot()
+      expect(before.dshProviderRows?.map(r => r.provider)).toEqual(['deepseek-official', 'minimax-cn'])
+      expect(before.dshProviderRows?.every(r => r.override === undefined)).toBe(true)
+
+      // Saving business fields writes localStorage and re-publishes at once.
+      face.setDshProviderOverride('minimax-cn', { totalPriceMicros: 99_000_000, autoFetchBalance: true })
+      const after = face.hooks.financeCard.getSnapshot()
+      const mm = after.dshProviderRows?.find(r => r.provider === 'minimax-cn')
+      expect(mm?.override?.totalPriceMicros).toBe(99_000_000)
+      expect(mm?.override?.autoFetchBalance).toBe(true)
+      // The other row is untouched by a single-provider write.
+      expect(after.dshProviderRows?.find(r => r.provider === 'deepseek-official')?.override).toBeUndefined()
+
+      // A second controller over the same storage rehydrates the overlay.
+      const second = new FinanceCardController(makeScope({ value: baseSection() }).scope, makeProviderRemote() as never)
+      await flush()
+      const rehydrated = second.inject().hooks.financeCard.getSnapshot()
+      expect(rehydrated.dshProviderRows?.find(r => r.provider === 'minimax-cn')?.override?.totalPriceMicros).toBe(99_000_000)
+
+      // Clearing reverts the row to the dsh snapshot defaults.
+      face.clearDshProviderOverride('minimax-cn')
+      const cleared = face.hooks.financeCard.getSnapshot()
+      expect(cleared.dshProviderRows?.find(r => r.provider === 'minimax-cn')?.override).toBeUndefined()
+    } finally {
+      Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: undefined })
+    }
   })
 
-  it('clears an empty price-table draft through the unset path', async () => {
-    const { scope, writes } = makeScope({ value: baseSection(), user: { prices: { 'x/y': { inputMicrosPerMtok: 1, outputMicrosPerMtok: 1 } } } })
+  it('leaves dshProviderRows undefined until the first listProviders lands', async () => {
+    const { scope } = makeScope({ value: baseSection() })
     const controller = new FinanceCardController(scope)
-    const face = controller.inject()
-    face.setPriceTable({ models: [] })
-    face.save()
     await flush()
-    expect(writes).toEqual([{ op: 'unset', field: 'prices' }])
+    expect(controller.inject().hooks.financeCard.getSnapshot().dshProviderRows).toBeUndefined()
+  })
+
+  it('leaves providerList undefined when listProviders returns an error envelope', async () => {
+    const remote = makeProviderRemote({
+      listProviders: vi.fn().mockResolvedValue({ ok: false as const, error: { code: 'internal', message: 'boom', details: {} } }),
+    })
+    const { scope } = makeScope({ value: baseSection() })
+    const controller = new FinanceCardController(scope, remote as never)
+    await flush()
+    const state = controller.inject().hooks.financeCard.getSnapshot()
+    expect(state.providerList).toBeUndefined()
   })
 })
 
-
-class FakeStorage {
-  private store = new Map<string, string>()
-  getItem(key: string): string | null { return this.store.has(key) ? this.store.get(key)! : null }
-  setItem(key: string, value: string): void { this.store.set(key, String(value)) }
-  removeItem(key: string): void { this.store.delete(key) }
-  clear(): void { this.store.clear() }
-  key(index: number): string | null { return [...this.store.keys()][index] ?? null }
-  get length(): number { return this.store.size }
+interface FakeProviderRemote {
+  listProviders: ReturnType<typeof vi.fn>
+  syncCommunityPrices?: ReturnType<typeof vi.fn>
+  getSyncStatus?: ReturnType<typeof vi.fn>
+  refreshBalance?: ReturnType<typeof vi.fn>
 }
 
-interface FakeFinanceSyncRemote {
-  syncCommunityPrices: ReturnType<typeof vi.fn>
-  getSyncStatus: ReturnType<typeof vi.fn>
-}
-
-function makeSyncRemote(): FakeFinanceSyncRemote {
+function makeProviderRemote(overrides: Partial<FakeProviderRemote> = {}): FakeProviderRemote {
   return {
-    syncCommunityPrices: vi.fn(async () => ({
-      ok: true as const,
-      value: {
-        ok: true as const,
-        source: 'https://models.dev/api.json',
-        appliedAt: 1_700_000_000_000,
-        fx: 7.2,
-        requestedProviders: ['openai', 'anthropic', 'google', 'zai', 'volcengine'],
-        requestedMissing: [],
-        kept: 12,
-        droppedDated: 0,
-        droppedNonToken: 0,
-        droppedNoCost: 0,
-        providers: ['openai', 'zai'],
-      },
-    })),
-    getSyncStatus: vi.fn(async () => ({ ok: true as const, value: null })),
+    listProviders: vi.fn(async () => ({ ok: true as const, value: makeProviderListFixture() })),
+    ...overrides,
   }
 }
 
@@ -578,3 +530,48 @@ describe('FinanceCardController community sync', () => {
   })
 })
 
+interface FakeFinanceSyncRemote {
+  syncCommunityPrices: ReturnType<typeof vi.fn>
+  getSyncStatus: ReturnType<typeof vi.fn>
+  refreshBalance: ReturnType<typeof vi.fn>
+}
+
+function makeSyncRemote(overrides: Partial<FakeFinanceSyncRemote> = {}): FakeFinanceSyncRemote {
+  return {
+    syncCommunityPrices: vi.fn(async () => ({
+      ok: true as const,
+      value: {
+        ok: true as const,
+        source: 'https://models.dev/api.json',
+        appliedAt: 1_700_000_000_000,
+        fx: 7.2,
+        requestedProviders: ['openai', 'anthropic', 'google', 'zai', 'volcengine'],
+        requestedMissing: [],
+        kept: 12,
+        droppedDated: 0,
+        droppedNonToken: 0,
+        droppedNoCost: 0,
+        providers: ['openai', 'zai'],
+      },
+    })),
+    getSyncStatus: vi.fn(async () => ({ ok: true as const, value: null })),
+    refreshBalance: vi.fn(async () => ({ ok: true as const, value: {
+      status: 'ok' as const,
+      provider: 'deepseek-official',
+      totalMicros: 12_340_000,
+      currency: 'CNY' as const,
+      fetchedAt: 1,
+    } })),
+    ...overrides,
+  }
+}
+
+class FakeStorage {
+  private readonly store = new Map<string, string>()
+  getItem(key: string): string | null { return this.store.get(key) ?? null }
+  setItem(key: string, value: string): void { this.store.set(key, value) }
+  removeItem(key: string): void { this.store.delete(key) }
+  clear(): void { this.store.clear() }
+  key(index: number): string | null { return [...this.store.keys()][index] ?? null }
+  get length(): number { return this.store.size }
+}

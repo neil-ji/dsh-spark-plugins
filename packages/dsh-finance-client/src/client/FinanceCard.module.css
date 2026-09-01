@@ -493,6 +493,19 @@
   flex: 1;
   min-width: 0;
 }
+
+/* Commit 20 followup: when autoFetchBalance owns the price (host refills on
+ * each refresh) the input is `disabled` — give it a clear "not editable" cue
+ * so the user can see the value is auto-managed vs. a normal empty field. */
+.providerPriceInput:disabled,
+.providerPriceInput[aria-disabled='true'] {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background: var(--dsw-alias-interactive-bg-hover);
+  text-decoration: line-through;
+  text-decoration-color: var(--dsw-alias-label-tertiary, transparent);
+  text-decoration-thickness: 1px;
+}
 .providerAutoFetch {
   align-items: center;
   color: var(--dsw-alias-label-primary);

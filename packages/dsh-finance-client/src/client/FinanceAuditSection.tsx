@@ -11,21 +11,30 @@ import type {
   FinanceBalanceView,
   FinanceHourOfDayRow,
   FinanceLedger,
-  FinanceOverview,
+  FinanceListProvidersResult,
   FinancePeakValleySplit,
 } from 'dsh-spark-finance/types'
 import type { FinanceAuditState } from './controller.ts'
 import type { FinanceKey } from './locales.ts'
 import { readFinancePrefs } from './persist.ts'
+import type { FinancePrefs, StoredBalancePeak } from './persist.ts'
 import { BarChart, Button, DonutChart, TrendChart, CHART_PALETTE, OTHER_CHART_COLOR, niceCeil } from 'dsh-ui-kit'
 import type { ChartDatum } from 'dsh-ui-kit'
-import type { FinancePrefs } from './persist.ts'
 import css from './FinanceAuditSection.module.css'
+import { BalanceGrid } from './BalanceGrid.tsx'
+import { ByModelTable } from './ByModelTable.tsx'
 
 export interface FinanceAuditInjected {
   useSnapshot: SnapshotSelectorHook<FinanceAuditState>
   t: (key: FinanceKey) => string
+  /** Refresh the dashboard's full data set (provider list + ledger). */
   refresh: () => void
+  /**
+   * Refresh one provider's balance slot in isolation (commit 21). Returns
+   * the in-flight promise so the caller can disable the per-card button
+   * until the fetch actually settles (rather than guessing a timeout).
+   */
+  refreshProvider: (provider: string) => Promise<void>
 }
 
 export interface FinanceAuditSectionProps extends SettingsSectionOwnerProps, FinanceAuditInjected {}
@@ -154,54 +163,6 @@ function KpiCard({ label, value, sub }: { label: string; value: string; sub?: st
       <div className={css.kpiValue}>{value}</div>
       {sub === undefined ? null : <div className={css.kpiSub}>{sub}</div>}
     </div>
-  )
-}
-
-/**
- * Balance battery gauge: the bar fills from the historical peak (recharge
- * baseline) down to the current balance. A detected top-up raises the peak and
- * refills the gauge; spending drains it. Peak tracking lives in the controller.
- */
-function BalanceGauge({ balance, peak, spentMicros, currency, t }: {
-  balance: FinanceBalanceView
-  peak?: { micros: number; updatedAt: number }
-  spentMicros: number
-  currency: string
-  t: (key: FinanceKey) => string
-}) {
-  if (balance.status === 'missing-credential') {
-    return (
-      <section className={css.gaugeCard}>
-        <div className={css.gaugeStatus}>{t('missingCredential')}</div>
-      </section>
-    )
-  }
-  if (balance.status === 'error') {
-    return (
-      <section className={css.gaugeCard}>
-        <div className={css.gaugeStatus}>{t('error')}</div>
-        {balance.message === undefined ? null : <div className={css.statusDetail}>{balance.message}</div>}
-      </section>
-    )
-  }
-  const total = balance.totalMicros ?? 0
-  const peakMicros = Math.max(peak?.micros ?? total, total)
-  const percent = peakMicros <= 0 ? 100 : Math.round(Math.min(1, total / peakMicros) * 100)
-  return (
-    <section className={css.gaugeCard}>
-      <div className={css.gaugeHead}>
-        <span className={css.gaugeTitle}>{t('balanceGauge')}</span>
-        <span className={css.gaugePercent}>{t('remaining')} {percent}%</span>
-      </div>
-      <div className={css.gaugeTrack} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-label={t('balanceGauge')}>
-        <div className={css.gaugeFill} style={{ width: `${percent}%` }} />
-      </div>
-      <div className={css.gaugeMeta}>
-        <span>{t('balance')} {formatMicros(total, currency)}</span>
-        <span>{t('peak')} {formatMicros(peakMicros, currency)}</span>
-        <span>{t('spent')} {formatMicros(spentMicros, currency)}</span>
-      </div>
-    </section>
   )
 }
 
@@ -421,7 +382,7 @@ function HourOfDayChart({ byHourOfDay, split, currency, windowStartMs, t }: {
 }
 
 export function FinanceAuditSection(props: FinanceAuditSectionProps) {
-  const { useSnapshot, t, refresh } = props
+  const { useSnapshot, t, refresh, refreshProvider } = props
   const state = useSnapshot(s => s)
 
   useEffect(() => {
@@ -478,17 +439,42 @@ export function FinanceAuditSection(props: FinanceAuditSectionProps) {
     )
   }
 
-  if (state.overview === undefined) return null
-  return <FinanceReady overview={state.overview} peak={state.peak} t={t} refresh={refresh} />
+  if (state.providerList === undefined || state.ledger === undefined) return null
+  return (
+    <FinanceReady
+      providerList={state.providerList}
+      ledger={state.ledger}
+      peaks={state.peaks}
+      t={t}
+      refresh={refresh}
+      refreshProvider={refreshProvider}
+    />
+  )
 }
 
-function FinanceReady({ overview, peak, t, refresh }: {
-  overview: FinanceOverview
-  peak?: { micros: number; updatedAt: number }
+function FinanceReady({ providerList, ledger, peaks, t, refresh, refreshProvider }: {
+  providerList: FinanceListProvidersResult
+  ledger: FinanceLedger
+  peaks: Readonly<Record<string, StoredBalancePeak>>
   t: (key: FinanceKey) => string
   refresh: () => void
+  refreshProvider: (provider: string) => Promise<void>
 }) {
-  const { balance, ledger } = overview
+  const [refreshingProviders, setRefreshingProviders] = useState<Record<string, boolean>>({})
+  const handleRefreshProvider = useCallback((provider: string) => {
+    setRefreshingProviders((prev) => ({ ...prev, [provider]: true }))
+    // The button stays disabled until the controller's promise settles; the
+    // controller republishes the snapshot on success/error, so clearing
+    // `refreshing` here is safe regardless of outcome (the caller's loading
+    // state mirrors the in-flight setTimeout-free HTTP call exactly).
+    void refreshProvider(provider).finally(() => {
+      setRefreshingProviders((prev) => {
+        const { [provider]: _drop, ...rest } = prev
+        void _drop
+        return rest
+      })
+    })
+  }, [refreshProvider])
 
   // View preferences: layout density and per-chart visibility, read from the
   // browser and honored here. The controls themselves live on the plugin
@@ -589,15 +575,17 @@ function FinanceReady({ overview, peak, t, refresh }: {
       </div>
 
       {charts.gauge ? (
-        <BalanceGauge
-          balance={balance}
-          peak={peak}
-          // The wallet only ever loses METERED money; plan subscriptions are a
-          // flat fee, so their list-price equivalent must not drain the gauge.
-          spentMicros={ledger.meteredCostMicros ?? ledger.totalCostMicros}
-          currency={ledger.currency}
-          t={t}
-        />
+        <section className={css.card}>
+          <div className={css.cardTitle}>{t('balanceGridTitle')}</div>
+          <p className={css.cardHint}>{t('balanceGridHint')}</p>
+          <BalanceGrid
+            list={providerList}
+            peaks={peaks}
+            refreshing={refreshingProviders}
+            t={t}
+            onRefresh={handleRefreshProvider}
+          />
+        </section>
       ) : null}
 
       {charts.kpis ? (
@@ -695,13 +683,7 @@ function FinanceReady({ overview, peak, t, refresh }: {
                 <span>{ledger.byModel.length} {t('modelCountUnit')}</span>
                 <span>{t('trendTotal')} {formatMicros(ledger.totalCostMicros, ledger.currency)}</span>
               </div>
-              <DonutChart
-                rows={modelRows}
-                centerValue={formatAxisLabel(modelRows.reduce((sum, row) => sum + row.value, 0), ledger.currency)}
-                centerLabel={t('trendTotal')}
-                ariaLabel={t('byModel')}
-                formatValue={(value) => formatMicros(value, ledger.currency)}
-              />
+              <ByModelTable rows={ledger.byModel} currency={ledger.currency} t={t} />
             </section>
           ) : null}
           {charts.byWorkspace ? (

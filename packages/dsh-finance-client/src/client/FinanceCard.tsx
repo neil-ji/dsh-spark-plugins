@@ -12,14 +12,12 @@
  * table by hand. The dashboard view prefs always stay visible at the bottom.
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { SnapshotSelectorHook } from 'dsh-spark-plugin-kit/client'
 import { Button, Input, Pill, SegmentedControl, Textarea } from 'dsh-ui-kit'
 import { ProviderDefaultsEditor, PriceTableEditor, RateFields } from './PriceEditors.tsx'
-import { ProviderListEditor } from './ProviderListEditor.tsx'
+import { ProviderListView } from './ProviderListView.tsx'
 import type { PriceTableDraft, ProviderDefaultsDraft, RateDraft } from './price-forms.ts'
-import type { ProviderRow } from './provider-forms.ts'
-import type { BillingModeRow } from './billing-modes.ts'
 import type {
   FinanceCardFace,
   FinanceCardFieldName,
@@ -27,7 +25,7 @@ import type {
   FinanceCardState,
 } from './FinanceCardController.ts'
 import type { FinanceKey } from './locales.ts'
-import type { FinanceChartPrefs, FinanceLayout } from './persist.ts'
+import type { DshProviderOverride, FinanceChartPrefs, FinanceLayout } from './persist.ts'
 import css from './FinanceCard.module.css'
 
 export interface FinanceCardInjected extends Omit<FinanceCardFace, 'hooks'> {
@@ -174,15 +172,13 @@ function PriceSyncSection({ t, state, disabled, onSyncNow, onSetAutoSync }: {
 }
 
 /** The card's open body: connection + provider list + sync + plan/metered tags + advanced JSON + dashboard prefs + save row. */
-export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, onSetBillingModes, onSetProviders, onSetDefaultPrice, onSetProviderDefaults, onSetPriceTable, onSetLayout, onToggleChart, onSyncNow, onSetAutoSync }: {
+export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, onSetDefaultPrice, onSetProviderDefaults, onSetPriceTable, onSetLayout, onToggleChart, onSyncNow, onSetAutoSync, onSetDshProviderOverride, onClearDshProviderOverride }: {
   t: (key: FinanceKey) => string
   state: FinanceCardState
   onEdit: (field: FinanceCardFieldName, text: string) => void
   onReset: (field: FinanceCardFieldName) => void
   onSave: () => void
   onDiscard: () => void
-  onSetBillingModes: (rows: readonly BillingModeRow[]) => void
-  onSetProviders: (rows: readonly ProviderRow[]) => void
   onSetDefaultPrice: (draft: RateDraft) => void
   onSetProviderDefaults: (draft: ProviderDefaultsDraft) => void
   onSetPriceTable: (draft: PriceTableDraft) => void
@@ -190,6 +186,10 @@ export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, 
   onToggleChart: (key: keyof FinanceChartPrefs) => void
   onSyncNow: () => Promise<unknown>
   onSetAutoSync: (next: boolean) => void
+  /** Persist one provider's business fields (localStorage; never touches dsh). */
+  onSetDshProviderOverride: (provider: string, override: DshProviderOverride) => void
+  /** Drop one provider's business fields, reverting to the dsh snapshot defaults. */
+  onClearDshProviderOverride: (provider: string) => void
 }) {
   const disabled = !state.writable
   const blocked = !state.dirty || state.invalid || state.saving
@@ -214,7 +214,8 @@ export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, 
       {!state.writable ? <p className={css.readOnly} role="status">{t('cardReadOnly')}</p> : null}
 
       <div className={css.section}>
-        <div className={css.sectionTitle}>{t('cardConnectionTitle')}</div>
+        <div className={css.sectionTitle}>{t('cardDeepseekConnectionTitle')}</div>
+        <p className={css.sectionHint}>{t('cardDeepseekConnectionHint')}</p>
         <Field
           id="plugin-config-finance-currency"
           label={t('cardCurrency')}
@@ -281,35 +282,16 @@ export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, 
       <div className={css.section}>
         <div className={css.sectionTitle}>{t('cardProvidersTitle')}</div>
         <p className={css.sectionHint}>{t('cardProvidersHint')}</p>
-        <ProviderListEditor
-          rows={state.providersList}
+        <ProviderListView
+          rows={state.dshProviderRows}
           disabled={disabled}
           t={t}
-          onChange={onSetProviders}
+          onSave={onSetDshProviderOverride}
+          onClear={onClearDshProviderOverride}
         />
       </div>
 
-      <div className={css.section}>
-        <div className={css.sectionTitle}>{t('cardBillingTitle')}</div>
-        <div className={css.field}>
-          <div className={css.fieldHead}>
-            <label className={css.fieldLabel} htmlFor="plugin-config-finance-billing-modes">{t('cardBillingModes')}</label>
-            <span className={css.fieldBadges}>{state.billingModes.overridden ? <Pill>{t('overridden')}</Pill> : null}</span>
-          </div>
-          <BillingModesEditor
-            rows={state.billingRows}
-            disabled={disabled}
-            t={t}
-            onChange={onSetBillingModes}
-          />
-          <div className={css.fieldFoot}>
-            <p className={css.hint}>{t('cardBillingModesHint')}</p>
-            {state.billingModes.overridden
-              ? <button type="button" className={css.reset} disabled={disabled} onClick={() => onReset('billingModes')}>{t('reset')}</button>
-              : null}
-          </div>
-        </div>
-        <details className={css.advancedDetails}>
+      <details className={css.advancedDetails}>
           <summary className={css.advancedSummary}>{t('cardAdvancedTitle')}</summary>
           <p className={css.advancedHint}>{t('cardAdvancedHint')}</p>
           <div className={css.field}>
@@ -367,7 +349,6 @@ export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, 
             </div>
           </div>
         </details>
-      </div>
 
       <div className={css.section}>
         <div className={css.sectionTitle}>{t('cardViewsTitle')}</div>
@@ -398,72 +379,20 @@ export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, 
   )
 }
 
-/**
- * Form-based editor for billing-mode tags: one row per route with a
- * metered/plan switch and a remove button, plus an add-row button. Fully
- * controlled over the staged JSON text — every edit re-serializes, so the
- * existing save/clear/dirty pipeline stays untouched.
- */
-function BillingModesEditor({ rows, disabled, t, onChange }: {
-  rows: readonly BillingModeRow[]
-  disabled: boolean
-  t: (key: FinanceKey) => string
-  onChange: (rows: readonly BillingModeRow[]) => void
-}) {
-  const update = (index: number, next: Partial<BillingModeRow>): void => {
-    onChange(rows.map((row, i) => (i === index ? { ...row, ...next } : row)))
-  }
-  return (
-    <div id="plugin-config-finance-billing-modes" className={css.billingEditor}>
-      {rows.map((row, index) => (
-        <div key={`${row.route}-${index}`} className={css.billingRow}>
-          <Input
-            className={css.billingRouteInput}
-            type="text"
-            value={row.route}
-            disabled={disabled}
-            spellCheck={false}
-            placeholder="provider | provider/model"
-            aria-label={t('billingRouteLabel')}
-            onChange={(event) => update(index, { route: event.currentTarget.value })}
-          />
-          <SegmentedControl
-            options={[
-              { value: 'metered', label: t('modeMetered') },
-              { value: 'plan', label: t('modePlan') },
-            ]}
-            value={row.mode}
-            ariaLabel={`${t('billingModeFor')} ${row.route}`}
-            disabled={disabled}
-            onChange={(mode) => update(index, { mode })}
-          />
-          <button
-            type="button"
-            className={css.billingRemove}
-            disabled={disabled}
-            aria-label={`${t('removeBillingRoute')}: ${row.route}`}
-            onClick={() => onChange(rows.filter((_, i) => i !== index))}
-          >
-            ×
-          </button>
-        </div>
-      ))}
-      <button
-        type="button"
-        className={css.billingAdd}
-        disabled={disabled}
-        onClick={() => onChange([...rows, { route: '', mode: 'plan' }])}
-      >
-        {t('addBillingRoute')}
-      </button>
-    </div>
-  )
-}
-
 export function FinanceCard(props: FinanceCardProps) {
   const { t } = props
   const state = props.useFinanceCard(snapshot => snapshot)
   const [open, setOpen] = useState(false)
+  // Commit 21 followup: the dashboard's empty-state "open config" action dispatches
+  // this window event. We catch it, expand the card, and scroll it into view
+  // so the user lands on the provider form.
+  useEffect(() => {
+    const handler = (): void => {
+      setOpen(true)
+    }
+    window.addEventListener('dsh-finance-open-config', handler)
+    return () => { window.removeEventListener('dsh-finance-open-config', handler) }
+  }, [])
   if (!state.available) return null
 
   return (
@@ -490,8 +419,6 @@ export function FinanceCard(props: FinanceCardProps) {
           onReset={props.resetField}
           onSave={props.save}
           onDiscard={props.discard}
-          onSetBillingModes={props.setBillingModes}
-          onSetProviders={props.setProviders}
           onSetDefaultPrice={props.setDefaultPrice}
           onSetProviderDefaults={props.setProviderDefaults}
           onSetPriceTable={props.setPriceTable}
@@ -499,6 +426,8 @@ export function FinanceCard(props: FinanceCardProps) {
           onToggleChart={props.toggleChart}
           onSyncNow={props.syncNow}
           onSetAutoSync={props.setAutoSync}
+          onSetDshProviderOverride={props.setDshProviderOverride}
+          onClearDshProviderOverride={props.clearDshProviderOverride}
         />
       )}
     </li>

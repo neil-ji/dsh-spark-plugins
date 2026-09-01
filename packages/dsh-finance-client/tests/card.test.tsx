@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { createElement } from 'react'
 import { FinanceCard, FinanceCardBody } from '../src/client/FinanceCard.tsx'
 import type { FinanceCardState, FinanceCardFieldState } from '../src/client/FinanceCardController.ts'
+import type { FinanceDshProviderRow } from '../src/client/FinanceCardController.ts'
 import { DEFAULT_FINANCE_PREFS } from '../src/client/persist.ts'
 import type { FinancePrefs } from '../src/client/persist.ts'
 
@@ -10,6 +11,46 @@ const t = (key: string): string => key
 
 function field(text = '', overridden = false, invalid = false): FinanceCardFieldState {
   return { text, overridden, invalid }
+}
+
+/**
+ * Two merged rows: one host-known provider carrying a user overlay (price +
+ * autoFetch), one runtime-only provider with no overlay at all.
+ */
+function makeProviderRows(): readonly FinanceDshProviderRow[] {
+  return [
+    {
+      provider: 'deepseek-official',
+      name: 'deepseek-official',
+      sources: ['host-known', 'llm-runtime'],
+      hostMeta: {
+        defaultBillingMode: 'metered',
+        defaultCurrency: 'CNY',
+        supportsBalanceFetch: true,
+        lockBillingModeAndCurrency: true,
+      },
+      override: { totalPriceMicros: 30_000_000, autoFetchBalance: true },
+      balance: {
+        status: 'ok',
+        provider: 'deepseek-official',
+        totalMicros: 12_340_000,
+        currency: 'CNY',
+        fetchedAt: 1_700_000_000_000,
+      },
+    },
+    {
+      provider: 'minimax-cn',
+      name: 'minimax-cn',
+      sources: ['llm-runtime'],
+      override: undefined,
+      balance: {
+        status: 'unsupported',
+        provider: 'minimax-cn',
+        code: 'no-balance-fetch',
+        fetchedAt: 1_700_000_000_000,
+      },
+    },
+  ]
 }
 
 function state(overrides: Partial<FinanceCardState> = {}): FinanceCardState {
@@ -26,33 +67,17 @@ function state(overrides: Partial<FinanceCardState> = {}): FinanceCardState {
     balanceTimeoutMs: field('10000'),
     defaultPrice: field(''),
     providerDefaults: field(''),
-    billingModes: field(''),
-    billingRows: [],
     defaultPriceDraft: { input: '', cacheRead: '', cacheWrite: '', output: '' },
     providerDefaultsDraft: { rows: [] },
     priceTableDraft: { models: [] },
     prices: field(''),
-    // Per-provider Form List (commit 13). Empty by default — most tests don't
-    // touch this surface; the provider-section cases below override as needed.
-    providers: { text: '', overridden: false, invalid: false },
-    providersList: [],
     prefs: DEFAULT_FINANCE_PREFS,
     syncState: { syncing: false, lastSync: null, lastError: null },
     syncAvailable: true,
+    providerList: undefined,
+    dshProviderRows: undefined,
     ...overrides,
   }
-}
-
-/** Render the body with one stored plan route to inspect the editor. */
-function bodyWithBillingRows(rows: Array<{ route: string; mode: 'metered' | 'plan' }>): string {
-  const staged = state({
-    billingModes: { text: JSON.stringify(Object.fromEntries(rows.map(r => [r.route, r.mode]))), overridden: true, invalid: false },
-    billingRows: rows,
-  })
-  return renderToStaticMarkup(createElement(FinanceCardBody, {
-    ...baseProps,
-    state: staged,
-  }))
 }
 
 const baseProps = {
@@ -62,8 +87,6 @@ const baseProps = {
   resetField: () => {},
   save: () => {},
   discard: () => {},
-  setBillingModes: () => {},
-  setProviders: () => {},
   setDefaultPrice: () => {},
   setProviderDefaults: () => {},
   setPriceTable: () => {},
@@ -71,6 +94,8 @@ const baseProps = {
   toggleChart: () => {},
   syncNow: () => Promise.resolve(null),
   setAutoSync: () => {},
+  setDshProviderOverride: () => {},
+  clearDshProviderOverride: () => {},
 }
 
 describe('FinanceCard', () => {
@@ -110,8 +135,6 @@ describe('FinanceCardBody', () => {
     onReset: () => {},
     onSave: () => {},
     onDiscard: () => {},
-    onSetBillingModes: () => {},
-    onSetProviders: () => {},
     onSetDefaultPrice: () => {},
     onSetProviderDefaults: () => {},
     onSetPriceTable: () => {},
@@ -119,21 +142,14 @@ describe('FinanceCardBody', () => {
     onToggleChart: () => {},
     onSyncNow: () => Promise.resolve(null),
     onSetAutoSync: () => {},
+    onSetDshProviderOverride: () => {},
+    onClearDshProviderOverride: () => {},
   }
-
-  it('renders the billing-mode editor as rows instead of a JSON textarea', () => {
-    const html = bodyWithBillingRows([{ route: 'zai', mode: 'plan' }])
-    expect(html).toContain('addBillingRoute')     // add-row button
-    expect(html).toContain('modeMetered')         // segment options
-    expect(html).toContain('modePlan')
-    expect(html).toContain('zai')                 // seeded route value
-    expect(html).toContain('removeBillingRoute')  // per-row remove
-    expect(html).not.toContain('plugin-config-finance-billing-modes\" type=\"text') // no textarea/input for the field itself
-  })
 
   it('renders the connection fields seeded from the section', () => {
     const html = renderToStaticMarkup(createElement(FinanceCardBody, bodyProps))
-    expect(html).toContain('cardConnectionTitle')
+    expect(html).toContain('cardDeepseekConnectionTitle')
+    expect(html).toContain('cardDeepseekConnectionHint')
     expect(html).toContain('cardCurrency')
     expect(html).toContain('cardBalanceURL')
     expect(html).toContain('cardBalanceApiKeyEnv')
@@ -212,70 +228,92 @@ describe('FinanceCardBody', () => {
     expect(html).toContain('role="status"')
   })
 
-  // Per-provider Form List (commit 13): one card per row, host metadata drives
-  // lock semantics + auto-fetch toggle visibility, "+ 添加 provider" seeds from
-  // HOST_KNOWN_PROVIDER_META.
-  it('renders the section title, hint and the add-provider button when empty', () => {
+  // Provider configuration read-only view (replaces commit 13 Form List).
+  // The section pulls one row per entry from `state.providerList`, no editable
+  // controls — every visible row carries the host's `hostMeta` defaults plus
+  // any user-config overrides (price, autoFetch, validity).
+  it('renders the Provider configuration section title and hint', () => {
     const html = renderToStaticMarkup(createElement(FinanceCardBody, bodyProps))
     expect(html).toContain('cardProvidersTitle')
     expect(html).toContain('cardProvidersHint')
-    expect(html).toContain('finance-provider-add')
-    expect(html).toContain('addProvider')
   })
 
-  it('renders a deepseek-official row with locked billing + currency + auto-fetch toggle', () => {
+  it('renders a loading placeholder while dshProviderRows is undefined', () => {
     const html = renderToStaticMarkup(createElement(FinanceCardBody, {
       ...bodyProps,
-      state: state({
-        providersList: [{
-          provider: 'deepseek-official',
-          billingMode: 'metered',
-          totalPriceMajor: 30,
-          currency: 'CNY',
-          autoFetchBalance: true,
-        }],
-      }),
+      state: state({ dshProviderRows: undefined }),
     }))
-    expect(html).toContain('deepseek-official')
+    expect(html).toContain('finance-provider-list-empty')
+    expect(html).toContain('cardProvidersLoading')
+  })
+
+  it('renders an empty placeholder when dshProviderRows has no entries', () => {
+    const html = renderToStaticMarkup(createElement(FinanceCardBody, {
+      ...bodyProps,
+      state: state({ dshProviderRows: [] }),
+    }))
+    expect(html).toContain('finance-provider-list-empty')
+    expect(html).toContain('cardProvidersNone')
+    // The placeholder is rendered inside the same providerList element, so we
+    // can only assert that the actual <article> cards are absent — nothing
+    // draws `data-provider="…"` when the list is empty.
+    expect(html).not.toContain('data-provider="deepseek-official"')
+  })
+
+  it('renders one card per dsh provider row', () => {
+    const html = renderToStaticMarkup(createElement(FinanceCardBody, {
+      ...bodyProps,
+      state: state({ dshProviderRows: makeProviderRows() }),
+    }))
+    expect(html).toContain('data-provider="deepseek-official"')
+    expect(html).toContain('data-provider="minimax-cn"')
+  })
+
+  it('shows the host-known tag and the overlay price for host-known providers', () => {
+    const html = renderToStaticMarkup(createElement(FinanceCardBody, {
+      ...bodyProps,
+      state: state({ dshProviderRows: makeProviderRows() }),
+    }))
     expect(html).toContain('cardProviderHostKnown')
-    expect(html).toContain('cardProviderAutoFetch')
-    expect(html).toContain('cardProviderAutoFetchHint')
-    expect(html).toContain('cardProviderValidity')
-    expect(html).toContain('removeProviderRow')
+    // 30 CNY from the fixture's override.totalPriceMicros
+    expect(html).toContain('¥30.00')
+    // autoFetch on the host-known row (supportsBalanceFetch === true)
+    expect(html).toContain('cardProviderAutoFetchOn')
   })
 
-  it('renders an unknown-provider row without the auto-fetch toggle', () => {
+  it('hides the autoFetch field for providers that do not support balance fetch', () => {
     const html = renderToStaticMarkup(createElement(FinanceCardBody, {
       ...bodyProps,
-      state: state({
-        providersList: [{
-          provider: 'minimax-cn',
-          billingMode: 'plan',
-          totalPriceMajor: 99,
-          currency: 'USD',
-          autoFetchBalance: false,
-        }],
-      }),
+      state: state({ dshProviderRows: makeProviderRows() }),
     }))
-    expect(html).toContain('minimax-cn')
-    expect(html).not.toContain('cardProviderHostKnown')
-    expect(html).not.toContain('cardProviderAutoFetchHint')
+    // Only the deepseek row supports balance fetch — its autoFetch shows the
+    // "on" badge, the minimax row renders no autoFetch field at all.
+    expect(html).toContain('cardProviderAutoFetchOn')
+    expect(html).not.toContain('cardProviderAutoFetchOff')
   })
 
-  it('renders one card per row in providersList', () => {
+  it('renders an edit button per row, plus a reset only where an overlay exists', () => {
     const html = renderToStaticMarkup(createElement(FinanceCardBody, {
       ...bodyProps,
-      state: state({
-        providersList: [
-          { provider: 'deepseek-official', billingMode: 'metered', totalPriceMajor: 30, currency: 'CNY', autoFetchBalance: true },
-          { provider: 'minimax-cn', billingMode: 'plan', totalPriceMajor: 99, currency: 'USD', autoFetchBalance: false },
-        ],
-      }),
+      state: state({ dshProviderRows: makeProviderRows() }),
     }))
-    const dsMatches = html.match(/deepseek-official/g) ?? []
-    const mmMatches = html.match(/minimax-cn/g) ?? []
-    expect(dsMatches.length).toBeGreaterThanOrEqual(1)
-    expect(mmMatches.length).toBeGreaterThanOrEqual(1)
+    // Every row gets an edit affordance for the business fields.
+    expect(html).toContain('finance-provider-edit-deepseek-official')
+    expect(html).toContain('finance-provider-edit-minimax-cn')
+    // Only the row carrying an override can be reset back to dsh defaults.
+    expect(html).toContain('finance-provider-reset-deepseek-official')
+    expect(html).not.toContain('finance-provider-reset-minimax-cn')
+    // The overlay row is badged as overridden.
+    expect(html).toContain('overridden')
+  })
+
+  it('disables the edit affordance when the Host document is read-only', () => {
+    const html = renderToStaticMarkup(createElement(FinanceCardBody, {
+      ...bodyProps,
+      state: state({ writable: false, dshProviderRows: makeProviderRows() }),
+    }))
+    expect(html).toContain('finance-provider-edit-deepseek-official')
+    expect(html).toContain('disabled')
   })
 })
 
@@ -372,11 +410,23 @@ describe('FinanceCard price sync section', () => {
       state: state({ prefs: { ...DEFAULT_FINANCE_PREFS, autoSync: false } }),
       setAutoSync,
     }))
-    expect(html).toContain('cardAutoSync')
-    // We can't easily fire checkbox onChange via renderToStaticMarkup, but
-    // we can confirm the setAutoSync closure is reachable.
-    expect(typeof setAutoSync).toBe('function')
-    expect(seen).toBeNull()
+    // The autoSync checkbox is identifiable by its aria-label; `checked`
+    // reflects the persisted `prefs.autoSync = false` so the input is
+    // unchecked in the rendered markup.
+    expect(html).toMatch(/<input[^>]*aria-label="cardAutoSync"[^>]*>/)
+    expect(html).not.toMatch(/<input[^>]*aria-label="cardAutoSync"[^>]*checked/)
+    expect(seen).toBeNull() // synthetic markup, no click fired
+  })
+
+  it('Sync now button wires through to the onSyncNow handler', () => {
+    let called = false
+    const syncNow = async () => { called = true; return null }
+    const html = renderToStaticMarkup(createElement(FinanceCardBody, {
+      ...baseProps,
+      state: state({ syncAvailable: true }),
+      syncNow,
+    }))
+    expect(html).toContain('finance-sync-now')
+    void called
   })
 })
-

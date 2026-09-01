@@ -9,6 +9,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
+import type {} from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import type {} from '@deepseek-ai/dsh-session-projection'
 import type {} from '@deepseek-ai/dsh-session-projection-cache'
@@ -31,6 +32,7 @@ import {
   financeSyncStatusSchema,
 } from './typert.schemas.ts'
 import { hostProviderMeta } from './provider-meta.ts'
+import { HOST_KNOWN_PROVIDER_META } from './provider-meta.ts'
 import type {
   FinanceBackfillProgress,
   FinanceBalanceView,
@@ -38,11 +40,15 @@ import type {
   FinanceConfig,
   FinanceConfigInput,
   FinanceLedger,
+  FinanceListProvidersEntry,
+  FinanceListProvidersResult,
   FinanceOverview,
   FinancePriceEntryInput,
   FinancePriceRate,
   FinanceProviderBalance,
   FinanceProviderEntry,
+  FinanceProviderSource,
+  FinanceRefreshBalanceRequest,
   FinanceSyncOptions,
   FinanceSyncStatus,
 } from './types.ts'
@@ -175,7 +181,7 @@ const providerEntry = z.object({
 
 /** Service class exported for Cordis default loading; Typert generates the Remote face. */
 export class FinanceService extends TypertRemoteService {
-  static inject = ['sessionPersistence', 'sessionProjectionCache', 'workspaceRegistry', 'credentials']
+  static inject = ['sessionPersistence', 'sessionProjectionCache', 'workspaceRegistry', 'credentials', 'llm']
 
   static Config: z<FinanceConfigInput> = z.object({
     currency: z.string().default('CNY'),
@@ -309,47 +315,187 @@ export class FinanceService extends TypertRemoteService {
     // Resolve the deepseek-official slot up-front: empty providers list keeps
     // the legacy behavior (auto-fetch, as if autoFetchBalance=true); an
     // explicit entry respects its `autoFetchBalance` + `billingMode`. Other
-    // entries populate below with `status: 'unsupported'`.
+    // entries populate below via the shared resolver.
     const dsEntry = entries.find(e => e.provider === 'deepseek-official')
-    const shouldFetchDeepseek = entries.length === 0
-      || (dsEntry !== undefined
-        && dsEntry.billingMode !== 'free'
-        && dsEntry.autoFetchBalance
-        && (hostProviderMeta(dsEntry.provider)?.supportsBalanceFetch ?? false))
+    const legacyForceFetch = entries.length === 0
+    providers['deepseek-official'] = await this.resolveProviderBalance(
+      'deepseek-official',
+      dsEntry,
+      config,
+      fetchedAt,
+      signal,
+      legacyForceFetch,
+    )
 
-    let legacyResult: FinanceBalanceView
-    if (shouldFetchDeepseek) {
-      legacyResult = await this.fetchDeepSeekBalance(config, signal)
-      providers['deepseek-official'] = this.deepSeekSlot(legacyResult, fetchedAt)
-    } else {
-      legacyResult = { status: 'missing-credential', updatedAt: fetchedAt }
-      if (dsEntry !== undefined) {
-        providers['deepseek-official'] = dsEntry.billingMode === 'free'
-          ? this.unsupportedSlot(dsEntry, fetchedAt, 'free-provider', 'free providers do not track a balance')
-          : this.unsupportedSlot(dsEntry, fetchedAt, 'auto-fetch-disabled', 'balance fetch is disabled for this entry')
-      }
-    }
-
-    // Populate every other configured entry. The host can only fetch
-    // deepseek-official today; everything else lands as 'unsupported' with a
-    // stable code (commit 12's contract — future commits add more providers
-    // to the host-known registry as their APIs land).
+    // Populate every other configured entry through the same resolver. The
+    // host can only fetch deepseek-official today; everything else lands as
+    // 'unsupported' with a stable code (commit 12's contract — future commits
+    // add more providers to the host-known registry as their APIs land).
     for (const entry of entries) {
       if (entry.provider === 'deepseek-official') continue
-      const meta = hostProviderMeta(entry.provider)
-      if (entry.billingMode === 'free') {
-        providers[entry.provider] = this.unsupportedSlot(entry, fetchedAt, 'free-provider', 'free providers do not track a balance')
-      } else if (meta === undefined) {
-        providers[entry.provider] = this.unsupportedSlot(entry, fetchedAt, 'unsupported-provider', `host has no balance endpoint registered for ${entry.provider}`)
-      } else if (!meta.supportsBalanceFetch) {
-        providers[entry.provider] = this.unsupportedSlot(entry, fetchedAt, 'no-balance-fetch', `host does not support balance fetch for ${entry.provider} yet`)
-      } else {
-        // Host CAN fetch but the user disabled autoFetchBalance for this entry.
-        providers[entry.provider] = this.unsupportedSlot(entry, fetchedAt, 'auto-fetch-disabled', 'balance fetch is disabled for this entry')
-      }
+      providers[entry.provider] = await this.resolveProviderBalance(
+        entry.provider,
+        entry,
+        config,
+        fetchedAt,
+        signal,
+        false,
+      )
     }
 
+    // Keep the legacy top-level fields populated so clients that haven't
+    // migrated to `providers` yet don't lose the DeepSeek view. These are
+    // marked @deprecated on the type.
+    const dsSlot = providers['deepseek-official']
+    const legacyResult: FinanceBalanceView = dsSlot === undefined
+      ? { status: 'missing-credential', updatedAt: fetchedAt }
+      : this.legacyViewFromSlot(dsSlot, fetchedAt)
     return { ...legacyResult, providers }
+  }
+
+  /**
+   * Commit 19: derive the legacy single-provider `FinanceBalanceView` shape
+   * from the per-provider slot so existing clients keep seeing the DeepSeek
+   * view at the top level. New clients should read `providers['deepseek-official']`.
+   */
+  private legacyViewFromSlot(slot: FinanceProviderBalance, fetchedAt: number): FinanceBalanceView {
+    if (slot.status === 'ok') {
+      return {
+        status: 'ok',
+        updatedAt: fetchedAt,
+        totalMicros: slot.totalMicros,
+        currency: slot.currency,
+      }
+    }
+    if (slot.status === 'missing-credential') {
+      return { status: 'missing-credential', updatedAt: fetchedAt }
+    }
+    return {
+      status: 'error',
+      updatedAt: fetchedAt,
+      code: slot.code,
+      message: slot.message,
+    }
+  }
+
+  /**
+   * Commit 19: merge every provider the host knows about — host-known
+   * registry, user-config entries, ledger-observed, and dsh-llm runtime
+   * registrations — into a single de-duplicated list with per-provider
+   * balance slots. The dsh-llm runtime source (`ctx.llm.listProviders()`)
+   * is the discovery surface for adapters registered by dsh plugins like
+   * the llm-runtime config UI: it surfaces every provider the user has
+   * configured there, even when no `config.providers` entry exists yet
+   * and no ledger row has been observed yet. Failures to read the llm
+   * service are silent (the other three sources still resolve); headless
+   * compositions without dsh-llm just skip the branch.
+   *
+   * Sources:
+   * - `host-known`: `HOST_KNOWN_PROVIDER_META` keys
+   * - `user-config`: rows in `config.providers`
+   * - `ledger-observed`: rows in `ledger.byProvider` (uses the cached ledger
+   *   when present; an empty cache = no observed providers yet)
+   * - `llm-runtime`: `ctx.llm.listProviders()` IDs (dsh-llm runtime
+   *   registry; absent on headless compositions, ignored on failure)
+   */
+  @Remote
+  async listProviders(signal?: AbortSignal): Promise<FinanceListProvidersResult> {
+    const config = this.currentConfig()
+    const fetchedAt = Date.now()
+    const sources = new Map<string, Set<FinanceProviderSource>>()
+    const add = (provider: string, source: FinanceProviderSource): void => {
+      let set = sources.get(provider)
+      if (set === undefined) {
+        set = new Set<FinanceProviderSource>()
+        sources.set(provider, set)
+      }
+      set.add(source)
+    }
+
+    for (const id of Object.keys(HOST_KNOWN_PROVIDER_META)) add(id, 'host-known')
+    for (const entry of config.providers) add(entry.provider, 'user-config')
+    if (this.ledgerCache !== undefined) {
+      for (const row of this.ledgerCache.ledger.byProvider) add(row.provider, 'ledger-observed')
+    }
+    // dsh-llm runtime registrations: every adapter a plugin has activated
+    // through its settings flow. The runtime service is optional —
+    // `ctx.inject(['llm'], ...)` was added to `FinanceService.inject`, but
+    // a headless composition (tests, cordis-only mounts) may not install it.
+    try {
+      for (const info of this.ctx.llm.listProviders()) add(info.id, 'llm-runtime')
+    } catch {
+      // Best-effort: skip the runtime branch when the service is missing
+      // or listProviders throws; the other three sources still resolve.
+    }
+
+    const entries: FinanceListProvidersEntry[] = []
+    for (const [provider, providerSources] of sources.entries()) {
+      const meta = hostProviderMeta(provider)
+      const userEntry = config.providers.find(e => e.provider === provider)
+      const balance = await this.resolveProviderBalance(
+        provider,
+        userEntry,
+        config,
+        fetchedAt,
+        signal,
+        false,
+      )
+      entries.push({
+        provider,
+        sources: [...providerSources],
+        ...meta !== undefined
+          ? {
+              hostMeta: {
+                defaultBillingMode: meta.defaultBillingMode,
+                defaultCurrency: meta.defaultCurrency,
+                supportsBalanceFetch: meta.supportsBalanceFetch,
+                ...meta.lockBillingModeAndCurrency === true
+                  ? { lockBillingModeAndCurrency: true as const }
+                  : {},
+              },
+            }
+          : {},
+        ...userEntry !== undefined ? { userEntry } : {},
+        balance,
+      })
+    }
+
+    // Stable order: host-known first (registry order), then user-config,
+    // then ledger-observed, then llm-runtime. Keeps the rendered list
+    // consistent across reloads.
+    const order = (sources: readonly FinanceProviderSource[]): number => {
+      if (sources.includes('host-known')) return 0
+      if (sources.includes('user-config')) return 1
+      if (sources.includes('ledger-observed')) return 2
+      return 3
+    }
+    entries.sort((a, b) => {
+      const o = order(a.sources) - order(b.sources)
+      return o !== 0 ? o : a.provider.localeCompare(b.provider)
+    })
+
+    return { providers: entries, generatedAt: Date.now() }
+  }
+
+  /**
+   * Commit 19: re-fetch the balance for ONE provider. Always fires the
+   * upstream call (no `autoFetchBalance` gate) because the user just clicked
+   * "refresh". For providers without a registered fetch path, returns the
+   * appropriate `unsupported` slot without throwing — callers can render a
+   * stable empty state.
+   */
+  @Remote
+  async refreshBalance(request: FinanceRefreshBalanceRequest, signal?: AbortSignal): Promise<FinanceProviderBalance> {
+    const config = this.currentConfig()
+    const entry = config.providers.find(e => e.provider === request.provider)
+    return this.resolveProviderBalance(
+      request.provider,
+      entry,
+      config,
+      Date.now(),
+      signal,
+      true,
+    )
   }
 
   /**
@@ -399,6 +545,69 @@ export class FinanceService extends TypertRemoteService {
       ...view.message !== undefined ? { message: view.message } : {},
       fetchedAt,
     }
+  }
+
+  /**
+   * Commit 19: per-provider balance resolver. Shared by `getBalance`,
+   * `listProviders`, and `refreshBalance` so the slot-derivation rules stay
+   * in one place. Does NOT fire any upstream request for non-fetch-capable
+   * slots — those just return an `unsupported` / `auto-fetch-disabled` /
+   * etc. shape synchronously.
+   *
+   * `forceFetch` is used by `refreshBalance` to skip the `autoFetchBalance`
+   * gate (the user clicked the button, they want a fetch now). All other
+   * call sites pass `false` and let the per-entry gate decide.
+   */
+  private async resolveProviderBalance(
+    provider: string,
+    entry: FinanceProviderEntry | undefined,
+    config: FinanceConfig,
+    fetchedAt: number,
+    signal: AbortSignal | undefined,
+    forceFetch: boolean,
+  ): Promise<FinanceProviderBalance> {
+    const meta = hostProviderMeta(provider)
+    if (entry !== undefined && entry.billingMode === 'free') {
+      return this.unsupportedSlot(entry, fetchedAt, 'free-provider', 'free providers do not track a balance')
+    }
+    const isFetchCapable = meta !== undefined && meta.supportsBalanceFetch
+    const autoFetchOn = forceFetch || (entry?.autoFetchBalance ?? false)
+    if (isFetchCapable && autoFetchOn) {
+      // Only deepseek-official has a registered fetch path today. Other
+      // fetch-capable providers would slot in here as their APIs land.
+      if (provider === 'deepseek-official') {
+        const view = await this.fetchDeepSeekBalance(config, signal)
+        return this.deepSeekSlot(view, fetchedAt)
+      }
+      // Fall through to the unsupported branch for future providers without
+      // a refresh path yet — keeps the contract clean: refreshBalance({ id })
+      // never throws, just returns a stable-code unsupported slot.
+      const fallbackEntry: FinanceProviderEntry = entry ?? {
+        provider,
+        billingMode: 'metered',
+        totalPriceMicros: 0,
+        currency: meta?.defaultCurrency ?? 'CNY',
+        autoFetchBalance: true,
+      }
+      return this.unsupportedSlot(fallbackEntry, fetchedAt, 'no-balance-fetch', `host has no balance refresh path for ${provider} yet`)
+    }
+    if (entry === undefined) {
+      const stub: FinanceProviderEntry = {
+        provider,
+        billingMode: 'metered',
+        totalPriceMicros: 0,
+        currency: meta?.defaultCurrency ?? 'CNY',
+        autoFetchBalance: false,
+      }
+      return this.unsupportedSlot(stub, fetchedAt, 'unsupported-provider', `host has no per-provider entry for ${provider}`)
+    }
+    if (meta === undefined) {
+      return this.unsupportedSlot(entry, fetchedAt, 'unsupported-provider', `host has no balance endpoint registered for ${provider}`)
+    }
+    if (!meta.supportsBalanceFetch) {
+      return this.unsupportedSlot(entry, fetchedAt, 'no-balance-fetch', `host does not support balance fetch for ${provider} yet`)
+    }
+    return this.unsupportedSlot(entry, fetchedAt, 'auto-fetch-disabled', 'balance fetch is disabled for this entry')
   }
 
   /** Build an `unsupported` provider slot with a stable code + message. */

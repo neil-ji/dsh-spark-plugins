@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { FinanceAuditController } from '../src/client/controller.ts'
-import type { FinanceOverview } from 'dsh-spark-finance/types'
+import type {
+  FinanceLedger,
+  FinanceListProvidersResult,
+  FinanceProviderBalance,
+} from 'dsh-spark-finance/types'
 
 // The dsh-client-runtime ./client export is the browser bundle (module-scope
 // window); tests exercise the controller against a plain store instead.
@@ -26,182 +30,286 @@ const memory = new Map<string, string>()
   key: (index: number) => [...memory.keys()][index] ?? null,
   get length() { return memory.size },
 }
+
 beforeEach(() => { memory.clear() })
 
-function overview(): FinanceOverview {
+const ZERO_LEDGER: FinanceLedger = {
+  generatedAt: 1,
+  currency: 'CNY',
+  totals: { uncachedInputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 },
+  totalCostMicros: 0,
+  meteredCostMicros: 0,
+  planEquivalentCostMicros: 0,
+  sessionCount: 0,
+  workspaceCount: 0,
+  taskCount: 0,
+  windowedSinceMs: null,
+  hourOfDayWindowStartMs: 1,
+  byDay: [],
+  byModel: [],
+  byProvider: [],
+  byWorkspace: [],
+  tasks: [],
+  sessions: [],
+  byHourOfDay: [],
+  peakValley: { peakCostMicros: 0, offPeakCostMicros: 0, flatCostMicros: 0, unclassifiedCostMicros: 0, legacyCostMicros: 0, shiftSavingsMicros: 0 },
+}
+
+function ledgerWith(overrides: Partial<FinanceLedger> = {}): FinanceLedger {
+  return { ...ZERO_LEDGER, ...overrides } as FinanceLedger
+}
+
+function okBalance(overrides: Partial<FinanceProviderBalance> = {}): FinanceProviderBalance {
   return {
-    balance: { status: 'ok', updatedAt: 1, totalMicros: 100, currency: 'CNY' },
-    ledger: {
-      generatedAt: 1,
-      currency: 'CNY',
-      totals: { uncachedInputTokens: 10, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 5 },
-      totalCostMicros: 42,
-      sessionCount: 1,
-      workspaceCount: 1,
-      taskCount: 1,
-      byDay: [],
-      byModel: [],
-      byWorkspace: [],
-      tasks: [],
-      sessions: [],
-    },
+    status: 'ok',
+    provider: 'deepseek-official',
+    totalMicros: 100_000_000, // 100 CNY
+    currency: 'CNY',
+    fetchedAt: 1,
+    ...overrides,
   }
 }
 
+function providerList(rows: Array<{ provider: string; balance: FinanceProviderBalance; sources?: readonly string[] }>): FinanceListProvidersResult {
+  return {
+    generatedAt: 1,
+    providers: rows.map(r => ({
+      provider: r.provider,
+      sources: (r.sources ?? ['host-known', 'user-config', 'ledger-observed']) as FinanceListProvidersResult['providers'][number]['sources'],
+      hostMeta: r.provider === 'deepseek-official'
+        ? { defaultBillingMode: 'metered', defaultCurrency: 'CNY', supportsBalanceFetch: true, lockBillingModeAndCurrency: true }
+        : undefined,
+      userEntry: undefined,
+      balance: r.balance,
+    })),
+  }
+}
+
+interface FakeRemote {
+  listProviders: ReturnType<typeof vi.fn>
+  getLedger: ReturnType<typeof vi.fn>
+  refreshBalance: ReturnType<typeof vi.fn>
+  getBackfillProgress: ReturnType<typeof vi.fn>
+  syncCommunityPrices: ReturnType<typeof vi.fn>
+  getSyncStatus: ReturnType<typeof vi.fn>
+}
+
 function fakeRemote(
-  getOverview = vi.fn(),
-  getBalance = vi.fn(),
-  getBackfillProgress = vi.fn(),
-  syncCommunityPrices = vi.fn(async () => ({ ok: true as const, value: stubOkSync })),
-  getSyncStatus = vi.fn(async () => ({ ok: true as const, value: null })),
-) {
-  return { getOverview, getBalance, getBackfillProgress, syncCommunityPrices, getSyncStatus } as never
+  overrides: Partial<Record<keyof FakeRemote, ReturnType<typeof vi.fn>>> = {},
+): FakeRemote {
+  return {
+    listProviders: vi.fn().mockResolvedValue({ ok: true, value: providerList([]) }),
+    getLedger: vi.fn().mockResolvedValue({ ok: true, value: ledgerWith() }),
+    refreshBalance: vi.fn().mockResolvedValue({ ok: true, value: okBalance() }),
+    getBackfillProgress: vi.fn(),
+    syncCommunityPrices: vi.fn(),
+    getSyncStatus: vi.fn(),
+    ...overrides,
+  } as unknown as FakeRemote
 }
 
-import type { FinanceCommunitySyncResult } from 'dsh-spark-finance/types'
-
-const stubOkSync: FinanceCommunitySyncResult = {
-  ok: true,
-  source: 'https://models.dev/api.json',
-  appliedAt: 0,
-  fx: 7.2,
-  requestedProviders: [],
-  requestedMissing: [],
-  kept: 0,
-  droppedDated: 0,
-  droppedNonToken: 0,
-  droppedNoCost: 0,
-  providers: [],
-}
-
-describe('FinanceAuditController', () => {
-  it('loads the overview into the store', async () => {
-    const remote = fakeRemote(vi.fn().mockResolvedValue({ ok: true, value: overview() }))
-    const controller = new FinanceAuditController(remote)
+describe('FinanceAuditController (commit 21: multi-provider)', () => {
+  it('loads the provider list + ledger into the store', async () => {
+    const list = providerList([
+      { provider: 'deepseek-official', balance: okBalance({ totalMicros: 100_000_000 }) },
+    ])
+    const led = ledgerWith({ totalCostMicros: 42 })
+    const remote = fakeRemote({
+      listProviders: vi.fn().mockResolvedValue({ ok: true, value: list }),
+      getLedger: vi.fn().mockResolvedValue({ ok: true, value: led }),
+    })
+    const controller = new FinanceAuditController(remote as never)
     await controller.load()
     const state = controller.store.getSnapshot()
     expect(state.status).toBe('ready')
-    expect(state.overview?.ledger.totalCostMicros).toBe(42)
+    expect(state.ledger?.totalCostMicros).toBe(42)
+    expect(state.providerList?.providers).toHaveLength(1)
+    expect(state.providerList?.providers[0]?.provider).toBe('deepseek-official')
   })
 
-  it('maps a Remote failure envelope to the error state', async () => {
-    const remote = fakeRemote(vi.fn().mockResolvedValue({ ok: false, error: { code: 'internal', message: 'boom', details: {} } }))
-    const controller = new FinanceAuditController(remote)
+  it('maps a Remote failure envelope from listProviders to the error state', async () => {
+    const remote = fakeRemote({
+      listProviders: vi.fn().mockResolvedValue({ ok: false, error: { code: 'internal', message: 'boom', details: {} } }),
+    })
+    const controller = new FinanceAuditController(remote as never)
     await controller.load()
     const state = controller.store.getSnapshot()
     expect(state.status).toBe('error')
     expect(state.error).toBe('boom')
   })
 
-  it('maps a rejected promise to the error state', async () => {
-    const remote = fakeRemote(vi.fn().mockRejectedValue(new Error('network down')))
-    const controller = new FinanceAuditController(remote)
+  it('maps a Remote failure envelope from getLedger to the error state', async () => {
+    const remote = fakeRemote({
+      getLedger: vi.fn().mockResolvedValue({ ok: false, error: { code: 'internal', message: 'ledger down', details: {} } }),
+    })
+    const controller = new FinanceAuditController(remote as never)
     await controller.load()
-    const state = controller.store.getSnapshot()
-    expect(state.status).toBe('error')
-    expect(state.error).toBe('network down')
+    expect(controller.store.getSnapshot().status).toBe('error')
+    expect(controller.store.getSnapshot().error).toBe('ledger down')
+  })
+
+  it('maps a rejected promise to the error state', async () => {
+    const remote = fakeRemote({
+      listProviders: vi.fn().mockRejectedValue(new Error('network down')),
+    })
+    const controller = new FinanceAuditController(remote as never)
+    await controller.load()
+    expect(controller.store.getSnapshot().status).toBe('error')
+    expect(controller.store.getSnapshot().error).toBe('network down')
   })
 
   it('ignores stale responses after a newer load started', async () => {
     let resolveFirst: (value: never) => void = () => {}
     const first = new Promise(resolve => { resolveFirst = resolve as never })
-    const remote = fakeRemote(
-      vi.fn()
+    const remote = fakeRemote({
+      listProviders: vi.fn()
         .mockReturnValueOnce(first)
-        .mockResolvedValueOnce({ ok: true, value: overview() }),
-    )
-    const controller = new FinanceAuditController(remote)
+        .mockResolvedValueOnce({ ok: true, value: providerList([]) }),
+      getLedger: vi.fn()
+        .mockReturnValueOnce(first)
+        .mockResolvedValueOnce({ ok: true, value: ledgerWith() }),
+    })
+    const controller = new FinanceAuditController(remote as never)
     const firstLoad = controller.load()
     await controller.load()
     resolveFirst({} as never)
     await firstLoad
-    // The second load wins; the stale first load must not overwrite it.
-    expect(remote.getOverview).toHaveBeenCalledTimes(2)
+    expect(remote.listProviders).toHaveBeenCalledTimes(2)
   })
 
-  it('patches a fresh balance into the current snapshot', async () => {
-    const remote = fakeRemote(
-      vi.fn().mockResolvedValue({ ok: true, value: overview() }),
-      vi.fn().mockResolvedValue({ ok: true, value: { status: 'ok', updatedAt: 2, totalMicros: 200, currency: 'CNY' } }),
-    )
-    const controller = new FinanceAuditController(remote)
+  it('tracks per-provider peaks from the first load', async () => {
+    const list = providerList([
+      { provider: 'deepseek-official', balance: okBalance({ totalMicros: 100_000_000 }) },
+      { provider: 'minimax-cn', balance: { status: 'unsupported', provider: 'minimax-cn', code: 'unsupported-provider', message: 'no endpoint', fetchedAt: 1 } },
+    ])
+    const remote = fakeRemote({
+      listProviders: vi.fn().mockResolvedValue({ ok: true, value: list }),
+    })
+    const controller = new FinanceAuditController(remote as never)
     await controller.load()
-    await controller.refreshBalance()
-    expect(controller.store.getSnapshot().overview?.balance.totalMicros).toBe(200)
+    const peaks = controller.store.getSnapshot().peaks
+    expect(peaks['deepseek-official']?.micros).toBe(100_000_000)
+    // Unsupported slots don't seed a peak (no money to track).
+    expect(peaks['minimax-cn']).toBeUndefined()
   })
 
-  it('sets the first balance as the peak baseline', async () => {
-    const remote = fakeRemote(vi.fn().mockResolvedValue({ ok: true, value: overview() }))
-    const controller = new FinanceAuditController(remote)
+  it('patches a fresh per-provider balance via refreshProvider and bumps the peak', async () => {
+    const list = providerList([
+      { provider: 'deepseek-official', balance: okBalance({ totalMicros: 100_000_000 }) },
+    ])
+    const remote = fakeRemote({
+      listProviders: vi.fn().mockResolvedValue({ ok: true, value: list }),
+      refreshBalance: vi.fn().mockResolvedValue({
+        ok: true, value: okBalance({ totalMicros: 200_000_000, fetchedAt: 2 }),
+      }),
+    })
+    const controller = new FinanceAuditController(remote as never)
     await controller.load()
-    expect(controller.store.getSnapshot().peak?.micros).toBe(100)
+    expect(controller.store.getSnapshot().peaks['deepseek-official']?.micros).toBe(100_000_000)
+
+    await controller.refreshProvider('deepseek-official')
+    const after = controller.store.getSnapshot()
+    expect(after.peaks['deepseek-official']?.micros).toBe(200_000_000)
+    expect(after.providerList?.providers[0]?.balance.totalMicros).toBe(200_000_000)
   })
 
-  it('raises the peak when a later balance is higher (recharge)', async () => {
-    const remote = fakeRemote(
-      vi.fn().mockResolvedValue({ ok: true, value: overview() }),
-      vi.fn().mockResolvedValue({ ok: true, value: { status: 'ok', updatedAt: 3, totalMicros: 150, currency: 'CNY' } }),
-    )
-    const controller = new FinanceAuditController(remote)
+  it('keeps the per-provider peak when the balance drops (normal spending)', async () => {
+    const list = providerList([
+      { provider: 'deepseek-official', balance: okBalance({ totalMicros: 100_000_000 }) },
+    ])
+    const remote = fakeRemote({
+      listProviders: vi.fn().mockResolvedValue({ ok: true, value: list }),
+      refreshBalance: vi.fn().mockResolvedValue({
+        ok: true, value: okBalance({ totalMicros: 80_000_000, fetchedAt: 2 }),
+      }),
+    })
+    const controller = new FinanceAuditController(remote as never)
     await controller.load()
-    await controller.refreshBalance()
-    expect(controller.store.getSnapshot().peak?.micros).toBe(150)
+    await controller.refreshProvider('deepseek-official')
+    expect(controller.store.getSnapshot().peaks['deepseek-official']?.micros).toBe(100_000_000)
   })
 
-  it('keeps the peak when the balance drops (normal spending)', async () => {
-    const remote = fakeRemote(
-      vi.fn().mockResolvedValue({ ok: true, value: overview() }),
-      vi.fn().mockResolvedValue({ ok: true, value: { status: 'ok', updatedAt: 3, totalMicros: 80, currency: 'CNY' } }),
-    )
-    const controller = new FinanceAuditController(remote)
+  it('patches a refresh failure into the per-row slot without losing other rows', async () => {
+    const list = providerList([
+      { provider: 'deepseek-official', balance: okBalance({ totalMicros: 100_000_000 }) },
+      { provider: 'minimax-cn', balance: { status: 'unsupported', provider: 'minimax-cn', code: 'unsupported-provider', message: 'no endpoint', fetchedAt: 1 } },
+    ])
+    const remote = fakeRemote({
+      listProviders: vi.fn().mockResolvedValue({ ok: true, value: list }),
+      refreshBalance: vi.fn().mockResolvedValue({
+        ok: false, error: { code: 'auth', message: 'rejected', details: {} },
+      }),
+    })
+    const controller = new FinanceAuditController(remote as never)
     await controller.load()
-    await controller.refreshBalance()
-    expect(controller.store.getSnapshot().peak?.micros).toBe(100)
-  })
-
-  it('patches a balance failure into the snapshot without losing the ledger', async () => {
-    const remote = fakeRemote(
-      vi.fn().mockResolvedValue({ ok: true, value: overview() }),
-      vi.fn().mockResolvedValue({ ok: false, error: { code: 'auth', message: 'rejected', details: {} } }),
-    )
-    const controller = new FinanceAuditController(remote)
-    await controller.load()
-    await controller.refreshBalance()
+    await controller.refreshProvider('deepseek-official')
     const state = controller.store.getSnapshot()
     expect(state.status).toBe('ready')
-    expect(state.overview?.balance.status).toBe('error')
-    expect(state.overview?.balance.code).toBe('client')
-    expect(state.overview?.ledger.sessionCount).toBe(1)
+    const dsSlot = state.providerList?.providers.find(p => p.provider === 'deepseek-official')
+    expect(dsSlot?.balance.status).toBe('error')
+    expect(dsSlot?.balance.code).toBe('client')
+    expect(dsSlot?.balance.message).toBe('rejected')
+    // The other row survives the failure.
+    const mmSlot = state.providerList?.providers.find(p => p.provider === 'minimax-cn')
+    expect(mmSlot?.balance.status).toBe('unsupported')
   })
 
-  it('falls back to a full load when refreshing an idle store', async () => {
-    const remote = fakeRemote(vi.fn().mockResolvedValue({ ok: true, value: overview() }))
-    const controller = new FinanceAuditController(remote)
-    await controller.refreshBalance()
-    expect(remote.getOverview).toHaveBeenCalledTimes(1)
+  it('falls back to a full load when refreshing from an idle store', async () => {
+    const remote = fakeRemote()
+    const controller = new FinanceAuditController(remote as never)
+    await controller.refreshProvider('deepseek-official')
+    expect(remote.listProviders).toHaveBeenCalledTimes(1)
+    expect(remote.getLedger).toHaveBeenCalledTimes(1)
+  })
+
+  it('refreshLedger only re-pulls the ledger (no balance refetch)', async () => {
+    const list = providerList([
+      { provider: 'deepseek-official', balance: okBalance({ totalMicros: 100_000_000 }) },
+    ])
+    const remote = fakeRemote({
+      listProviders: vi.fn().mockResolvedValue({ ok: true, value: list }),
+    })
+    const controller = new FinanceAuditController(remote as never)
+    await controller.load()
+    expect(remote.listProviders).toHaveBeenCalledTimes(1)
+    const before = remote.getLedger.mock.calls.length
+    await controller.refreshLedger()
+    expect(remote.getLedger.mock.calls.length).toBe(before + 1)
+    // listProviders is not re-called.
+    expect(remote.listProviders).toHaveBeenCalledTimes(1)
+  })
+
+  it('refreshes quietly when a snapshot is already visible (no loading flash)', async () => {
+    const remote = fakeRemote()
+    const controller = new FinanceAuditController(remote as never)
+    await controller.load()
+    expect(controller.store.getSnapshot().status).toBe('ready')
+    const refreshing = controller.load()
+    expect(controller.store.getSnapshot().status).toBe('ready')
+    await refreshing
+    expect(controller.store.getSnapshot().status).toBe('ready')
   })
 
   it('polls backfill progress while the first load runs and stops when done', async () => {
     vi.useFakeTimers()
     try {
-      let resolveOverview: (value: never) => void = () => {}
-      const overviewPromise = new Promise(resolve => { resolveOverview = resolve as never })
-      const progress = { phase: 'backfill', scanned: 45, total: 96, rescanned: 5, startedAt: 1 }
-      const remote = fakeRemote(
-        vi.fn().mockReturnValueOnce(overviewPromise).mockResolvedValue({ ok: true, value: overview() }),
-        vi.fn(),
-        vi.fn().mockResolvedValue({ ok: true, value: progress }),
-      )
-      const controller = new FinanceAuditController(remote)
+      let resolveList: (value: never) => void = () => {}
+      const listPromise = new Promise(resolve => { resolveList = resolve as never })
+      const ledPromise = listPromise
+      const progress = { phase: 'backfill' as const, scanned: 45, total: 96, rescanned: 5, startedAt: 1 }
+      const remote = fakeRemote({
+        listProviders: vi.fn().mockReturnValueOnce(listPromise),
+        getLedger: vi.fn().mockReturnValueOnce(ledPromise),
+        getBackfillProgress: vi.fn().mockResolvedValue({ ok: true, value: progress }),
+      })
+      const controller = new FinanceAuditController(remote as never)
       const load = controller.load()
-      // The first load shows the loading state and starts polling.
       expect(controller.store.getSnapshot().status).toBe('loading')
       await vi.advanceTimersByTimeAsync(700)
       expect(remote.getBackfillProgress).toHaveBeenCalled()
       expect(controller.store.getSnapshot().progress?.scanned).toBe(45)
       expect(controller.store.getSnapshot().progress?.total).toBe(96)
-      // The load settles: polling stops and progress clears.
-      resolveOverview({ ok: true, value: overview() } as never)
+      resolveList({ ok: true, value: providerList([]) } as never)
       await load
       expect(controller.store.getSnapshot().status).toBe('ready')
       expect(controller.store.getSnapshot().progress).toBeUndefined()
@@ -213,26 +321,13 @@ describe('FinanceAuditController', () => {
     }
   })
 
-  it('refreshes quietly when an overview is already visible (no loading flash)', async () => {
-    const remote = fakeRemote(vi.fn().mockResolvedValue({ ok: true, value: overview() }))
-    const controller = new FinanceAuditController(remote)
-    await controller.load()
-    expect(controller.store.getSnapshot().status).toBe('ready')
-    const refreshing = controller.load()
-    // A refresh keeps the visible snapshot instead of flipping to loading.
-    expect(controller.store.getSnapshot().status).toBe('ready')
-    await refreshing
-    expect(controller.store.getSnapshot().status).toBe('ready')
-  })
-
   it('dispose invalidates in-flight reads', async () => {
-    const remote = fakeRemote(vi.fn().mockResolvedValue({ ok: true, value: overview() }))
-    const controller = new FinanceAuditController(remote)
+    const remote = fakeRemote()
+    const controller = new FinanceAuditController(remote as never)
     const load = controller.load()
     controller.dispose()
     await load
     // The stale load must not flip the snapshot to ready; it stays at loading.
     expect(controller.store.getSnapshot().status).toBe('loading')
   })
-
 })

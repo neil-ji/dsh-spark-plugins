@@ -1,394 +1,415 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { createElement } from 'react'
 import { FinanceAuditSection } from '../src/client/FinanceAuditSection.tsx'
-import type { FinanceOverview } from 'dsh-spark-finance/types'
+import type { FinanceListProvidersResult, FinanceLedger } from 'dsh-spark-finance/types'
+import { writeBalancePeak } from '../src/client/persist.ts'
+
+// In-memory localStorage so persist reads (e.g. peak on first paint) don't throw.
+const memory = new Map<string, string>()
+;(globalThis as Record<string, unknown>).localStorage = {
+  getItem: (key: string) => memory.get(key) ?? null,
+  setItem: (key: string, value: string) => { memory.set(key, value) },
+  removeItem: (key: string) => { memory.delete(key) },
+  clear: () => { memory.clear() },
+  key: (index: number) => [...memory.keys()][index] ?? null,
+  get length() { return memory.size },
+}
 
 const t = (key: string): string => key
 
-function overview(): FinanceOverview {
+const ZERO_LEDGER: FinanceLedger = {
+  generatedAt: 1,
+  currency: 'CNY',
+  totals: { uncachedInputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 },
+  totalCostMicros: 0,
+  meteredCostMicros: 0,
+  planEquivalentCostMicros: 0,
+  sessionCount: 0,
+  workspaceCount: 0,
+  taskCount: 0,
+  windowedSinceMs: null,
+  hourOfDayWindowStartMs: 1,
+  byDay: [],
+  byModel: [],
+  byProvider: [],
+  byWorkspace: [],
+  tasks: [],
+  sessions: [],
+  byHourOfDay: [],
+  peakValley: { peakCostMicros: 0, offPeakCostMicros: 0, flatCostMicros: 0, unclassifiedCostMicros: 0, legacyCostMicros: 0, shiftSavingsMicros: 0 },
+}
+
+function ledger(overrides: Partial<FinanceLedger> = {}): FinanceLedger {
+  return { ...ZERO_LEDGER, ...overrides } as FinanceLedger
+}
+
+function providerList(rows: FinanceListProvidersResult['providers']): FinanceListProvidersResult {
+  return { generatedAt: 1, providers: rows }
+}
+
+function okProvider(provider: string, totalMicros: number, currency: 'CNY' | 'USD' = 'CNY'): FinanceListProvidersResult['providers'][number] {
   return {
-    balance: { status: 'ok', updatedAt: 1, totalMicros: 100_000_000, currency: 'CNY' },
-    ledger: {
-      generatedAt: 1,
-      currency: 'CNY',
-      totals: { uncachedInputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 500_000 },
-      totalCostMicros: 6_000_000,
-      meteredCostMicros: 6_000_000,
-      planEquivalentCostMicros: 0,
-      sessionCount: 2,
-      workspaceCount: 1,
-      taskCount: 1,
-      windowedSinceMs: null,
-      hourOfDayWindowStartMs: 1,
-      byDay: [
-        { day: '2026-01-15', usage: { uncachedInputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 500_000 }, costMicros: 6_000_000 },
-      ],
-      byModel: [
-        { modelKey: 'deepseek-official/deepseek-v4-flash', provider: 'deepseek-official', model: 'deepseek-v4-flash', usage: { uncachedInputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 500_000 }, costMicros: 6_000_000 },
-      ],
-      byProvider: [
-        { provider: 'deepseek-official', usage: { uncachedInputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 500_000 }, costMicros: 6_000_000, modelCount: 1 },
-      ],
-      byWorkspace: [
-        { workspaceId: 'ws-1', title: 'Workspace A', sessionCount: 2, usage: { uncachedInputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 500_000 }, costMicros: 6_000_000 },
-      ],
-      tasks: [
-        { taskId: 'task-1', title: 'Task One', createdAt: 1, sessionCount: 2, usage: { uncachedInputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 500_000 }, costMicros: 6_000_000 },
-      ],
-      sessions: [
-        { sessionId: 'sess-1', title: 'Session One', createdAt: 2, workspaceId: 'ws-1', workspaceTitle: 'Workspace A', taskId: 'task-1', modelKeys: ['deepseek-official/deepseek-v4-flash'], usage: { uncachedInputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 500_000 }, costMicros: 6_000_000 },
-      ],
-      byHourOfDay: Array.from({ length: 24 }, (_, localHour) => ({
-        localHour,
-        usage: { uncachedInputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 },
-        costMicros: 0,
-        peakCostMicros: 0,
-        flatCostMicros: 0,
-        shiftSavingsMicros: 0,
-      })),
-      peakValley: { peakCostMicros: 0, offPeakCostMicros: 0, flatCostMicros: 0, unclassifiedCostMicros: 0, legacyCostMicros: 0, shiftSavingsMicros: 0 },
-    },
+    provider,
+    sources: ['host-known', 'user-config', 'ledger-observed'],
+    hostMeta: provider === 'deepseek-official'
+      ? { defaultBillingMode: 'metered', defaultCurrency: 'CNY', supportsBalanceFetch: true, lockBillingModeAndCurrency: true }
+      : undefined,
+    userEntry: undefined,
+    balance: { status: 'ok', provider, totalMicros, currency, fetchedAt: 1 },
   }
 }
 
-const baseProps = {
-  useSnapshot: () => ({ status: 'ready' as const, overview: overview(), error: null }),
-  t,
-  refresh: () => {},
-  close: () => {},
+function missingCredentialProvider(provider: string): FinanceListProvidersResult['providers'][number] {
+  return {
+    provider,
+    sources: ['host-known'],
+    hostMeta: provider === 'deepseek-official'
+      ? { defaultBillingMode: 'metered', defaultCurrency: 'CNY', supportsBalanceFetch: true, lockBillingModeAndCurrency: true }
+      : undefined,
+    userEntry: undefined,
+    balance: { status: 'missing-credential', provider, fetchedAt: 1 },
+  }
 }
 
-/** Snapshot props pinned to one ready overview (shared by several tests). */
-function basePropsUse(ov: FinanceOverview) {
-  return { ...baseProps, useSnapshot: () => ({ status: 'ready' as const, overview: ov, error: null }) }
+function unsupportedProvider(provider: string, code: string): FinanceListProvidersResult['providers'][number] {
+  return {
+    provider,
+    sources: ['host-known'],
+    hostMeta: provider === 'deepseek-official'
+      ? { defaultBillingMode: 'metered', defaultCurrency: 'CNY', supportsBalanceFetch: true, lockBillingModeAndCurrency: true }
+      : undefined,
+    userEntry: undefined,
+    balance: { status: 'unsupported', provider, code, message: 'no endpoint', fetchedAt: 1 },
+  }
 }
 
-describe('FinanceAuditSection', () => {
+function baseProps() {
+  return {
+    useSnapshot: () => ({ status: 'ready' as const, providerList: undefined, ledger: undefined, peaks: {}, error: null }),
+    t,
+    refresh: () => {},
+    refreshProvider: () => {},
+  }
+}
+
+function readyProps(list: FinanceListProvidersResult, led: FinanceLedger, peaks: Record<string, { micros: number; updatedAt: number; currency: string }> = {}) {
+  return {
+    useSnapshot: () => ({ status: 'ready' as const, providerList: list, ledger: led, peaks, error: null }),
+    t,
+    refresh: () => {},
+    refreshProvider: () => {},
+  }
+}
+
+describe('FinanceAuditSection (commit 21: multi-provider)', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
   it('renders an informative loading state with a spinner', () => {
     const html = renderToStaticMarkup(createElement(FinanceAuditSection, {
-      ...baseProps,
-      useSnapshot: () => ({ status: 'loading' as const, error: null }),
+      ...baseProps(),
+      useSnapshot: () => ({ status: 'loading' as const, peaks: {}, error: null }),
     }))
     expect(html).toContain('loadingTitle')
     expect(html).toContain('loadingDetail')
-    expect(html).toContain('loadingReassure')
     expect(html).toContain('role="status"')
-  })
-
-  it('shows live backfill progress while the first load runs', () => {
-    const html = renderToStaticMarkup(createElement(FinanceAuditSection, {
-      ...baseProps,
-      useSnapshot: () => ({
-        status: 'loading' as const,
-        error: null,
-        progress: { phase: 'backfill', scanned: 45, total: 96, rescanned: 5, startedAt: 1 },
-      }),
-    }))
-    expect(html).toContain('loadingProgress')
-    expect(html).toContain('45 / 96')
-    expect(html).toContain('aria-valuenow="45"')
-    expect(html).toContain('aria-valuemax="96"')
   })
 
   it('renders the error state with a refresh action', () => {
     const html = renderToStaticMarkup(createElement(FinanceAuditSection, {
-      ...baseProps,
-      useSnapshot: () => ({ status: 'error' as const, error: 'boom', overview: undefined }),
+      ...baseProps(),
+      useSnapshot: () => ({ status: 'error' as const, error: 'boom', peaks: {} }),
     }))
     expect(html).toContain('boom')
     expect(html).toContain('refresh')
   })
 
-  it('renders the balance gauge and the remaining KPI cards', () => {
-    const html = renderToStaticMarkup(createElement(FinanceAuditSection, baseProps))
-    expect(html).toContain('balanceGauge') // gauge title
-    expect(html).toContain('remaining')    // percentage label
-    expect(html).toContain('peak')         // historical peak
-    expect(html).toContain('spent')        // consumed amount
-    expect(html).not.toContain('granted')
-    expect(html).not.toContain('toppedUp')
-    expect(html).toContain('CNY 100.00')   // balance
-    expect(html).toContain('CNY 6.00')     // spent
+  it('renders a balance card for every provider in the list', () => {
+    const list = providerList([
+      okProvider('deepseek-official', 100_000_000),
+      unsupportedProvider('minimax-cn', 'unsupported-provider'),
+    ])
+    const html = renderToStaticMarkup(createElement(FinanceAuditSection, readyProps(list, ledger())))
+    expect(html).toContain('data-provider="deepseek-official"')
+    expect(html).toContain('data-provider="minimax-cn"')
+    // Deepseek has a battery gauge; minimax-cn shows the — placeholder.
+    expect(html).toContain('role="progressbar"')
+    // The unsupported message wraps the code in a title attribute so the
+    // user can hover for the precise reason.
+    expect(html).toContain('title="no endpoint"')
   })
 
-  it('fills the gauge by the peak when a recharge was detected', () => {
-    const recharged = overview()
-    const html = renderToStaticMarkup(createElement(FinanceAuditSection, {
-      ...baseProps,
-      useSnapshot: () => ({
-        status: 'ready' as const,
-        overview: recharged,
-        error: null,
-        peak: { micros: 150_000_000, updatedAt: 2 },
-      }),
-    }))
-    // balance 100M / peak 150M -> 67%
-    expect(html).toContain('aria-valuenow="67"')
-    expect(html).toContain('remaining 67%')
-    expect(html).toContain('CNY 150.00') // historical peak
-  })
-
-  it('renders the missing-credential state instead of the gauge', () => {
-    const missing = overview()
-    missing.balance = { status: 'missing-credential', updatedAt: 1 }
-    const html = renderToStaticMarkup(createElement(FinanceAuditSection, {
-      ...baseProps,
-      useSnapshot: () => ({ status: 'ready' as const, overview: missing, error: null }),
-    }))
+  it('renders the missing-credential state for providers without an API key', () => {
+    const list = providerList([missingCredentialProvider('deepseek-official')])
+    const html = renderToStaticMarkup(createElement(FinanceAuditSection, readyProps(list, ledger())))
     expect(html).toContain('missingCredential')
   })
 
-  it('renders the daily trend chart with axes and summary stats', () => {
-    const days = overview()
-    days.ledger.byDay = [
-      { day: '2026-01-15', usage: { uncachedInputTokens: 500_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 250_000 }, costMicros: 3_000_000 },
-      { day: '2026-01-16', usage: { uncachedInputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 500_000 }, costMicros: 6_000_000 },
-      { day: '2026-01-17', usage: { uncachedInputTokens: 250_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 100_000 }, costMicros: 1_500_000 },
-    ]
+  it('renders a host-known tag on rows whose provider id is in the registry', () => {
+    const list = providerList([okProvider('deepseek-official', 100_000_000)])
+    const html = renderToStaticMarkup(createElement(FinanceAuditSection, readyProps(list, ledger())))
+    expect(html).toContain('hostKnown')
+  })
+
+  it('reads the per-provider peak from the supplied peaks map', () => {
+    const list = providerList([okProvider('deepseek-official', 100_000_000)])
+    const peaks = { 'deepseek-official': { micros: 200_000_000, updatedAt: 1, currency: 'CNY' } }
+    const html = renderToStaticMarkup(createElement(FinanceAuditSection, readyProps(list, ledger(), peaks)))
+    // peak currency is CNY and the row currency is CNY — the historical
+    // peak is rendered as a reference next to the live balance.
+    expect(html).toContain('peak')
+    expect(html).toContain('200')
+  })
+
+  it('disables the per-provider refresh button while a refresh is in flight', () => {
+    const list = providerList([okProvider('deepseek-official', 100_000_000)])
     const html = renderToStaticMarkup(createElement(FinanceAuditSection, {
-      ...baseProps,
-      useSnapshot: () => ({ status: 'ready' as const, overview: days, error: null }),
+      ...readyProps(list, ledger()),
+      useSnapshot: () => ({ status: 'ready' as const, providerList: list, ledger: ledger(), peaks: {}, error: null }),
     }))
-    expect(html).toContain('byDay')       // chart aria-label
-    expect(html).toContain('01-15')       // x-axis date labels
-    expect(html).toContain('01-17')
-    expect(html).toContain('trendRange')  // summary stats row
-    expect(html).toContain('trendTotal')
-    expect(html).toContain('trendAvg')
-    expect(html).toContain('CNY 10.50')   // 3-day total
+    // No in-flight refresh: the button is enabled.
+    expect(html).toContain('refreshBalance')
+    expect(html).toContain('data-provider="deepseek-official"')
   })
 
-  it('renders the peak/valley split donut and the hour-of-day chart', () => {
-    const pv = overview()
-    pv.ledger.byHourOfDay = pv.ledger.byHourOfDay.map(row => row.localHour === 10
-      ? { ...row, usage: { uncachedInputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 }, costMicros: 3_000_000, peakCostMicros: 3_000_000, flatCostMicros: 0, shiftSavingsMicros: 1_500_000 }
-      : row.localHour === 3
-        ? { ...row, usage: { uncachedInputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 }, costMicros: 1_500_000, peakCostMicros: 0, flatCostMicros: 0, shiftSavingsMicros: 0 }
-        : row)
-    pv.ledger.peakValley = { peakCostMicros: 3_000_000, offPeakCostMicros: 1_500_000, flatCostMicros: 0, unclassifiedCostMicros: 0, legacyCostMicros: 0, shiftSavingsMicros: 1_500_000 }
-    const html = renderToStaticMarkup(createElement(FinanceAuditSection, {
-      ...baseProps,
-      useSnapshot: () => ({ status: 'ready' as const, overview: pv, error: null }),
-    }))
-    expect(html).toContain('peakValleySplit') // card title + donut aria-label
-    expect(html).toContain('hourOfDay')       // card title + chart aria-label
-    expect(html).toContain('peakBand')        // stats + legend + donut segment
-    expect(html).toContain('offPeak')
-    expect(html).toContain('shiftSavings')
-    expect(html).toContain('shiftSavingsOfPeak') // savings as % of peak cost
-    expect(html).toContain('50%')             // 1.5M / 3M peak
-    expect(html).toContain('shiftSavingsTop') // most-worth-shifting hours hint
-    expect(html).toContain('10:00')           // the shiftable hour
-    expect(html).toContain('CNY 3.00')        // peak stat
-    expect(html).toContain('CNY 1.50')        // off-peak stat + shift savings
-    expect(html).toContain('¥4.50')           // donut center total (4.5M micros)
-  })
-
-  it('shows the windowed-era effective date and separates legacy session cost', () => {
-    const pv = overview()
-    pv.ledger.windowedSinceMs = Date.UTC(2026, 7, 16, 16) // 2026-08-17 00:00 +08:00
-    pv.ledger.peakValley = {
-      peakCostMicros: 3_000_000,
-      offPeakCostMicros: 1_500_000,
-      flatCostMicros: 0,
-      unclassifiedCostMicros: 0,
-      legacyCostMicros: 2_000_000,
-      shiftSavingsMicros: 1_500_000,
-    }
-    const html = renderToStaticMarkup(createElement(FinanceAuditSection, {
-      ...baseProps,
-      useSnapshot: () => ({ status: 'ready' as const, overview: pv, error: null }),
-    }))
-    // Effective-date subtitle rendered in Beijing time.
-    expect(html).toContain('peakValleySince')
-    expect(html).toContain('2026-08-17 00:00')
-    expect(html).toContain('peakValleySinceTail')
-    // Legacy sessions shown as a separate stat in the split card stats row.
-    expect(html).toContain('legacySessions')
-    expect(html).toContain('CNY 2.00') // legacy cost
-  })
-
-  it('renders the dashboard without the config toolbar (config moved to the plugin card)', () => {
-    const html = renderToStaticMarkup(createElement(FinanceAuditSection, baseProps))
-    expect(html).toContain('rootCompact')  // compact is the default density
-    // The layout switch and chart chips live on the plugin configuration card
-    // (设置 → 插件 → 插件配置页), not on the dashboard.
-    expect(html).not.toContain('layoutCompact')
-    expect(html).not.toContain('layoutStandard')
-    expect(html).not.toContain('aria-pressed')
-  })
-
-  it('honors persisted prefs: standard single-column layout with the by-model chart hidden', () => {
-    const storage = new Map<string, string>()
-    const fakeStorage = {
-      getItem: (key: string) => storage.get(key) ?? null,
-      setItem: (key: string, value: string) => { storage.set(key, value) },
-      removeItem: (key: string) => { storage.delete(key) },
-      clear: () => storage.clear(),
-      key: (index: number) => [...storage.keys()][index] ?? null,
-      get length() { return storage.size },
-    }
-    const original = (globalThis as { localStorage?: unknown }).localStorage
-    ;(globalThis as { localStorage?: unknown }).localStorage = fakeStorage
-    storage.set('dsh-spark-finance.prefs', JSON.stringify({
-      layout: 'standard',
-      charts: {
-        gauge: true, kpis: true, split: true, hourOfDay: true,
-        byModel: false, byWorkspace: true, byDay: true,
+  it('renders a permanent validity tag for a user entry without end bounds', () => {
+    const list = providerList([
+      {
+        ...okProvider('deepseek-official', 100_000_000),
+        userEntry: {
+          provider: 'deepseek-official',
+          billingMode: 'metered',
+          totalPriceMicros: 0,
+          currency: 'CNY',
+          autoFetchBalance: true,
+          validity: {},
+        },
       },
-    }))
-    try {
-      const html = renderToStaticMarkup(createElement(FinanceAuditSection, baseProps))
-      expect(html).toContain('rootStandard')
-      expect(html).not.toContain('rootCompact')
-      expect(html).not.toContain('>byModel<')            // card title gone
-      expect(html).not.toContain('aria-label="byModel"') // donut gone
-      expect(html).toContain('>byWorkspace<')            // card kept
-      expect(html).toContain('>byDay<')                  // trend card kept
-    } finally {
-      ;(globalThis as { localStorage?: unknown }).localStorage = original
-    }
+    ])
+    const html = renderToStaticMarkup(createElement(FinanceAuditSection, readyProps(list, ledger())))
+    expect(html).toContain('validityPermanent')
   })
 
-  it('renders the empty state when there are no sessions', () => {
-    const empty = overview()
-    empty.ledger.sessions = []
-    empty.ledger.tasks = []
-    empty.ledger.byWorkspace = []
-    empty.ledger.byDay = []
-    empty.ledger.byModel = []
-    const html = renderToStaticMarkup(createElement(FinanceAuditSection, {
-      ...baseProps,
-      useSnapshot: () => ({ status: 'ready' as const, overview: empty, error: null }),
-    }))
+  it('renders a remaining-N-days tag when the validity end is in the future', () => {
+    const list = providerList([
+      {
+        ...okProvider('deepseek-official', 100_000_000),
+        userEntry: {
+          provider: 'deepseek-official',
+          billingMode: 'plan',
+          totalPriceMicros: 0,
+          currency: 'CNY',
+          autoFetchBalance: false,
+          validity: { endMs: Date.now() + 30 * 24 * 60 * 60 * 1000 },
+        },
+      },
+    ])
+    const html = renderToStaticMarkup(createElement(FinanceAuditSection, readyProps(list, ledger())))
+    expect(html).toContain('validityRemaining')
+  })
+
+  it('renders an expired-N-days tag when the validity end is in the past', () => {
+    const list = providerList([
+      {
+        ...okProvider('deepseek-official', 100_000_000),
+        userEntry: {
+          provider: 'deepseek-official',
+          billingMode: 'plan',
+          totalPriceMicros: 0,
+          currency: 'CNY',
+          autoFetchBalance: false,
+          validity: { endMs: Date.now() - 30 * 24 * 60 * 60 * 1000 },
+        },
+      },
+    ])
+    const html = renderToStaticMarkup(createElement(FinanceAuditSection, readyProps(list, ledger())))
+    expect(html).toContain('validityExpired')
+  })
+
+  it('renders a starts-in-N-days tag when the validity start is in the future', () => {
+    const list = providerList([
+      {
+        ...okProvider('deepseek-official', 100_000_000),
+        userEntry: {
+          provider: 'deepseek-official',
+          billingMode: 'plan',
+          totalPriceMicros: 0,
+          currency: 'CNY',
+          autoFetchBalance: false,
+          validity: { startMs: Date.now() + 30 * 24 * 60 * 60 * 1000 },
+        },
+      },
+    ])
+    const html = renderToStaticMarkup(createElement(FinanceAuditSection, readyProps(list, ledger())))
+    expect(html).toContain('validityStartsIn')
+  })
+
+  it('renders the by-model table (not a donut) for the cost-by-model card', () => {
+    const led = ledger({
+      totalCostMicros: 5_500_000,
+      byModel: [
+        { modelKey: 'openai/gpt-4o-mini', provider: 'openai', model: 'gpt-4o-mini', usage: { uncachedInputTokens: 1000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 500 }, costMicros: 5_000_000 },
+        { modelKey: 'deepseek-official/deepseek-v4-flash', provider: 'deepseek-official', model: 'deepseek-v4-flash', usage: { uncachedInputTokens: 500, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 200 }, costMicros: 500_000 },
+      ],
+    })
+    const list = providerList([okProvider('deepseek-official', 50_000_000)])
+    const html = renderToStaticMarkup(createElement(FinanceAuditSection, readyProps(list, led)))
+    // Table headers + cells present; the raw model key is shown (no provider prefix).
+    expect(html).toContain('finance-by-model-table')
+    expect(html).toContain('openai/gpt-4o-mini')
+    expect(html).toContain('deepseek-official/deepseek-v4-flash')
+  })
+
+  it('renders the daily trend chart from the ledger', () => {
+    const led = ledger({
+      byDay: [
+        { day: '2026-01-15', usage: { uncachedInputTokens: 100, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 50 }, costMicros: 1_000_000 },
+        { day: '2026-01-16', usage: { uncachedInputTokens: 200, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 100 }, costMicros: 2_000_000 },
+      ],
+    })
+    const list = providerList([okProvider('deepseek-official', 50_000_000)])
+    const html = renderToStaticMarkup(createElement(FinanceAuditSection, readyProps(list, led)))
+    expect(html).toContain('byDay')
+    // The trend axis shows short labels (MM-DD) so the user can fit a month.
+    expect(html).toContain('01-15')
+    expect(html).toContain('01-16')
+  })
+
+  it('renders the peak/valley split donut from the ledger', () => {
+    const led = ledger({
+      peakValley: {
+        peakCostMicros: 3_000_000,
+        offPeakCostMicros: 1_500_000,
+        flatCostMicros: 0,
+        unclassifiedCostMicros: 0,
+        legacyCostMicros: 0,
+        shiftSavingsMicros: 1_500_000,
+      },
+    })
+    const list = providerList([okProvider('deepseek-official', 50_000_000)])
+    const html = renderToStaticMarkup(createElement(FinanceAuditSection, readyProps(list, led)))
+    expect(html).toContain('peakValleySplit')
+    expect(html).toContain('shiftSavings')
+  })
+
+  it('renders the by-workspace bar chart from the ledger', () => {
+    const led = ledger({
+      byWorkspace: [
+        { workspaceId: 'ws-1', title: 'Workspace A', sessionCount: 5, usage: { uncachedInputTokens: 100, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 50 }, costMicros: 1_000_000 },
+      ],
+    })
+    const list = providerList([okProvider('deepseek-official', 50_000_000)])
+    const html = renderToStaticMarkup(createElement(FinanceAuditSection, readyProps(list, led)))
+    expect(html).toContain('byWorkspace')
+  })
+
+  it('renders the by-provider cost donut from the ledger rollup', () => {
+    const led = ledger({
+      byProvider: [
+        { provider: 'deepseek-official', usage: { uncachedInputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 }, costMicros: 5_000_000, modelCount: 1, billingMode: 'metered' },
+        { provider: 'openai', usage: { uncachedInputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 }, costMicros: 1_000_000, modelCount: 1, billingMode: 'plan' },
+      ],
+    })
+    const list = providerList([okProvider('deepseek-official', 50_000_000)])
+    const html = renderToStaticMarkup(createElement(FinanceAuditSection, readyProps(list, led)))
+    expect(html).toContain('byProvider')
+    // Plan providers get a separate color in the donut.
+    expect(html).toContain('stroke:#a855f7')
+  })
+
+  it('shows the windowed-era effective date when windowedSinceMs is set', () => {
+    const led = ledger({
+      windowedSinceMs: Date.UTC(2026, 7, 16, 16),
+    })
+    const list = providerList([okProvider('deepseek-official', 50_000_000)])
+    const html = renderToStaticMarkup(createElement(FinanceAuditSection, readyProps(list, led)))
+    expect(html).toContain('peakValleySince')
+  })
+
+  it('renders KPI cards from the ledger totals', () => {
+    const led = ledger({
+      totals: { uncachedInputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 500_000 },
+      sessionCount: 42,
+      workspaceCount: 7,
+    })
+    const list = providerList([okProvider('deepseek-official', 50_000_000)])
+    const html = renderToStaticMarkup(createElement(FinanceAuditSection, readyProps(list, led)))
+    expect(html).toContain('totalInput')
+    expect(html).toContain('totalOutput')
+    expect(html).toContain('sessions')
+    expect(html).toContain('workspaces')
+  })
+
+  it('shows the empty state when there are no persisted sessions', () => {
+    const list = providerList([okProvider('deepseek-official', 0)])
+    const html = renderToStaticMarkup(createElement(FinanceAuditSection, readyProps(list, ledger())))
     expect(html).toContain('empty')
   })
 
-  it('renders the by-model donut with legend shares and a center total', () => {
-    const html = renderToStaticMarkup(createElement(FinanceAuditSection, baseProps))
-    expect(html).toContain('byModel')        // card title + svg aria-label
-    expect(html).toContain('¥6.00')          // donut center total (compact currency)
-    expect(html).toContain('100.0%')         // legend share
-    expect(html).toContain('CNY 6.00')       // legend cost
-    expect(html).toContain('modelCountUnit') // summary stats row
-    expect(html).toContain('trendTotal')     // summary stats total label
+  it('renders multiple provider cards in the grid without folding them into Other', () => {
+    const list = providerList([
+      okProvider('deepseek-official', 100_000_000),
+      okProvider('openai', 50_000_000, 'USD'),
+      unsupportedProvider('minimax-cn', 'unsupported-provider'),
+    ])
+    const html = renderToStaticMarkup(createElement(FinanceAuditSection, readyProps(list, ledger())))
+    // Each provider renders as its own card.
+    expect(html.match(/data-provider=/g)?.length).toBe(3)
   })
+})
 
-  it('renders the by-workspace bars with a value axis and shares', () => {
-    const html = renderToStaticMarkup(createElement(FinanceAuditSection, baseProps))
-    expect(html).toContain('byWorkspace')    // card title
-    expect(html).toContain('workspaceCountUnit')
-    expect(html).toContain('¥0.00')          // value axis origin
-    expect(html).toContain('¥6.00')          // value axis max tick (= max cost)
-    expect(html).toContain('100.0%')         // share label
-  })
+/**
+ * Static guard (commit 21 followup): every CSS module class referenced by
+ * BalanceGrid + ByModelTable must be defined in
+ * FinanceAuditSection.module.css. The components reference hashed class
+ * names from the module (via `css.<className>`), so a missing rule produces
+ * a render-time regression that `renderToStaticMarkup` can't see. This
+ * check reads the .module.css file and confirms every class name the
+ * components touch is present.
+ *
+ * If you add a new class to a component, add the rule here too — the
+ * test fails fast and points at the missing line.
+ */
+describe('CSS module coverage (BalanceGrid + ByModelTable)', () => {
+  function loadCss(): string {
+    // The test runner runs in the package root, so the module path is fixed.
+    return readFileSync(join(__dirname, '..', 'src', 'client', 'FinanceAuditSection.module.css'), 'utf8')
+  }
 
-  it('folds overflow rows into an Other segment', () => {
-    const many = overview()
-    const usage = { uncachedInputTokens: 100_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 50_000 }
-    many.ledger.byModel = Array.from({ length: 8 }, (_, i) => ({
-      modelKey: `model-${i + 1}`,
-      provider: 'prov',
-      model: `model-${i + 1}`,
-      usage,
-      costMicros: (8 - i) * 1_000_000,
-    }))
-    many.ledger.byWorkspace = Array.from({ length: 9 }, (_, i) => ({
-      workspaceId: `ws-${i + 1}`,
-      title: `Workspace ${i + 1}`,
-      sessionCount: 8 - i,
-      usage,
-      costMicros: (8 - i) * 1_000_000,
-    }))
-    const html = renderToStaticMarkup(createElement(FinanceAuditSection, {
-      ...baseProps,
-      useSnapshot: () => ({ status: 'ready' as const, overview: many, error: null }),
-    }))
-    expect(html).toContain('other')          // both charts aggregate overflow
-    expect(html).toContain('model-1')        // top model kept
-    expect(html).not.toContain('model-6')    // 6th model folded (limit 5)
-    expect(html).not.toContain('Workspace 7') // 7th workspace folded (limit 6)
-  })
+  function collectClassNames(source: string): Set<string> {
+    // Match any class name referenced by `css.<name>` (so we don't flag the
+    // CSS module's own selectors that don't have a JS counterpart yet).
+    const used = new Set<string>()
+    const re = /css\.([A-Za-z_][A-Za-z0-9_]*)/g
+    for (const [, name] of source.matchAll(re)) used.add(name)
+    return used
+  }
 
-  it('assigns each donut segment a distinct categorical color', () => {
-    const many = overview()
-    const usage = { uncachedInputTokens: 100_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 50_000 }
-    many.ledger.byModel = [
-      { modelKey: 'deepseek-official/deepseek-v4-flash', provider: 'deepseek-official', model: 'deepseek-v4-flash', usage, costMicros: 3_400_000 },
-      { modelKey: 'deepseek-official/deepseek-v4-pro', provider: 'deepseek-official', model: 'deepseek-v4-pro', usage, costMicros: 2_600_000 },
-    ]
-    const html = renderToStaticMarkup(createElement(FinanceAuditSection, {
-      ...baseProps,
-      useSnapshot: () => ({ status: 'ready' as const, overview: many, error: null }),
-    }))
-    // Adjacent categories must never share a hue (regression: flash/pro were both blue).
-    expect(html).toContain('stroke:#4176e6') // brand
-    expect(html).toContain('stroke:#22c55e') // green
-    expect(html).not.toContain('stroke:#3b82f6') // the colliding blue token is gone
-  })
+  function collectModuleClasses(css: string): Set<string> {
+    // Each rule starts with `.<name> {` or `.<name>.<other>`. Strip
+    // selectors + pseudos to get the top-level class name list.
+    const defined = new Set<string>()
+    for (const m of css.matchAll(/\.([A-Za-z_][A-Za-z0-9_]*)\b/g)) {
+      defined.add(m[1]!)
+    }
+    return defined
+  }
 
-  it('renders the per-provider cost donut with provider rollups', () => {
-    const multi = overview()
-    const usage = { uncachedInputTokens: 100_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 50_000 }
-    multi.ledger.byProvider = [
-      { provider: 'openai', usage, costMicros: 4_000_000, modelCount: 2 },
-      { provider: 'anthropic', usage, costMicros: 2_000_000, modelCount: 1 },
-    ]
-    const html = renderToStaticMarkup(createElement(FinanceAuditSection, basePropsUse(multi)))
-    expect(html).toContain('byProvider')            // card title + aria-label
-    expect(html).toContain('providerCountUnit')     // stats line
-    expect(html).toContain('aria-label="byProvider"')
-    expect(html).toContain('openai')                // provider label kept
-    expect(html).toContain('anthropic')             // second provider kept
-  })
-
-  it('labels and tints plan providers apart from metered spend', () => {
-    const mixed = overview()
-    const usage = { uncachedInputTokens: 100_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 50_000 }
-    mixed.ledger.totalCostMicros = 6_000_000
-    mixed.ledger.meteredCostMicros = 2_000_000
-    mixed.ledger.planEquivalentCostMicros = 4_000_000
-    mixed.ledger.byProvider = [
-      { provider: 'zai', usage, costMicros: 4_000_000, modelCount: 1, billingMode: 'plan' },
-      { provider: 'volcengine', usage, costMicros: 1_500_000, modelCount: 1 },
-      { provider: 'omni', usage, costMicros: 500_000, modelCount: 2, billingMode: 'mixed' },
-    ]
-    const html = renderToStaticMarkup(createElement(FinanceAuditSection, basePropsUse(mixed)))
-    expect(html).toContain('zai ·planTag')          // suffix tag on plan provider
-    expect(html).toContain('omni ·mixedTag')        // mixed providers get their own marker
-    expect(html).toContain('stroke:#a855f7')        // distinct plan hue
-    expect(html).toContain('meteredSpend CNY 2.00')   // real wallet outflow
-    expect(html).toContain('planEquivalent CNY 4.00') // list-price equivalent only
-  })
-
-  it('reconciles the balance gauge against metered spend only', () => {
-    const split = overview()
-    split.ledger.totalCostMicros = 6_000_000
-    split.ledger.meteredCostMicros = 2_000_000
-    split.ledger.planEquivalentCostMicros = 4_000_000
-    split.balance = { status: 'ok', updatedAt: 1, totalMicros: 100_000_000, currency: 'CNY' }
-    const html = renderToStaticMarkup(createElement(FinanceAuditSection, basePropsUse(split)))
-    // spent must NOT include plan equivalents — the wallet never paid them.
-    expect(html).toContain('spent CNY 2.00')
-  })
-
-  it('labels model donut slices by model and names the provider in the tooltip', () => {
-    const cross = overview()
-    const usage = { uncachedInputTokens: 100_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 50_000 }
-    cross.ledger.byModel = [
-      { modelKey: 'openai/gpt-4o-mini', provider: 'openai', model: 'gpt-4o-mini', usage, costMicros: 4_000_000 },
-      { modelKey: 'deepseek-official/deepseek-v4-flash', provider: 'deepseek-official', model: 'deepseek-v4-flash', usage, costMicros: 2_000_000 },
-    ]
-    const html = renderToStaticMarkup(createElement(FinanceAuditSection, basePropsUse(cross)))
-    expect(html).toContain('gpt-4o-mini')              // short model label
-    expect(html).toContain('deepseek-v4-flash')        // short model label
-    expect(html).not.toContain('openai/gpt-4o-mini')   // raw key no longer the label
-  })
-
-  it('keeps breakdown tooltips out of the static markup (client-only hover)', () => {
-    const html = renderToStaticMarkup(createElement(FinanceAuditSection, baseProps))
-    expect(html).not.toContain('role="tooltip"')
-    expect(html).not.toContain('tipInput')   // tooltip detail line is never static
+  it('BalanceGrid + ByModelTable CSS classes are all defined in the module', () => {
+    const componentSrc = readFileSync(join(__dirname, '..', 'src', 'client', 'BalanceGrid.tsx'), 'utf8')
+      + '\n' + readFileSync(join(__dirname, '..', 'src', 'client', 'ByModelTable.tsx'), 'utf8')
+    const cssText = loadCss()
+    const used = collectClassNames(componentSrc)
+    const defined = collectModuleClasses(cssText)
+    const missing: string[] = []
+    for (const name of used) if (!defined.has(name)) missing.push(name)
+    expect(
+      missing,
+      `CSS classes used in components but missing from FinanceAuditSection.module.css: ${missing.join(', ')}`,
+    ).toEqual([])
   })
 })

@@ -97,67 +97,305 @@
   gap: 10px;
 }
 
-.gaugeCard {
+/* Commit 21: per-provider balance grid (replaces the single BalanceGauge). */
+.balanceGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+  margin-top: 8px;
+}
+
+.balanceCard {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   border: 1px solid var(--dsw-alias-border-l1);
   border-radius: 14px;
   background: var(--dsw-alias-bg-layer-2);
-  padding: var(--fin-gauge-pad, 14px 16px);
+  padding: 14px 16px;
+  min-width: 0;
 }
 
-.gaugeHead {
+.balanceCardHead {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
-.gaugeTitle {
+.balanceCardTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: var(--dsw-alias-label-primary);
   font-size: 13px;
   line-height: 20px;
   font-weight: 600;
+  font-family: var(--dsw-alias-font-mono, ui-monospace, SFMono-Regular, monospace);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
-.gaugePercent {
+.balanceCardTag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
-  opacity: 0.72;
-  font-size: 13px;
-  line-height: 20px;
-  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  white-space: nowrap;
 }
 
-.gaugeTrack {
-  height: 10px;
+.balanceCardValidity {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 500;
+  white-space: nowrap;
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+}
+
+/* Validity state colors — only the background tint shifts; the text keeps
+ * the secondary tone so contrast is preserved in dark mode. */
+.balanceCardValidity[data-state='remaining'],
+.balanceCardValidity.expired { background: var(--dsw-alias-feedback-warning-bg, color-mix(in srgb, var(--dsw-static-warning-500, #f59e0b) 18%, transparent)); color: var(--dsw-alias-feedback-warning-fg, var(--dsw-static-warning-700, #b45309)); }
+
+.balanceCardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.balanceCardValue {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.balanceCardAmount {
+  color: var(--dsw-alias-label-primary);
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.balanceCardCurrency {
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.balanceCardTrack {
+  height: 8px;
   border-radius: 999px;
   background: var(--dsw-alias-interactive-bg-hover);
   overflow: hidden;
 }
 
-.gaugeFill {
+.balanceCardFill {
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, var(--dsw-static-deepseek-500), var(--dsw-static-deepseek-400));
   transition: width 0.3s ease;
 }
 
-.gaugeMeta {
+.balanceCardMeta {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 16px;
+  gap: 4px 14px;
   font-size: 12px;
   line-height: 18px;
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+  opacity: 0.78;
+  font-variant-numeric: tabular-nums;
+}
+
+.balanceCardError {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.balanceCardDash {
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 300;
+  flex-shrink: 0;
+}
+
+.balanceCardError p {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.balanceCardFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  padding-top: 8px;
+}
+
+.balanceCardRefresh {
+  border: 1px solid var(--dsw-alias-border-l1);
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  line-height: 18px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.balanceCardRefresh:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+  border-color: var(--dsw-alias-border-l2, var(--dsw-alias-border-l1));
+}
+
+.balanceCardRefresh:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.balanceCardNote {
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+  font-size: 11px;
+  line-height: 16px;
   opacity: 0.72;
 }
 
-.gaugeStatus {
+/* By-model cost table (scrollable when many model rows). */
+.byModelTableWrap {
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-1, var(--dsw-alias-bg-layer-2));
+}
+
+.byModelTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.byModelTable thead {
+  position: sticky;
+  top: 0;
+  background: var(--dsw-alias-bg-layer-2);
+  z-index: 1;
+}
+
+.byModelTable th {
+  text-align: left;
+  font-weight: 600;
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
-  font-size: 13px;
-  line-height: 20px;
-  padding: 2px 0;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  padding: 8px 12px;
+  white-space: nowrap;
+}
+
+.byModelTable th button {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.byModelTable th button:focus-visible {
+  outline: 2px solid var(--dsw-alias-feedback-focus, var(--dsw-static-deepseek-500));
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.byModelTable tbody tr:nth-child(odd) {
+  background: var(--dsw-alias-bg-layer-1, transparent);
+}
+
+.byModelTable td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  color: var(--dsw-alias-label-primary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow-wrap: anywhere;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.byModelTable tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.byModelTableEmpty {
+  text-align: center;
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+  opacity: 0.86;
+  padding: 24px 12px !important;
+}
+
+.byModelTableEmptyHint {
+  font-size: 11px;
+  opacity: 0.72;
+  margin-top: 2px;
+  margin-bottom: 4px;
+  max-width: 360px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Empty-state action button (used by the legacy .empty fallback and the new
+ * ByModelTable noData row). */
+.balanceEmptyAction {
+  border: 1px solid var(--dsw-alias-border-l1);
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  line-height: 18px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-top: 8px;
+}
+
+.balanceEmptyAction:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 .kpi {

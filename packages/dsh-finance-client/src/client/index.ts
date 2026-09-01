@@ -24,7 +24,7 @@ import { FinanceAuditController } from './controller.ts'
 import type { FinanceAuditState } from './controller.ts'
 import { FinanceAuditSection } from './FinanceAuditSection.tsx'
 import type { FinanceAuditInjected } from './FinanceAuditSection.tsx'
-import { FinanceCardController } from './FinanceCardController.ts'
+import { FinanceCardController, type FinanceRemote } from './FinanceCardController.ts'
 import { FinanceCard } from './FinanceCard.tsx'
 import { en, zh, type FinanceKey } from './locales.ts'
 
@@ -61,11 +61,13 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   const useSnapshot = bindSnapshotSelector(controller.store) as SnapshotSelectorHook<FinanceAuditState>
   const t = ctx.locale.bind(NS) as (key: FinanceKey) => string
   const refresh = (): void => { void controller.load() }
+  const refreshProvider = (provider: string): Promise<void> => controller.refreshProvider(provider)
 
   const injected = (): FinanceAuditInjected => ({
     useSnapshot,
     t,
     refresh,
+    refreshProvider,
   })
 
   ctx.slots.inject('settings.section', () => ctx.slots.register({
@@ -80,10 +82,14 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   // Plugin configuration card in 设置 → 插件 → 插件配置页. Bound to the
   // `finance` settings namespace the host service registers; rendered only
   // while that namespace is served to this client. Carries the finance
-  // Remote too so the price-sync section reaches `syncCommunityPrices`.
+  // Remote too so the price-sync section reaches `syncCommunityPrices` and
+  // the new read-only Provider configuration section reaches
+  // `listProviders`. `FinanceRemote` accepts any subset of those four
+  // methods, so a legacy host without `listProviders` keeps working (the
+  // section falls back to a loading slot).
   const cardController = new FinanceCardController(
     ctx.settingsScope.bind({ namespace: 'finance' }),
-    finance as unknown as Pick<ClientRemote['finance'], 'syncCommunityPrices' | 'getSyncStatus'>,
+    finance as unknown as FinanceRemote,
   )
   cardController.ensureAutoSync()
   ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
