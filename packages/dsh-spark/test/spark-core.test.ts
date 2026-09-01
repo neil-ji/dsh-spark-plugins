@@ -125,6 +125,12 @@ test('buildHippoInputFromSpark: preserves sourceSessionId + agentId for traceabi
   assert.equal(out.sourceAgentId, 'agent-Y')
 })
 
+test('buildHippoInputFromSpark: threads spark.id as the Phase 2 reverse link', () => {
+  const spark = makeRecord({ id: 'sp-123' })
+  const out = buildHippoInputFromSpark(spark, { kind: 'insight', importance: 0.5, globalProven: false })
+  assert.equal(out.sourceSparkId, 'sp-123', 'hippo record will carry sourceSparkId for UI reverse link')
+})
+
 // ----- deriveTitle sanity -----
 
 test('deriveTitle: short content unchanged', () => {

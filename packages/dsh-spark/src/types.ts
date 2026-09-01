@@ -56,6 +56,8 @@ export interface HippoPutInput {
   importance: number
   sourceSessionId: string
   sourceAgentId: string | null
+  /** Provenance: id of the originating spark (cognitive-layer Phase 2 reverse link). */
+  sourceSparkId: string
 }
 
 export function buildHippoInputFromSpark(spark: SparkView, opts: SparkCrystallize): HippoPutInput {
@@ -76,5 +78,6 @@ export function buildHippoInputFromSpark(spark: SparkView, opts: SparkCrystalliz
     importance: opts.importance,
     sourceSessionId: spark.sourceSessionId,
     sourceAgentId: spark.sourceAgentId,
+    sourceSparkId: spark.id,
   }
 }
