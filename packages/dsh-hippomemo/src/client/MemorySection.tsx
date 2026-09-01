@@ -17,7 +17,7 @@ import {
   IconChevronLeftOutline14, IconChevronRightOutline14, IconChevronUpOutline14,
   IconEditOutline16, IconPlusOutline16, IconThinkOutline16, IconTrashOutline16,
   IconWarningOutline16, Input, Menu, Modal, Pill, SearchInput, SegmentedControl,
-  Textarea, TrendChart,
+  StateDot, Textarea, TrendChart,
 } from 'dsh-ui-kit'
 import type { ChartDatum } from 'dsh-ui-kit'
 import type { HippomemoApi, MemoryTagCount } from './api.ts'
@@ -150,19 +150,20 @@ function BrainStrip({ t, stats, usage, preferences, candidates, narrative, reloa
       </div>
       <div className='hippomemo-brain-strip'>
         <div className='hippomemo-brain-row'>
-          {regions.map(region => (
-            <button type='button' key={region.id}
-              className={'hippomemo-brain-region' + (pulseRegion === region.id
-                ? ' hippomemo-brain-region-anim hippomemo-brain-region-anim-' + region.id
-                : '')}
-              data-region={region.id}
-              onClick={() => { setPulseRegion(region.id); window.setTimeout(() => setPulseRegion(null), 900) }}
-              aria-label={t(region.nameKey) + ' · ' + region.val}>
-              <span className='hippomemo-brain-dot' style={{ background: BRAIN_REGION_TONE[region.id] }} />
-              <span className='hippomemo-brain-name'>{t(region.nameKey)}</span>
-              <span className='hippomemo-brain-val'>{region.val}</span>
-            </button>
-          ))}
+          {regions.map(region => {
+            const pulse = pulseRegion === region.id
+            return (
+              <Button key={region.id} variant='ghost' size='sm'
+                className={'hippomemo-brain-region' + (pulse ? ' hippomemo-brain-region-anim hippomemo-brain-region-anim-' + region.id : '')}
+                data-region={region.id}
+                onClick={() => { setPulseRegion(region.id); window.setTimeout(() => setPulseRegion(null), 900) }}
+                aria-label={t(region.nameKey) + ' · ' + region.val}>
+                <StateDot state='done' size={10} className={'hippomemo-brain-dot hippomemo-brain-dot-' + region.id} />
+                <span className='hippomemo-brain-name'>{t(region.nameKey)}</span>
+                <span className='hippomemo-brain-val'>{region.val}</span>
+              </Button>
+            )
+          })}
           <span className='hippomemo-brain-spacer' />
           <Button size='sm' variant='outline' onClick={() => { setExpanded(!expanded) }}
             icon={<IconChevronDownOutline14 className={expanded ? 'hippomemo-chev hippomemo-chev-up' : 'hippomemo-chev'} />}>
@@ -180,7 +181,7 @@ function BrainStrip({ t, stats, usage, preferences, candidates, narrative, reloa
             {regions.map(region => (
               <div className='hippomemo-brain-card' key={region.id}>
                 <h5 className='hippomemo-brain-card-title'>
-                  <span className='hippomemo-brain-dot' style={{ background: BRAIN_REGION_TONE[region.id] }} />
+                  <StateDot state='done' size={10} className={'hippomemo-brain-dot hippomemo-brain-dot-' + region.id} />
                   {t(region.nameKey)}
                 </h5>
                 <p className='hippomemo-brain-card-desc'>{t(region.descKey)}</p>
@@ -239,9 +240,7 @@ function TodoQuadrantImpl({ t, items, now, onResolve }: {
           };
           return (
             <li className={'hippomemo-todo-item hippomemo-todo-item-' + kindClass} key={item.id}>
-              <span className={'hippomemo-todo-icon hippomemo-todo-icon-' + kindClass}>
-                <IconWarningOutline16 size={14} />
-              </span>
+              <StateDot state={kindClass === 'danger' ? 'error' : 'warning'} size={14} className={'hippomemo-todo-icon hippomemo-todo-icon-' + kindClass} />
               <div className='hippomemo-todo-body'>
                 <div className='hippomemo-todo-title'>{item.title}</div>
                 <div className='hippomemo-todo-desc'>
@@ -375,13 +374,13 @@ function PreferenceQuadrant({ t, items, totalRecall, onAction }: {
                 </div>
                 <div className='hippomemo-pref-ops'>
                   {!item.confirmed ? (
-                    <button type='button' className='hippomemo-pref-op hippomemo-pref-op-confirm'
-                      onClick={() => { onAction('confirm', item.id) }}>{t('prefConfirm')}</button>
+                    <Button size='sm' variant='ghost' className='hippomemo-pref-op hippomemo-pref-op-confirm'
+                      onClick={() => { onAction('confirm', item.id) }}>{t('prefConfirm')}</Button>
                   ) : null}
-                  <button type='button' className='hippomemo-pref-op'
-                    onClick={() => { onAction('revise', item.id) }}>{t('prefRevise')}</button>
-                  <button type='button' className='hippomemo-pref-op hippomemo-pref-op-forget'
-                    onClick={() => { onAction('forget', item.id) }}>{t('prefForget')}</button>
+                  <Button size='sm' variant='ghost' className='hippomemo-pref-op'
+                    onClick={() => { onAction('revise', item.id) }}>{t('prefRevise')}</Button>
+                  <Button size='sm' variant='ghost' className='hippomemo-pref-op hippomemo-pref-op-forget'
+                    onClick={() => { onAction('forget', item.id) }}>{t('prefForget')}</Button>
                 </div>
               </li>
             );
@@ -518,7 +517,7 @@ function MemoryListPanel({ t, api, detailId, onDetail }: {
                     <span className='hippomemo-row-title'>{record.title}</span>
                     <span className='hippomemo-row-meta'>
                       {record.kind !== 'preference' ? (
-                        <span className={'hippomemo-kind-pill hippomemo-kind-' + record.kind}>{t(record.kind)}</span>
+                        <Pill className={'hippomemo-kind-pill hippomemo-kind-' + record.kind}>{t(record.kind)}</Pill>
                       ) : null}
                       {meta.map((part, index) => (
                         <span key={index}>
@@ -531,25 +530,28 @@ function MemoryListPanel({ t, api, detailId, onDetail }: {
                 </button>
                 <div className='hippomemo-row-actions'>
                   {record.kind === 'preference' ? (
-                    <span className='hippomemo-pill hippomemo-pill-preference'>
-                      <IconThinkOutline16 className='hippomemo-pill-icon' size={12} />
+                    <Pill className='hippomemo-pill hippomemo-pill-preference'>
+                      <IconThinkOutline16 size={12} />
                       {t('preference')}
-                    </span>
+                    </Pill>
                   ) : null}
                   {record.sourceSparkId !== undefined && record.sourceSparkId !== null && record.sourceSparkId.length > 0 ? (
                     <span className='hippomemo-row-spark' title={t('sourceSparkHint')}>
                       <IconBranchOutline16 size={14} />
                     </span>
                   ) : null}
-                  <button type='button' className='hippomemo-icon-btn' title={t('edit')} aria-label={t('edit')}
-                    onClick={() => { onDetail(record.id); }}><IconEditOutline16 size={14} /></button>
-                  <button type='button' className='hippomemo-icon-btn hippomemo-icon-btn-danger'
-                    title={t('delete')} aria-label={t('delete')}
+                  <Button size='sm' variant='ghost' title={t('edit')} aria-label={t('edit')}
+                    className='hippomemo-icon-btn'
+                    onClick={() => { onDetail(record.id); }}
+                    icon={<IconEditOutline16 size={14} />} />
+                  <Button size='sm' variant='ghost' title={t('delete')} aria-label={t('delete')}
+                    className='hippomemo-icon-btn hippomemo-icon-btn-danger'
                     onClick={async () => {
                       if (window.confirm(t('confirmDelete')) === false) return;
                       await api.remove(record.id);
                       reload();
-                    }}><IconTrashOutline16 size={14} /></button>
+                    }}
+                    icon={<IconTrashOutline16 size={14} />} />
                 </div>
               </div>
             );
@@ -700,25 +702,25 @@ function MemoryDetailModal({ api, t, id, refreshKey, onBack, onEdit, onDeleted }
         <h4 className='hippomemo-lineage-title'><IconBranchOutline16 size={14} /> {t('modalLineage')}</h4>
         {hasSpark ? (
           <div className='hippomemo-lineage-row'>
-            <span className='hippomemo-lineage-node hippomemo-lineage-spark'>
+            <Pill className='hippomemo-lineage-node hippomemo-lineage-spark'>
               {t('modalLineageSpark', { id: (record.sourceSparkId ?? '').slice(0, 8) })}
-            </span>
+            </Pill>
             <span className='hippomemo-lineage-arrow'>──结晶──▶</span>
-            <span className='hippomemo-lineage-node hippomemo-lineage-crystal'>
+            <Pill className='hippomemo-lineage-node hippomemo-lineage-crystal'>
               {t('modalLineageCrystallize', { kind: record.kind, importance: record.importance.toFixed(2) })}
-            </span>
+            </Pill>
             <span className='hippomemo-lineage-arrow'>──▶</span>
-            <span className='hippomemo-lineage-node hippomemo-lineage-hippo'>
+            <Pill className='hippomemo-lineage-node hippomemo-lineage-hippo'>
               {t('modalLineageMemory', { id: record.id.slice(0, 8) })}
-            </span>
+            </Pill>
           </div>
         ) : (
           <div className='hippomemo-lineage-row'>
-            <span className='hippomemo-lineage-node hippomemo-lineage-crystal'>{t('modalLineageDirect')}</span>
+            <Pill className='hippomemo-lineage-node hippomemo-lineage-crystal'>{t('modalLineageDirect')}</Pill>
             <span className='hippomemo-lineage-arrow'>──▶</span>
-            <span className='hippomemo-lineage-node hippomemo-lineage-hippo'>
+            <Pill className='hippomemo-lineage-node hippomemo-lineage-hippo'>
               {t('modalLineageMemory', { id: record.id.slice(0, 8) })}
-            </span>
+            </Pill>
           </div>
         )}
         <p className='hippomemo-lineage-note'>{hasSpark ? t('modalLineageSparkNote') : t('modalLineageDirectNote')}</p>
@@ -728,11 +730,12 @@ function MemoryDetailModal({ api, t, id, refreshKey, onBack, onEdit, onDeleted }
           <span className='hippomemo-related-label'>{t('related')}</span>
           <div className='hippomemo-related-list'>
             {related.map(item => (
-              <button type='button' key={item.id} className='hippomemo-related-item'
+              <Button key={item.id} size='sm' variant='ghost'
+                className='hippomemo-related-item'
                 onClick={() => { onEdit(item.id); }}>
                 <span className='hippomemo-related-title'>{item.title}</span>
                 <span className='hippomemo-related-meta'>{t(item.kind)} · {formatDate(item.updatedAt)}</span>
-              </button>
+              </Button>
             ))}
           </div>
         </div>

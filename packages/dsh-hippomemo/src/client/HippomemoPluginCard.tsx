@@ -69,7 +69,7 @@ function NumberField({ id, label, hint, state, disabled, invalidLabel, overridde
       <div className="hippomemo-card-field-foot">
         <p className="hippomemo-card-hint">{hint}</p>
         {state.overridden
-          ? <button type="button" className="hippomemo-card-reset" disabled={disabled} onClick={onReset}>{resetLabel}</button>
+          ? <Button size="sm" variant="ghost" className="hippomemo-card-reset" disabled={disabled} onClick={onReset}>{resetLabel}</Button>
           : null}
       </div>
     </div>
@@ -105,21 +105,18 @@ function ChoiceField({ id, label, hint, state, disabled, choices, invalidLabel, 
       <Input id={id} className="hippomemo-card-field-input" type="text" value={state.text} disabled={disabled} onChange={(event) => onEdit(event.currentTarget.value)} />
       <div className="hippomemo-card-choice-row">
         {choices.map(choice => (
-          <button
-            key={choice}
-            type="button"
-            className={state.text === choice ? 'hippomemo-card-choice hippomemo-card-choice-active' : 'hippomemo-card-choice'}
-            disabled={disabled}
-            onClick={() => onEdit(choice)}
-          >
+          <Pill key={choice}
+            active={state.text === choice}
+            className={'hippomemo-card-choice' + (state.text === choice ? ' hippomemo-card-choice-active' : '')}
+            onClick={() => { if (!disabled) onEdit(choice) }}>
             {choice}
-          </button>
+          </Pill>
         ))}
       </div>
       <div className="hippomemo-card-field-foot">
         <p className="hippomemo-card-hint">{hint}</p>
         {state.overridden
-          ? <button type="button" className="hippomemo-card-reset" disabled={disabled} onClick={onReset}>{resetLabel}</button>
+          ? <Button size="sm" variant="ghost" className="hippomemo-card-reset" disabled={disabled} onClick={onReset}>{resetLabel}</Button>
           : null}
       </div>
     </div>
