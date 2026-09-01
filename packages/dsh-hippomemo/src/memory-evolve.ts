@@ -269,6 +269,86 @@ export function planEvolution(records: readonly MemoryRecord[], options: EvolveO
 
   return actions
 }
+
+// ---------------------------------------------------------------------------
+// v3 UI candidate helpers (live, read-only): turn planEvolution actions into
+// UI-ready PendingCandidate rows, classified into one of four user-facing
+// quadrants. Pure functions; safe to call per HTTP request.
+// ---------------------------------------------------------------------------
+
+import type { CandidateKind, PendingCandidate } from './types.ts'
+
+/** Options that pin the candidate view to a single deterministic snapshot. */
+export interface CandidateViewOptions {
+  now: number
+  /** Minimum recall count to flag a record as observation (probe). */
+  observationMinRecalls?: number
+  /** Auto-decay window in ms; preferences whose lastSurfacedAt is older become 'preference-review'. */
+  preferenceDecayMs?: number
+}
+
+const DEFAULT_OBSERVATION_MIN_RECALLS = 5
+const DEFAULT_PREFERENCE_DECAY_MS = 30 * 24 * 60 * 60 * 1000
+
+/** Map an EvolveAction.action to the kind/category that the UI surfaces. */
+function classifyAction(action: EvolveActionType, opts: { nearDuplicate: boolean }): CandidateKind {
+  if (action === 'archive') return 'expired'
+  if (action === 'supersede' || action === 'link') return 'near-duplicate'
+  if (action === 'probation') return 'observation'
+  if (action === 'downgrade-scope') return 'preference-review'
+  // cancel-probation is informational; the UI never surfaces it as a candidate.
+  return 'observation'
+}
+
+/**
+ * Build the live candidate list for the v3 "needs my attention" quadrant.
+ * Equivalent to planEvolution() but returns UI-ready rows (one per record,
+ * classified by CandidateKind) and never mutates anything. The action's
+ * 'reason' is reused as the user-visible caption so candidates stay aligned
+ * with what the deterministic sweep would actually do.
+ */
+export function derivePendingCandidates(
+  records: readonly MemoryRecord[],
+  options: CandidateViewOptions,
+): { items: PendingCandidate[]; byKind: Record<CandidateKind, number> } {
+  const actions = planEvolution(records, {
+    now: options.now,
+    graceMs: 0,
+    decayMinRecalls: options.observationMinRecalls ?? DEFAULT_OBSERVATION_MIN_RECALLS,
+    probationMs: 30 * 24 * 60 * 60 * 1000,
+    dupTitleThreshold: 0.7,
+    maxConsolidations: 32,
+  })
+  const items: PendingCandidate[] = []
+  const byKind: Record<CandidateKind, number> = {
+    expired: 0,
+    'near-duplicate': 0,
+    observation: 0,
+    'preference-review': 0,
+  }
+  const lookup = new Map<string, MemoryRecord>()
+  for (const record of records) lookup.set(record.id, record)
+  for (const action of actions) {
+    if (action.action === 'cancel-probation') continue // never a candidate row
+    const record = lookup.get(action.id)
+    if (record === undefined) continue
+    const kind = classifyAction(action.action, { nearDuplicate: action.action === 'supersede' || action.action === 'link' })
+    byKind[kind] += 1
+    items.push({
+      id: record.id,
+      kind,
+      title: record.title,
+      reason: action.reason,
+      memoryKind: record.kind,
+      suggestedAction: action.action,
+      ...(action.targetId !== undefined ? { targetId: action.targetId } : {}),
+      importance: record.importance,
+      detectedAt: options.now,
+    })
+  }
+  return { items, byKind }
+}
+
 // ---------------------------------------------------------------------------
 // LLM review pass (pure framing/parsing; the model call itself lives in apply)
 // ---------------------------------------------------------------------------

@@ -13,7 +13,11 @@ import type {
   CitationInput, CitationListQuery, CitationListResult, CitationRecord,
   HippomemoChanged, MemoryId, MemoryListQuery, MemoryListResult, MemoryPatchInput,
   MemoryPutInput, MemoryRecord, MemorySearchResult, MemoryStats, MemoryUsageStats,
+  PendingCandidate, PendingCandidateListResult, PreferenceListQuery, PreferenceListResult,
+  PreferenceRecord, RecallNarrative,
 } from './types.ts'
+import { derivePendingCandidates } from './memory-evolve.ts'
+import { recencyDecay } from './relevance.ts'
 import { registerHippomemoHttpRoutes } from './http.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -253,6 +257,118 @@ export class MemoryService extends Service {
     return this.core.allTags()
   }
 
+  /**
+   * v3 UI: list preference-kind memories with derived auto/manual source and
+   * decay counters. Powers the dedicated "preference zone" panel. The result
+   * is stable-sorted by importance desc + updatedAt desc.
+   */
+  preferences(query: PreferenceListQuery = {}): PreferenceListResult {
+    const now = Date.now()
+    const list = this.core.list({
+      kind: 'preference',
+      status: query.source === undefined ? 'active' : 'active',
+      limit: 200,
+      sort: 'importance',
+      order: 'desc',
+    })
+    const items: PreferenceRecord[] = []
+    for (const record of list.items) {
+      const source: PreferenceRecord['source'] = detectPreferenceSource(record)
+      const decay = computePreferenceDecay(record, now)
+      if (query.decayFloor !== undefined && (decay === null || decay > query.decayFloor)) {
+        continue
+      }
+      if (query.source !== undefined && source !== query.source) {
+        continue
+      }
+      items.push({
+        id: record.id,
+        title: record.title,
+        content: record.content,
+        tags: record.tags,
+        source,
+        hitCount: record.recallCount,
+        lastSurfacedAt: record.lastRecalledAt,
+        decayPercent: decay,
+        // Author-set global preferences are durable until the user revises them;
+        // everything else keeps the current 30-day half-life behaviour.
+        confirmed: record.scope === 'global' && record.globalProven === true,
+        status: record.status,
+        updatedAt: record.updatedAt,
+      })
+    }
+    return { items, total: items.length }
+  }
+
+  /**
+   * v3 UI: live, read-only candidate list computed from the deterministic sweep.
+   * Mirrors the F11 design spec: derived from planEvolution() on every call,
+   * classified into one of four user-facing quadrants. No writes; resolution
+   * stays on the existing PATCH /records/:id path.
+   */
+  candidates(): PendingCandidateListResult {
+    const listed = this.core.list({ status: 'active', limit: 1000 })
+    const derived = derivePendingCandidates(listed.items, { now: Date.now() })
+    return {
+      items: derived.items,
+      byKind: derived.byKind,
+      total: derived.items.length,
+    }
+  }
+
+  /**
+   * v3 UI: synthesise one brain-strip narration row from existing data. Until
+   * the F10 recall-event table lands, this is the cheapest truthful proxy:
+   * - if there is a fresh citation, talk about the agent using a memory;
+   * - else if the latest preference was just saved, talk about it;
+   * - else summarise the most-recently-updated active memory.
+   * The `ts` is set to the underlying event time so the UI can retrigger the
+   * pulse animation only when something genuinely new happens.
+   */
+  recallNarrative(): RecallNarrative {
+    const usage = this.core.usage()
+    const lastCitation = this.citationLog.length > 0
+      ? this.citationLog.slice().sort((left, right) => right.ts - left.ts)[0]
+      : undefined
+    if (lastCitation !== undefined) {
+      const cited = this.core.get(lastCitation.memoryId)
+      if (cited !== undefined) {
+        const snippet = lastCitation.snippet !== undefined && lastCitation.snippet.length > 0
+          ? '“' + lastCitation.snippet.slice(0, 60) + '…”'
+          : '「' + cited.title.slice(0, 28) + '…」'
+        return {
+          text: '前额叶命中 1 条 · ' + snippet + ' · 这条记忆刚刚被引用。',
+          region: 'pfc',
+          ts: lastCitation.ts,
+          ...(snippet !== '' ? { snippet: lastCitation.snippet ?? '' } : {}),
+        }
+      }
+    }
+    const recentPreferences = this.core.list({ kind: 'preference', status: 'active', limit: 1, sort: 'updatedAt', order: 'desc' })
+    if (recentPreferences.items.length > 0) {
+      const preference = recentPreferences.items[0]!
+      return {
+        text: '杏仁核识别到 1 条偏好 · 命中率 ' + String(preference.recallCount) + '×。',
+        region: 'amy',
+        ts: preference.updatedAt,
+      }
+    }
+    const recent = this.core.list({ status: 'active', limit: 1, sort: 'updatedAt', order: 'desc' })
+    if (recent.items.length > 0) {
+      const memory = recent.items[0]!
+      return {
+        text: '记忆库已更新：最近写入「' + memory.title.slice(0, 24) + '…」 · 共 ' + String(usage.total) + ' 条。',
+        region: 'cortex',
+        ts: memory.updatedAt,
+      }
+    }
+    return {
+      text: '还没有沉淀的记忆。先建一条试试，或让 AI 自动写入。',
+      region: 'cortex',
+      ts: Date.now(),
+    }
+  }
+
   subscribe(listener: (change: HippomemoChanged) => void): () => void {
     this.listeners.add(listener)
     return () => { this.listeners.delete(listener) }
@@ -307,5 +423,46 @@ export class MemoryService extends Service {
     }
   }
 }
+
+// ---- preference-zone helpers (pure) ----
+
+const PREFERENCE_HALF_LIFE_DAYS = 30
+const PREFERENCE_DECAY_FLOOR = 40
+
+/**
+ * Heuristic for "is this preference user-declared or auto-mined": if the
+ * record carries an explicit `updatedBy: 'human'` author tag it is always
+ * manual; otherwise we treat an agent-written record that survived at least
+ * one recall as 'auto' (spark's valence miner is the producer). Defaults to
+ * 'manual' when uncertain so the UI never over-claims an automatic origin.
+ */
+function detectPreferenceSource(record: MemoryRecord): PreferenceRecord['source'] {
+  if (record.updatedBy === 'human') return 'manual'
+  if (record.updatedBy === 'agent') return 'auto'
+  // 'system' defaults: sourceSparkId present → auto crystallised from a spark
+  return record.sourceSparkId !== undefined && record.sourceSparkId !== null && record.sourceSparkId.length > 0
+    ? 'auto'
+    : 'manual'
+}
+
+/**
+ * Compute a 0..100 decay percent for the preference zone. Mirrors the
+ * existing recencyDecay curve but maps to a percentage and returns null when
+ * the preference is either freshly written or global-confirmed (no decay).
+ */
+function computePreferenceDecay(record: MemoryRecord, now: number): number | null {
+  if (record.scope === 'global' && record.globalProven === true) return null
+  const anchor = record.lastRecalledAt ?? record.updatedAt
+  const ageDays = Math.max(0, (now - anchor) / 86_400_000)
+  if (ageDays <= 0) return null
+  const raw = Math.pow(0.5, ageDays / PREFERENCE_HALF_LIFE_DAYS)
+  // recencyDecay is clamped to [floor, 1] — express the *lost* fraction so
+  // the UI can label "衰减中 60%" when raw dropped 0.40 below 1.0.
+  const decay = Math.max(PREFERENCE_DECAY_FLOOR / 100, raw)
+  const lost = Math.max(0, Math.min(100, Math.round((1 - decay) * 100)))
+  return lost === 0 ? null : lost
+}
+
+export { detectPreferenceSource, computePreferenceDecay }
 
 export default MemoryService

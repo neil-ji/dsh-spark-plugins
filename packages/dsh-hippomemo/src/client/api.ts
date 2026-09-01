@@ -3,6 +3,7 @@
 import type {
   CitationListQuery, CitationListResult, EvolveReport, MemoryListQuery, MemoryListResult,
   MemoryPatchInput, MemoryPutInput, MemoryRecord, MemoryStats, MemoryUsageStats,
+  PendingCandidateListResult, PreferenceListQuery, PreferenceListResult, RecallNarrative,
 } from '../types.ts'
 
 interface Envelope {
@@ -58,6 +59,14 @@ function citationQueryString(query: CitationListQuery = {}): string {
   return value.length > 0 ? '?' + value : ''
 }
 
+function preferenceQueryString(query: PreferenceListQuery = {}): string {
+  const params = new URLSearchParams()
+  if (query.decayFloor !== undefined) params.set('decayFloor', String(query.decayFloor))
+  if (query.source !== undefined) params.set('source', query.source)
+  const value = params.toString()
+  return value.length > 0 ? '?' + value : ''
+}
+
 export interface HippomemoApi {
   list(query?: MemoryListQuery): Promise<MemoryListResult>
   get(id: string): Promise<MemoryRecord | null>
@@ -70,6 +79,12 @@ export interface HippomemoApi {
   citations(query?: CitationListQuery): Promise<CitationListResult>
   evolveLast(): Promise<EvolveReport | null>
   evolveRun(dryRun: boolean): Promise<EvolveReport>
+  /** v3 UI: live preference zone (kind=preference with derived source + decay). */
+  preferences(query?: PreferenceListQuery): Promise<PreferenceListResult>
+  /** v3 UI: live pending candidates (F11 dry-run over the active set). */
+  candidates(): Promise<PendingCandidateListResult>
+  /** v3 UI: brain-strip narration row (F10-light fallback). */
+  narrative(): Promise<RecallNarrative>
   events(onChange: (event: { operation: string; id: string }) => void): () => void
 }
 
@@ -95,6 +110,9 @@ export function createHippomemoApi(): HippomemoApi {
       method: 'POST',
       body: JSON.stringify({ dryRun }),
     }),
+    preferences: query => request<PreferenceListResult>('/hippomemo/preferences' + preferenceQueryString(query)),
+    candidates: () => request<PendingCandidateListResult>('/hippomemo/candidates'),
+    narrative: () => request<RecallNarrative>('/hippomemo/narrative'),
     events: (onChange) => {
       const source = new EventSource('/hippomemo/events')
       source.onmessage = (event) => {

@@ -8,7 +8,9 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { MemoryService } from './memory-service.ts'
-import type { CitationListQuery, MemoryListQuery, MemoryPatchInput, MemoryPutInput } from './types.ts'
+import type {
+  CitationListQuery, MemoryListQuery, MemoryPatchInput, MemoryPutInput, PreferenceListQuery,
+} from './types.ts'
 
 const PREFIX = '/hippomemo'
 const MAX_BODY_BYTES = 256 * 1024
@@ -44,6 +46,26 @@ async function handle(req: IncomingMessage, res: ServerResponse, service: Memory
 
     if (req.method === 'GET' && sub === '/stats') {
       send(res, 200, okEnvelope(service.stats()))
+      return
+    }
+
+    // v3 UI: preference zone (live, read-only). The query mirrors the
+    // PreferenceListQuery shape; empty values are treated as undefined.
+    if (req.method === 'GET' && sub === '/preferences') {
+      const query = preferenceQueryFromUrl(url)
+      send(res, 200, okEnvelope(service.preferences(query)))
+      return
+    }
+
+    // v3 UI: live candidate list (F11 dry-run semantics over the active set).
+    if (req.method === 'GET' && sub === '/candidates') {
+      send(res, 200, okEnvelope(service.candidates()))
+      return
+    }
+
+    // v3 UI: brain-strip narration row (F10-light fallback).
+    if (req.method === 'GET' && sub === '/narrative') {
+      send(res, 200, okEnvelope(service.recallNarrative()))
       return
     }
 
@@ -134,6 +156,18 @@ function listQueryFromUrl(url: URL): MemoryListQuery {
   if (limit !== null) query.limit = Number(limit)
   const cursor = url.searchParams.get('cursor')
   if (cursor !== null) query.cursor = Number(cursor)
+  return query
+}
+
+function preferenceQueryFromUrl(url: URL): PreferenceListQuery {
+  const query: PreferenceListQuery = {}
+  const floor = url.searchParams.get('decayFloor')
+  if (floor !== null) {
+    const parsed = Number(floor)
+    if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 100) query.decayFloor = parsed
+  }
+  const source = url.searchParams.get('source')
+  if (source === 'auto' || source === 'manual') query.source = source
   return query
 }
 

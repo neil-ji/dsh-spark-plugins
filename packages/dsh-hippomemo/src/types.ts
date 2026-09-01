@@ -258,3 +258,96 @@ export interface EvolveReport {
   /** When the LLM review pass ran: which candidates were kept (not probated). */
   review?: EvolveReviewVerdict[]
 }
+
+// ---- v3 UI 偏好专区 ----
+
+/**
+ * One preference-kind memory surfaced in the dedicated preference zone.
+ * Carries derived hit/decay counters consumed by the UI; recall/citation
+ * counters come straight from MemoryRecord.
+ */
+export interface PreferenceRecord {
+  id: MemoryId
+  title: string
+  content: string
+  tags: string[]
+  /** 'auto' = 自动从语气强度挖（杏仁核/valence miner）; 'manual' = 用户直接声明. */
+  source: 'auto' | 'manual'
+  /** Times this preference was injected or matched; 0 means unused so far. */
+  hitCount: number
+  /** Last time the agent surfaced this preference, or null. */
+  lastSurfacedAt: number | null
+  /** 0..100; null = 未衰减. The auto-decayed view consumed in the UI. */
+  decayPercent: number | null
+  /** User has confirmed this preference is durable (rejects decay floor). */
+  confirmed: boolean
+  status: MemoryStatus
+  updatedAt: number
+}
+
+export interface PreferenceListQuery {
+  /** Only surface preferences whose decay has dropped under this percent. */
+  decayFloor?: number
+  /** Source filter; undefined = both. */
+  source?: PreferenceRecord['source']
+}
+
+export interface PreferenceListResult {
+  items: PreferenceRecord[]
+  total: number
+}
+
+// ---- v3 UI 待处理候选（F11 落地前的轻量版） ----
+
+/**
+ * Live candidate surfaced from the deterministic sweep: the existing
+ * planEvolution() outcome for the current record set, classified into one
+ * of the action quadrants the UI shows in the "needs my attention" panel.
+ * No writes happen on read; resolution still goes through PATCH on the
+ * underlying record.
+ */
+export type CandidateKind = 'expired' | 'near-duplicate' | 'observation' | 'preference-review'
+
+export interface PendingCandidate {
+  id: MemoryId
+  kind: CandidateKind
+  title: string
+  /** Free-text reason (human-readable). */
+  reason: string
+  /** Memory kind, surfaced for the pill. */
+  memoryKind: MemoryKind
+  /** Suggested action label from the corresponding EvolveAction. */
+  suggestedAction: EvolveActionType
+  /** For near-duplicate candidates, the winner id. */
+  targetId?: MemoryId
+  /** Importance (so the UI can sort within a kind). */
+  importance: number
+  /** When the candidate was first detected (now()). */
+  detectedAt: number
+}
+
+export interface PendingCandidateListResult {
+  items: PendingCandidate[]
+  /** Aggregated counts by kind for the brain-strip + header. */
+  byKind: Record<CandidateKind, number>
+  total: number
+}
+
+// ---- v3 UI 脑区旁白（F10 召回事件落地前的轻量版） ----
+
+/**
+ * Brain-strip narration row. Without the full F10 recall-event table the
+ * narrator is synthesised from the latest citation + current totals so the
+ * strip still animates against real events.
+ */
+export interface RecallNarrative {
+  /** Short caption shown in the brain strip footer. */
+  text: string
+  /** Region that should pulse when this narrative is rendered. */
+  region: 'pfc' | 'amy' | 'hippo' | 'cortex'
+  /** Epoch ms; UI uses this to decide whether to retrigger the pulse. */
+  ts: number
+  /** Optional citation snippet backing the narration. */
+  snippet?: string
+}
+
