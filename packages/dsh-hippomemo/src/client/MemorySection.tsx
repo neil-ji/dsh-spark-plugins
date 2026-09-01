@@ -357,8 +357,13 @@ export function MemorySection({ api, t }: MemorySectionProps): ReactNode {
                 <div className="hippomemo-row" key={record.id}>
                   <button type="button" className="hippomemo-row-main" onClick={() => { openDetail(record.id) }} title={record.title}>
                     <span className="hippomemo-row-title">{record.title}</span>
-                    <span className={'hippomemo-row-kind hippomemo-kind-' + record.kind}>{t(record.kind)}</span>
+                    <span className={'hippomemo-row-kind hippomemo-kind-' + record.kind}>
+                      {record.kind === 'preference' ? '⭐ ' : ''}{t(record.kind)}
+                    </span>
                     <span className="hippomemo-row-scope">{t(record.scope)}</span>
+                    {record.sourceSparkId !== undefined && record.sourceSparkId !== null && record.sourceSparkId.length > 0 ? (
+                      <span className="hippomemo-row-spark" title={t('sourceSparkHint')}>🔗</span>
+                    ) : null}
                     {record.scope === 'global' ? (
                       <span className={'hippomemo-row-proven hippomemo-proven-' + (record.globalProven ? 'yes' : 'no')}>
                         {record.globalProven ? t('proven') : t('unproven') + '·' + (record.seenWorkspaces?.length ?? 0)}
@@ -509,6 +514,24 @@ function MemoryCharts({ api, t, stats, reloadKey }: {
       .filter(row => row.value > 0)
   }, [stats])
 
+  // Phase 6.5 visibility: recall volume broken down by kind so the user can
+  // see at a glance which kind the cognitive filter is surfacing most. The
+  // (row|bar) chart here is read-only and reflects the allRecords window
+  // (last 200 by updatedAt desc) rather than the full corpus, so it is a
+  // taste signal, not a hard count.
+  const recallByKind = useMemo<ChartDatum[]>(() => {
+    if (allRecords.length === 0) return []
+    const sums = new Map<MemoryKind, number>()
+    for (const record of allRecords) {
+      const recall = record.recallCount ?? 0
+      if (recall <= 0) continue
+      sums.set(record.kind, (sums.get(record.kind) ?? 0) + recall)
+    }
+    return KINDS
+      .map(kind => ({ key: kind, label: t(kind), value: sums.get(kind) ?? 0 }))
+      .filter(row => row.value > 0)
+  }, [allRecords, t])
+
   const statusRows = useMemo<ChartDatum[]>(() => {
     if (stats === null) return []
     const counts: Record<string, number> = {
@@ -591,6 +614,20 @@ function MemoryCharts({ api, t, stats, reloadKey }: {
         )}
       </section>
 
+      <section className="hippomemo-chart-card">
+        <div className="hippomemo-chart-title">{t('chartRecallByKindTitle')}</div>
+        {recallByKind.length === 0 ? (
+          <p className="hippomemo-empty">{t('chartNoData')}</p>
+        ) : (
+          <BarChart
+            rows={recallByKind}
+            ariaLabel={t('chartRecallByKindTitle')}
+            formatValue={value => String(value)}
+            axisFormatter={value => String(Math.round(value))}
+          />
+        )}
+      </section>
+
       <section className="hippomemo-chart-card hippomemo-chart-card-wide">
         <div className="hippomemo-chart-title">{t('chartCitationsTrendTitle')}</div>
         {trendPoints.length < 2 ? (
@@ -623,6 +660,9 @@ function EvolvePanel({ api, t }: { api: HippomemoApi; t: Translate }): ReactNode
   const [report, setReport] = useState<EvolveReport | null>(null)
   const [running, setRunning] = useState(false)
   const [error, setError] = useState('')
+  // kind[id] so each action/verdict row can render the affected memory's kind
+  // pill without N round-trips per render.
+  const [kindMap, setKindMap] = useState<Map<string, MemoryKind>>(new Map())
 
   const load = async (): Promise<void> => {
     try {
@@ -641,6 +681,35 @@ function EvolvePanel({ api, t }: { api: HippomemoApi; t: Translate }): ReactNode
     })
     return () => { current = false }
   }, [api])
+
+  // Resolve the kind of every memory referenced in the report. Distinct ids
+  // only — even a 200-action sweep batches into at most a couple of dozen
+  // GET calls. Failures stay silent; the kind column simply shows "—".
+  useEffect(() => {
+    if (report === null) {
+      setKindMap(new Map())
+      return
+    }
+    const ids = new Set<string>()
+    for (const action of report.actions) ids.add(action.id)
+    if (report.review !== undefined) for (const verdict of report.review) ids.add(verdict.id)
+    if (ids.size === 0) return
+    let current = true
+    void Promise.all([...ids].map(async id => {
+      try {
+        const record = await api.get(id)
+        return record === null ? null : [id, record.kind] as const
+      } catch {
+        return null
+      }
+    })).then(entries => {
+      if (current === false) return
+      const next = new Map<string, MemoryKind>()
+      for (const entry of entries) if (entry !== null) next.set(entry[0], entry[1])
+      setKindMap(next)
+    })
+    return () => { current = false }
+  }, [api, report])
 
   const run = async (dryRun: boolean): Promise<void> => {
     setRunning(true)
@@ -684,28 +753,36 @@ function EvolvePanel({ api, t }: { api: HippomemoApi; t: Translate }): ReactNode
           {report.review !== undefined && report.review.length > 0 ? (
             <div className="hippomemo-evolve-review">
               <div className="hippomemo-evolve-block-title">{t('evolveReviewedLabel')}</div>
-              {report.review.map(verdict => (
+              {report.review.map(verdict => {
+                const kind = kindMap.get(verdict.id)
+                return (
                 <div className="hippomemo-evolve-verdict" key={verdict.id}>
                   <Pill className={'hippomemo-verdict-' + verdict.verdict}>
                     {verdict.verdict === 'keep' ? t('evolveKeep') : t('evolveNoise')}
                   </Pill>
+                  <Pill className={'hippomemo-evolve-kind hippomemo-kind-' + (kind ?? 'unknown')}>{kind === undefined ? '—' : t(kind)}</Pill>
                   <span className="hippomemo-evolve-verdict-id">{verdict.id.slice(0, 8)}</span>
                   {verdict.reason !== undefined ? <span className="hippomemo-evolve-verdict-reason">{verdict.reason}</span> : null}
                 </div>
-              ))}
+                )
+              })}
             </div>
           ) : null}
 
           {report.actions.length > 0 ? (
             <div className="hippomemo-evolve-actions">
               <div className="hippomemo-evolve-block-title">{t('evolveActionsLabel')}</div>
-              {report.actions.map(action => (
+              {report.actions.map(action => {
+                const kind = kindMap.get(action.id)
+                return (
                 <div className="hippomemo-evolve-action" key={action.id + action.action}>
                   <Pill className={'hippomemo-action-' + action.action}>{t(ACTION_LABELS[action.action])}</Pill>
+                  <Pill className={'hippomemo-evolve-kind hippomemo-kind-' + (kind ?? 'unknown')}>{kind === undefined ? '—' : t(kind)}</Pill>
                   <span className="hippomemo-evolve-action-id">{action.id.slice(0, 8)}</span>
                   <span className="hippomemo-evolve-action-reason">{action.reason}</span>
                 </div>
-              ))}
+                )
+              })}
             </div>
           ) : (
             <p className="hippomemo-empty">—</p>
@@ -802,7 +879,7 @@ function MemoryDetail({ api, t, id, refreshKey, onBack, onEdit, onChanged, onDel
       <div className="hippomemo-detail-head">
         <h3 className="hippomemo-detail-title">{record.title}</h3>
         <div className="hippomemo-detail-pills">
-          <Pill className={'hippomemo-kind-pill hippomemo-kind-' + record.kind}>{t(record.kind)}</Pill>
+          <Pill className={'hippomemo-kind-pill hippomemo-kind-' + record.kind}>{record.kind === 'preference' ? '⭐ ' : ''}{t(record.kind)}</Pill>
           <Pill className="hippomemo-scope-pill">{t(record.scope)}</Pill>
           {record.scope === 'global' ? (
             <Pill className={'hippomemo-proven-pill hippomemo-proven-' + (record.globalProven ? 'yes' : 'no')}>
@@ -837,6 +914,16 @@ function MemoryDetail({ api, t, id, refreshKey, onBack, onEdit, onChanged, onDel
           <dt>{t('sourceSession')}</dt>
           <dd>{record.sourceSessionId}</dd>
         </div>
+        {record.sourceSparkId !== undefined && record.sourceSparkId !== null && record.sourceSparkId.length > 0 ? (
+          <div className="hippomemo-fact hippomemo-fact-spark">
+            <dt>{t('sourceSpark')}</dt>
+            <dd>
+              <Pill className="hippomemo-source-spark-pill" title={t('sourceSparkHint')}>
+                🔗 {t('sourceSparkBadge')}: <code className="hippomemo-source-spark-id">{record.sourceSparkId.slice(0, 8)}</code>
+              </Pill>
+            </dd>
+          </div>
+        ) : null}
         <div className="hippomemo-fact">
           <dt>{t('createdAt')}</dt>
           <dd>{formatDate(record.createdAt)}</dd>

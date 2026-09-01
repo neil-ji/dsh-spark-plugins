@@ -69,6 +69,8 @@ const memoryRecord = z.object({
   lastRecalledAt: z.number().nullable().default(null),
   citationCount: z.number().int().nonnegative().default(0),
   lastCitedAt: z.number().nullable().default(null),
+  /** Provenance: id of the spark crystallized into this memory (Phase 2 reverse link). Optional; null for memories not from a spark. */
+  sourceSparkId: z.string().nullable().default(null),
 }) satisfies z.ZodType<MemoryRecord>
 
 const citationRecord = z.object({

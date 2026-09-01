@@ -17,7 +17,7 @@ import type {} from './memory-service.ts'
 import type { MemoryRecord } from './types.ts'
 import { neutralizeFences } from './memory-extract.ts'
 import { filterAutoInjection } from './memory-core.ts'
-import { filterByRelevance } from './relevance.ts'
+import { filterByRelevanceAdjusted } from './relevance.ts'
 
 export const name = 'hippomemo-context'
 export const inject = ['agents', 'memory']
@@ -97,7 +97,10 @@ export function apply(ctx: Context, config: HippomemoContextConfig = {}): void {
     // sessions — the alternative is a silent failure that misleads the user.
     let filtered = injectable
     if (isCognitive) {
-      filtered = filterByRelevance(injectable, query, recallConfig.cognitiveRelevanceThreshold)
+      // Phase 6.5: cognitive-adjusted score boosts preference kind matches and
+      // applies a 30-day half-life recency decay (floor 40%) so mined
+      // preferences stay actionable but stale ones don't drown out fresh hits.
+      filtered = filterByRelevanceAdjusted(injectable, query, recallConfig.cognitiveRelevanceThreshold)
       if (filtered.length === 0 && injectable.length > 0) {
         filtered = [injectable[0]!]
       }

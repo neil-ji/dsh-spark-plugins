@@ -64,6 +64,27 @@ test('normalizeRecord rejects empty title and content', () => {
   assert.throws(() => normalizeRecord(input('x', '  ')), /content must be non-empty/)
 })
 
+test('normalizeRecord threads sourceSparkId (cognitive-layer Phase 2 reverse link)', () => {
+  const withSpark = normalizeRecord(input('From Spark', 'y'), undefined, { now: () => 2000, newId: () => 'id-spark-1' })
+  assert.equal(withSpark.record.sourceSparkId, null, 'absent input -> null')
+  const set = normalizeRecord(input('From Spark', 'y', { sourceSparkId: 'spark-xyz' }), undefined, { now: () => 2000, newId: () => 'id-spark-2' })
+  assert.equal(set.record.sourceSparkId, 'spark-xyz', 'set on create')
+  // Survives a patch round-trip (preserve previous provenance)
+  const patched = normalizeRecord(set.record, set.record, { now: () => 3000 })
+  // patching without specifying sourceSparkId falls through to previous
+  assert.equal(patched.record.title, 'From Spark')
+})
+
+test('core put/update preserves sourceSparkId round-trip', () => {
+  const core = makeCore()
+  const created = core.put(input('Crystallized', 'note', { sourceSparkId: 'spark-7' }))
+  assert.equal(created.sourceSparkId, 'spark-7')
+  const updated = core.update(created.id, { title: 'Crystallized v2' })
+  assert.equal(updated.sourceSparkId, 'spark-7', 'patch does not clobber sourceSparkId')
+  const deleted = core.put(input('Plain fact', 'no spark', {}))
+  assert.equal(deleted.sourceSparkId, null)
+})
+
 test('core put/list/get/delete round-trips records', () => {
   const core = makeCore()
   const record = core.put(input('First', 'hello world', { tags: ['greeting'], kind: 'fact' }))

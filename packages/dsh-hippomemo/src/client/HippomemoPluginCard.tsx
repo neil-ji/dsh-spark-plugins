@@ -15,7 +15,15 @@ import type { StagedSettingsCardState, StagedCardActions } from 'dsh-spark-plugi
 import type { HippomemoLocaleKey } from './locales.ts'
 
 /** Card fields edited by this plugin (hippomemo settings namespace). */
-export type HippomemoCardFieldName = 'maxMemories' | 'defaultRecallLimit' | 'maxRecallChars'
+export type HippomemoCardFieldName =
+  | 'maxMemories'
+  | 'defaultRecallLimit'
+  | 'maxRecallChars'
+  | 'recallMode'
+  | 'cognitiveRelevanceThreshold'
+  | 'cognitiveRecallMultiplier'
+
+const RECALL_MODE_CHOICES = ['firehose', 'cognitive'] as const
 
 /** Selector hook the slot renderer synthesizes from the injected store. */
 export type HippomemoCardHook = <S>(selector: (snapshot: StagedSettingsCardState) => S) => S
@@ -58,6 +66,56 @@ function NumberField({ id, label, hint, state, disabled, invalidLabel, overridde
         </span>
       </div>
       <Input id={id} className="hippomemo-card-field-input" type="text" inputMode="numeric" value={state.text} disabled={disabled} onChange={(event) => onEdit(event.currentTarget.value)} />
+      <div className="hippomemo-card-field-foot">
+        <p className="hippomemo-card-hint">{hint}</p>
+        {state.overridden
+          ? <button type="button" className="hippomemo-card-reset" disabled={disabled} onClick={onReset}>{resetLabel}</button>
+          : null}
+      </div>
+    </div>
+  )
+}
+
+/** One labelled choice control: text input + inline buttons for the valid choices.
+ * Free-text typing is allowed (and the staged parser rejects values outside the
+ * choices), so the same `text` shape from the staged card flows through and
+ * the override/invalid badges still apply uniformly. */
+function ChoiceField({ id, label, hint, state, disabled, choices, invalidLabel, overriddenLabel, resetLabel, onEdit, onReset }: {
+  id: string
+  label: string
+  hint: string
+  state: { text: string; overridden: boolean; invalid: boolean }
+  disabled: boolean
+  choices: readonly string[]
+  invalidLabel: string
+  overriddenLabel: string
+  resetLabel: string
+  onEdit: (text: string) => void
+  onReset: () => void
+}): ReactNode {
+  return (
+    <div className="hippomemo-card-field">
+      <div className="hippomemo-card-field-head">
+        <label className="hippomemo-card-field-label" htmlFor={id}>{label}</label>
+        <span className="hippomemo-card-field-badges">
+          {state.overridden ? <Pill>{overriddenLabel}</Pill> : null}
+          {state.invalid ? <Pill>{invalidLabel}</Pill> : null}
+        </span>
+      </div>
+      <Input id={id} className="hippomemo-card-field-input" type="text" value={state.text} disabled={disabled} onChange={(event) => onEdit(event.currentTarget.value)} />
+      <div className="hippomemo-card-choice-row">
+        {choices.map(choice => (
+          <button
+            key={choice}
+            type="button"
+            className={state.text === choice ? 'hippomemo-card-choice hippomemo-card-choice-active' : 'hippomemo-card-choice'}
+            disabled={disabled}
+            onClick={() => onEdit(choice)}
+          >
+            {choice}
+          </button>
+        ))}
+      </div>
       <div className="hippomemo-card-field-foot">
         <p className="hippomemo-card-hint">{hint}</p>
         {state.overridden
@@ -121,6 +179,44 @@ function HippomemoCardBody({ t, state, onEdit, onReset, onSave, onDiscard }: {
         resetLabel={t('cardReset')}
         onEdit={(text) => onEdit('maxRecallChars', text)}
         onReset={() => onReset('maxRecallChars')}
+      />
+
+      <ChoiceField
+        id="plugin-config-hippomemo-recall-mode"
+        label={t('cardRecallMode')}
+        hint={t('cardRecallModeHint')}
+        state={field('recallMode')}
+        disabled={disabled}
+        choices={RECALL_MODE_CHOICES}
+        invalidLabel={t('cardInvalidChoice')}
+        overriddenLabel={t('cardOverridden')}
+        resetLabel={t('cardReset')}
+        onEdit={(text) => onEdit('recallMode', text)}
+        onReset={() => onReset('recallMode')}
+      />
+      <NumberField
+        id="plugin-config-hippomemo-cognitive-threshold"
+        label={t('cardCognitiveThreshold')}
+        hint={t('cardCognitiveThresholdHint')}
+        state={field('cognitiveRelevanceThreshold')}
+        disabled={disabled}
+        invalidLabel={t('cardInvalidNumber')}
+        overriddenLabel={t('cardOverridden')}
+        resetLabel={t('cardReset')}
+        onEdit={(text) => onEdit('cognitiveRelevanceThreshold', text)}
+        onReset={() => onReset('cognitiveRelevanceThreshold')}
+      />
+      <NumberField
+        id="plugin-config-hippomemo-cognitive-multiplier"
+        label={t('cardCognitiveMultiplier')}
+        hint={t('cardCognitiveMultiplierHint')}
+        state={field('cognitiveRecallMultiplier')}
+        disabled={disabled}
+        invalidLabel={t('cardInvalidNumber')}
+        overriddenLabel={t('cardOverridden')}
+        resetLabel={t('cardReset')}
+        onEdit={(text) => onEdit('cognitiveRecallMultiplier', text)}
+        onReset={() => onReset('cognitiveRecallMultiplier')}
       />
 
       <div className="hippomemo-card-footer">

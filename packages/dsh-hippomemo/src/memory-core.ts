@@ -117,6 +117,7 @@ function completeRecord(record: MemoryRecord): MemoryRecord {
   if (record.lastCitedAt === undefined) record.lastCitedAt = null
   if (record.globalProven === undefined) record.globalProven = false
   if (record.seenWorkspaces === undefined) record.seenWorkspaces = []
+  if (record.sourceSparkId === undefined) record.sourceSparkId = null
   return record
 }
 
@@ -206,6 +207,10 @@ export function normalizeRecord(input: MemoryPutInput, previous?: MemoryRecord, 
     sourceSessionId: input.sourceSessionId ?? previous?.sourceSessionId ?? 'user',
     ...(input.sourceAgentId !== undefined || previous?.sourceAgentId !== undefined ? { sourceAgentId: input.sourceAgentId ?? previous?.sourceAgentId } : {}),
     ...(input.sourceTurn !== undefined || previous?.sourceTurn !== undefined ? { sourceTurn: input.sourceTurn ?? previous?.sourceTurn } : {}),
+    // Provenance: set only at create or via MemoryPatchInput round-trip; normalizeRecord
+    // threads it from input or previous so an existing crystallized memory survives
+    // a patch round-trip without losing its spark origin.
+    sourceSparkId: input.sourceSparkId === undefined ? previous?.sourceSparkId ?? null : input.sourceSparkId,
     revision,
     updatedBy: input.updatedBy ?? previous?.updatedBy ?? 'system',
     supersedes: input.supersedes === undefined ? previous?.supersedes ?? null : input.supersedes,
