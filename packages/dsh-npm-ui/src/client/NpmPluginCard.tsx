@@ -6,7 +6,7 @@
  */
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button, Input, Pill, Textarea } from 'dsh-ui-kit'
+import { Button, Input, Pill, SettingsCardHeader, Textarea } from 'dsh-ui-kit'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import { textCardField } from 'dsh-spark-plugin-kit/client'
 import type { CardFieldSpec, CardFieldWrite, StagedSettingsCardState, StagedCardActions } from 'dsh-spark-plugin-kit/client'
@@ -164,20 +164,15 @@ export function NpmPluginCard(props: NpmPluginCardProps): ReactNode {
 
   return (
     <li className={open ? styles.card + ' ' + styles.cardOpen : styles.card}>
-      <button
-        type="button"
-        className={styles.header}
-        aria-expanded={open}
-        aria-label={(open ? t('cardCollapse') : t('cardExpand')) + ': ' + t('cardTitle')}
-        onClick={() => setOpen(!open)}
-      >
-        <span className={styles.headText}>
-          <span className={styles.name}>{t('cardTitle')}</span>
-          <span className={styles.description}>{t('cardDescription')}</span>
-        </span>
-        {state.shell.dirty ? <span className={styles.pending}>{t('cardUnsaved')}</span> : null}
-        <span className={open ? styles.chevron + ' ' + styles.chevronOpen : styles.chevron} aria-hidden="true" />
-      </button>
+      <SettingsCardHeader
+        title={t('cardTitle')}
+        description={t('cardDescription')}
+        open={open}
+        onToggle={() => setOpen(!open)}
+        trailing={state.shell.dirty ? <span className={styles.pending}>{t('cardUnsaved')}</span> : null}
+        expandLabel={t('cardExpand')}
+        collapseLabel={t('cardCollapse')}
+      />
       {!open ? null : (
         <NpmCardBody
           t={t}

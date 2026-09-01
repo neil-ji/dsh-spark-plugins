@@ -14,7 +14,7 @@
 
 import { useEffect, useState } from 'react'
 import type { SnapshotSelectorHook } from 'dsh-spark-plugin-kit/client'
-import { Button, Input, Pill, SegmentedControl, Textarea } from 'dsh-ui-kit'
+import { Button, Input, Pill, SegmentedControl, SettingsCardHeader, Textarea } from 'dsh-ui-kit'
 import { ProviderDefaultsEditor, PriceTableEditor, RateFields } from './PriceEditors.tsx'
 import { ProviderListView } from './ProviderListView.tsx'
 import type { PriceTableDraft, ProviderDefaultsDraft, RateDraft } from './price-forms.ts'
@@ -397,20 +397,15 @@ export function FinanceCard(props: FinanceCardProps) {
 
   return (
     <li className={open ? `${css.card} ${css.cardOpen}` : css.card}>
-      <button
-        type="button"
-        className={css.header}
-        aria-expanded={open}
-        aria-label={`${t(open ? 'cardCollapse' : 'cardExpand')}: ${t('cardTitle')}`}
-        onClick={() => setOpen(!open)}
-      >
-        <span className={css.headText}>
-          <span className={css.name}>{t('cardTitle')}</span>
-          <span className={css.description}>{t('cardDescription')}</span>
-        </span>
-        {state.dirty ? <span className={css.pending}>{t('unsaved')}</span> : null}
-        <span className={open ? `${css.chevron} ${css.chevronOpen}` : css.chevron} aria-hidden="true" />
-      </button>
+      <SettingsCardHeader
+        title={t('cardTitle')}
+        description={t('cardDescription')}
+        open={open}
+        onToggle={() => setOpen(!open)}
+        trailing={state.dirty ? <span className={css.pending}>{t('unsaved')}</span> : null}
+        expandLabel={t('cardExpand')}
+        collapseLabel={t('cardCollapse')}
+      />
       {!open ? null : (
         <FinanceCardBody
           t={t}

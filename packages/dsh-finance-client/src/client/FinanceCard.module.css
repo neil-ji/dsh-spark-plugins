@@ -20,48 +20,6 @@
   border-color: var(--dsw-alias-label-dimmed);
 }
 
-.header {
-  appearance: none;
-  width: 100%;
-  font: inherit;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-  background: none;
-  border: 0;
-  border-radius: 12px;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  display: flex;
-}
-
-.header:focus-visible {
-  outline: 2px solid var(--dsw-alias-brand-primary);
-  outline-offset: -2px;
-}
-
-.headText {
-  flex-direction: column;
-  flex: 1;
-  gap: 4px;
-  min-width: 0;
-  display: flex;
-}
-
-.name {
-  color: var(--dsw-alias-label-primary);
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.4;
-}
-
-.description {
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 13px;
-  line-height: 1.5;
-}
-
 .pending {
   white-space: nowrap;
   background: var(--dsw-alias-bg-module-platform);
@@ -72,21 +30,6 @@
   font-size: 11px;
   font-weight: 500;
   line-height: 17px;
-}
-
-.chevron {
-  color: var(--dsw-alias-label-tertiary);
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-right: 1.6px solid currentColor;
-  border-bottom: 1.6px solid currentColor;
-  transform: rotate(45deg);
-  transition: transform .16s;
-}
-
-.chevronOpen {
-  transform: rotate(225deg);
 }
 
 .body {

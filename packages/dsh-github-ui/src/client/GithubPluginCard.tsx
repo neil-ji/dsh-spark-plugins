@@ -12,7 +12,7 @@
  */
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button, Checkbox, Input, Pill, SegmentedControl } from 'dsh-ui-kit'
+import { Button, Checkbox, Input, Pill, SegmentedControl, SettingsCardHeader } from 'dsh-ui-kit'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import { booleanCardField, choiceCardField, textCardField } from 'dsh-spark-plugin-kit/client'
 import type { CardFieldSpec, StagedSettingsCardState, StagedCardActions } from 'dsh-spark-plugin-kit/client'
@@ -246,20 +246,15 @@ export function GithubPluginCard(props: GithubPluginCardProps): ReactNode {
 
   return (
     <li className={open ? styles.card + ' ' + styles.cardOpen : styles.card}>
-      <button
-        type="button"
-        className={styles.header}
-        aria-expanded={open}
-        aria-label={(open ? t('cardCollapse') : t('cardExpand')) + ': ' + t('cardTitle')}
-        onClick={() => setOpen(!open)}
-      >
-        <span className={styles.headText}>
-          <span className={styles.name}>{t('cardTitle')}</span>
-          <span className={styles.description}>{t('cardDescription')}</span>
-        </span>
-        {state.shell.dirty ? <span className={styles.pending}>{t('cardUnsaved')}</span> : null}
-        <span className={open ? styles.chevron + ' ' + styles.chevronOpen : styles.chevron} aria-hidden="true" />
-      </button>
+      <SettingsCardHeader
+        title={t('cardTitle')}
+        description={t('cardDescription')}
+        open={open}
+        onToggle={() => setOpen(!open)}
+        trailing={state.shell.dirty ? <span className={styles.pending}>{t('cardUnsaved')}</span> : null}
+        expandLabel={t('cardExpand')}
+        collapseLabel={t('cardCollapse')}
+      />
       {!open ? null : (
         <GithubCardBody
           t={t}
