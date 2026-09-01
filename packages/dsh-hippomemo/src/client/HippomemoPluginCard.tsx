@@ -198,42 +198,42 @@ function HippomemoCardBody({ t, state, advancedOpen, onToggleAdvanced, onEdit, o
       >
         <div className="hippomemo-card-advanced-body">
           <ChoiceField
-              id="plugin-config-hippomemo-recall-mode"
-              label={t('cardRecallMode')}
-              hint={t('cardRecallModeHint')}
-              state={field('recallMode')}
-              disabled={disabled}
-              choices={RECALL_MODE_CHOICES}
-              invalidLabel={t('cardInvalidChoice')}
-              overriddenLabel={t('cardOverridden')}
-              resetLabel={t('cardReset')}
-              onEdit={(text) => onEdit('recallMode', text)}
-              onReset={() => onReset('recallMode')}
-            />
-            <NumberField
-              id="plugin-config-hippomemo-cognitive-threshold"
-              label={t('cardCognitiveThreshold')}
-              hint={t('cardCognitiveThresholdHint')}
-              state={field('cognitiveRelevanceThreshold')}
-              disabled={disabled}
-              invalidLabel={t('cardInvalidNumber')}
-              overriddenLabel={t('cardOverridden')}
-              resetLabel={t('cardReset')}
-              onEdit={(text) => onEdit('cognitiveRelevanceThreshold', text)}
-              onReset={() => onReset('cognitiveRelevanceThreshold')}
-            />
-            <NumberField
-              id="plugin-config-hippomemo-cognitive-multiplier"
-              label={t('cardCognitiveMultiplier')}
-              hint={t('cardCognitiveMultiplierHint')}
-              state={field('cognitiveRecallMultiplier')}
-              disabled={disabled}
-              invalidLabel={t('cardInvalidNumber')}
-              overriddenLabel={t('cardOverridden')}
-              resetLabel={t('cardReset')}
-              onEdit={(text) => onEdit('cognitiveRecallMultiplier', text)}
-              onReset={() => onReset('cognitiveRecallMultiplier')}
-            />
+            id="plugin-config-hippomemo-recall-mode"
+            label={t('cardRecallMode')}
+            hint={t('cardRecallModeHint')}
+            state={field('recallMode')}
+            disabled={disabled}
+            choices={RECALL_MODE_CHOICES}
+            invalidLabel={t('cardInvalidChoice')}
+            overriddenLabel={t('cardOverridden')}
+            resetLabel={t('cardReset')}
+            onEdit={(text) => onEdit('recallMode', text)}
+            onReset={() => onReset('recallMode')}
+          />
+          <NumberField
+            id="plugin-config-hippomemo-cognitive-threshold"
+            label={t('cardCognitiveThreshold')}
+            hint={t('cardCognitiveThresholdHint')}
+            state={field('cognitiveRelevanceThreshold')}
+            disabled={disabled}
+            invalidLabel={t('cardInvalidNumber')}
+            overriddenLabel={t('cardOverridden')}
+            resetLabel={t('cardReset')}
+            onEdit={(text) => onEdit('cognitiveRelevanceThreshold', text)}
+            onReset={() => onReset('cognitiveRelevanceThreshold')}
+          />
+          <NumberField
+            id="plugin-config-hippomemo-cognitive-multiplier"
+            label={t('cardCognitiveMultiplier')}
+            hint={t('cardCognitiveMultiplierHint')}
+            state={field('cognitiveRecallMultiplier')}
+            disabled={disabled}
+            invalidLabel={t('cardInvalidNumber')}
+            overriddenLabel={t('cardOverridden')}
+            resetLabel={t('cardReset')}
+            onEdit={(text) => onEdit('cognitiveRecallMultiplier', text)}
+            onReset={() => onReset('cognitiveRecallMultiplier')}
+          />
         </div>
       </DisclosureRow>
 
@@ -257,29 +257,32 @@ export function HippomemoPluginCard(props: HippomemoPluginCardProps): ReactNode 
   return (
     <div data-plugin="dsh-hippomemo">
       <li className={open ? 'hippomemo-card hippomemo-card-open' : 'hippomemo-card'}>
-      <DisclosureRow
-        icon={<IconThinkOutline16 />}
-        className="hippomemo-card-header"
-        rowClassName="hippomemo-card-header-inner"
-        leadingClassName="hippomemo-card-chev"
-        title={t('cardTitle')}
-        description={t('cardDescription')}
-        open={open}
-        expandable
-        onToggle={() => setOpen(!open)}
-        trailing={state.shell.dirty ? <span className="hippomemo-card-pending">{t('cardUnsaved')}</span> : null}
-      >
-        <HippomemoCardBody
-          t={t}
-          state={state}
-          advancedOpen={advancedOpen}
-          onToggleAdvanced={() => setAdvancedOpen(!advancedOpen)}
-          onEdit={props.edit}
-          onReset={props.resetField}
-          onSave={props.save}
-          onDiscard={props.discard}
-        />
-      </DisclosureRow>
+        <button
+          type="button"
+          className="hippomemo-card-header"
+          aria-expanded={open}
+          aria-label={(open ? t('cardCollapse') : t('cardExpand')) + ': ' + t('cardTitle')}
+          onClick={() => setOpen(!open)}
+        >
+          <span className="hippomemo-card-head-text">
+            <span className="hippomemo-card-name">{t('cardTitle')}</span>
+            <span className="hippomemo-card-description">{t('cardDescription')}</span>
+          </span>
+          {state.shell.dirty ? <span className="hippomemo-card-pending">{t('cardUnsaved')}</span> : null}
+          <span className={open ? 'hippomemo-card-chev hippomemo-card-chev-open' : 'hippomemo-card-chev'} aria-hidden="true" />
+        </button>
+        {open ? (
+          <HippomemoCardBody
+            t={t}
+            state={state}
+            advancedOpen={advancedOpen}
+            onToggleAdvanced={() => setAdvancedOpen(!advancedOpen)}
+            onEdit={props.edit}
+            onReset={props.resetField}
+            onSave={props.save}
+            onDiscard={props.discard}
+          />
+        ) : null}
       </li>
     </div>
   )

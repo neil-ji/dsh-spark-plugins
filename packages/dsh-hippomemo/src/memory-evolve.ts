@@ -283,15 +283,12 @@ export interface CandidateViewOptions {
   now: number
   /** Minimum recall count to flag a record as observation (probe). */
   observationMinRecalls?: number
-  /** Auto-decay window in ms; preferences whose lastSurfacedAt is older become 'preference-review'. */
-  preferenceDecayMs?: number
 }
 
 const DEFAULT_OBSERVATION_MIN_RECALLS = 5
-const DEFAULT_PREFERENCE_DECAY_MS = 30 * 24 * 60 * 60 * 1000
 
 /** Map an EvolveAction.action to the kind/category that the UI surfaces. */
-function classifyAction(action: EvolveActionType, opts: { nearDuplicate: boolean }): CandidateKind {
+function classifyAction(action: EvolveActionType): CandidateKind {
   if (action === 'archive') return 'expired'
   if (action === 'supersede' || action === 'link') return 'near-duplicate'
   if (action === 'probation') return 'observation'
@@ -332,7 +329,7 @@ export function derivePendingCandidates(
     if (action.action === 'cancel-probation') continue // never a candidate row
     const record = lookup.get(action.id)
     if (record === undefined) continue
-    const kind = classifyAction(action.action, { nearDuplicate: action.action === 'supersede' || action.action === 'link' })
+    const kind = classifyAction(action.action)
     byKind[kind] += 1
     items.push({
       id: record.id,

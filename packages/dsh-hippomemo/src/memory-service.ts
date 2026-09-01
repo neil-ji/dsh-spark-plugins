@@ -266,7 +266,7 @@ export class MemoryService extends Service {
     const now = Date.now()
     const list = this.core.list({
       kind: 'preference',
-      status: query.source === undefined ? 'active' : 'active',
+      status: 'active',
       limit: 200,
       sort: 'importance',
       order: 'desc',
