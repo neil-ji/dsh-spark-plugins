@@ -202,7 +202,7 @@ function TodoQuadrantImpl({ t, items, now, onResolve }: {
 }): ReactNode {
   if (items.length === 0) {
     return (
-      <section className='hippomemo-quadrant'>
+      <div className='hippomemo-quadrant'>
         <div className='hippomemo-panel-head'>
           <h3 className='hippomemo-panel-title'>{t('todoTitle')}</h3>
           <Pill className='hippomemo-pill'>行动</Pill>
@@ -211,11 +211,11 @@ function TodoQuadrantImpl({ t, items, now, onResolve }: {
         <p className='hippomemo-quadrant-empty'>
           <IconWarningOutline16 size={14} /> {t('todoEmpty')}
         </p>
-      </section>
+      </div>
     );
   }
   return (
-    <section className='hippomemo-quadrant'>
+    <div className='hippomemo-quadrant'>
       <div className='hippomemo-panel-head'>
         <h3 className='hippomemo-panel-title'>{t('todoTitle')}</h3>
         <Pill className='hippomemo-pill'>行动</Pill>
@@ -257,7 +257,7 @@ function TodoQuadrantImpl({ t, items, now, onResolve }: {
           );
         })}
       </ul>
-    </section>
+    </div>
   );
 }
 
@@ -267,14 +267,14 @@ function RecallQuadrant({ t, citations, narrative, now }: {
 }): ReactNode {
   if (citations.length === 0 && narrative === null) {
     return (
-      <section className='hippomemo-quadrant'>
+      <div className='hippomemo-quadrant'>
         <div className='hippomemo-panel-head'>
           <h3 className='hippomemo-panel-title'>{t('recallTitle')}</h3>
           <Pill className='hippomemo-pill'>验证</Pill>
           <span className='hippomemo-panel-count'>—</span>
         </div>
         <p className='hippomemo-quadrant-empty'>{t('recallEmpty')}</p>
-      </section>
+      </div>
     );
   }
   const rows: Array<{ key: string; when: string; what: ReactNode; sub: string; kind: 'injected' | 'suppressed' | 'cited' }> = [];
@@ -297,7 +297,7 @@ function RecallQuadrant({ t, citations, narrative, now }: {
     });
   }
   return (
-    <section className='hippomemo-quadrant'>
+    <div className='hippomemo-quadrant'>
       <div className='hippomemo-panel-head'>
         <h3 className='hippomemo-panel-title'>{t('recallTitle')}</h3>
         <Pill className='hippomemo-pill'>验证</Pill>
@@ -315,7 +315,7 @@ function RecallQuadrant({ t, citations, narrative, now }: {
           </li>
         ))}
       </ul>
-    </section>
+    </div>
   );
 }
 
@@ -1077,8 +1077,8 @@ function OverviewTab({ t, stats, usage, preferences, candidates, narrative, cita
         preferences={preferences} candidates={candidates}
         narrative={narrative} reloadKey={0} />
       <section className='hippomemo-section-card'>
-        <div className='hippomemo-section-head'>
-          <h3 className='hippomemo-section-title'>{t('overviewLiveActivity')}</h3>
+        <div className='hippomemo-panel-head'>
+          <h3 className='hippomemo-panel-title'>{t('overviewLiveActivity')}</h3>
           <Pill className='hippomemo-pill'>{t('recallTitle')}</Pill>
         </div>
         <RecallQuadrant t={t} citations={citations} narrative={narrative} now={now} />
@@ -1109,16 +1109,16 @@ function EvolutionTab({ t, stats, usage, candidates, now, onResolve, api, reload
   return (
     <div className='hippomemo-tab'>
       <section className='hippomemo-section-card'>
-        <div className='hippomemo-section-head'>
-          <h3 className='hippomemo-section-title'>{t('evolutionCandidatesTitle')}</h3>
+        <div className='hippomemo-panel-head'>
+          <h3 className='hippomemo-panel-title'>{t('evolutionCandidatesTitle')}</h3>
           <Pill className='hippomemo-pill'>{t('todoTitle')}</Pill>
           <span className='hippomemo-panel-count'>{candidates?.total ?? 0} 项</span>
         </div>
         <TodoQuadrantImpl t={t} items={candidates?.items ?? []} now={now} onResolve={onResolve} />
       </section>
       <section className='hippomemo-section-card'>
-        <div className='hippomemo-section-head'>
-          <h3 className='hippomemo-section-title'>{t('evolutionStatsTitle')}</h3>
+        <div className='hippomemo-panel-head'>
+          <h3 className='hippomemo-panel-title'>{t('evolutionStatsTitle')}</h3>
           <Pill className='hippomemo-pill'>{t('usage')}</Pill>
         </div>
         {stats !== null ? (
@@ -1143,8 +1143,8 @@ function EvolutionTab({ t, stats, usage, candidates, now, onResolve, api, reload
         ) : null}
       </section>
       <section className='hippomemo-section-card'>
-        <div className='hippomemo-section-head'>
-          <h3 className='hippomemo-section-title'>{t('evolutionChartsTitle')}</h3>
+        <div className='hippomemo-panel-head'>
+          <h3 className='hippomemo-panel-title'>{t('evolutionChartsTitle')}</h3>
         </div>
         <MemoryCharts api={api} t={t} stats={stats} reloadKey={reloadKey} />
       </section>
