@@ -249,10 +249,16 @@ function TodoQuadrantImpl({ t, items, now, onResolve }: {
                   <span className='hippomemo-todo-meta'>{formatRelative(item.detectedAt, now)}</span>
                 </div>
               </div>
-              <Button size='sm' variant='outline' className='hippomemo-todo-act'
-                onClick={() => { onResolve(item) }}>
-                {t(actionKeyMap[item.suggestedAction])}
-              </Button>
+              {item.kind === 'observation' ? (
+                // On-observation records are engine-owned: auto-archive at the deadline,
+                // auto-cancel on citation. Read-only status row, nothing to resolve.
+                <Pill className='hippomemo-todo-kind hippomemo-todo-auto'>自动</Pill>
+              ) : (
+                <Button size='sm' variant='outline' className='hippomemo-todo-act'
+                  onClick={() => { onResolve(item) }}>
+                  {t(actionKeyMap[item.suggestedAction])}
+                </Button>
+              )}
             </li>
           );
         })}
@@ -510,6 +516,7 @@ function MemoryListPanel({ t, api, detailId, onDetail }: {
             }
             meta.push(t('importanceLabel') + ' ' + record.importance.toFixed(2));
             meta.push(formatDate(record.updatedAt));
+            const scoped = (record.modelIds?.length ?? 0) > 0;
             return (
               <ListRow
                 key={record.id}
@@ -520,6 +527,11 @@ function MemoryListPanel({ t, api, detailId, onDetail }: {
                   <>
                     {record.kind !== 'preference' ? (
                       <Pill className={'hippomemo-kind-pill hippomemo-kind-' + record.kind}>{t(record.kind)}</Pill>
+                    ) : null}
+                    {scoped ? (
+                      <Pill className='hippomemo-model-pill' title={(record.modelIds ?? []).join(', ')}>
+                        {'⚙ ' + (record.modelIds ?? [])[0] + ((record.modelIds?.length ?? 0) > 1 ? ' +' + String((record.modelIds?.length ?? 0) - 1) : '')}
+                      </Pill>
                     ) : null}
                     {meta.map((part, index) => (
                       <span key={index}>
@@ -621,14 +633,18 @@ function MemoryDetailModal({ api, t, id, refreshKey, onBack, onEdit, onDeleted }
   if (error.length > 0) {
     return (
       <Modal open={true} onClose={onBack} title={t('loadFailed')} closeLabel={t('cancel')}>
-        <p className='hippomemo-error'>{error}</p>
+        <div data-plugin='dsh-hippomemo' className='hippomemo-modal-scope'>
+          <p className='hippomemo-error'>{error}</p>
+        </div>
       </Modal>
     );
   }
   if (record === null) {
     return (
       <Modal open={true} onClose={onBack} title={t('memoryNotFound')} closeLabel={t('cancel')}>
-        <p className='hippomemo-empty'>{t('memoryNotFound')}</p>
+        <div data-plugin='dsh-hippomemo' className='hippomemo-modal-scope'>
+          <p className='hippomemo-empty'>{t('memoryNotFound')}</p>
+        </div>
       </Modal>
     );
   }
@@ -659,6 +675,7 @@ function MemoryDetailModal({ api, t, id, refreshKey, onBack, onEdit, onDeleted }
         </div>
       )}
     >
+      <div data-plugin='dsh-hippomemo' className='hippomemo-modal-scope'>
       <div className='hippomemo-detail-pills'>
         <Pill className={'hippomemo-kind-pill hippomemo-kind-' + record.kind}>
           {record.kind === 'preference' ? <IconThinkOutline16 className='hippomemo-pill-icon' size={12} /> : null}
@@ -678,6 +695,14 @@ function MemoryDetailModal({ api, t, id, refreshKey, onBack, onEdit, onDeleted }
           <span className='hippomemo-tag-label'>{t('tags')}</span>
           {record.tags.map(tagItem => (
             <Pill key={tagItem} className='hippomemo-tag-pill'>#{tagItem}</Pill>
+          ))}
+        </div>
+      ) : null}
+      {(record.modelIds?.length ?? 0) > 0 ? (
+        <div className='hippomemo-tag-list'>
+          <span className='hippomemo-tag-label'>{t('modelIdsLabel')}</span>
+          {record.modelIds!.map(modelId => (
+            <Pill key={modelId} className='hippomemo-model-pill' title={t('modelIdsHint')}>{modelId}</Pill>
           ))}
         </div>
       ) : null}
@@ -743,6 +768,7 @@ function MemoryDetailModal({ api, t, id, refreshKey, onBack, onEdit, onDeleted }
           </div>
         </div>
       ) : null}
+      </div>
     </Modal>
   );
 }
@@ -755,6 +781,7 @@ function MemoryEditorModal({ api, t, initial, onCancel, onSaved }: {
   const [title, setTitle] = useState(initial?.title ?? '');
   const [content, setContent] = useState(initial?.content ?? '');
   const [tags, setTags] = useState(initial?.tags.join(', ') ?? '');
+  const [modelIds, setModelIds] = useState(initial?.modelIds?.join(', ') ?? '');
   const [kind, setKind] = useState<MemoryKind>(initial?.kind ?? 'insight');
   const [scope, setScope] = useState<MemoryScope>(initial?.scope ?? 'global');
   const [importance, setImportance] = useState(String(initial?.importance ?? 0.5));
@@ -765,6 +792,7 @@ function MemoryEditorModal({ api, t, initial, onCancel, onSaved }: {
       const patch: MemoryPatchInput = {
         title, content,
         tags: tags.split(',').map(item => item.trim()).filter(item => item.length > 0),
+        modelIds: modelIds.split(',').map(item => item.trim()).filter(item => item.length > 0),
         kind, scope, importance: Number(importance) || 0.5,
       };
       if (initial === undefined) await api.create(patch as MemoryPutInput);
@@ -786,6 +814,7 @@ function MemoryEditorModal({ api, t, initial, onCancel, onSaved }: {
         </div>
       )}
     >
+      <div data-plugin='dsh-hippomemo' className='hippomemo-modal-scope'>
       <label className='hippomemo-form-label'>{t('titleLabel')}
         <Input value={title} onChange={event => { setTitle(event.currentTarget.value); }} />
       </label>
@@ -809,6 +838,12 @@ function MemoryEditorModal({ api, t, initial, onCancel, onSaved }: {
       <label className='hippomemo-form-label'>{t('tagsLabel')}
         <Input value={tags} onChange={event => { setTags(event.currentTarget.value); }} />
       </label>
+      <label className='hippomemo-form-label'>{t('modelIdsLabel')}
+        <Input value={modelIds} onChange={event => { setModelIds(event.currentTarget.value); }}
+          placeholder='tencent/hy4-preview, deepseek/deepseek-v4-flash' />
+        <span className='hippomemo-form-hint'>{t('modelIdsHint')}</span>
+      </label>
+      </div>
     </Modal>
   );
 }

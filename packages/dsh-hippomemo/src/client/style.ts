@@ -57,6 +57,7 @@ export const HIPPOMEMO_CSS = [
   '[data-plugin="dsh-hippomemo"] .hippomemo-todo-meta { color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-todo-act { flex: none; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-todo-kind { font-size: 10px; padding: 1px 6px; text-transform: none; }',
+  '[data-plugin="dsh-hippomemo"] .hippomemo-todo-auto { color: var(--dsw-alias-state-success-primary, #16A34A); background: color-mix(in srgb, var(--dsw-alias-state-success-primary, #16A34A) 10%, transparent); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-recall-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-recall-item { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; border-radius: 6px; border-left: 3px solid var(--dsw-alias-border-l2, transparent); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-recall-item-injected { border-left-color: var(--dsw-alias-brand-primary, #2563EB); }',
@@ -120,6 +121,8 @@ export const HIPPOMEMO_CSS = [
   '[data-plugin="dsh-hippomemo"] .hippomemo-tag-list { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-tag-label { font-size: 12px; color: var(--dsw-alias-label-secondary); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-tag-pill { color: var(--dsw-alias-label-secondary); font-size: 11px; padding: 1px 8px; }',
+  '[data-plugin="dsh-hippomemo"] .hippomemo-model-pill { color: var(--dsw-static-violet-500, #7C3AED); font-size: 11px; padding: 1px 8px; background: color-mix(in srgb, var(--dsw-static-violet-500, #7C3AED) 10%, transparent); font-family: var(--ds-font-family-code, ui-monospace, monospace); }',
+  '[data-plugin="dsh-hippomemo"] .hippomemo-form-hint { font-size: 11px; color: var(--dsw-alias-label-tertiary); line-height: 16px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px 16px; margin: 0; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-fact { display: flex; flex-direction: column; gap: 2px; min-width: 0; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-fact dt { font-size: 12px; color: var(--dsw-alias-label-secondary); }',
@@ -193,4 +196,11 @@ export const HIPPOMEMO_CSS = [
   '[data-plugin="dsh-hippomemo"] .hippomemo-todo-icon-warn { color: var(--dsw-alias-state-warn-primary, #D97706) !important; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-todo-icon-info { color: var(--dsw-alias-brand-primary, #2563EB) !important; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-todo-icon-danger { color: var(--dsw-alias-state-error-primary, #DC2626) !important; }',
+  // ---- portal modal 高度约束 ----
+  // ui-kit Modal portal 到 document.body，dialog 无 data-plugin 祖先；hippomemo-*
+  // 类名全局唯一，无前缀规则安全。dialog 限高 + 内部内容（hippomemo-modal-scope）
+  // 独立滚动：header/footer 恒可见，长内容（记忆正文/编辑表单）在 scope 内滚动，
+  // 不再撑破视口。detail 正文区另有 360px 内滚（.hippomemo-detail-content）。
+  '.hippomemo-detail-modal, .hippomemo-edit-modal { max-height: min(720px, calc(100vh - 40px)); }',
+  '.hippomemo-detail-modal .hippomemo-modal-scope, .hippomemo-edit-modal .hippomemo-modal-scope { max-height: calc(100vh - 230px); min-height: 0; overflow-y: auto; }',
 ].join('\n')

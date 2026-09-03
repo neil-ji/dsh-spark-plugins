@@ -146,6 +146,8 @@ function listQueryFromUrl(url: URL): MemoryListQuery {
   if (status !== null) query.status = status as MemoryListQuery['status']
   const tag = url.searchParams.get('tag')
   if (tag !== null && tag.length > 0) query.tag = tag
+  const modelId = url.searchParams.get('modelId')
+  if (modelId !== null && modelId.length > 0) query.modelId = modelId
   const workspacePath = url.searchParams.get('workspacePath')
   if (workspacePath !== null && workspacePath.length > 0) query.workspacePath = workspacePath
   const sort = url.searchParams.get('sort')

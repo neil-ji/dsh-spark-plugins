@@ -234,3 +234,41 @@ test('completeVerdicts fills missing verdicts with keep by default', () => {
   assert.match(complete[1]!.reason ?? '', /kept by default/)
   assert.equal(complete[2]!.verdict, 'keep')
 })
+
+test('model-scoped error-notebook records are exempt from probation/downgrade/consolidation', () => {
+  // High recall + zero citation would normally trigger probation.
+  const scopedNoise = record({
+    id: 's1', title: 'tencent/hy4-preview 429 处置', recallCount: 12, citationCount: 0,
+    modelIds: ['tencent/hy4-preview'],
+  })
+  const probations = planEvolution([scopedNoise], BASE_OPTIONS)
+  assert.equal(probations.some(a => a.action === 'probation'), false)
+
+  // A declared global restricted to one model with only source-workspace
+  // evidence would normally be downgraded — model-scoped globals stay put
+  // because their exposure is narrow by design.
+  const scopedGlobal = record({
+    id: 's2', title: '某模型专用规则', recallCount: 8, citationCount: 0,
+    scope: 'global', workspacePath: '/a', seenWorkspaces: ['/a'], globalProven: false,
+    modelIds: ['deepseek/deepseek-v4-flash'],
+  })
+  const downgrades = planEvolution([scopedGlobal], BASE_OPTIONS)
+  assert.equal(downgrades.some(a => a.action === 'downgrade-scope'), false)
+
+  // Near-duplicate titles must not consolidate away one model's notebook into
+  // another's — superseding would drop the loser's modelIds.
+  const a = record({ id: 'a', title: '同模型重复标题', citationCount: 2, modelIds: ['tencent/hy4-preview'] })
+  const b = record({ id: 'b', title: '同模型重复标题', citationCount: 0, modelIds: ['deepseek/deepseek-v4-flash'] })
+  const consolidations = planEvolution([a, b], BASE_OPTIONS)
+  assert.equal(consolidations.some(act => act.action === 'supersede' || act.action === 'link'), false)
+})
+
+test('model-scoped records still respect an author-set expiresAt', () => {
+  const expired = record({
+    id: 's', title: '过期错题', citationCount: 0, expiresAt: NOW - DAY,
+    modelIds: ['tencent/hy4-preview'],
+  })
+  const actions = planEvolution([expired], BASE_OPTIONS)
+  assert.equal(actions.length, 1)
+  assert.equal(actions[0]!.action, 'archive')
+})

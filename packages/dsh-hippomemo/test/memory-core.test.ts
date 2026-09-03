@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { MemoryCore, normalizeRecord, splitTags, tokenize, isMemoryAutoInjectable, filterAutoInjection } from '../src/memory-core.ts'
+import { MemoryCore, normalizeRecord, splitTags, tokenize, isMemoryAutoInjectable, filterAutoInjection, cleanModelIds, isMemoryModelApplicable, filterModelScoped } from '../src/memory-core.ts'
 import type { MemoryPutInput, MemoryRecord } from '../src/types.ts'
 
 function makeCore(overrides: Partial<{ maxMemories: number; defaultRecallLimit: number; maxRecallChars: number }> = {}) {
@@ -542,4 +542,81 @@ test('cross-workspace recall accumulates evidence and auto-confirms a global', (
   // Repeated recall in the same workspace does not double-count.
   core.markRecalled([g.id], 1006, '/c')
   assert.equal(core.get(g.id).seenWorkspaces.length, 3)
+})
+
+test('cleanModelIds trims, dedupes, drops empties, and caps at 16', () => {
+  assert.deepEqual(cleanModelIds([' tencent/hy4-preview ', 'deepseek/deepseek-v4-flash', 'tencent/hy4-preview', '  ', '']), ['tencent/hy4-preview', 'deepseek/deepseek-v4-flash'])
+  assert.deepEqual(cleanModelIds(undefined), [])
+  const many = Array.from({ length: 20 }, (_, i) => 'm' + String(i) + '/model')
+  assert.equal(cleanModelIds(many).length, 16)
+})
+
+test('normalizeRecord stores modelIds and preserves them on patch (explicit [] clears)', () => {
+  const first = normalizeRecord(input('Model quirk', 'x', { modelIds: ['tencent/hy4-preview'] }), undefined, { now: () => 2000, newId: () => 'id-1' })
+  assert.deepEqual(first.record.modelIds, ['tencent/hy4-preview'])
+  // A patch that does not mention modelIds keeps the previous gate.
+  const patched = normalizeRecord({ title: 'Model quirk', content: 'y' }, first.record, { now: () => 3000 })
+  assert.deepEqual(patched.record.modelIds, ['tencent/hy4-preview'])
+  // Explicit empty array clears the gate (back to model-agnostic).
+  const cleared = normalizeRecord({ title: 'Model quirk', content: 'y', modelIds: [] }, first.record, { now: () => 4000 })
+  assert.deepEqual(cleared.record.modelIds, [])
+})
+
+test('core put/update round-trips modelIds and old records default to empty', () => {
+  const core = makeCore()
+  const created = core.put(input('Quirk', 'note', { modelIds: ['tencent/hy4-preview'] }))
+  assert.deepEqual(created.modelIds, ['tencent/hy4-preview'])
+  const updated = core.update(created.id, { modelIds: ['deepseek/deepseek-v4-flash'] })
+  assert.deepEqual(updated.modelIds, ['deepseek/deepseek-v4-flash'])
+  // Legacy record missing the field (completeRecord path) defaults to [].
+  const legacy = { ...created, id: 'legacy' } as MemoryRecord
+  delete (legacy as { modelIds?: string[] }).modelIds
+  const loaded = new MemoryCore(() => ({ maxMemories: 10, defaultRecallLimit: 5, maxRecallChars: 5000 }))
+  loaded.load([[legacy.id, legacy]])
+  assert.deepEqual(loaded.get('legacy')?.modelIds, [])
+})
+
+test('model gate: scoped records pass only on matching model; agnostic always pass', () => {
+  const scoped = {
+    id: 's', kind: 'fact' as const, title: 'S', content: 'c', tags: [], scope: 'global' as const,
+    workspacePath: null, globalProven: true, importance: 0.5, status: 'active' as const,
+    sourceSessionId: 's', revision: 1, updatedBy: 'system' as const, supersedes: null,
+    supersededBy: null, createdAt: 1, updatedAt: 1, expiresAt: null, relatedIds: [],
+    searchTerms: [], modelIds: ['tencent/hy4-preview', 'deepseek/deepseek-v4-flash'],
+    recallCount: 0, lastRecalledAt: null, citationCount: 0, lastCitedAt: null,
+  } as MemoryRecord
+  const agnostic = { ...scoped, id: 'a', modelIds: [] } as MemoryRecord
+
+  // Scoped matches one of its models.
+  assert.equal(isMemoryModelApplicable(scoped, 'tencent/hy4-preview'), true)
+  // Unknown/absent model never leaks a scoped memory into the wrong conversation.
+  assert.equal(isMemoryModelApplicable(scoped, 'anthropic/claude-4'), false)
+  assert.equal(isMemoryModelApplicable(scoped, undefined), false)
+  // Model-agnostic memory is usable by every model.
+  assert.equal(isMemoryModelApplicable(agnostic, 'anything/anything'), true)
+  assert.equal(isMemoryModelApplicable(agnostic, undefined), true)
+
+  const hits = [
+    { record: scoped, matchedReason: ['title'] },
+    { record: agnostic, matchedReason: ['title'] },
+  ]
+  const matching = filterModelScoped(hits, 'tencent/hy4-preview')
+  assert.equal(matching.length, 2)
+  const foreign = filterModelScoped(hits, 'anthropic/claude-4')
+  assert.equal(foreign.length, 1)
+  assert.equal(foreign[0].record.id, 'a')
+  const unknown = filterModelScoped(hits, undefined)
+  assert.equal(unknown.length, 1)
+  assert.equal(unknown[0].record.id, 'a')
+})
+
+test('core filter/list supports exact modelId query', () => {
+  const core = makeCore()
+  core.put(input('Quirk', 'one', { modelIds: ['tencent/hy4-preview'] }))
+  core.put(input('Plain', 'two', {}))
+  assert.equal(core.list({ modelId: 'tencent/hy4-preview' }).total, 1)
+  assert.equal(core.list({ modelId: 'no/such-model' }).total, 0)
+  // Search uses the same filter when modelId is passed.
+  const result = core.search({ q: '', modelId: 'tencent/hy4-preview' })
+  assert.equal(result.total, 1)
 })

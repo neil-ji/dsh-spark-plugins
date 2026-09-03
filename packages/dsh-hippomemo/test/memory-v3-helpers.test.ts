@@ -66,7 +66,7 @@ test('derivePendingCandidates flags near-duplicate titles as near-duplicate cand
   assert.equal(result.byKind['near-duplicate'] >= 1, true)
 })
 
-test('derivePendingCandidates flags probation candidates for uncited recall-heavy records', () => {
+test('uncited recall-heavy records are NOT todos (engine-owned probation, no human step)', () => {
   const noisy = makeRecord({
     id: 'noisy', kind: 'insight',
     title: 'noise', content: 'noise',
@@ -74,9 +74,26 @@ test('derivePendingCandidates flags probation candidates for uncited recall-heav
     createdAt: 100, updatedAt: 100,
   })
   const result = derivePendingCandidates([noisy], { now: 1_000_000 })
-  const observationCand = result.items.find(c => c.kind === 'observation')
-  assert.ok(observationCand, 'expected observation candidate for noisy record')
-  assert.equal(observationCand.suggestedAction, 'probation')
+  assert.equal(result.items.some(c => c.id === 'noisy'), false)
+  assert.equal(result.byKind.observation, 0)
+})
+
+test('records already on observation surface as read-only status rows with deadline', () => {
+  const onProbation = makeRecord({
+    id: 'obs', kind: 'insight',
+    title: 'under observation',
+    recallCount: 20, citationCount: 0,
+    createdAt: 100, updatedAt: 100,
+    expiresAt: 1_000_000 + 7 * 86_400_000,
+  })
+  const result = derivePendingCandidates([onProbation], { now: 1_000_000 })
+  const row = result.items.find(c => c.id === 'obs')
+  assert.ok(row, 'expected read-only observation row')
+  assert.equal(row.kind, 'observation')
+  assert.equal(row.suggestedAction, 'cancel-probation')
+  assert.equal(row.expiresAt, 1_000_000 + 7 * 86_400_000)
+  assert.match(row.reason, /剩 7 天/)
+  assert.equal(result.byKind.observation, 1)
 })
 
 test('derivePendingCandidates flags downgrade-scope for unproven global under-recall', () => {

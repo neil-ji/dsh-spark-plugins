@@ -50,4 +50,30 @@ describe('memoryRecord schema self-healing (end-to-end)', () => {
     assert.ok(parsed.searchTerms.length > 1 && parsed.searchTerms.length <= 32)
     for (const term of parsed.searchTerms) assert.ok(term.length >= 1 && term.length <= 50)
   })
+  it('legacy record without modelIds defaults to [] and modelIds heals bounded terms', () => {
+    const base = {
+      id: 'e2c9a1d0-0000-4000-8000-000000000002',
+      kind: 'fact',
+      title: 'Legacy model quirk',
+      content: 'written before modelIds existed',
+      scope: 'workspace',
+      sourceSessionId: 'test-session',
+      createdAt: 1, updatedAt: 1,
+    }
+    const parsed = memoriesSchema.parse(base)
+    assert.deepEqual(parsed.modelIds, [])
+    const healed = memoriesSchema.parse({
+      ...base,
+      id: 'e2c9a1d0-0000-4000-8000-000000000003',
+      modelIds: [' tencent/hy4-preview ', 'tencent/hy4-preview', 'deepseek/deepseek-v4-flash'],
+    })
+    assert.deepEqual(healed.modelIds, ['tencent/hy4-preview', 'deepseek/deepseek-v4-flash'])
+    const capped = memoriesSchema.parse({
+      ...base,
+      id: 'e2c9a1d0-0000-4000-8000-000000000004',
+      modelIds: Array.from({ length: 40 }, (_, i) => 'provider' + String(i) + '/model'),
+    })
+    // Read-side heal bounds to 32 so boot never bricks; write-side caps at 16.
+    assert.ok(capped.modelIds.length <= 32)
+  })
 })

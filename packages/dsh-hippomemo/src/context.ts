@@ -16,7 +16,7 @@ import type { AssistantMessage, UserMessage } from '@deepseek-ai/dsh-llm'
 import type {} from './memory-service.ts'
 import type { MemoryRecord } from './types.ts'
 import { neutralizeFences } from './memory-extract.ts'
-import { filterAutoInjection } from './memory-core.ts'
+import { filterAutoInjection, filterModelScoped } from './memory-core.ts'
 import { filterByRelevanceAdjusted } from './relevance.ts'
 
 export const name = 'hippomemo-context'
@@ -88,7 +88,13 @@ export function apply(ctx: Context, config: HippomemoContextConfig = {}): void {
       limit: searchLimit,
     })
 
-    const injectable = filterAutoInjection(result.items, cwd)
+    // Workspace gate first, then the per-model error-notebook gate: a memory
+    // tagged with modelIds may only enter a session whose running model matches
+    // one of those ids (unknown model -> under-recall, never leak). This runs
+    // BEFORE the cognitive fallback below so the fallback never resurrects a
+    // model-scoped memory into a non-matching conversation.
+    const modelKey = sessionModelKey(agent)
+    const injectable = filterModelScoped(filterAutoInjection(result.items, cwd), modelKey)
     if (injectable.length === 0) return decision
 
     // Apply the prefrontal (cognitive) filter when in cognitive mode.
@@ -164,6 +170,32 @@ function firstUserText(messages: readonly UserMessage[]): string {
     }
   }
   return parts.join(' ').trim()
+}
+
+/**
+ * Resolve the canonical model key ("provider/model", e.g. "tencent/hy4-preview")
+ * of the agent session that is about to run the step.
+ *
+ * Precedence mirrors how the host resolves a session's live model: the last
+ * logged request/header config wins (it records the model a request actually
+ * ran under, including GUI switches), then the agent's creation options. When
+ * neither is available (a brand-new session before its first request) we
+ * return undefined — model-scoped memories then under-recall, which is the
+ * harmless direction.
+ */
+function sessionModelKey(agent: {
+  session: { requestHeader?: () => { config?: { provider?: string; model?: string } } | undefined }
+  options?: { provider?: string; model?: string }
+}): string | undefined {
+  const logged = agent.session.requestHeader?.()?.config
+  if (logged !== undefined && logged.provider !== undefined && logged.model !== undefined) {
+    return logged.provider + '/' + logged.model
+  }
+  const options = agent.options
+  if (options !== undefined && options.provider !== undefined && options.model !== undefined) {
+    return options.provider + '/' + options.model
+  }
+  return undefined
 }
 
 interface RenderItem {

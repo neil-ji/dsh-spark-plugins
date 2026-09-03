@@ -185,8 +185,17 @@ export function planEvolution(records: readonly MemoryRecord[], options: EvolveO
 
   // Pass B: near-duplicate consolidation among survivors. Supersede is the most
   // decisive cleanup (the winner keeps the knowledge), so it outranks probation.
+  //
+  // Model-scoped records (modelIds non-empty) are per-model error notebooks:
+  // they are exposed only in sessions whose model matches, so every usage rule
+  // below that assumes full exposure would misjudge them (low recall = "unused",
+  // cross-model duplicates = "noise", one-workspace evidence = "never global").
+  // They are exempt from consolidation/probation/downgrade; only an author-set
+  // expiresAt (pass A) still retires one.
+  const modelScoped = new Set(survivors.filter(record => (record.modelIds ?? []).length > 0).map(record => record.id))
   const groups = new Map<string, MemoryRecord[]>()
   for (const record of survivors) {
+    if (modelScoped.has(record.id)) continue
     const key = record.scope + '|' + (record.workspacePath ?? '')
     let group = groups.get(key)
     if (group === undefined) {
@@ -240,6 +249,7 @@ export function planEvolution(records: readonly MemoryRecord[], options: EvolveO
   // is left alone. Downgrade under-recalls, which is the harmless direction.
   for (const record of survivors) {
     if (claimed.has(record.id)) continue
+    if (modelScoped.has(record.id)) continue
     if (record.scope !== 'global' || record.globalProven === true) continue
     if (record.expiresAt !== null && record.expiresAt !== undefined) continue
     if (record.recallCount < options.decayMinRecalls) continue
@@ -257,6 +267,7 @@ export function planEvolution(records: readonly MemoryRecord[], options: EvolveO
   // never reach expiry.
   for (const record of survivors) {
     if (claimed.has(record.id)) continue
+    if (modelScoped.has(record.id)) continue
     if (record.expiresAt !== null && record.expiresAt !== undefined) continue
     if (
       record.citationCount === 0
@@ -325,11 +336,42 @@ export function derivePendingCandidates(
   }
   const lookup = new Map<string, MemoryRecord>()
   for (const record of records) lookup.set(record.id, record)
+
+  // Records already on observation (future expiresAt) are read-only status rows:
+  // the engine auto-archives them at the deadline (or auto-cancels on citation),
+  // so there is nothing for a human to resolve. Surface them so the user can see
+  // what is being observed and for how long.
+  for (const record of records) {
+    if (record.status !== 'active') continue
+    if (record.expiresAt === null || record.expiresAt === undefined) continue
+    if (record.expiresAt <= options.now) continue
+    const days = Math.max(1, Math.ceil((record.expiresAt - options.now) / 86_400_000))
+    byKind.observation += 1
+    items.push({
+      id: record.id,
+      kind: 'observation',
+      title: record.title,
+      reason: '观察中 · 剩 ' + String(days) + ' 天 · 到期自动归档',
+      memoryKind: record.kind,
+      suggestedAction: 'cancel-probation',
+      expiresAt: record.expiresAt,
+      importance: record.importance,
+      detectedAt: options.now,
+    })
+  }
+
+  // Everything else from the deterministic sweep that still needs a human call:
+  // expired (author TTL), near-duplicate (supersede/link), downgrade-scope. The
+  // plain probation suggestion (uncited recall-heavy, no expiresAt yet) is NOT a
+  // todo: the automatic sweep + LLM review decides it, and the observed records
+  // surface above once it applies.
   for (const action of actions) {
     if (action.action === 'cancel-probation') continue // never a candidate row
+    if (action.action === 'probation') continue // auto-handled by the engine sweep
     const record = lookup.get(action.id)
     if (record === undefined) continue
     const kind = classifyAction(action.action)
+    if (kind === 'observation') continue // safety: only the status rows above
     byKind[kind] += 1
     items.push({
       id: record.id,

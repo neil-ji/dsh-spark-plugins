@@ -65,6 +65,10 @@ const memoryRecord = z.object({
   expiresAt: z.number().nullable().default(null),
   relatedIds: z.array(memoryId).max(16).default([]),
   searchTerms: z.preprocess(healBoundedStringList, z.array(z.string().min(1).max(50)).max(32).default([])),
+  // Schema cap mirrors healBoundedStringList's 32-item bound so an oversized
+  // stored list can never brick boot; the semantic 16-model cap lives in
+  // cleanModelIds on the write path.
+  modelIds: z.preprocess(healBoundedStringList, z.array(z.string().min(1).max(100)).max(32).default([])),
   recallCount: z.number().int().nonnegative().default(0),
   lastRecalledAt: z.number().nullable().default(null),
   citationCount: z.number().int().nonnegative().default(0),

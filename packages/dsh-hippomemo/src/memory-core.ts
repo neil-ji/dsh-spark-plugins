@@ -118,6 +118,7 @@ function completeRecord(record: MemoryRecord): MemoryRecord {
   if (record.globalProven === undefined) record.globalProven = false
   if (record.seenWorkspaces === undefined) record.seenWorkspaces = []
   if (record.sourceSparkId === undefined) record.sourceSparkId = null
+  if (record.modelIds === undefined) record.modelIds = []
   return record
 }
 
@@ -142,6 +143,44 @@ export function isMemoryAutoInjectable(record: MemoryRecord, workspacePath?: str
 /** Filter search hits down to the ones that may be auto-injected in `workspacePath`. */
 export function filterAutoInjection(items: MemorySearchHit[], workspacePath?: string): MemorySearchHit[] {
   return items.filter(hit => isMemoryAutoInjectable(hit.record, workspacePath))
+}
+
+/**
+ * Normalize a modelIds input for storage: trim, drop empties, dedupe, cap.
+ * Empty/undefined input stays empty (model-agnostic default).
+ */
+export function cleanModelIds(value: string[] | undefined): string[] {
+  if (value === undefined) return []
+  const out: string[] = []
+  for (const raw of value) {
+    const item = raw.trim()
+    if (item.length === 0) continue
+    if (out.includes(item)) continue
+    out.push(item)
+    if (out.length >= 16) break
+  }
+  return out
+}
+
+/**
+ * Model-scoped auto-injection gate (hard filter, not a ranking signal).
+ *
+ * A record with an empty modelIds list is model-agnostic and always passes.
+ * A record that names models (a per-model error notebook) only passes when
+ * `modelId` is defined and included — an unknown/absent session model must
+ * never leak a model-specific memory into the wrong conversation, so it
+ * under-recalls (the harmless direction). Manual memory_search intentionally
+ * ignores this gate: it is about *automatic* injection hygiene.
+ */
+export function isMemoryModelApplicable(record: MemoryRecord, modelId: string | undefined): boolean {
+  const scoped = record.modelIds ?? []
+  if (scoped.length === 0) return true
+  return modelId !== undefined && scoped.includes(modelId)
+}
+
+/** Filter search hits by the model-scoped gate described above. */
+export function filterModelScoped(items: MemorySearchHit[], modelId: string | undefined): MemorySearchHit[] {
+  return items.filter(hit => isMemoryModelApplicable(hit.record, modelId))
 }
 
 
@@ -220,6 +259,8 @@ export function normalizeRecord(input: MemoryPutInput, previous?: MemoryRecord, 
     expiresAt: input.expiresAt === undefined ? previous?.expiresAt ?? null : input.expiresAt,
     relatedIds: [...new Set(input.relatedIds ?? previous?.relatedIds ?? [])].slice(0, 16),
     searchTerms: [...new Set(input.searchTerms ?? previous?.searchTerms ?? [])].slice(0, 32),
+    // modelIds: keep previous when unset; explicit [] clears the model gate.
+    modelIds: cleanModelIds(input.modelIds === undefined ? previous?.modelIds : input.modelIds),
     recallCount: input.recallCount ?? previous?.recallCount ?? 0,
     lastRecalledAt: input.lastRecalledAt === undefined ? (previous?.lastRecalledAt ?? null) : input.lastRecalledAt,
     citationCount: input.citationCount ?? previous?.citationCount ?? 0,
@@ -522,6 +563,8 @@ export class MemoryCore {
     if (query.status !== undefined) records = records.filter(record => record.status === query.status)
     const tag = query.tag
     if (tag !== undefined) records = records.filter(record => record.tags.includes(tag))
+    const modelId = query.modelId
+    if (modelId !== undefined) records = records.filter(record => (record.modelIds ?? []).includes(modelId))
     if (query.scope === 'current') {
       records = records.filter(record =>
         record.scope === 'global' || (query.workspacePath !== undefined && record.workspacePath === query.workspacePath))

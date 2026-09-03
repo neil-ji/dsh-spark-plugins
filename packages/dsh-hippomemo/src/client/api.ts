@@ -35,6 +35,7 @@ function queryString(query: MemoryListQuery = {}): string {
   if (query.scope !== undefined) params.set('scope', query.scope)
   if (query.status !== undefined) params.set('status', query.status)
   if (query.tag !== undefined) params.set('tag', query.tag)
+  if (query.modelId !== undefined) params.set('modelId', query.modelId)
   if (query.workspacePath !== undefined) params.set('workspacePath', query.workspacePath)
   if (query.sort !== undefined) params.set('sort', query.sort)
   if (query.order !== undefined) params.set('order', query.order)
