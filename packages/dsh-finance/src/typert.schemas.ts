@@ -29,7 +29,7 @@ export const financeProviderBalanceSchema = z.object({
   status: z.enum(['ok', 'missing-credential', 'unsupported', 'error']),
   provider: z.string(),
   totalMicros: z.number().optional(),
-  currency: z.enum(['CNY', 'USD']).optional(),
+  currency: z.string().optional(),
   code: z.string().optional(),
   message: z.string().optional(),
   fetchedAt: z.number(),
@@ -63,7 +63,7 @@ export const financeProviderEntrySchema = z.object({
   provider: z.string(),
   billingMode: z.enum(['metered', 'plan', 'free']),
   totalPriceMicros: z.number().min(0).max(100_000_000_000),
-  currency: z.enum(['CNY', 'USD']),
+  currency: z.string(),
   autoFetchBalance: z.boolean(),
   validity: z.object({
     startMs: z.number().optional(),
@@ -238,7 +238,7 @@ export const financeListProvidersEntrySchema = z.object({
   sources: z.array(financeProviderSourceSchema),
   hostMeta: z.object({
     defaultBillingMode: z.enum(['metered', 'plan', 'free']),
-    defaultCurrency: z.enum(['CNY', 'USD']),
+    defaultCurrency: z.string(),
     supportsBalanceFetch: z.boolean(),
     lockBillingModeAndCurrency: z.boolean().optional(),
   }).optional(),

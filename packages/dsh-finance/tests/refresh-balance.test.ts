@@ -101,6 +101,29 @@ describe('FinanceService.refreshBalance', () => {
     expect(fake).not.toHaveBeenCalled()
   })
 
+  it('falls back to the deepseek provider credential when the custom balance env is unset', async () => {
+    const ctx = new Context()
+    // Only the deepseek-official LLM adapter's default ref resolves; the
+    // custom balance env (balance.apiKeyEnv) has no stored value.
+    ;(ctx as unknown as { credentials: { resolve: ReturnType<typeof vi.fn> } }).credentials = {
+      resolve: vi.fn(async (ref: string) => ref === 'DEEPSEEK_API_KEY' ? { value: 'sk-test' } : undefined),
+    }
+    const service = new FinanceService(ctx as never, {
+      providers: [{
+        provider: 'deepseek-official',
+        billingMode: 'metered',
+        totalPriceMicros: 0,
+        currency: 'CNY',
+        autoFetchBalance: true,
+      }],
+      balance: { baseURL: 'https://api.deepseek.com', apiKeyEnv: 'MY_CUSTOM_BALANCE_KEY', timeoutMs: 10000 },
+    })
+    const slot = await service.refreshBalance({ provider: 'deepseek-official' })
+    expect(slot.status).toBe('ok')
+    expect(slot.totalMicros).toBe(5_000_000)
+    expect(fake).toHaveBeenCalledOnce()
+  })
+
   it('returns unsupported-provider for an unknown provider id', async () => {
     const ctx = new Context()
     stubCredentials(ctx, 'sk-test')

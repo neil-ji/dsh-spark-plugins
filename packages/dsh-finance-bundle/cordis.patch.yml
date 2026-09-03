@@ -7,7 +7,9 @@
     - id: finance
       name: dsh-spark-finance
       config:
-        currency: CNY
+        # No top-level currency: each `providers[].currency` carries its own
+        # account currency, and hostMeta defaults (deepseek-official = CNY)
+        # seed any provider the user adds through the dashboard.
         balance:
           baseURL: https://api.deepseek.com
           apiKeyEnv: DEEPSEEK_API_KEY

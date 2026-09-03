@@ -62,7 +62,6 @@ async function flush(): Promise<void> {
 }
 
 const SECTION = {
-  currency: 'CNY',
   balance: { baseURL: 'https://api.deepseek.com', apiKeyEnv: 'DEEPSEEK_API_KEY', timeoutMs: 10000 },
 }
 
@@ -77,14 +76,13 @@ describe('FinanceCardController', () => {
     const state = controller.inject().hooks.financeCard.getSnapshot()
     expect(state.available).toBe(true) // scope reports ready
     expect(state.writable).toBe(true)
-    expect(state.currency.text).toBe('')
+    expect(state.balanceBaseURL.text).toBe('')
   })
 
   it('seeds field drafts from the resolved section', () => {
     const { scope } = makeScope({ value: baseSection() })
     const controller = new FinanceCardController(scope)
     const state = controller.inject().hooks.financeCard.getSnapshot()
-    expect(state.currency.text).toBe('CNY')
     expect(state.balanceBaseURL.text).toBe('https://api.deepseek.com')
     expect(state.balanceApiKeyEnv.text).toBe('DEEPSEEK_API_KEY')
     expect(state.balanceTimeoutMs.text).toBe('10000')
@@ -92,34 +90,34 @@ describe('FinanceCardController', () => {
   })
 
   it('marks a field overridden when the user layer carries it', () => {
-    const { scope } = makeScope({ value: baseSection(), user: { currency: 'USD' } })
+    const { scope } = makeScope({ value: baseSection(), user: { balance: { baseURL: 'https://alt.deepseek.com', apiKeyEnv: 'ALT', timeoutMs: 1 } } })
     const controller = new FinanceCardController(scope)
     const state = controller.inject().hooks.financeCard.getSnapshot()
-    expect(state.currency.overridden).toBe(true)
-    expect(state.balanceBaseURL.overridden).toBe(false)
+    expect(state.balanceBaseURL.overridden).toBe(true)
+    expect(state.defaultPrice.overridden).toBe(false)
   })
 
-  it('stages edits, saves them as one write per top-level field, and clears the drafts', async () => {
+  it('stages edits, saves them as one whole-object balance write, and clears the drafts', async () => {
     const { scope, writes } = makeScope({ value: baseSection() })
     const controller = new FinanceCardController(scope)
     const face = controller.inject()
-    face.edit('currency', 'USD')
     face.edit('balance.baseURL', 'https://example.com')
+    face.edit('balance.timeoutMs', '9000')
     const staged = face.hooks.financeCard.getSnapshot()
     expect(staged.dirty).toBe(true)
-    expect(staged.currency.text).toBe('USD')
+    expect(staged.balanceBaseURL.text).toBe('https://example.com')
+    expect(staged.balanceTimeoutMs.text).toBe('9000')
     expect(staged.invalid).toBe(false)
 
     face.save()
     await flush()
 
+    // The balance sub-fields save as one whole-object write preserving untouched members.
     expect(writes).toEqual([
-      { op: 'set', field: 'currency', value: 'USD' },
-      // The balance sub-fields save as one whole-object write preserving untouched members.
       {
         op: 'set',
         field: 'balance',
-        value: { baseURL: 'https://example.com', apiKeyEnv: 'DEEPSEEK_API_KEY', timeoutMs: 10000 },
+        value: { baseURL: 'https://example.com', apiKeyEnv: 'DEEPSEEK_API_KEY', timeoutMs: 9000 },
       },
     ])
     const after = face.hooks.financeCard.getSnapshot()
@@ -213,15 +211,21 @@ describe('FinanceCardController', () => {
   })
 
   it('clears an overridden field on reset + save', async () => {
-    const { scope, writes } = makeScope({ value: baseSection(), user: { currency: 'USD' } })
+    const { scope, writes } = makeScope({ value: baseSection(), user: { balance: { baseURL: 'https://alt.deepseek.com', apiKeyEnv: 'ALT', timeoutMs: 1 } } })
     const controller = new FinanceCardController(scope)
     const face = controller.inject()
-    face.resetField('currency')
+    face.resetField('balance.baseURL')
     const staged = face.hooks.financeCard.getSnapshot()
-    expect(staged.currency.overridden).toBe(false) // a clear would drop the override
+    expect(staged.balanceBaseURL.overridden).toBe(false) // a clear would drop the override
     face.save()
     await flush()
-    expect(writes).toEqual([{ op: 'unset', field: 'currency' }])
+    // Resetting one balance sub-field rewrites the object without that key,
+    // preserving the untouched members.
+    expect(writes).toEqual([{
+      op: 'set',
+      field: 'balance',
+      value: { apiKeyEnv: 'DEEPSEEK_API_KEY', timeoutMs: 10000 },
+    }])
     expect(face.hooks.financeCard.getSnapshot().dirty).toBe(false)
   })
 
@@ -229,7 +233,7 @@ describe('FinanceCardController', () => {
     const { scope, writes } = makeScope({ value: baseSection() })
     const controller = new FinanceCardController(scope)
     const face = controller.inject()
-    face.edit('currency', 'USD')
+    face.edit('balance.baseURL', 'https://example.com')
     face.discard()
     expect(face.hooks.financeCard.getSnapshot().dirty).toBe(false)
     face.save()
@@ -248,7 +252,7 @@ describe('FinanceCardController', () => {
     void originalSet
     const controller = new FinanceCardController(scope)
     const face = controller.inject()
-    face.edit('currency', 'USD')
+    face.edit('balance.baseURL', 'https://example.com')
     face.save()
     await flush()
     const state = face.hooks.financeCard.getSnapshot()

@@ -24,6 +24,7 @@ import type {
   FinancePriceEntry,
   FinancePriceEntryInput,
   FinancePriceRate,
+  FinanceProviderBillingMode,
   FinanceTimeBand,
   FinanceTokenBuckets,
   FinanceWindowedRate,
@@ -57,20 +58,20 @@ export function financeProviderDefault(config: FinanceConfig, modelKey: string):
 }
 
 /**
- * How a route bills: an exact model-key entry in `billingModes` wins over the
- * provider-level entry; anything unlisted defaults to 'metered' (real wallet
- * spend). Plan routes still get priced at list prices — but the ledger keeps
- * that amount apart so subscriptions never masquerade as cash flow.
+ * How a route bills: read from the resolved `hostMetaByProvider` map (the
+ * host-known defaults + every provider the user has registered). Unknown
+ * providers default to 'metered' (real wallet spend). Free routes never
+ * enter this lookup — they hit the `free-provider` unsupported slot upstream
+ * and never get priced for the wallet-vs-plan rollup.
+ *
+ * Migration note: a route-level `billingModes` map used to let users pin a
+ * specific modelKey as plan/metered. The editor surface was retired (no UI
+ * to set it on, no defaults that ever classified anything as plan), so the
+ * classification now flows exclusively from the host-known provider registry.
  */
 export function financeBillingMode(config: FinanceConfig, modelKey: string): 'metered' | 'plan' {
-  const modes = config.billingModes
-  if (modes !== undefined) {
-    const exact = modes[modelKey]
-    if (exact !== undefined) return exact
-    const providerLevel = modes[financeProviderOf(modelKey)]
-    if (providerLevel !== undefined) return providerLevel
-  }
-  return 'metered'
+  const mode = config.hostMetaByProvider[financeProviderOf(modelKey)]
+  return mode === 'plan' ? 'plan' : 'metered'
 }
 
 /** Empty token buckets. */
@@ -375,16 +376,26 @@ export function mergePriceLayers(
   return merged as Record<string, FinanceConfigInput['prices'] extends infer T ? (T extends Record<string, infer V> ? V : never) : never>
 }
 
-/** Normalize a raw config into the resolved `FinanceConfig` the ledger prices with. */
-export function normalizeFinanceConfig(raw: FinanceConfigInput | FinanceConfig): FinanceConfig {
-  const base = raw as FinanceConfig
+/**
+ * Normalize a raw config into the resolved `FinanceConfig` the ledger prices
+ * with. Caller passes the hostMeta map separately (so this pure helper stays
+ * unaware of provider-meta); the service layer injects the resolved
+ * `hostMetaByProvider` at every callsite.
+ */
+export function normalizeFinanceConfig(
+  raw: FinanceConfigInput,
+  hostMetaByProvider: Record<string, FinanceProviderBillingMode> = {},
+): FinanceConfig {
+  // Display currency for the dashboard falls through to 'CNY' for legacy
+  // hosts that haven't migrated; per-provider fields surface each account's
+  // own currency on the BalanceGrid.
   return {
-    currency: base.currency ?? 'CNY',
-    balance: base.balance ?? { baseURL: 'https://api.deepseek.com', apiKeyEnv: 'DEEPSEEK_API_KEY', timeoutMs: 10_000 },
-    defaultPrice: base.defaultPrice ?? DEFAULT_PRICE,
-    providerDefaults: base.providerDefaults ?? {},
-    billingModes: base.billingModes ?? {},
-    prices: normalizeFinancePrices(base.prices),
-    providers: base.providers ?? [],
+    currency: 'CNY',
+    balance: raw.balance ?? { baseURL: 'https://api.deepseek.com', apiKeyEnv: 'DEEPSEEK_API_KEY', timeoutMs: 10_000 },
+    defaultPrice: raw.defaultPrice ?? DEFAULT_PRICE,
+    providerDefaults: raw.providerDefaults ?? {},
+    hostMetaByProvider,
+    prices: normalizeFinancePrices(raw.prices),
+    providers: raw.providers ?? [],
   }
 }

@@ -12,6 +12,7 @@ const config: FinanceConfig = {
     cacheWriteMicrosPerMtok: 2_000_000,
     outputMicrosPerMtok: 8_000_000,
   },
+  hostMetaByProvider: { 'deepseek-official': 'metered' },
   prices: {},
 }
 
@@ -353,7 +354,9 @@ describe('buildFinanceLedger with hourly usage', () => {
     expect(ledger.byProvider[0].provider).toBe('deepseek-official')
   })
 
-  it('splits metered and plan costs when billingModes mark a provider', async () => {
+  it('splits metered and plan costs when hostMeta marks a provider', async () => {
+    // The route-level billingModes map is gone; classification flows from
+    // hostMetaByProvider (per-provider), injected by the service layer.
     const { ctx } = makeCtx([{ id: 'a', createdAt: ERA_B }], {
       'a': {
         financeUsageHourly: hourlyUsage({
@@ -363,7 +366,10 @@ describe('buildFinanceLedger with hourly usage', () => {
         title: 'A',
       },
     })
-    const planConfig: FinanceConfig = { ...windowedConfig, billingModes: { zai: 'plan' } }
+    const planConfig: FinanceConfig = {
+      ...windowedConfig,
+      hostMetaByProvider: { ...windowedConfig.hostMetaByProvider, zai: 'plan' },
+    }
     const ledger = await buildFinanceLedger(ctx, planConfig, undefined, { nowMs: HOUR_NOW_MS })
     // session total: peak flash (3 CNY/Mtok x 2M) + glm at default 2/Mtok = 8M
     expect(ledger.totalCostMicros).toBe(8_000_000)
@@ -377,7 +383,11 @@ describe('buildFinanceLedger with hourly usage', () => {
     expect(ledger.byProvider.find(p => p.provider === 'deepseek-official')!.billingMode).toBeUndefined()
   })
 
-  it('rolls mixed-mode providers up as mixed and keeps exact-key precedence', async () => {
+  it('rolls multiple models of one provider under a single byProvider mode', async () => {
+    // With hostMetaByProvider as the only source of truth, a provider can no
+    // longer mix plan/metered models — every model under the provider inherits
+    // its single mode. The rollup stays consistent: 'plan' if the provider
+    // is plan, otherwise the metered default.
     const { ctx } = makeCtx([{ id: 'a', createdAt: ERA_B }], {
       'a': {
         financeUsageHourly: hourlyUsage({
@@ -389,13 +399,14 @@ describe('buildFinanceLedger with hourly usage', () => {
     })
     const planConfig: FinanceConfig = {
       ...windowedConfig,
-      billingModes: { zai: 'plan', 'zai/api-only': 'metered' }, // exact key wins
+      hostMetaByProvider: { ...windowedConfig.hostMetaByProvider, zai: 'plan' },
     }
     const ledger = await buildFinanceLedger(ctx, planConfig, undefined, { nowMs: HOUR_NOW_MS })
     expect(ledger.byModel.find(m => m.modelKey === 'zai/glm-4.6')!.billingMode).toBe('plan')
-    expect(ledger.byModel.find(m => m.modelKey === 'zai/api-only')!.billingMode).toBe('metered') // exact key overrides the plan provider
+    expect(ledger.byModel.find(m => m.modelKey === 'zai/api-only')!.billingMode).toBe('plan')
     const zaiProvider = ledger.byProvider.find(p => p.provider === 'zai')!
-    expect(zaiProvider.billingMode).toBe('mixed')
+    expect(zaiProvider.billingMode).toBe('plan')
+    expect(zaiProvider.modelCount).toBe(2)
   })
 
   it('rolls multiple models of one provider into a single byProvider row', async () => {

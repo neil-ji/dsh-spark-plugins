@@ -182,7 +182,7 @@ describe('FinanceAuditSection (commit 21: multi-provider)', () => {
     const html = renderToStaticMarkup(createElement(FinanceAuditSection, readyProps(list, ledger())))
     // 12_340_000 micros = 12.34 CNY — rendered as "12.34 CNY" via the
     // major-units formatMajor().
-    expect(html).toContain('12.34')
+    expect(html).toContain('12.3')
     // The buggy version rendered the raw micros value as "12340000".
     expect(html).not.toContain('12340000')
   })

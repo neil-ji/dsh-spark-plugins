@@ -25,8 +25,13 @@ export interface FinanceHostProviderMeta {
   provider: string
   /** Default billing mode seeded when the user has no entry for this provider. */
   defaultBillingMode: FinanceBillingMode
-  /** Default currency seeded with the entry. */
-  defaultCurrency: 'CNY' | 'USD'
+  /**
+   * Default currency seeded with the entry. Free-form string — anything the
+   * upstream balance API can report (CNY / USD / JPY / EUR / ...). The
+   * host-known registry just supplies a sensible default; the user can
+   * override per provider via `FinanceProviderEntry.currency`.
+   */
+  defaultCurrency: string
   /**
    * True iff the host has a balance-fetch endpoint for this provider. The host
    * still respects the per-entry `autoFetchBalance` toggle — when false, no
@@ -65,20 +70,4 @@ export const HOST_KNOWN_PROVIDER_META: Readonly<Record<string, FinanceHostProvid
 /** Lookup helper so call sites don't sprinkle optional-chaining everywhere. */
 export function hostProviderMeta(provider: string): FinanceHostProviderMeta | undefined {
   return HOST_KNOWN_PROVIDER_META[provider]
-}
-
-/**
- * Default row seeded when the user clicks "+ 添加 provider" for a provider
- * the host recognises. Unknown providers get `plan` / CNY / autoFetch=false
- * (mirrors the spec's "未知 provider 默认订阅付费" + no-balance-fetch fallback).
- */
-export function defaultProviderEntry(provider: string): import('./types.ts').FinanceProviderEntry {
-  const meta = hostProviderMeta(provider)
-  return {
-    provider,
-    billingMode: meta?.defaultBillingMode ?? 'plan',
-    totalPriceMicros: 0,
-    currency: meta?.defaultCurrency ?? 'CNY',
-    autoFetchBalance: meta?.supportsBalanceFetch ?? false,
-  }
 }

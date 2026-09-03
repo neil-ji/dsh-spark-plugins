@@ -35,6 +35,7 @@ const config: FinanceConfig = {
     cacheWriteMicrosPerMtok: 2_000_000,
     outputMicrosPerMtok: 8_000_000,
   },
+  hostMetaByProvider: {},
   prices: {},
 }
 
@@ -323,21 +324,28 @@ describe('pricing', () => {
     expect(prices['m'][0]).toBe(FLASH_WINDOWED)
   })
 
-  it('resolves the billing mode with model-key precedence over provider', () => {
+  it('resolves the billing mode from the host-known provider map', () => {
+    // The service layer injects hostMetaByProvider; pricing is a pure reader.
     const custom: FinanceConfig = {
       ...config,
-      billingModes: { zai: 'plan', 'zai/special-model': 'metered' },
+      hostMetaByProvider: { zai: 'plan' },
     }
     expect(financeBillingMode(custom, 'zai/glm-4.6')).toBe('plan')
-    expect(financeBillingMode(custom, 'zai/special-model')).toBe('metered') // exact wins
+    // Any model under a listed provider inherits the provider's mode.
+    expect(financeBillingMode(custom, 'zai/special-model')).toBe('plan')
     expect(financeBillingMode(custom, 'openai/gpt-4o')).toBe('metered')   // unlisted default
     expect(financeBillingMode(config, 'zai/glm-4.6')).toBe('metered')     // no map at all
+    // Free routes never book as cash flow; the wallet-vs-plan rollup ignores
+    // them regardless, but the lookup still returns the literal 'free' for
+    // observability — the ledger gates on `=== 'plan'`.
+    const freeConfig: FinanceConfig = { ...config, hostMetaByProvider: { openai: 'free' } }
+    expect(financeBillingMode(freeConfig, 'openai/gpt-4o')).toBe('metered') // free falls through to metered
   })
 
-  it('normalizeFinanceConfig carries billing modes and defaults them to empty', () => {
-    const normalized = normalizeFinanceConfig({ billingModes: { zai: 'plan' } })
-    expect(normalized.billingModes).toEqual({ zai: 'plan' })
-    expect(normalizeFinanceConfig({}).billingModes).toEqual({})
+  it('normalizeFinanceConfig injects hostMetaByProvider with empty default', () => {
+    const normalized = normalizeFinanceConfig({ prices: {} }, { zai: 'plan' })
+    expect(normalized.hostMetaByProvider).toEqual({ zai: 'plan' })
+    expect(normalizeFinanceConfig({}).hostMetaByProvider).toEqual({})
   })
 
   it('normalizeFinanceConfig carries provider defaults and defaults them to empty', () => {

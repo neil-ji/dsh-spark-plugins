@@ -43,7 +43,6 @@ import { readAllDshProviderOverrides, readFinancePrefs, writeDshProviderOverride
 import type { DshProviderOverride, FinanceChartPrefs, FinanceLayout, FinancePrefs, FinanceSyncSnapshot } from './persist.ts'
 
 export type FinanceCardFieldName =
-  | 'currency'
   | 'balance.baseURL'
   | 'balance.apiKeyEnv'
   | 'balance.timeoutMs'
@@ -94,7 +93,6 @@ export interface FinanceCardState {
   saving: boolean
   /** Whether the last save did not land as staged; cleared by the next edit or save. */
   failed: boolean
-  currency: FinanceCardFieldState
   balanceBaseURL: FinanceCardFieldState
   balanceApiKeyEnv: FinanceCardFieldState
   balanceTimeoutMs: FinanceCardFieldState
@@ -119,6 +117,13 @@ export interface FinanceCardState {
    * `undefined` while the first fetch is still in flight.
    */
   providerList: FinanceListProvidersResult | undefined
+  /**
+   * First-fetch error for `listProviders`. Distinct from the dashboard's
+   * audit error so a card-only failure (provider list) doesn't blank the
+   * dashboard; the user sees an inline retry inside the Provider section
+   * instead. Cleared on every retry attempt.
+   */
+  providerListError: string | undefined
   /**
    * Per-provider rows derived from `providerList` (dsh-llm runtime snapshot
    * — the only source of truth for which providers exist) merged with the
@@ -151,7 +156,8 @@ export interface FinanceDshProviderRow {
   /** Host-known metadata; undefined for runtime-only providers. */
   hostMeta?: {
     defaultBillingMode: 'metered' | 'plan' | 'free'
-    defaultCurrency: 'CNY' | 'USD'
+    /** Free-form account currency seeded by the dsh-llm host metadata. */
+    defaultCurrency: string
     supportsBalanceFetch: boolean
     lockBillingModeAndCurrency?: boolean
   }
@@ -215,6 +221,13 @@ export interface FinanceCardFace {
    * snapshot's defaults. Idempotent when no override exists.
    */
   clearDshProviderOverride: (provider: string) => void
+  /**
+   * Retry the host's `listProviders` after a failure. The card view binds
+   * this to the inline "retry" button next to `providerListError`; the
+   * controller's loadList is single-flight, so a held-down button still
+   * fires one round-trip.
+   */
+  retryListProviders: () => void
 }
 
 type PlannedWrite = { run: (() => Promise<boolean>) | undefined }
@@ -260,11 +273,18 @@ export class FinanceCardController {
   /** Auto-sync bootstrap state: once-only so we don't refetch on every settings doc update. */
   private autoSyncAttempted = false
   /**
-   * Latest snapshot of `finance.listProviders`. Populated once on construction
-   * (and on each settings-doc update, since the host-known set can grow
-   * without a separate signal). The Provider configuration view binds to this.
+   * Latest snapshot of `finance.listProviders`. Repopulated on construction
+   * AND on every settings-doc update — the host-known set can grow without a
+   * separate signal (a new dsh-llm provider lands via settings before
+   * any session runs through it), so the card snapshot stays current.
    */
   private providerListValue: FinanceListProvidersResult | undefined
+  /**
+   * Mirror of `providerListValue` for failure: when `loadList` rejects or the
+   * host returns `ok: false`, we surface the message here so the Provider
+   * section can show an inline retry. Cleared at the start of every retry.
+   */
+  private providerListErrorValue: string | undefined
   /**
    * User-maintained business fields per dsh-llm provider, kept in localStorage
    * (NOT in the host settings namespace — the dsh-llm runtime registry is
@@ -295,11 +315,16 @@ export class FinanceCardController {
       this.syncStateValue = { ...this.syncStateValue, lastSync: readFinancePrefs().lastSync }
     }
     this.store = createSnapshotStore<FinanceCardState>(this.projection())
-    scope.subscribe(() => this.publish())
+    // Settings-doc updates can grow the host-known provider set (a new dsh-llm
+    // provider lands via settings before any session runs through it), so
+    // refresh the provider list on every change — single-flight inside
+    // loadList keeps a settings burst from fanning out into N requests.
+    scope.subscribe(() => {
+      this.publish()
+      if (this.financeRemote?.listProviders !== undefined) void this.loadList()
+    })
     if (financeRemote !== undefined) {
       this.refreshSyncStatus()
-      // Pull the merged provider list once on mount; cheap because it's the
-      // same Remote call the dashboard's BalanceGrid makes independently.
       void this.loadList()
     }
   }
@@ -313,7 +338,6 @@ export class FinanceCardController {
     const value = this.snapshot().value
     if (value === undefined) return undefined
     switch (field) {
-      case 'currency': return value.currency
       case 'balance.baseURL': return value.balance?.baseURL
       case 'balance.apiKeyEnv': return value.balance?.apiKeyEnv
       case 'balance.timeoutMs': return value.balance?.timeoutMs
@@ -430,9 +454,6 @@ export class FinanceCardController {
       plan.push({ run: () => this.storeField(field, write.value) })
     }
 
-    const currency = this.staged.get('currency')
-    if (currency !== undefined) pushIfChanged('currency', currency, this.sectionValue('currency'))
-
     if (BALANCE_FIELDS.some(field => this.staged.has(field))) {
       const balanceInvalid = BALANCE_FIELDS.some(field => {
         const staged = this.staged.get(field)
@@ -481,7 +502,6 @@ export class FinanceCardController {
   private projection(): FinanceCardState {
     return {
       ...this.shell(),
-      currency: this.fieldState('currency'),
       balanceBaseURL: this.fieldState('balance.baseURL'),
       balanceApiKeyEnv: this.fieldState('balance.apiKeyEnv'),
       balanceTimeoutMs: this.fieldState('balance.timeoutMs'),
@@ -495,6 +515,7 @@ export class FinanceCardController {
       syncState: this.syncStateValue,
       syncAvailable: this.syncAvailableValue,
       providerList: this.providerListValue,
+      providerListError: this.providerListErrorValue,
       dshProviderRows: this.buildDshProviderRows(),
     }
   }
@@ -624,6 +645,13 @@ export class FinanceCardController {
       discard: () => {
         if (this.staged.size === 0 && !this.failed) return
         this.staged.clear()
+        // Mirror resetField: also reset the in-flight price-form drafts
+        // so the next projection re-seeds from the stored section instead
+        // of rendering the stale half-edited draft (single source of
+        // truth — staged and draft caches stay in lockstep).
+        this.defaultPriceDraftValue = null
+        this.providerDefaultsDraftValue = null
+        this.priceTableDraftValue = null
         this.failed = false
         this.publish()
       },
@@ -653,6 +681,7 @@ export class FinanceCardController {
       ensureAutoSync: () => this.ensureAutoSync(),
       setDshProviderOverride: (provider, override) => this.setDshProviderOverride(provider, override),
       clearDshProviderOverride: (provider) => this.clearDshProviderOverride(provider),
+      retryListProviders: () => { void this.loadList() },
     }
   }
 
@@ -744,22 +773,35 @@ export class FinanceCardController {
   }
 
   /**
-   * Pull the merged provider list once. Failure is silent (the view renders a
-   * loading slot until the next successful fetch); the previous good
-   * snapshot, if any, stays in place so the user never sees the section
-   * disappear.
+   * Pull the merged provider list. Single-flight: concurrent calls share one
+   * in-flight promise so settings-doc bursts don't fan out into N requests.
+   * Failure (host error or thrown) surfaces as `providerListError` on the
+   * projection — the Provider section shows an inline retry so the card
+   * never sits on a permanent loading slot. A successful retry clears the
+   * error and re-publishes the rows.
    */
+  private listInFlight: Promise<void> | null = null
   private async loadList(): Promise<void> {
+    if (this.listInFlight !== null) return this.listInFlight
     const list = this.financeRemote?.listProviders
     if (list === undefined) return
-    try {
-      const result = await list()
-      if (!result.ok) return
-      this.providerListValue = result.value
-      this.publish()
-    } catch {
-      // Best-effort: the section keeps rendering its previous state.
-    }
+    this.store.update(state => { state.providerListError = undefined })
+    const task = (async () => {
+      try {
+        const result = await list()
+        if (!result.ok) {
+          this.store.update(state => { state.providerListError = result.error.message })
+          return
+        }
+        this.providerListValue = result.value
+        this.publish()
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        this.store.update(state => { state.providerListError = message })
+      }
+    })()
+    this.listInFlight = task.finally(() => { this.listInFlight = null })
+    return this.listInFlight
   }
 
   /**

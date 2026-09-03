@@ -46,6 +46,7 @@ import type {
   FinancePriceEntryInput,
   FinancePriceRate,
   FinanceProviderBalance,
+  FinanceProviderBillingMode,
   FinanceProviderEntry,
   FinanceProviderSource,
   FinanceRefreshBalanceRequest,
@@ -58,7 +59,9 @@ export { financeUsageHourlyProjectionDefinition, financeUsageProjectionDefinitio
 export { fetchFinanceBalance, FinanceBalanceError, microsFromDecimal } from './balance.ts'
 export { backfillFinanceHourly } from './ledger.ts'
 // Commit 13: client uses these to seed Form List defaults + lock fields.
-export { HOST_KNOWN_PROVIDER_META, defaultProviderEntry, hostProviderMeta } from './provider-meta.ts'
+// Client uses these to read host-known defaults (billing mode / currency /
+// balance-fetch capability).
+export {HOST_KNOWN_PROVIDER_META, hostProviderMeta} from './provider-meta.ts'
 export type { FinanceHostProviderMeta } from './provider-meta.ts'
 export {
   addFinanceBuckets,
@@ -171,7 +174,10 @@ const providerEntry = z.object({
   provider: z.string().required(),
   billingMode: z.union(['metered', 'plan', 'free']).required(),
   totalPriceMicros: z.number().step(1).min(0).max(100_000_000_000).required(),
-  currency: z.union(['CNY', 'USD']).required(),
+  // Free-form currency code (anything the upstream API emits). We still
+  // demand a non-empty string so a typo can't silently turn into "all
+  // balances are blank" downstream.
+  currency: z.string().required(),
   autoFetchBalance: z.boolean().required(),
   validity: z.object({
     startMs: z.number().step(1),
@@ -184,7 +190,10 @@ export class FinanceService extends TypertRemoteService {
   static inject = ['sessionPersistence', 'sessionProjectionCache', 'workspaceRegistry', 'credentials', 'llm']
 
   static Config: z<FinanceConfigInput> = z.object({
-    currency: z.string().default('CNY'),
+    // Note: no top-level `currency`. Each provider carries its own currency;
+    // the resolved config's display currency (used for the dashboard KPI
+    // labels) defaults to CNY and follows the dominant provider currency
+    // when present.
     balance: z.object({
       baseURL: z.string().default('https://api.deepseek.com'),
       apiKeyEnv: z.string().default('DEEPSEEK_API_KEY'),
@@ -192,7 +201,13 @@ export class FinanceService extends TypertRemoteService {
     }),
     defaultPrice: priceRate.default(DEFAULT_PRICE),
     providerDefaults: z.dict(priceRate).default({}),
-    billingModes: z.dict(z.union(['metered', 'plan'])).default({}),
+    /**
+     * Per-route billing map retired; classification flows from
+     * `HOST_KNOWN_PROVIDER_META.defaultBillingMode` via
+     * `currentConfig().hostMetaByProvider`. Settings written by an older
+     * host carrying `billingModes` are tolerated via the unknown-fields
+     * policy but the values are ignored at lookup time.
+     */
     prices: z.dict(priceEntries).default({}),
     /**
      * Per-provider configuration list (commit 11, additive). Empty by default
@@ -294,6 +309,9 @@ export class FinanceService extends TypertRemoteService {
    * The resolved config: raw settings normalized into era-sorted price lists.
    * Price tables are merged across three tiers (composition ⊆ community ⊆ user)
    * before normalization so the ledger sees the right rate for every model.
+   * The per-provider billing map (`hostMetaByProvider`) is sourced from
+   * `HOST_KNOWN_PROVIDER_META` so pricing stays a pure function of the
+   * resolved config — the service layer injects the meta here.
    */
   private currentConfig(): FinanceConfig {
     const raw = this.configSource()
@@ -301,7 +319,11 @@ export class FinanceService extends TypertRemoteService {
     const communityPrices = this.communityPrices
     const userPrices = this.userPrices
     const mergedPrices = mergePriceLayers(compositionPrices, communityPrices, userPrices)
-    return normalizeFinanceConfig({ ...raw, prices: mergedPrices })
+    const hostMetaByProvider: Record<string, FinanceProviderBillingMode> = {}
+    for (const [id, meta] of Object.entries(HOST_KNOWN_PROVIDER_META)) {
+      hostMetaByProvider[id] = meta.defaultBillingMode
+    }
+    return normalizeFinanceConfig({ ...raw, prices: mergedPrices }, hostMetaByProvider)
   }
 
   /** Fetch the first-party balance now. The API key never leaves the host. */
@@ -507,8 +529,20 @@ export class FinanceService extends TypertRemoteService {
     config: FinanceConfig,
     signal?: AbortSignal,
   ): Promise<FinanceBalanceView> {
-    const ref = credentialRef(config.balance.apiKeyEnv)
-    const credential = await this.ctx.credentials.resolve(ref)
+    // Resolve the balance key. The finance config names its own env ref, but
+    // for the host-known deepseek-official provider we fall back to the SAME
+    // credential the local dsh LLM adapter uses for that provider
+    // (dsh-llm-deepseek: provider 'deepseek-official', apiKeyEnv default
+    // 'DEEPSEEK_API_KEY') — so a working deepseek Provider is enough, no
+    // second key to configure. resolve() reads all credential layers (env /
+    // file / project-env / user-env) once per name.
+    const refs = [config.balance.apiKeyEnv, 'DEEPSEEK_API_KEY']
+      .filter((name, index, all) => name.trim() !== '' && all.indexOf(name) === index)
+    let credential: { value: string } | undefined
+    for (const name of refs) {
+      credential = await this.ctx.credentials.resolve(credentialRef(name.trim()))
+      if (credential !== undefined) break
+    }
     if (credential === undefined) {
       return { status: 'missing-credential', updatedAt: Date.now() }
     }
@@ -529,9 +563,12 @@ export class FinanceService extends TypertRemoteService {
         status: 'ok',
         provider: 'deepseek-official',
         ...view.totalMicros !== undefined ? { totalMicros: view.totalMicros } : {},
-        ...view.currency !== undefined && (view.currency === 'CNY' || view.currency === 'USD')
-          ? { currency: view.currency }
-          : {},
+        // Currency flows verbatim — anything the upstream API reports (CNY /
+        // USD / JPY / EUR / ...) lands on the per-provider slot unchanged.
+        // The legacy view was hard-filtering to CNY/USD; the wider wire shape
+        // preserves the real currency so multi-currency accounts aren't
+        // silently relabelled.
+        ...view.currency !== undefined ? { currency: view.currency } : {},
         fetchedAt,
       }
     }

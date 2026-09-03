@@ -33,6 +33,16 @@ const memory = new Map<string, string>()
 
 beforeEach(() => { memory.clear() })
 
+const DSH_OVERRIDES_KEY = 'dsh-spark-finance.dsh-provider-overrides'
+
+/** Seed the browser-local auto-fetch overlay for one provider. */
+function setAutoFetchOverride(provider: string, autoFetchBalance: boolean): void {
+  const raw = memory.get(DSH_OVERRIDES_KEY)
+  const all = raw === undefined ? {} : JSON.parse(raw) as Record<string, { autoFetchBalance: boolean; totalPriceMicros: number }>
+  all[provider] = { autoFetchBalance, totalPriceMicros: 0 }
+  memory.set(DSH_OVERRIDES_KEY, JSON.stringify(all))
+}
+
 const ZERO_LEDGER: FinanceLedger = {
   generatedAt: 1,
   currency: 'CNY',
@@ -103,7 +113,8 @@ function fakeRemote(
     refreshBalance: vi.fn().mockResolvedValue({ ok: true, value: okBalance() }),
     getBackfillProgress: vi.fn(),
     syncCommunityPrices: vi.fn(),
-    getSyncStatus: vi.fn(),
+    // No successful sync yet: dashboard controller polls but gets null back.
+    getSyncStatus: vi.fn().mockResolvedValue({ ok: true, value: null }),
     ...overrides,
   } as unknown as FakeRemote
 }
@@ -188,9 +199,58 @@ describe('FinanceAuditController (commit 21: multi-provider)', () => {
     const controller = new FinanceAuditController(remote as never)
     await controller.load()
     const peaks = controller.store.getSnapshot().peaks
-    expect(peaks['deepseek-official']?.micros).toBe(100_000_000)
+    expect(peaks['deepseek-official']?.byCurrency.CNY?.micros).toBe(100_000_000)
     // Unsupported slots don't seed a peak (no money to track).
     expect(peaks['minimax-cn']).toBeUndefined()
+  })
+
+  it('auto-fetches gate-disabled providers whose overlay flags auto-fetch', async () => {
+    const list = providerList([
+      { provider: 'deepseek-official', balance: { status: 'unsupported', provider: 'deepseek-official', code: 'unsupported-provider', message: 'no per-provider entry', fetchedAt: 1 } },
+    ])
+    const remote = fakeRemote({
+      listProviders: vi.fn().mockResolvedValue({ ok: true, value: list }),
+      refreshBalance: vi.fn().mockResolvedValue({
+        ok: true, value: okBalance({ totalMicros: 200_000_000, fetchedAt: 2 }),
+      }),
+    })
+    setAutoFetchOverride('deepseek-official', true)
+    const controller = new FinanceAuditController(remote as never)
+    await controller.load()
+    // The flagged row is force-refreshed past the host gate.
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(remote.refreshBalance).toHaveBeenCalledWith({ provider: 'deepseek-official' })
+    const dsSlot = controller.store.getSnapshot().providerList?.providers.find(p => p.provider === 'deepseek-official')
+    expect(dsSlot?.balance.status).toBe('ok')
+    expect(dsSlot?.balance.totalMicros).toBe(200_000_000)
+    expect(controller.store.getSnapshot().peaks['deepseek-official']?.byCurrency.CNY?.micros).toBe(200_000_000)
+  })
+
+  it('does not force-fetch providers without the auto-fetch overlay flag', async () => {
+    const list = providerList([
+      { provider: 'deepseek-official', balance: { status: 'unsupported', provider: 'deepseek-official', code: 'unsupported-provider', message: 'no per-provider entry', fetchedAt: 1 } },
+    ])
+    const remote = fakeRemote({
+      listProviders: vi.fn().mockResolvedValue({ ok: true, value: list }),
+    })
+    const controller = new FinanceAuditController(remote as never)
+    await controller.load()
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(remote.refreshBalance).not.toHaveBeenCalled()
+  })
+
+  it('auto-fetch flag is ignored once a provider is not fetch-capable (no hostMeta)', async () => {
+    const list = providerList([
+      { provider: 'minimax-cn', balance: { status: 'unsupported', provider: 'minimax-cn', code: 'unsupported-provider', message: 'no endpoint', fetchedAt: 1 } },
+    ])
+    const remote = fakeRemote({
+      listProviders: vi.fn().mockResolvedValue({ ok: true, value: list }),
+    })
+    setAutoFetchOverride('minimax-cn', true)
+    const controller = new FinanceAuditController(remote as never)
+    await controller.load()
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(remote.refreshBalance).not.toHaveBeenCalled()
   })
 
   it('patches a fresh per-provider balance via refreshProvider and bumps the peak', async () => {
@@ -205,11 +265,11 @@ describe('FinanceAuditController (commit 21: multi-provider)', () => {
     })
     const controller = new FinanceAuditController(remote as never)
     await controller.load()
-    expect(controller.store.getSnapshot().peaks['deepseek-official']?.micros).toBe(100_000_000)
+    expect(controller.store.getSnapshot().peaks['deepseek-official']?.byCurrency.CNY?.micros).toBe(100_000_000)
 
     await controller.refreshProvider('deepseek-official')
     const after = controller.store.getSnapshot()
-    expect(after.peaks['deepseek-official']?.micros).toBe(200_000_000)
+    expect(after.peaks['deepseek-official']?.byCurrency.CNY?.micros).toBe(200_000_000)
     expect(after.providerList?.providers[0]?.balance.totalMicros).toBe(200_000_000)
   })
 
@@ -226,7 +286,7 @@ describe('FinanceAuditController (commit 21: multi-provider)', () => {
     const controller = new FinanceAuditController(remote as never)
     await controller.load()
     await controller.refreshProvider('deepseek-official')
-    expect(controller.store.getSnapshot().peaks['deepseek-official']?.micros).toBe(100_000_000)
+    expect(controller.store.getSnapshot().peaks['deepseek-official']?.byCurrency.CNY?.micros).toBe(100_000_000)
   })
 
   it('patches a refresh failure into the per-row slot without losing other rows', async () => {

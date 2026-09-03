@@ -123,9 +123,15 @@ export type FinancePriceEntryInput =
     utcOffsetMinutes?: number
   }
 
-/** Raw finance configuration as validated from settings, before normalization. */
+/** Raw finance configuration as validated from settings, before normalization.
+ *
+ * Note: no top-level `currency` — every monetary field is per-provider.
+ * `FinanceProviderEntry.currency` carries the provider's account currency, the
+ * legacy `FinanceBalanceView.currency` mirrors the per-provider slot, and the
+ * ledger's display currency follows the row's provider. The bundle defaults
+ * each known provider via `HOST_KNOWN_PROVIDER_META.defaultCurrency`.
+ */
 export interface FinanceConfigInput {
-  currency?: string
   balance?: FinanceConfig['balance']
   defaultPrice?: FinancePriceRate
   /**
@@ -138,13 +144,15 @@ export interface FinanceConfigInput {
    */
   providerDefaults?: Record<string, FinancePriceRate>
   /**
-   * How every route is billed: 'metered' (pay-as-you-go wallet, the default)
-   * or 'plan' (subscription — its computed amount is a LIST-PRICE EQUIVALENT,
-   * never real cash flow). Keys may be either a full model key ('zai/glm-4.6',
-   * highest precedence) or just a provider ('zai').
+   * One price entry per model key, or an era history list of entries.
+   *
+   * Per-route billing classification (plan vs metered) used to live here as a
+   * `billingModes` map; it was retired when the UI editor was dropped
+   * (no surface to set it on, while the bundle never shipped defaults that
+   * actually classified anything as plan). The classification is now
+   * derived exclusively from `hostMeta.defaultBillingMode` on each provider,
+   * so the editor surface never had to exist.
    */
-  billingModes?: Record<string, 'metered' | 'plan'>
-  /** One price entry per model key, or an era history list of entries. */
   prices?: Record<string, FinancePriceEntryInput | FinancePriceEntryInput[]>
   /**
    * Per-provider configuration entries — one row per provider the user wants
@@ -183,7 +191,14 @@ export interface FinanceProviderEntry {
   billingMode: FinanceProviderBillingMode
   /** Currency micros; UI displays in major units (元 / $). Capped at 100,000. */
   totalPriceMicros: number
-  currency: 'CNY' | 'USD'
+  /**
+   * Account currency for this provider. Free-form string — the host-known
+   * metadata seeds it for recognized providers (deepseek-official = CNY by
+   * default), but anything the upstream API emits is allowed through.
+   * Validation stops at "non-empty" so typos surface in the editor instead
+   * of silently dropping balances.
+   */
+  currency: string
   /** Persisted user toggle; the host actually fires the balance fetch. */
   autoFetchBalance: boolean
   /** Optional validity window in epoch ms. Both bounds optional; absent = 永久. */
@@ -194,13 +209,17 @@ export interface FinanceProviderEntry {
  * Balance view for one provider. The current host only fetches DeepSeek; other
  * providers surface as `status: 'unsupported'` with a stable `code` so the UI
  * can pick a sensible empty state. `totalMicros` is in the provider's declared
- * currency (CNY or USD depending on the corresponding entry's `currency`).
+ * currency (whatever the upstream API reports; surfaced verbatim to the UI).
  */
 export interface FinanceProviderBalance {
   status: 'ok' | 'missing-credential' | 'unsupported' | 'error'
   provider: string
   totalMicros?: number
-  currency?: 'CNY' | 'USD'
+  /** Currency code the upstream returned. Free-form string — anything the
+   * API emits (CNY / USD / JPY / EUR / ...) flows through unchanged. The
+   * BalanceGrid's currency-aware formatter falls back to "—" for unknown
+   * codes so a typo doesn't crash the UI. */
+  currency?: string
   /** Stable lower-kebab code (e.g. 'auth', 'http', 'unsupported-provider'). */
   code?: string
   /** Human-readable message; UI may show or hide depending on the code. */
@@ -219,8 +238,14 @@ export interface FinanceConfig {
   }
   defaultPrice: FinancePriceRate
   providerDefaults: Record<string, FinancePriceRate>
-  /** Route-level billing classification; absent = 'metered' at lookup time. */
-  billingModes: Record<string, 'metered' | 'plan'>
+  /**
+   * Per-provider billing mode map populated by the service layer from
+   * `HOST_KNOWN_PROVIDER_META`. Absent for unknown providers — they fall
+   * through to 'metered' at lookup time, matching the historical default.
+   * Free routes are typed `free` here but the wallet-vs-plan rollup
+   * excludes them, so the ledger never books them as cash flow.
+   */
+  hostMetaByProvider: Record<string, FinanceProviderBillingMode>
   prices: Record<string, readonly FinancePriceEntry[]>
   /** Resolved per-provider list (defaults to [] when settings omit it). */
   providers: readonly FinanceProviderEntry[]
@@ -304,7 +329,7 @@ export interface FinanceListProvidersEntry {
    */
   hostMeta?: {
     defaultBillingMode: FinanceProviderBillingMode
-    defaultCurrency: 'CNY' | 'USD'
+    defaultCurrency: string
     supportsBalanceFetch: boolean
     lockBillingModeAndCurrency?: boolean
   }

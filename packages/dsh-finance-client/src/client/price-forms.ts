@@ -30,7 +30,7 @@ export function validRateDraft(rate: RateDraft | null | undefined): boolean {
 
 /** Parse a rate draft into the wire shape; null when a field is malformed. */
 export function parseRateDraft(rate: RateDraft | null | undefined, required: boolean): Record<string, number> | null {
-  if (rate === null || rate === undefined) return required ? null : null
+  if (rate === null || rate === undefined) return null
   const out: Record<string, number> = {}
   const pick = (key: string, field: string): boolean => {
     const text = rate[field as keyof RateDraft].trim()

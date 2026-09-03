@@ -30,8 +30,8 @@ describe('FinancePrefs persistence', () => {
     expect(readFinancePrefs()).toEqual(DEFAULT_FINANCE_PREFS)
   })
 
-  it('default autoSync is true so the simplification actually simplifies', () => {
-    expect(DEFAULT_FINANCE_PREFS.autoSync).toBe(true)
+  it('default autoSync is false (opt-in: first network call needs an explicit flip)', () => {
+    expect(DEFAULT_FINANCE_PREFS.autoSync).toBe(false)
   })
 
   it('persists autoSync off across reads', () => {
@@ -78,7 +78,7 @@ describe('FinancePrefs persistence', () => {
     // Other chart keys kept on default
     expect(prefs.charts.gauge).toBe(true)
     // Newer fields fall back to default
-    expect(prefs.autoSync).toBe(true)
+    expect(prefs.autoSync).toBe(false)
     expect(prefs.lastSync).toBeNull()
   })
 })
