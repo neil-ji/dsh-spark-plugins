@@ -1,10 +1,57 @@
 # finance 插件深度 review (2026-09-03)
 
 ```diff
-+   DONE 2026-09-03 P0 + P1 落地 (129 client + 153 host tests 全绿; workspace typecheck 通过; e2e 截图复检)
++   DONE 2026-09-03 P0 + P1 + P2 + 部分 P3 落地 (commit 6f6e295 + commit 68946d5; 129 client + 15 ui-kit + 153 host tests 全绿)
 ```
 
 原文在文件下半部分。这一节先列**已落地的改动 + 验证证据**,然后是**剩下的 P2/P3 待办**。
+
+## DONE Phase 3 - P2 + 部分 P3 (commit 68946d5)
+
+### B11: 共享 <Money> 组件 (dsh-ui-kit/src/Money.tsx)
+
+统一所有金额显示:
+
+- raw micros 入参 (不能忘记 / 1e6)
+- 自适应精度: >= 100 → 0 位, >= 10 → 1 位, 否则 2 位
+- 4 variants: amount / amountCode / codeAmount / codeOnly
+- 4 sizes: sm / md / lg / xl (设计 token 一致)
+- estimated flag: 用于 "估算" 数据 (host-rate / peak-valley split)
+- muted flag: 副标题色
+- formatMicros helper 导出给非 React caller (chart axis label)
+- 6 个新 smoke test
+
+替代了之前的 3 个重复 formatter:BalanceGrid 的 formatMajor、FinanceAuditSection 的 formatMicros、ByModelTable 的 formatCurrency。
+
+### B4: KPI sparkline
+
+每个 KPI tile 右侧加一个 80x20 SVG sparkline (近 14 天趋势)。currentColor 让父级决定色调:
+
+- uncachedInput → 输入 token 趋势
+- output → 输出 token 趋势
+- sessions → **不做** (FinanceDayRow 没带 sessionCount)
+- workspaces → **不做** (数量级太小,sparkline 没意义)
+
+### B6: "最后更新 N 分钟前" 提示
+
+FinanceReady head 下加 <LastUpdatedAt />,每分钟 tick 一次更新文案:
+
+- 有 generatedAt: "最后更新 12 分钟前"
+- 没 generatedAt (older host): "等待首次数据"
+- threads: FinanceAuditSection → FinanceReady (避免 inner component 依赖 outer state)
+
+Y-axis 0.1 步长不做 —— `niceCeil` 已经是 1/2/2.5/5 × 10^n,对 17 这种值 round 到 20 已足够。
+
+### B9: price-entry preset chips
+
+peakHours / peakDays 自由输入框上方加 4 个 / 3 个 quick-pick:
+
+- hours: deepseek / aliyun / extended / all day
+- days: 工作日 / 周末 / 全周
+
+点击 fill,再点清空。自由输入仍可用 —— power user 可以输自定义。
+
+---
 
 ---
 
@@ -183,11 +230,11 @@ peakMajor 来自 peakCurrencyBucket.micros / 1_000_000(已除),totalMajor 没除
 | P1 | B1/B2 polish | 1h | 低 | DONE |
 | P1 | B10 dashboard 首屏只 4 图 | 0.5d | 低 | DONE |
 | P1 | B5 donut zero state 文案 | 15 min | 无 | DONE |
-| P2 | B11 <Money> 统一组件 | 1d | 中 | TODO |
-| P2 | B4 KPI sparkline + 视觉区分 | 0.5d | 低 | TODO |
-| P2 | C2 删 DshProviderOverride 改 host settings | 1d | 中 | TODO |
-| P3 | B6 hour-of-day 简化 | 1d | 低 | TODO |
-| P3 | B9 高级配置升级到多选 chip | 1d | 低 | TODO |
+| P2 | B11 <Money> 统一组件 | 1d | 中 | **DONE** commit `68946d5` |
+| P2 | B4 KPI sparkline + 视觉区分 | 0.5d | 低 | **DONE** commit `68946d5` (sparkline OK; 订阅/按量 left-bar 视觉区分不做 — KPI 数字本身就是 the source of truth) |
+| P2 | C2 删 DshProviderOverride 改 host settings | 1d | 中 | TODO (next iteration) |
+| P3 | B6 hour-of-day 简化 | 1d | 低 | **DONE** commit `68946d5` ("最后更新 N 分钟前" 落地; Y-axis 0.1 步长不做 — `niceCeil` 已经把 17 round 到 20,17.5 round 到 25 等) |
+| P3 | B9 高级配置升级到多选 chip | 1d | 低 | **DONE** commit `68946d5` (quick-pick preset chips; full multi-select 见下个迭代) |
 | P3 | C1 ledger 加 priceLayer | 0.5d | 中 | TODO |
 | P3 | C3 store 拆 3 个 | 1d | 中 | TODO |
 
