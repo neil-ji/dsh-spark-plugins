@@ -95,13 +95,27 @@ function baseProps() {
   }
 }
 
-function readyProps(list: FinanceListProvidersResult, led: FinanceLedger, peaks: Record<string, { micros: number; updatedAt: number; currency: string }> = {}) {
+function readyProps(list: FinanceListProvidersResult, led: FinanceLedger, peaks: Record<string, { byCurrency: Record<string, { micros: number; updatedAt: number }> }> = {}) {
   return {
     useSnapshot: () => ({ status: 'ready' as const, providerList: list, ledger: led, peaks, error: null }),
     t,
     refresh: () => {},
     refreshProvider: () => {},
   }
+}
+
+// Persist a charts-prefs override so the opt-in cards (byProvider /
+// byWorkspace / byDay) render. The dashboard defaults to those three OFF so a
+// first-time user lands on a useful view inside the settings modal; tests
+// that exercise the opt-in cards seed the pref here. Other prefs (layout,
+// autoSync, lastSync) keep the default values.
+function enableCharts(...keys: Array<'byProvider' | 'byWorkspace' | 'byDay' | 'gauge' | 'kpis' | 'split' | 'hourOfDay' | 'byModel'>) {
+  const charts = {
+    gauge: true, kpis: true, split: true, hourOfDay: true, byModel: true,
+    byProvider: false, byWorkspace: false, byDay: false,
+  }
+  for (const k of keys) charts[k] = true
+  localStorage.setItem('dsh-spark-finance.prefs', JSON.stringify({ layout: 'compact', charts, autoSync: false, lastSync: null }))
 }
 
 describe('FinanceAuditSection (commit 21: multi-provider)', () => {
@@ -143,21 +157,76 @@ describe('FinanceAuditSection (commit 21: multi-provider)', () => {
     expect(html).toContain('title="no endpoint"')
   })
 
+  // B2: every row carries a status dot (CSS-only color signal). ok rows
+  // get a green dot, unsupported rows a slate dot. A regression in the
+  // dot's data attribute would silently lose the only color cue a user
+  // gets when 5 of 6 rows are unsupported.
+  it('renders a status dot whose data-status mirrors the balance slot', () => {
+    const list = providerList([
+      okProvider('deepseek-official', 100_000_000),
+      unsupportedProvider('minimax-cn', 'unsupported-provider'),
+    ])
+    const html = renderToStaticMarkup(createElement(FinanceAuditSection, readyProps(list, ledger())))
+    expect(html).toContain('data-status="ok"')
+    expect(html).toContain('data-status="unsupported"')
+  })
+
+  // Unit-bug regression: totalMicros is integer micros (1 CNY = 1,000,000
+  // micros). The row's right-pinned amount and the gauge percent must both
+  // divide by 1e6 before rendering. The earlier code passed totalMicros
+  // straight to formatMajor() — 12_340_000 micros would render as "12340000"
+  // and a 100% gauge, both visibly wrong. If a future change drops the
+  // division the assertions below trip on the first CI run.
+  it('renders the per-row balance in major units (regression for the / 1e6 unit bug)', () => {
+    const list = providerList([okProvider('deepseek-official', 12_340_000)])
+    const html = renderToStaticMarkup(createElement(FinanceAuditSection, readyProps(list, ledger())))
+    // 12_340_000 micros = 12.34 CNY — rendered as "12.34 CNY" via the
+    // major-units formatMajor().
+    expect(html).toContain('12.34')
+    // The buggy version rendered the raw micros value as "12340000".
+    expect(html).not.toContain('12340000')
+  })
+
+  it('computes the gauge percent from major-vs-major (no micros / major mismatch)', () => {
+    // 50 CNY current, 100 CNY peak → 50% remaining, not 100%.
+    const list = providerList([okProvider('deepseek-official', 50_000_000)])
+    const peaks = { 'deepseek-official': { byCurrency: { CNY: { micros: 100_000_000, updatedAt: 1 } } } }
+    const html = renderToStaticMarkup(createElement(FinanceAuditSection, readyProps(list, ledger(), peaks)))
+    // The gauge div carries aria-valuenow="50".
+    expect(html).toContain('aria-valuenow="50"')
+    // Visible text is the rendered template (the test t() echoes the key),
+    // so we assert on the locale key prefix rather than the zh translation.
+    expect(html).toContain('remaining 50%')
+    // And the peak in major units, not raw micros.
+    expect(html).toContain('peak 100 CNY')
+  })
+
+  it('clamps the gauge to 100% when current balance exceeds the historical peak', () => {
+    // Topped up: 200 CNY current, 100 CNY peak → clamp at 100, not overflow.
+    const list = providerList([okProvider('deepseek-official', 200_000_000)])
+    const peaks = { 'deepseek-official': { byCurrency: { CNY: { micros: 100_000_000, updatedAt: 1 } } } }
+    const html = renderToStaticMarkup(createElement(FinanceAuditSection, readyProps(list, ledger(), peaks)))
+    expect(html).toContain('aria-valuenow="100"')
+  })
+
   it('renders the missing-credential state for providers without an API key', () => {
     const list = providerList([missingCredentialProvider('deepseek-official')])
     const html = renderToStaticMarkup(createElement(FinanceAuditSection, readyProps(list, ledger())))
     expect(html).toContain('missingCredential')
   })
 
-  it('renders a host-known tag on rows whose provider id is in the registry', () => {
+  it('renders a host-known source pill on rows whose provider id is in the registry', () => {
     const list = providerList([okProvider('deepseek-official', 100_000_000)])
     const html = renderToStaticMarkup(createElement(FinanceAuditSection, readyProps(list, ledger())))
-    expect(html).toContain('hostKnown')
+    // The source pill renders with data-source="host-known" (CSS-driven color)
+    // and a locale-key text payload (the test t() echoes the key).
+    expect(html).toContain('data-source="host-known"')
+    expect(html).toContain('sourceHostKnown')
   })
 
   it('reads the per-provider peak from the supplied peaks map', () => {
     const list = providerList([okProvider('deepseek-official', 100_000_000)])
-    const peaks = { 'deepseek-official': { micros: 200_000_000, updatedAt: 1, currency: 'CNY' } }
+    const peaks = { 'deepseek-official': { byCurrency: { CNY: { micros: 200_000_000, updatedAt: 1 } } } }
     const html = renderToStaticMarkup(createElement(FinanceAuditSection, readyProps(list, ledger(), peaks)))
     // peak currency is CNY and the row currency is CNY — the historical
     // peak is rendered as a reference next to the live balance.
@@ -265,6 +334,7 @@ describe('FinanceAuditSection (commit 21: multi-provider)', () => {
   })
 
   it('renders the daily trend chart from the ledger', () => {
+    enableCharts('byDay')
     const led = ledger({
       byDay: [
         { day: '2026-01-15', usage: { uncachedInputTokens: 100, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 50 }, costMicros: 1_000_000 },
@@ -297,6 +367,7 @@ describe('FinanceAuditSection (commit 21: multi-provider)', () => {
   })
 
   it('renders the by-workspace bar chart from the ledger', () => {
+    enableCharts('byWorkspace')
     const led = ledger({
       byWorkspace: [
         { workspaceId: 'ws-1', title: 'Workspace A', sessionCount: 5, usage: { uncachedInputTokens: 100, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 50 }, costMicros: 1_000_000 },
@@ -308,6 +379,7 @@ describe('FinanceAuditSection (commit 21: multi-provider)', () => {
   })
 
   it('renders the by-provider cost donut from the ledger rollup', () => {
+    enableCharts('byProvider')
     const led = ledger({
       byProvider: [
         { provider: 'deepseek-official', usage: { uncachedInputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 }, costMicros: 5_000_000, modelCount: 1, billingMode: 'metered' },

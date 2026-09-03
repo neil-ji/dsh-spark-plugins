@@ -38,6 +38,15 @@
   padding-bottom: 8px;
 }
 
+/* Inline dashboard — the audit section lives at the top of the card body.
+   A subtle separator + tighter top padding keeps the visual hierarchy:
+   first you see numbers, then you edit. */
+.dashboard {
+  margin-top: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--dsw-alias-border-l2);
+}
+
 .readOnly {
   color: var(--dsw-alias-label-tertiary);
   margin: 12px 0 0;
@@ -390,6 +399,25 @@
   display: flex;
   justify-content: space-between;
   margin-bottom: 8px;
+}
+
+/* Host-owned meta line (billing mode + currency). One row of small chips so
+   the read-only body below only carries fields the 编辑 button can actually
+   change. */
+.providerMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: -4px 0 10px;
+  padding: 6px 8px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  border-radius: 6px;
+}
+.providerMetaItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
 }
 .providerName {
   color: var(--dsw-alias-label-primary);

@@ -7,26 +7,34 @@
  * tracking instead of throwing.
  */
 
-/** Single-key record; currency guards against config switches. */
-export interface StoredBalancePeak {
+/**
+ * Per-currency peak record for one provider. A single provider can carry
+ * peaks in several currencies (deepseek-official on a multi-currency account
+ * reports both CNY and USD balances on different endpoints); keeping each
+ * currency's history separate means a CNY → USD switch no longer wipes the
+ * baseline. The map is keyed by currency code; absence = no history yet.
+ */
+export interface StoredCurrencyPeak {
   micros: number
   updatedAt: number
-  currency: string
+}
+
+/**
+ * One provider's stored baseline: a map of currency code → peak. Legacy
+ * per-provider records (commit 19's `{micros, currency, updatedAt}` shape)
+ * migrate into the map under their embedded currency on the next read.
+ */
+export interface StoredBalancePeak {
+  byCurrency: Record<string, StoredCurrencyPeak>
 }
 
 const PEAK_KEY = 'dsh-spark-finance.balance-peak'
 const PEAKS_KEY = 'dsh-spark-finance.balance-peaks'
 
 /**
- * Commit 19: read the recharge baseline for ONE provider. Returns the per-provider
- * map if present, otherwise the single-key legacy value (treated as
- * `deepseek-official`'s peak — the only provider we ever had pre-commit-19),
- * otherwise undefined.
- *
- * Migration: on the first read, if the legacy single key is present and the
- * per-provider map is not, the legacy value is migrated into the map under
- * `deepseek-official` and the legacy key is removed. Subsequent reads return
- * the migrated value without further migration.
+ * Read the peak for ONE provider (returns the full record so callers can
+ * switch currencies without re-reading storage). The `provider` lookup is
+ * the most common path; the multi-currency view is read off `byCurrency`.
  */
 export function readBalancePeak(provider: string): StoredBalancePeak | undefined {
   return readAllBalancePeaks()[provider]
@@ -40,14 +48,20 @@ export function readAllBalancePeaks(): Record<string, StoredBalancePeak> {
     if (rawMap !== null) {
       const parsed = JSON.parse(rawMap) as unknown
       if (isPeakMap(parsed)) return parsed
+      // Legacy per-provider shape (commit 19: each entry has inline
+      // {micros, currency, updatedAt}). Refold into the new `byCurrency` map
+      // so old browsers don't lose their history.
+      if (isLegacyPerProviderMap(parsed)) return migrateLegacyMap(parsed)
     }
-    // No per-provider map yet: try to migrate the legacy single key under
-    // `deepseek-official` (the only provider we ever had pre-commit-19).
+    // No per-provider map yet: try to migrate the very first legacy shape
+    // (single-key, committed before commit 19) under `deepseek-official`.
     const rawSingle = localStorage.getItem(PEAK_KEY)
     if (rawSingle === null) return {}
-    const parsedSingle = JSON.parse(rawSingle) as Partial<StoredBalancePeak>
-    if (!isPeak(parsedSingle)) return {}
-    const migrated: Record<string, StoredBalancePeak> = { 'deepseek-official': parsedSingle }
+    const parsedSingle = JSON.parse(rawSingle) as unknown
+    if (!isLegacyFlatPeak(parsedSingle)) return {}
+    const migrated: Record<string, StoredBalancePeak> = {
+      'deepseek-official': { byCurrency: { [parsedSingle.currency]: { micros: parsedSingle.micros, updatedAt: parsedSingle.updatedAt } } },
+    }
     try {
       localStorage.setItem(PEAKS_KEY, JSON.stringify(migrated))
       localStorage.removeItem(PEAK_KEY)
@@ -61,8 +75,9 @@ export function readAllBalancePeaks(): Record<string, StoredBalancePeak> {
 }
 
 /**
- * Write the recharge baseline for ONE provider. The other providers' peaks
- * are preserved.
+ * Write the recharge baseline for ONE provider, replacing the full
+ * `byCurrency` map. The other providers are preserved. Callers that want
+ * to update a single currency should read, mutate, then write back.
  */
 export function writeBalancePeak(provider: string, peak: StoredBalancePeak): void {
   try {
@@ -77,18 +92,53 @@ export function writeBalancePeak(provider: string, peak: StoredBalancePeak): voi
   }
 }
 
-function isPeak(value: unknown): value is StoredBalancePeak {
+interface LegacyFlatPeak {
+  micros: number
+  updatedAt: number
+  currency: string
+}
+
+function isLegacyFlatPeak(value: unknown): value is LegacyFlatPeak {
   if (value === null || typeof value !== 'object') return false
-  const v = value as Partial<StoredBalancePeak>
+  const v = value as Record<string, unknown>
   return typeof v.micros === 'number'
     && typeof v.updatedAt === 'number'
     && typeof v.currency === 'string'
 }
 
+function isLegacyPerProviderMap(value: unknown): value is Record<string, LegacyFlatPeak> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
+  for (const entry of Object.values(value as Record<string, unknown>)) {
+    if (!isLegacyFlatPeak(entry)) return false
+  }
+  return true
+}
+
+function migrateLegacyMap(legacy: Record<string, LegacyFlatPeak>): Record<string, StoredBalancePeak> {
+  const out: Record<string, StoredBalancePeak> = {}
+  for (const [provider, peak] of Object.entries(legacy)) {
+    const existing = out[provider] ?? { byCurrency: {} }
+    existing.byCurrency[peak.currency] = { micros: peak.micros, updatedAt: peak.updatedAt }
+    out[provider] = existing
+  }
+  try {
+    localStorage.setItem(PEAKS_KEY, JSON.stringify(out))
+  } catch {
+    // Migration is best-effort.
+  }
+  return out
+}
+
 function isPeakMap(value: unknown): value is Record<string, StoredBalancePeak> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
   for (const entry of Object.values(value as Record<string, unknown>)) {
-    if (!isPeak(entry)) return false
+    const v = entry as { byCurrency?: unknown }
+    if (v === null || typeof v !== 'object' || typeof v.byCurrency !== 'object' || v.byCurrency === null) {
+      return false
+    }
+    for (const sub of Object.values(v.byCurrency as Record<string, unknown>)) {
+      if (!isLegacyFlatPeak({ ...(sub as Record<string, unknown>), currency: '?' })) return false
+    }
   }
   return true
 }
@@ -148,19 +198,27 @@ export interface FinancePrefs {
 
 export const DEFAULT_FINANCE_PREFS: FinancePrefs = {
   layout: 'compact',
+  // First-screen charts (always on): balance gauge, KPI tiles, peak/off-peak
+  // split, hour-of-day distribution, and the by-model table. The other three
+  // (byProvider / byWorkspace / byDay) are the bulkier cards the settings
+  // modal currently crops off — opt-in via the dashboard view preferences in
+  // the plugin card so power users can still reach them, but a brand-new
+  // browser lands on a useful dashboard instead of a sea of cards.
   charts: {
     gauge: true,
     kpis: true,
     split: true,
     hourOfDay: true,
-    byProvider: true,
     byModel: true,
-    byWorkspace: true,
-    byDay: true,
+    byProvider: false,
+    byWorkspace: false,
+    byDay: false,
   },
-  // autoSync defaults to TRUE: the whole point of the simplification is "users
-  // do not hand-edit prices, the host fetches them". Opt-out is per-browser.
-  autoSync: true,
+  // autoSync defaults to FALSE: opt-in keeps the user in control of the
+  // first silent network call (sync against models.dev) and avoids surprising
+  // users who already maintain prices by hand. Returning users who already
+  // set `autoSync = true` keep their setting — see mergePrefs below.
+  autoSync: false,
   lastSync: null,
 }
 
@@ -184,9 +242,10 @@ function mergePrefs(parsed: Partial<FinancePrefs> | null): FinancePrefs {
   return {
     layout: parsed?.layout === 'standard' ? 'standard' : DEFAULT_FINANCE_PREFS.layout,
     charts,
-    // Default to true so older browser storage (without these keys) silently
-    // enables auto-sync on first read; users can opt out per browser.
-    autoSync: parsed?.autoSync === false ? false : DEFAULT_FINANCE_PREFS.autoSync,
+    // Opt-in: explicit value wins (including a stored `false`), absent key
+    // falls back to the default. The early returns respect whichever the
+    // browser stored last, so a returning user who flipped it off stays off.
+    autoSync: typeof parsed?.autoSync === 'boolean' ? parsed.autoSync : DEFAULT_FINANCE_PREFS.autoSync,
     lastSync: isSyncSnapshot(parsed?.lastSync) ? parsed.lastSync : DEFAULT_FINANCE_PREFS.lastSync,
   }
 }
@@ -271,11 +330,6 @@ export function readAllDshProviderOverrides(): Record<string, DshProviderOverrid
   } catch {
     return {}
   }
-}
-
-/** Read the dsh-overlay entry for one provider, or undefined when the user hasn't set one. */
-export function readDshProviderOverride(provider: string): DshProviderOverride | undefined {
-  return readAllDshProviderOverrides()[provider]
 }
 
 /**

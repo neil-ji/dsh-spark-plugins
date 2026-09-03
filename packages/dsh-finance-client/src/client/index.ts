@@ -1,9 +1,15 @@
 /**
- * Finance audit plugin, browser half. Mounts the generated finance Remote,
- * registers the finance dashboard as one `settings.section` navigation entry,
- * and registers the finance configuration card into the shared Plugins
- * settings section (`settings.plugin.item`) so the plugin's configuration
- * lives on the standard plugin-config page instead of the dashboard.
+ * Finance audit plugin, browser half. Mounts the generated finance Remote and
+ * registers the finance configuration card into the shared Plugins settings
+ * section (`settings.plugin.item`). The dashboard lives at the top of the
+ * card body, so a single `设置 → 插件 → 财务审计` entry holds both the
+ * balance/KPI/chart view and the connection / sync / provider configuration
+ * — the same shape as GitHub / hippomemo / npm connector cards.
+ *
+ * (Pre-2026-09 the dashboard was a separate `settings.section` item. Two
+ * entry points for the same content is a UX trap: power users see one and
+ * ordinary users see the other, and the dashboard's 1-2 minute first-load
+ * backfill blocks the side the user happened to click.)
  */
 
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
@@ -22,10 +28,9 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import { FinanceAuditController } from './controller.ts'
 import type { FinanceAuditState } from './controller.ts'
-import { FinanceAuditSection } from './FinanceAuditSection.tsx'
 import type { FinanceAuditInjected } from './FinanceAuditSection.tsx'
 import { FinanceCardController, type FinanceRemote } from './FinanceCardController.ts'
-import { FinanceCard } from './FinanceCard.tsx'
+import { FinanceCard, type FinanceCardInjected } from './FinanceCard.tsx'
 import { en, zh, type FinanceKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -45,8 +50,9 @@ const NS = 'settings.finance'
 export const inject = ['slots', 'locale', 'remote', 'connection', 'settingsScope']
 
 /**
- * Mount the finance Remote and register the dashboard section plus the plugin
- * configuration card once the shell's slot declarations are on the ledger.
+ * Mount the finance Remote and register the plugin configuration card once
+ * the shell's slot declarations are on the ledger. The card body hosts both
+ * the dashboard view and the editor — see FinanceCard.tsx for the layout.
  */
 export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-finance: dictionaries')
@@ -63,21 +69,12 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   const refresh = (): void => { void controller.load() }
   const refreshProvider = (provider: string): Promise<void> => controller.refreshProvider(provider)
 
-  const injected = (): FinanceAuditInjected => ({
+  const auditInjected = (): FinanceAuditInjected => ({
     useSnapshot,
     t,
     refresh,
     refreshProvider,
   })
-
-  ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section',
-    id: 'finance-audit',
-    order: 20,
-    label: () => t('nav'),
-    locale: NS,
-    inject: injected,
-  }, FinanceAuditSection))
 
   // Plugin configuration card in 设置 → 插件 → 插件配置页. Bound to the
   // `finance` settings namespace the host service registers; rendered only
@@ -96,7 +93,25 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
     name: 'settings.plugin.item',
     key: 'finance',
     locale: NS,
-    inject: () => cardController.inject(),
+    // Card body now also receives the dashboard inject props so the body's
+    // top half can render the dashboard inline. The card owns the section
+    // since commit folded the standalone settings.section item away.
+    inject: (): FinanceCardInjected & FinanceAuditInjected => {
+      const cardFace = cardController.inject()
+      // FinanceCardInjected expects `useFinanceCard` (a selector hook) —
+      // cardFace exposes the underlying SnapshotStore instead, so wrap once
+      // here and forward the rest of the card surface verbatim.
+      const cardInjected: FinanceCardInjected = {
+        ...cardFace,
+        useFinanceCard: bindSnapshotSelector(cardFace.hooks.financeCard) as FinanceCardInjected['useFinanceCard'],
+        // The audit dashboard refreshes share the same shape, so rename
+        // for the card-level type clarity.
+        dashboardRefresh: refresh,
+        refreshProvider,
+        useSnapshot,
+      }
+      return { ...cardInjected, ...auditInjected() }
+    },
   }, FinanceCard))
 
   return async () => {

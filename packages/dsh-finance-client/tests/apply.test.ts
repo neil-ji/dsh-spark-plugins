@@ -89,17 +89,13 @@ describe('dsh-spark-finance-client apply', () => {
     expect(ctx.remote.$mount).toHaveBeenCalledWith(financeRemote)
   })
 
-  it('registers the settings.section slot named finance-audit', async () => {
+  // B7: the standalone `settings.section` entry was removed in commit folding
+  // the dashboard into the plugin card body. One entry, one mental model.
+  it('does not register a standalone settings.section slot', async () => {
     const { ctx, getRegistrar } = fakeCtx()
     await apply(ctx)
-    expect(ctx.slots.inject).toHaveBeenCalledWith('settings.section', expect.any(Function))
-    getRegistrar('settings.section')!()
-    expect(ctx.slots.register).toHaveBeenCalledTimes(1)
-    const [entry] = ctx.slots.register.mock.calls[0]
-    expect(entry.name).toBe('settings.section')
-    expect(entry.id).toBe('finance-audit')
-    expect(entry.order).toBe(20)
-    expect(entry.locale).toBe('settings.finance')
+    expect(ctx.slots.inject).not.toHaveBeenCalledWith('settings.section', expect.any(Function))
+    expect(getRegistrar('settings.section')).toBeUndefined()
   })
 
   it('registers the finance plugin card into settings.plugin.item', async () => {

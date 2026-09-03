@@ -23,6 +23,12 @@ import css from './FinanceCard.module.css'
 export interface ProviderListViewProps {
   /** 合并后的行：dsh 快照 + 本地覆盖层。undefined = 首次拉取尚未返回。 */
   rows: readonly FinanceDshProviderRow[] | undefined
+  /**
+   * First-fetch error from `finance.listProviders`. Surfaces as an inline
+   * retry inside the section so a transient host blip doesn't strand the
+   * card on a permanent loading slot.
+   */
+  loadError: string | undefined
   /** Host 文档只读时禁用所有编辑入口。 */
   disabled: boolean
   t: (key: FinanceKey) => string
@@ -30,6 +36,8 @@ export interface ProviderListViewProps {
   onSave: (provider: string, override: DshProviderOverride) => void
   /** 清除一行的业务字段，回落到 dsh 默认。 */
   onClear: (provider: string) => void
+  /** Retry `listProviders` after a loadError. */
+  onRetry: () => void
 }
 
 /** 空覆盖层的安全默认：价格 0、不自动取余额、无有效期。 */
@@ -42,7 +50,19 @@ function defaultOverride(row: FinanceDshProviderRow): DshProviderOverride {
   }
 }
 
-export function ProviderListView({ rows, disabled, t, onSave, onClear }: ProviderListViewProps): JSX.Element {
+export function ProviderListView({ rows, loadError, disabled, t, onSave, onClear, onRetry }: ProviderListViewProps): JSX.Element {
+  // Error wins over the loading slot: a previous-good snapshot may still be
+  // visible while a retry is in flight, but a fresh failure must not sit on
+  // "正在加载…" forever.
+  if (loadError !== undefined && rows === undefined) {
+    return (
+      <div className={css.providerList} data-testid="finance-provider-list-error">
+        <p className={css.providerLocked}>{t('cardProvidersLoadError')}</p>
+        <p className={css.providerLocked} title={loadError}>{loadError}</p>
+        <Button variant="outline" disabled={disabled} onClick={onRetry}>{t('retry')}</Button>
+      </div>
+    )
+  }
   if (rows === undefined) {
     return (
       <div className={css.providerList} data-testid="finance-provider-list-empty">
@@ -59,6 +79,9 @@ export function ProviderListView({ rows, disabled, t, onSave, onClear }: Provide
   }
   return (
     <div className={css.providerList} data-testid="finance-provider-list">
+      {loadError !== undefined
+        ? <p className={css.providerLocked}>{t('cardProvidersRefreshError')}</p>
+        : null}
       {rows.map((row) => (
         <ProviderRowView
           key={row.provider}
@@ -114,7 +137,19 @@ function ProviderRowView({ row, disabled, t, onSave, onClear }: ProviderRowViewP
   const major = row.override?.totalPriceMicros !== undefined
     ? row.override.totalPriceMicros / 1_000_000
     : null
-  const priceInvalid = editing && !/^\d*\.?\d*$/.test(priceText.trim())
+  // The host schema caps `totalPriceMicros` at 100,000 (in major units);
+  // pre-validate here so the user gets an inline error instead of a
+  // silent "Save failed" banner after the host rejects the write.
+  const MAX_PRICE_MAJOR = 100_000
+  const priceOverCap = (() => {
+    if (!editing) return false
+    const trimmed = priceText.trim()
+    if (trimmed === '') return false
+    if (!/^\d*\.?\d*$/.test(trimmed)) return false
+    const value = Number(trimmed)
+    return Number.isFinite(value) && value > MAX_PRICE_MAJOR
+  })()
+  const priceInvalid = editing && (!/^\d*\.?\d*$/.test(priceText.trim()) || priceOverCap)
 
   const beginEdit = (): void => {
     const fresh = defaultOverride(row)
@@ -138,6 +173,14 @@ function ProviderRowView({ row, disabled, t, onSave, onClear }: ProviderRowViewP
       ...end !== undefined ? { validityEndMs: end } : {},
     })
     setEditing(false)
+    // Cross-controller signal: the dashboard is mounted independently and
+    // would otherwise wait for its next load() (auto-refresh, manual 刷新)
+    // to pick up the new autoFetch flag. Emitting a window event lets it
+    // pull a fresh `listProviders` immediately when the user just enabled
+    // auto-fetch on a previously unsupported provider.
+    window.dispatchEvent(new CustomEvent('dsh-finance-dsh-override-changed', {
+      detail: { provider: row.provider, kind: 'save' },
+    }))
   }
 
   return (
@@ -167,7 +210,14 @@ function ProviderRowView({ row, disabled, t, onSave, onClear }: ProviderRowViewP
               <Button
                 variant="outline"
                 disabled={disabled}
-                onClick={() => onClear(row.provider)}
+                onClick={() => {
+                  onClear(row.provider)
+                  // Mirror the commit() side: dashboard refreshes so the
+                  // gauge/balance updates after a reset.
+                  window.dispatchEvent(new CustomEvent('dsh-finance-dsh-override-changed', {
+                    detail: { provider: row.provider, kind: 'clear' },
+                  }))
+                }}
                 data-testid={`finance-provider-reset-${row.provider}`}
               >
                 {t('reset')}
@@ -176,6 +226,33 @@ function ProviderRowView({ row, disabled, t, onSave, onClear }: ProviderRowViewP
           </span>
         )}
       </div>
+
+      {/* Host-owned meta line: shows fields the user CANNOT edit
+          (billing mode + currency). Lives directly under the head so the
+          read-only body below only carries fields the 编辑 button can
+          actually change — fixing the field-set mismatch where the body
+          promised 计费方式/货币 were editable but the edit form had no input
+          for them. */}
+      {editing ? null : (
+        <div className={css.providerMeta} data-testid={`finance-provider-meta-${row.provider}`}>
+          <span className={css.providerMetaItem}>
+            <span className={css.providerLabel}>{t('cardProviderBillingMode')}</span>
+            <span className={css.providerLocked}>
+              {billingMode === 'metered'
+                ? t('modeMetered')
+                : billingMode === 'plan'
+                  ? t('modePlan')
+                  : billingMode === 'free'
+                    ? t('modeFree')
+                    : '—'}
+            </span>
+          </span>
+          <span className={css.providerMetaItem}>
+            <span className={css.providerLabel}>{t('cardProviderCurrency')}</span>
+            <span className={css.providerLocked}>{meta?.defaultCurrency ?? '—'}</span>
+          </span>
+        </div>
+      )}
 
       {editing ? (
         <div className={css.providerGrid} data-testid={`finance-provider-form-${row.provider}`}>
@@ -187,11 +264,16 @@ function ProviderRowView({ row, disabled, t, onSave, onClear }: ProviderRowViewP
                 className={css.providerPriceInput}
                 type="text"
                 value={priceText}
-                disabled={disabled}
+                // When autoFetch is on, the host fills the price on each
+                // refresh — disable the input so the user knows the value
+                // is auto-managed. The CSS line-through reinforces it.
+                disabled={disabled || autoFetch}
                 onChange={(event) => setPriceText(event.currentTarget.value)}
               />
             </div>
-            {priceInvalid ? <span className={css.providerLabel}>{t('invalidNumber')}</span> : null}
+            {priceInvalid
+              ? <span className={css.providerLabel}>{priceOverCap ? t('cardProviderPriceOverCap') : t('invalidNumber')}</span>
+              : null}
           </div>
           {hasAutoFetch ? (
             <div className={css.providerField}>
@@ -251,22 +333,6 @@ function ProviderRowView({ row, disabled, t, onSave, onClear }: ProviderRowViewP
         </div>
       ) : (
         <div className={css.providerGrid}>
-          <div className={css.providerField}>
-            <span className={css.providerLabel}>{t('cardProviderBillingMode')}</span>
-            <span className={css.providerLocked}>
-              {billingMode === 'metered'
-                ? t('modeMetered')
-                : billingMode === 'plan'
-                  ? t('modePlan')
-                  : billingMode === 'free'
-                    ? t('modeFree')
-                    : '—'}
-            </span>
-          </div>
-          <div className={css.providerField}>
-            <span className={css.providerLabel}>{t('cardProviderCurrency')}</span>
-            <span className={css.providerLocked}>{meta?.defaultCurrency ?? '—'}</span>
-          </div>
           <div className={css.providerField}>
             <span className={css.providerLabel}>{t('cardProviderTotalPrice')}</span>
             <span className={css.providerLocked}>

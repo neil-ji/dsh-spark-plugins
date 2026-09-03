@@ -97,199 +97,224 @@
   gap: 10px;
 }
 
-/* Commit 21: per-provider balance grid (replaces the single BalanceGauge). */
-.balanceGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 14px;
-  margin-top: 8px;
-}
-
-.balanceCard {
+/* Commit 22: per-provider balance list — compact single-line rows. */
+.balanceList {
   display: flex;
   flex-direction: column;
-  gap: 12px;
   border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 14px;
-  background: var(--dsw-alias-bg-layer-2);
-  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-1, var(--dsw-alias-bg-layer-2));
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.balanceRow {
+  display: grid;
+  /* label | stat | value | refresh — the label column gets a hard minimum
+     (160px) so provider ids like "deepseek-official" never clip into
+     "deepseek-of..." on a wide-enough container. The trailing auto columns
+     keep their intrinsic size; the stat column wins the remaining space. */
+  grid-template-columns: minmax(160px, 1.4fr) minmax(0, 1fr) auto auto;
+  column-gap: 10px;
+  align-items: center;
+  padding: 5px 10px;
   min-width: 0;
 }
 
-.balanceCardHead {
+.balanceRow + .balanceRow {
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+
+.balanceRowLabel {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
   flex-wrap: wrap;
+  gap: 4px 6px;
   min-width: 0;
 }
 
-.balanceCardTitle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+.balanceRowName {
   color: var(--dsw-alias-label-primary);
-  font-size: 13px;
-  line-height: 20px;
+  font-size: 12px;
+  line-height: 18px;
   font-weight: 600;
   font-family: var(--dsw-alias-font-mono, ui-monospace, SFMono-Regular, monospace);
+  /* No more ellipsis: the column is wide enough now, and the title attribute
+     below still exposes the full id on hover for assistive tech. */
   min-width: 0;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 
-.balanceCardTag {
+.balanceRowTag,
+.balanceRowValidity,
+.balanceRowSource {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
+  gap: 3px;
+  padding: 1px 7px;
   border-radius: 999px;
   background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
-  font-size: 11px;
-  line-height: 16px;
+  font-size: 10px;
+  line-height: 14px;
   font-weight: 500;
   letter-spacing: 0.02em;
-  text-transform: none;
   white-space: nowrap;
 }
 
-.balanceCardValidity {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  line-height: 16px;
-  font-weight: 500;
-  white-space: nowrap;
-  background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+/* Source pill tints. The four sources the host distinguishes in
+   `FinanceListProvidersEntry.sources` get four stable hues so the user can
+   tell at a glance which providers came from where. */
+.balanceRowSource[data-source='host-known'] {
+  background: var(--dsw-alias-feedback-info-bg, color-mix(in srgb, var(--dsw-static-deepseek-500, #4f6df5) 16%, transparent));
+  color: var(--dsw-alias-feedback-info-fg, var(--dsw-static-deepseek-700, #1e3a8a));
+}
+.balanceRowSource[data-source='user-config'] {
+  background: color-mix(in srgb, #a855f7 18%, transparent);
+  color: #6b21a8;
+}
+.balanceRowSource[data-source='ledger-observed'] {
+  background: color-mix(in srgb, #64748b 18%, transparent);
+  color: #334155;
+}
+.balanceRowSource[data-source='llm-runtime'] {
+  background: var(--dsw-alias-feedback-warning-bg, color-mix(in srgb, #f59e0b 18%, transparent));
+  color: var(--dsw-alias-feedback-warning-fg, #b45309);
+}
+
+/* Status dot — 6px colored circle that prefixes the row's status text. The
+   color is the only cue the user gets when the source pill is missing
+   (e.g. missing-credential providers that were never set up). */
+.balanceRowDot {
+  flex: none;
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dsw-alias-label-tertiary, #94a3b8);
+}
+.balanceRowDot[data-status='ok'] {
+  background: #10b981; /* emerald-500 */
+}
+.balanceRowDot[data-status='missing-credential'] {
+  background: #f59e0b; /* amber-500 */
+}
+.balanceRowDot[data-status='unsupported'] {
+  background: #94a3b8; /* slate-400 */
+}
+.balanceRowDot[data-status='error'] {
+  background: #ef4444; /* red-500 */
 }
 
 /* Validity state colors — only the background tint shifts; the text keeps
- * the secondary tone so contrast is preserved in dark mode. */
-.balanceCardValidity[data-state='remaining'],
-.balanceCardValidity.expired { background: var(--dsw-alias-feedback-warning-bg, color-mix(in srgb, var(--dsw-static-warning-500, #f59e0b) 18%, transparent)); color: var(--dsw-alias-feedback-warning-fg, var(--dsw-static-warning-700, #b45309)); }
+   the secondary tone so contrast is preserved in dark mode. */
+.balanceRowValidity[data-state='remaining'],
+.balanceRowValidity[data-state='expired'] {
+  background: var(--dsw-alias-feedback-warning-bg, color-mix(in srgb, var(--dsw-static-warning-500, #f59e0b) 18%, transparent));
+  color: var(--dsw-alias-feedback-warning-fg, var(--dsw-static-warning-700, #b45309));
+}
 
-.balanceCardBody {
+.balanceRowStat {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
 }
 
-.balanceCardValue {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  min-width: 0;
-}
-
-.balanceCardAmount {
-  color: var(--dsw-alias-label-primary);
-  font-size: 24px;
-  line-height: 32px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
-}
-
-.balanceCardCurrency {
-  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
-  font-size: 12px;
-  line-height: 18px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.balanceCardTrack {
-  height: 8px;
+.balanceRowTrack {
+  flex: none;
+  width: 64px;
+  height: 4px;
   border-radius: 999px;
   background: var(--dsw-alias-interactive-bg-hover);
   overflow: hidden;
 }
 
-.balanceCardFill {
+/* No historical peak yet — full width fill in dashed outline so the
+   gauge reads as "unfilled, awaiting first recharge" instead of 100%. */
+.balanceRowTrackNoPeak .balanceRowFill {
+  background: repeating-linear-gradient(
+    90deg,
+    var(--dsw-alias-interactive-bg-hover) 0 4px,
+    var(--dsw-alias-label-tertiary, transparent) 4px 8px
+  );
+}
+
+.balanceRowFill {
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, var(--dsw-static-deepseek-500), var(--dsw-static-deepseek-400));
   transition: width 0.3s ease;
 }
 
-.balanceCardMeta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 14px;
-  font-size: 12px;
-  line-height: 18px;
+.balanceRowStatText {
+  font-size: 11px;
+  line-height: 16px;
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
-  opacity: 0.78;
+  opacity: 0.8;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 260px;
 }
 
-.balanceCardError {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  min-width: 0;
-}
-
-.balanceCardDash {
-  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
-  font-size: 22px;
-  line-height: 28px;
-  font-weight: 300;
-  flex-shrink: 0;
-}
-
-.balanceCardError p {
+.balanceRowMessage {
   margin: 0;
+  min-width: 0;
+  max-width: 420px;
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
   font-size: 12px;
   line-height: 18px;
   overflow-wrap: anywhere;
-  min-width: 0;
 }
 
-.balanceCardFoot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  border-top: 1px solid var(--dsw-alias-border-l1);
-  padding-top: 8px;
+.balanceRowValue {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  white-space: nowrap;
 }
 
-.balanceCardRefresh {
+.balanceRowAmount {
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.balanceRowCurrency {
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+  font-size: 10px;
+  line-height: 14px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.balanceRowRefresh {
   border: 1px solid var(--dsw-alias-border-l1);
   background: transparent;
   color: var(--dsw-alias-label-primary);
-  font-size: 12px;
-  line-height: 18px;
-  padding: 4px 10px;
-  border-radius: 8px;
+  font-size: 11px;
+  line-height: 16px;
+  padding: 2px 8px;
+  border-radius: 6px;
   cursor: pointer;
+  white-space: nowrap;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-.balanceCardRefresh:hover:not(:disabled) {
+.balanceRowRefresh:hover:not(:disabled) {
   background: var(--dsw-alias-interactive-bg-hover);
   border-color: var(--dsw-alias-border-l2, var(--dsw-alias-border-l1));
 }
 
-.balanceCardRefresh:disabled {
+.balanceRowRefresh:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-.balanceCardNote {
-  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
-  font-size: 11px;
-  line-height: 16px;
-  opacity: 0.72;
 }
 
 /* By-model cost table (scrollable when many model rows). */
@@ -764,6 +789,18 @@
 .chipOn {
   background: var(--dsw-alias-interactive-bg-hover-accent, var(--dsw-alias-interactive-bg-hover));
   opacity: 1;
+}
+
+/* "Stale sync" banner above the dashboard — surfaces when the
+   community price table has not been refreshed in over 24h. */
+.staleSyncHint {
+  color: var(--dsw-alias-feedback-warning-fg, var(--dsw-static-warning-700, #b45309));
+  background: var(--dsw-alias-feedback-warning-bg, color-mix(in srgb, var(--dsw-static-warning-500, #f59e0b) 14%, transparent));
+  border: 1px solid color-mix(in srgb, var(--dsw-static-warning-500, #f59e0b) 30%, transparent);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 18px;
 }
 
 /* "Most worth shifting" hint under the peak/valley split donut. */

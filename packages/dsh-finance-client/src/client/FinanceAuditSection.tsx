@@ -39,8 +39,16 @@ export interface FinanceAuditInjected {
 
 export interface FinanceAuditSectionProps extends SettingsSectionOwnerProps, FinanceAuditInjected {}
 
+/**
+ * Format a micros value with its currency code, matching the BalanceCard
+ * pattern (amount first, code trailing). Falls back to `—` when the
+ * upstream reports an unknown / blank currency code so a typo never
+ * crashes the chart center label.
+ */
 function formatMicros(micros: number, currency: string): string {
-  return `${currency} ${(micros / 1_000_000).toFixed(2)}`
+  const major = micros / 1_000_000
+  const text = major >= 100 ? major.toFixed(0) : major >= 10 ? major.toFixed(1) : major.toFixed(2)
+  return currency === '' ? text : `${text} ${currency}`
 }
 
 function formatTokens(tokens: number): string {
@@ -98,6 +106,13 @@ function beijingClock(ms: number): string {
   const d = new Date(ms + 8 * 3_600_000)
   const pad = (n: number): string => String(n).padStart(2, '0')
   return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`
+}
+
+/** "13:00" — the whole-hour bucket label the rolling-window "top shiftable hours"
+ * hint uses. Distinct from `beijingClock` (which carries minutes) so the
+ * template doesn't have to append ":00" itself. */
+function formatBeijingClockHour(ms: number): string {
+  return `${String(beijingHourOf(ms)).padStart(2, '0')}:00`
 }
 
 
@@ -344,19 +359,58 @@ function HourOfDayChart({ byHourOfDay, split, currency, windowStartMs, t }: {
           if (row.costMicros <= 0) return null
           const x = HOD_PAD.left + (i + 0.5) * slotW
           const h = row.costMicros / yMax * plotH
-          const color = row.peakCostMicros > 0 ? PEAK_COLOR : row.flatCostMicros > 0 ? FLAT_COLOR : OFFPEAK_COLOR
+          // Bar fill reflects the dominant time band. A mixed peak+flat hour
+          // gets a vertical split (amber over slate) so the user can see at
+          // a glance which share is which — earlier this dropped both into
+          // the peak bucket and hid the flat share visually.
+          const peakShare = row.peakCostMicros / row.costMicros
+          const flatShare = row.flatCostMicros / row.costMicros
+          const fillPeakFlat = peakShare > 0 && flatShare > 0
+          const color = row.peakCostMicros > 0 && !fillPeakFlat
+            ? PEAK_COLOR
+            : row.flatCostMicros > 0 && !fillPeakFlat
+              ? FLAT_COLOR
+              : OFFPEAK_COLOR
           return (
-            <rect
-              key={i}
-              x={x - barW / 2}
-              y={baseY - h}
-              width={barW}
-              height={h}
-              rx={2}
-              fill={color}
-              opacity={hover === null || hover === i ? 1 : 0.35}
-              className={css.hodBar}
-            />
+            <g key={i}>
+              {fillPeakFlat
+                ? (
+                  <>
+                    <rect
+                      x={x - barW / 2}
+                      y={baseY - h * peakShare}
+                      width={barW}
+                      height={h * peakShare}
+                      rx={2}
+                      fill={PEAK_COLOR}
+                      opacity={hover === null || hover === i ? 1 : 0.35}
+                      className={css.hodBar}
+                    />
+                    <rect
+                      x={x - barW / 2}
+                      y={baseY - h}
+                      width={barW}
+                      height={h * flatShare}
+                      rx={2}
+                      fill={FLAT_COLOR}
+                      opacity={hover === null || hover === i ? 1 : 0.35}
+                      className={css.hodBar}
+                    />
+                  </>
+                )
+                : (
+                  <rect
+                    x={x - barW / 2}
+                    y={baseY - h}
+                    width={barW}
+                    height={h}
+                    rx={2}
+                    fill={color}
+                    opacity={hover === null || hover === i ? 1 : 0.35}
+                    className={css.hodBar}
+                  />
+                )}
+            </g>
           )
         })}
         {tip}
@@ -396,6 +450,28 @@ export function FinanceAuditSection(props: FinanceAuditSectionProps) {
     const timer = setInterval(() => { refresh() }, 30 * 60_000)
     return () => clearInterval(timer)
   }, [refresh])
+
+  // Cross-controller signal from the plugin config card's Provider list
+  // (ProviderListView dispatches `dsh-finance-dsh-override-changed` on save/
+  // clear). Refreshing here closes the loop so toggling autoFetch on a
+  // previously-unfetchable provider immediately turns the row green and the
+  // balance re-fetches, instead of waiting for the next 30-min timer or a
+  // manual 刷新 click.
+  useEffect(() => {
+    const handler = (): void => { refresh() }
+    window.addEventListener('dsh-finance-dsh-override-changed', handler)
+    return () => window.removeEventListener('dsh-finance-dsh-override-changed', handler)
+  }, [refresh])
+
+  // Surface a stale community price table as a header hint so a silent
+  // auto-sync failure doesn't go unnoticed. We only render the hint when
+  // the host reports an appliedAt timestamp older than 24h (the auto-sync
+  // threshold from persist.ts); absent or zero = never synced yet.
+  const ONE_DAY_MS = 24 * 60 * 60 * 1000
+  const lastSyncAgeMs = state.lastSyncAppliedAt !== undefined && state.lastSyncAppliedAt > 0
+    ? Date.now() - state.lastSyncAppliedAt
+    : null
+  const staleSync = lastSyncAgeMs !== null && lastSyncAgeMs > ONE_DAY_MS
 
   if (state.status === 'idle' || state.status === 'loading') {
     // First open runs the host's one-time hourly backfill, which can take a
@@ -445,6 +521,7 @@ export function FinanceAuditSection(props: FinanceAuditSectionProps) {
       providerList={state.providerList}
       ledger={state.ledger}
       peaks={state.peaks}
+      staleSync={staleSync}
       t={t}
       refresh={refresh}
       refreshProvider={refreshProvider}
@@ -452,10 +529,11 @@ export function FinanceAuditSection(props: FinanceAuditSectionProps) {
   )
 }
 
-function FinanceReady({ providerList, ledger, peaks, t, refresh, refreshProvider }: {
+function FinanceReady({ providerList, ledger, peaks, staleSync, t, refresh, refreshProvider }: {
   providerList: FinanceListProvidersResult
   ledger: FinanceLedger
   peaks: Readonly<Record<string, StoredBalancePeak>>
+  staleSync: boolean
   t: (key: FinanceKey) => string
   refresh: () => void
   refreshProvider: (provider: string) => Promise<void>
@@ -533,10 +611,14 @@ function FinanceReady({ providerList, ledger, peaks, t, refresh, refreshProvider
     .filter(row => (row.shiftSavingsMicros ?? 0) > 0)
     .sort((a, b) => (b.shiftSavingsMicros ?? 0) - (a.shiftSavingsMicros ?? 0))
     .slice(0, 3)
-    .map(row => ({
-      hour: row.hourStartMs !== undefined ? formatBeijingShort(row.hourStartMs) : `${String(row.localHour).padStart(2, '0')}:00`,
-      savingsMicros: row.shiftSavingsMicros ?? 0,
-    })),
+    .map(row => {
+      const hourMs = row.hourStartMs ?? Date.UTC(1970, 0, 1, row.localHour)
+      // "HH:00" — the rolling-window hour start on Beijing (UTC+8) clock,
+      // the same wall time the bar tooltip uses. The render template appends
+      // nothing; this string is the final display label.
+      const hour = formatBeijingClockHour(hourMs)
+      return { hour, savingsMicros: row.shiftSavingsMicros ?? 0 }
+    }),
   [ledger])
 
   // Peak/off-peak split donut: semantic hues per time band, zero-cost bands
@@ -573,6 +655,12 @@ function FinanceReady({ providerList, ledger, peaks, t, refresh, refreshProvider
           <Button variant="outline" onClick={refresh}>{t('refresh')}</Button>
         </div>
       </div>
+
+      {staleSync ? (
+        <div className={css.staleSyncHint} role="status">
+          {t('staleSyncHint')}
+        </div>
+      ) : null}
 
       {charts.gauge ? (
         <section className={css.card}>
@@ -636,7 +724,7 @@ function FinanceReady({ providerList, ledger, peaks, t, refresh, refreshProvider
                 <div className={css.shiftSavingsTop} title={t('shiftSavingsHint')}>
                   <span className={css.shiftSavingsTopLabel}>{t('shiftSavingsTop')}</span>
                   {topShiftHours.map((entry, i) => (
-                    <span key={entry.hour}>{i > 0 ? ' · ' : null}{entry.hour}:00（{formatMicros(entry.savingsMicros, ledger.currency)}）</span>
+                    <span key={entry.hour}>{i > 0 ? ' · ' : null}{entry.hour}（{formatMicros(entry.savingsMicros, ledger.currency)}）</span>
                   ))}
                 </div>
               )}

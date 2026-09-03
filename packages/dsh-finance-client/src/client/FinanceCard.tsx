@@ -12,11 +12,13 @@
  * table by hand. The dashboard view prefs always stay visible at the bottom.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { SnapshotSelectorHook } from 'dsh-spark-plugin-kit/client'
 import { Button, Input, Pill, SegmentedControl, SettingsCardHeader, Textarea } from 'dsh-ui-kit'
 import { ProviderDefaultsEditor, PriceTableEditor, RateFields } from './PriceEditors.tsx'
 import { ProviderListView } from './ProviderListView.tsx'
+import { FinanceAuditSection } from './FinanceAuditSection.tsx'
+import type { FinanceAuditInjected } from './FinanceAuditSection.tsx'
 import type { PriceTableDraft, ProviderDefaultsDraft, RateDraft } from './price-forms.ts'
 import type {
   FinanceCardFace,
@@ -30,6 +32,16 @@ import css from './FinanceCard.module.css'
 
 export interface FinanceCardInjected extends Omit<FinanceCardFace, 'hooks'> {
   useFinanceCard: SnapshotSelectorHook<FinanceCardState>
+  /**
+   * Dashboard inject props, threaded through from the apply() factory so the
+   * body can render `<FinanceAuditSection>` at the top. (Pre-2026-09 the
+   * dashboard was a separate settings.section item; folding it in here
+   * removes the duplicate entry and makes the first-time backfill cost
+   * opt-in via expanding the card.)
+   */
+  useSnapshot: FinanceAuditInjected['useSnapshot']
+  dashboardRefresh: FinanceAuditInjected['refresh']
+  refreshProvider: FinanceAuditInjected['refreshProvider']
 }
 
 export interface FinanceCardProps extends FinanceCardInjected {
@@ -171,10 +183,23 @@ function PriceSyncSection({ t, state, disabled, onSyncNow, onSetAutoSync }: {
   )
 }
 
-/** The card's open body: connection + provider list + sync + plan/metered tags + advanced JSON + dashboard prefs + save row. */
-export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, onSetDefaultPrice, onSetProviderDefaults, onSetPriceTable, onSetLayout, onToggleChart, onSyncNow, onSetAutoSync, onSetDshProviderOverride, onClearDshProviderOverride }: {
+/** The card's open body: dashboard + connection + provider list + sync + plan/metered tags + advanced JSON + dashboard prefs + save row. */
+export function FinanceCardBody({
+  t, state,
+  useSnapshot, dashboardRefresh, refreshProvider,
+  onEdit, onReset, onSave, onDiscard,
+  onSetDefaultPrice, onSetProviderDefaults, onSetPriceTable,
+  onSetLayout, onToggleChart,
+  onSyncNow, onSetAutoSync,
+  onSetDshProviderOverride, onClearDshProviderOverride,
+  onRetryListProviders,
+}: {
   t: (key: FinanceKey) => string
   state: FinanceCardState
+  /** Dashboard inject props — used to mount `<FinanceAuditSection>` inline at the top. */
+  useSnapshot: FinanceAuditInjected['useSnapshot']
+  dashboardRefresh: FinanceAuditInjected['refresh']
+  refreshProvider: FinanceAuditInjected['refreshProvider']
   onEdit: (field: FinanceCardFieldName, text: string) => void
   onReset: (field: FinanceCardFieldName) => void
   onSave: () => void
@@ -190,6 +215,8 @@ export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, 
   onSetDshProviderOverride: (provider: string, override: DshProviderOverride) => void
   /** Drop one provider's business fields, reverting to the dsh snapshot defaults. */
   onClearDshProviderOverride: (provider: string) => void
+  /** Retry `listProviders` after a load error. */
+  onRetryListProviders: () => void
 }) {
   const disabled = !state.writable
   const blocked = !state.dirty || state.invalid || state.saving
@@ -213,21 +240,29 @@ export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, 
     <div className={css.body}>
       {!state.writable ? <p className={css.readOnly} role="status">{t('cardReadOnly')}</p> : null}
 
+      {/*
+        Inline dashboard. The card body hosts the same component that used to
+        live at the standalone `settings.section` entry. The dashboard's own
+        loading / error / stale-sync paths are unchanged — only the surface
+        moves. View preferences (`仪表盘视图偏好`) further down stay where
+        they are; toggling a chart here re-renders the section above.
+      */}
+      <div className={css.dashboard} data-testid="finance-card-dashboard">
+        <FinanceAuditSection
+          useSnapshot={useSnapshot}
+          t={t}
+          refresh={dashboardRefresh}
+          refreshProvider={refreshProvider}
+          // No-op close: the dashboard is no longer a sibling section, so
+          // there's no parent to close. The section's own header renders a
+          // refresh button instead.
+          close={(): void => {}}
+        />
+      </div>
+
       <div className={css.section}>
         <div className={css.sectionTitle}>{t('cardDeepseekConnectionTitle')}</div>
         <p className={css.sectionHint}>{t('cardDeepseekConnectionHint')}</p>
-        <Field
-          id="plugin-config-finance-currency"
-          label={t('cardCurrency')}
-          hint={t('cardCurrencyHint')}
-          state={state.currency}
-          disabled={disabled}
-          invalidLabel={t('invalidText')}
-          overriddenLabel={t('overridden')}
-          resetLabel={t('reset')}
-          onEdit={(text) => onEdit('currency', text)}
-          onReset={() => onReset('currency')}
-        />
         <Field
           id="plugin-config-finance-balance-url"
           label={t('cardBalanceURL')}
@@ -284,10 +319,12 @@ export function FinanceCardBody({ t, state, onEdit, onReset, onSave, onDiscard, 
         <p className={css.sectionHint}>{t('cardProvidersHint')}</p>
         <ProviderListView
           rows={state.dshProviderRows}
+          loadError={state.providerListError}
           disabled={disabled}
           t={t}
           onSave={onSetDshProviderOverride}
           onClear={onClearDshProviderOverride}
+          onRetry={onRetryListProviders}
         />
       </div>
 
@@ -383,12 +420,18 @@ export function FinanceCard(props: FinanceCardProps) {
   const { t } = props
   const state = props.useFinanceCard(snapshot => snapshot)
   const [open, setOpen] = useState(false)
+  const cardRef = useRef<HTMLLIElement | null>(null)
   // Commit 21 followup: the dashboard's empty-state "open config" action dispatches
   // this window event. We catch it, expand the card, and scroll it into view
   // so the user lands on the provider form.
   useEffect(() => {
     const handler = (): void => {
       setOpen(true)
+      // rAF defers one frame so the now-uncollapsed body has a layout to
+      // scroll into (otherwise scrollIntoView measures the collapsed card).
+      requestAnimationFrame(() => {
+        cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      })
     }
     window.addEventListener('dsh-finance-open-config', handler)
     return () => { window.removeEventListener('dsh-finance-open-config', handler) }
@@ -396,7 +439,7 @@ export function FinanceCard(props: FinanceCardProps) {
   if (!state.available) return null
 
   return (
-    <li className={open ? `${css.card} ${css.cardOpen}` : css.card}>
+    <li ref={cardRef} className={open ? `${css.card} ${css.cardOpen}` : css.card}>
       <SettingsCardHeader
         title={t('cardTitle')}
         description={t('cardDescription')}
@@ -410,6 +453,9 @@ export function FinanceCard(props: FinanceCardProps) {
         <FinanceCardBody
           t={t}
           state={state}
+          useSnapshot={props.useSnapshot}
+          dashboardRefresh={props.dashboardRefresh}
+          refreshProvider={props.refreshProvider}
           onEdit={props.edit}
           onReset={props.resetField}
           onSave={props.save}
@@ -423,6 +469,7 @@ export function FinanceCard(props: FinanceCardProps) {
           onSetAutoSync={props.setAutoSync}
           onSetDshProviderOverride={props.setDshProviderOverride}
           onClearDshProviderOverride={props.clearDshProviderOverride}
+          onRetryListProviders={props.retryListProviders}
         />
       )}
     </li>

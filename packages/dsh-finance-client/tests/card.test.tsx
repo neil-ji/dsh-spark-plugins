@@ -61,7 +61,6 @@ function state(overrides: Partial<FinanceCardState> = {}): FinanceCardState {
     invalid: false,
     saving: false,
     failed: false,
-    currency: field('CNY'),
     balanceBaseURL: field('https://api.deepseek.com'),
     balanceApiKeyEnv: field('DEEPSEEK_API_KEY'),
     balanceTimeoutMs: field('10000'),
@@ -83,6 +82,13 @@ function state(overrides: Partial<FinanceCardState> = {}): FinanceCardState {
 const baseProps = {
   t,
   useFinanceCard: (selector: (snapshot: FinanceCardState) => unknown) => selector(state()),
+  // B7: same dashboard stubs as bodyProps so the card-level tests cover the
+  // new inject surface. The card's render path doesn't depend on dashboard
+  // content (it always renders the body inside the disclosure), so a no-op
+  // selector + no-op refresh is enough.
+  useSnapshot: (selector: (snapshot: { status: 'idle' }) => unknown) => selector({ status: 'idle' as const }),
+  dashboardRefresh: () => {},
+  refreshProvider: () => Promise.resolve(),
   edit: () => {},
   resetField: () => {},
   save: () => {},
@@ -114,7 +120,7 @@ describe('FinanceCard', () => {
     expect(html).toContain('aria-expanded="false"')
     expect(html).toContain('cardExpand') // header disclosure aria-label
     // Body is collapsed by default.
-    expect(html).not.toContain('cardCurrency')
+    expect(html).not.toContain('cardDeepseekConnectionTitle')
     expect(html).not.toContain('cardViewsTitle')
   })
 
@@ -131,6 +137,12 @@ describe('FinanceCardBody', () => {
   const bodyProps = {
     t,
     state: state(),
+    // B7: the body now hosts the dashboard inline. The card test renders
+    // with an empty snapshot so the dashboard falls into the loading slot;
+    // section.test.tsx covers the dashboard's actual rendering paths.
+    useSnapshot: (selector: (snapshot: { status: 'idle' }) => unknown) => selector({ status: 'idle' as const }),
+    dashboardRefresh: () => {},
+    refreshProvider: () => Promise.resolve(),
     onEdit: () => {},
     onReset: () => {},
     onSave: () => {},
@@ -150,13 +162,11 @@ describe('FinanceCardBody', () => {
     const html = renderToStaticMarkup(createElement(FinanceCardBody, bodyProps))
     expect(html).toContain('cardDeepseekConnectionTitle')
     expect(html).toContain('cardDeepseekConnectionHint')
-    expect(html).toContain('cardCurrency')
     expect(html).toContain('cardBalanceURL')
     expect(html).toContain('cardBalanceApiKeyEnv')
     expect(html).toContain('cardBalanceTimeoutMs')
     expect(html).toContain('cardDefaultPrice')
     expect(html).toContain('cardPrices')
-    expect(html).toContain('value="CNY"')
     expect(html).toContain('value="https://api.deepseek.com"')
     expect(html).toContain('value="DEEPSEEK_API_KEY"')
     expect(html).toContain('value="10000"')
@@ -210,13 +220,13 @@ describe('FinanceCardBody', () => {
   it('renders field override badges and invalid notices', () => {
     const html = renderToStaticMarkup(createElement(FinanceCardBody, {
       ...bodyProps,
-      state: state({ currency: field('USD', true, true) }),
+      state: state({ balanceBaseURL: field('https://example.com', true, true) }),
     }))
-    expect(html).toContain('overridden')    // currency override badge
+    expect(html).toContain('overridden')    // balance URL override badge
     expect(html).toContain('reset')         // reset control for the override
     // JSON fields validate inline now (no textarea badge); the Field-based
-    // invalid channel still surfaces on scalar fields like currency.
-    expect(html).toContain('invalidText')   // invalid currency text badge
+    // invalid channel still surfaces on scalar fields like the balance URL.
+    expect(html).toContain('invalidText')   // invalid scalar text badge
   })
 
   it('renders a failed-save status line', () => {
@@ -279,6 +289,25 @@ describe('FinanceCardBody', () => {
     expect(html).toContain('¥30.00')
     // autoFetch on the host-known row (supportsBalanceFetch === true)
     expect(html).toContain('cardProviderAutoFetchOn')
+  })
+
+  // B8: the read-only panel used to advertise 计费方式/货币 as editable
+  // fields, but the edit form had no inputs for them — the user clicked
+  // 编辑, then couldn't change them. The fix moves host-owned meta
+  // (billing mode + currency) into a dedicated strip under the card head
+  // and leaves the body to only the editable business fields.
+  it('renders host-owned meta (billing mode + currency) under the card head, not in the body', () => {
+    const html = renderToStaticMarkup(createElement(FinanceCardBody, {
+      ...bodyProps,
+      state: state({ dshProviderRows: makeProviderRows() }),
+    }))
+    // The new meta strip carries the host-owned fields and the bilingual labels.
+    expect(html).toContain('finance-provider-meta-deepseek-official')
+    expect(html).toContain('finance-provider-meta-minimax-cn')
+    // minimax-cn has no hostMeta, so the meta strip still renders with the
+    // label but a "—" placeholder rather than a hidden row.
+    expect(html).toContain('cardProviderBillingMode')
+    expect(html).toContain('cardProviderCurrency')
   })
 
   it('hides the autoFetch field for providers that do not support balance fetch', () => {
