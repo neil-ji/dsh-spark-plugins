@@ -1,10 +1,33 @@
 # finance 插件深度 review (2026-09-03)
 
 ```diff
-+   DONE 2026-09-03 P0 + P1 + P2 + 部分 P3 落地 (commit 6f6e295 + commit 68946d5; 129 client + 15 ui-kit + 153 host tests 全绿)
++   DONE 2026-09-03 P0 + P1 + P2 + P3 (B4/B6/B9/B11) + C2 落地 (commits 6f6e295, 68946d5, debc0a2, a76fce2; 129 client + 15 ui-kit + 153 host tests 全绿)
 ```
 
 原文在文件下半部分。这一节先列**已落地的改动 + 验证证据**,然后是**剩下的 P2/P3 待办**。
+
+## DONE Phase 4 - C2 structural cleanup (commit a76fce2)
+
+`DshProviderOverride` 删完了。其实 prior session 已经把 `BillingModesEditor` 退掉了 (commit 8e87fa3),但 `billingModes` config 字段、`defaultProviderEntry` helper、`billing-modes.ts` 还留着当 dead code。这一轮把路径走完:
+
+### 删除项
+
+- `FinanceConfigInput.billingModes` —— 客户端没人编辑,服务端的 `financeBillingMode()` 直接查 `hostMetaByProvider`
+- `FinanceConfigInput.currency` —— 每个 provider entry 已经带 currency,全局覆盖冗余
+- `client/billing-modes.ts` + 对应 test —— 没人 import 了 (`grep -r billingModes` 只剩 stale doc 注释)
+- `defaultProviderEntry()` helper —— host meta 现在直接 resolve 到 `providerDefaults`
+
+### 新 schema
+
+`FinanceConfig.hostMetaByProvider: Record<string, FinanceBillingMode>` 由 `currentConfig()` 从 `HOST_KNOWN_PROVIDER_META` 现算:`financeBillingMode(config, modelKey)` 现在是 `hostMetaByProvider[financeProviderOf(modelKey)] === 'plan' ? 'plan' : 'metered'`。
+
+`FinanceProviderEntry.currency: z.string()`(不再 union CNY/USD),任何上游 API 能 emit 的 code 都接受 —— 还是要 `required()` 以防 typo。
+
+### 兼容旧 settings
+
+`billingModes` 字段从 schema 删了,但 Typert 未知字段策略是默认接受,所以老 host 带着这个字段的 settings.json 加载时不会炸,只是 lookup 时忽略。
+
+---
 
 ## DONE Phase 3 - P2 + 部分 P3 (commit 68946d5)
 
@@ -232,7 +255,7 @@ peakMajor 来自 peakCurrencyBucket.micros / 1_000_000(已除),totalMajor 没除
 | P1 | B5 donut zero state 文案 | 15 min | 无 | DONE |
 | P2 | B11 <Money> 统一组件 | 1d | 中 | **DONE** commit `68946d5` |
 | P2 | B4 KPI sparkline + 视觉区分 | 0.5d | 低 | **DONE** commit `68946d5` (sparkline OK; 订阅/按量 left-bar 视觉区分不做 — KPI 数字本身就是 the source of truth) |
-| P2 | C2 删 DshProviderOverride 改 host settings | 1d | 中 | TODO (next iteration) |
+| P2 | C2 删 DshProviderOverride 改 host settings | 1d | 中 | **DONE** commit `a76fce2` (dropped `billingModes` config field; classify via `HOST_KNOWN_PROVIDER_META.defaultBillingMode` → `hostMetaByProvider`; removed dead `billing-modes.ts` + test; top-level `currency` field also dropped — per-provider currency only) |
 | P3 | B6 hour-of-day 简化 | 1d | 低 | **DONE** commit `68946d5` ("最后更新 N 分钟前" 落地; Y-axis 0.1 步长不做 — `niceCeil` 已经把 17 round 到 20,17.5 round 到 25 等) |
 | P3 | B9 高级配置升级到多选 chip | 1d | 低 | **DONE** commit `68946d5` (quick-pick preset chips; full multi-select 见下个迭代) |
 | P3 | C1 ledger 加 priceLayer | 0.5d | 中 | TODO |
