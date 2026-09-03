@@ -822,3 +822,43 @@
   font-weight: 600;
   opacity: 1;
 }
+
+
+/* B4: Sparkline trend inside KPI tiles. 80x20 SVG rendered currentColor
+   so a parent decides the hue via color cascade (deepseek blue by
+   default; muted/empty states use a softer label color). */
+.sparkline {
+  color: var(--dsw-static-deepseek-500);
+  flex: none;
+  display: block;
+  margin-left: 8px;
+}
+.sparklineEmpty {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+  margin-left: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* KpiCard now lays out value + sparkline in a flex row so the sparkline
+   rides to the right of the headline number. */
+.kpiValueRow {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+  min-height: var(--fin-kpi-value-lh, 28px);
+}
+
+/* B6: last-updated hint. Small, muted, sits right under the subtitle so
+   it's the first thing the user reads on a stale dashboard. */
+.lastUpdated {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}

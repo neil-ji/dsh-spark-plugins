@@ -18,6 +18,7 @@ import type {
   FinanceListProvidersResult,
   FinanceProviderBalance,
 } from 'dsh-spark-finance/types'
+import { Money, formatMicros as moneyFormatMicros } from 'dsh-ui-kit'
 import type { StoredBalancePeak } from './persist.ts'
 import type { FinanceKey } from './locales.ts'
 import css from './FinanceAuditSection.module.css'
@@ -212,32 +213,28 @@ function ProblemMessage({ slot, fetchUnsupportedNote, t }: { slot: FinanceProvid
   )
 }
 
+
 /** Right-pinned amount for an ok row. */
 function ValueCell({ slot }: { slot: FinanceProviderBalance }): JSX.Element {
   const code = slot.currency ?? 'CNY'
-  // The wire field is in integer micros (1 CNY = 1,000,000 micros); divide once
-  // here so the rendered amount matches the unit the user expects. Skipping
-  // the / 1_000_000 leaves a row that reads "32620000 CNY" instead of
-  // "32.62 CNY".
-  const totalMajor = (slot.totalMicros ?? 0) / 1_000_000
+  // Take micros straight; <Money> handles the major-units math (and the
+  // / 1e6 we used to forget here is now structurally impossible to
+  // drop — see commit 6f6e295 for the original bug).
+  const totalMicros = slot.totalMicros ?? 0
   return (
-    <span className={css.balanceRowValue} title={code + ' ' + totalMajor.toFixed(2)}>
-      <span className={css.balanceRowAmount}>{formatMajor(totalMajor)}</span>
-      <span className={css.balanceRowCurrency}>{code}</span>
+    <span className={css.balanceRowValue}>
+      <Money micros={totalMicros} currency={code} size="md" className={css.balanceRowAmount} />
     </span>
   )
 }
 
 /**
- * Format a major-units number with adaptive precision.
- *
- * Expects **major units already** (i.e. the caller has done the `/ 1_000_000`
- * from micros). Callers that pass raw micros by mistake get nonsensical
- * output — every micros-magnitude number renders as a flat integer, which is
- * the symptom that originally surfaced the unit bug.
+ * Adapter: formatMajor lives in dsh-ui-kit as `formatMicros` (renamed —
+ * it expects integer micros, the only sane unit). We keep the local name
+ * `formatMajor` to avoid touching every callsite that builds tooltip /
+ * title strings; the implementation just delegates.
  */
 function formatMajor(major: number): string {
-  if (major >= 100) return major.toFixed(0)
-  if (major >= 10) return major.toFixed(1)
-  return major.toFixed(2)
+  return moneyFormatMicros(major * 1_000_000)
 }
+

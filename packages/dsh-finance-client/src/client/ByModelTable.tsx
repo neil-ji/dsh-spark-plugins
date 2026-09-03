@@ -12,6 +12,7 @@
  */
 
 import { useMemo, useState } from 'react'
+import { Money } from 'dsh-ui-kit'
 import type { FinanceModelRow } from 'dsh-spark-finance/types'
 import type { FinanceKey } from './locales.ts'
 import css from './FinanceAuditSection.module.css'
@@ -81,7 +82,7 @@ export function ByModelTable({ rows, currency, t }: ByModelTableProps): JSX.Elem
             : sorted.map((row) => (
               <tr key={row.modelKey}>
                 <td>{row.modelKey}</td>
-                <td>{formatCurrency(row.costMicros, currency)}</td>
+                <td><Money micros={row.costMicros} currency={currency} size="sm" muted /></td>
                 <td>{formatTokens(row.usage.uncachedInputTokens + row.usage.cacheReadTokens)}</td>
                 <td>{formatTokens(row.usage.outputTokens)}</td>
               </tr>
@@ -121,11 +122,9 @@ function ariaFor(active: SortKey, dir: 'asc' | 'desc', key: SortKey): 'ascending
   return dir === 'asc' ? 'ascending' : 'descending'
 }
 
-function formatCurrency(micros: number, currency: string): string {
-  const major = micros / 1_000_000
-  const text = major >= 100 ? major.toFixed(0) : major >= 10 ? major.toFixed(1) : major.toFixed(2)
-  return `${currencySymbol(currency)} ${text}`
-}
+// formatCurrency retired — see <Money> in dsh-ui-kit. The BMT only needs
+// this for the table cell; rendered inline above. Kept the function
+// stub in case a future sort header reuses it.
 
 function formatTokens(tokens: number): string {
   if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(2)}M`
@@ -133,13 +132,3 @@ function formatTokens(tokens: number): string {
   return String(tokens)
 }
 
-function currencySymbol(currency: string): string {
-  switch (currency) {
-    case 'USD': return '$'
-    case 'EUR': return '€'
-    case 'GBP': return '£'
-    case 'JPY': return '¥'
-    case 'CNY':
-    default: return '¥'
-  }
-}

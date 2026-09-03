@@ -192,3 +192,9 @@
   flex: 1;
   min-width: 0;
 }
+.presetRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 4px;
+}

@@ -20,7 +20,7 @@ import type {
   FinanceListProvidersResult,
   FinanceProviderBalance,
 } from 'dsh-spark-finance/types'
-import { readAllBalancePeaks, writeBalancePeak, type StoredBalancePeak } from './persist.ts'
+import { readAllBalancePeaks, readAllDshProviderOverrides, writeBalancePeak, type StoredBalancePeak } from './persist.ts'
 
 export interface FinanceAuditState {
   status: 'idle' | 'loading' | 'ready' | 'error'
@@ -41,6 +41,13 @@ export interface FinanceAuditState {
   error: string | null
   /** Live progress of the first-open hourly backfill, shown while loading. */
   progress?: FinanceBackfillProgress
+  /**
+   * Last successful community price sync the host has applied. Distinct
+   * from the per-card syncStatus: the dashboard polls it independently so a
+   * silent auto-sync failure surfaces as a "price table is N hours stale"
+   * hint instead of going unnoticed.
+   */
+  lastSyncAppliedAt?: number
 }
 
 type FinanceRemote = ClientRemote['finance']
@@ -58,15 +65,31 @@ function messageOf(error: unknown): string {
  * Commit 21: per-provider; the controller takes the provider id + the slot,
  * not the legacy single `FinanceBalanceView`.
  */
-function trackPeakFor(provider: string, slot: FinanceProviderBalance, current: StoredBalancePeak | undefined): StoredBalancePeak | undefined {
+/**
+ * Update one provider's per-currency baseline.
+ *
+ * Multi-currency aware: a CNY peak and a USD peak live in separate buckets,
+ * so toggling currencies (or seeing both endpoints) no longer destroys the
+ * other currency's history. Returns the merged peak record so the caller
+ * can republish the snapshot.
+ */
+function trackPeakFor(
+  provider: string,
+  slot: FinanceProviderBalance,
+  current: StoredBalancePeak | undefined,
+): StoredBalancePeak | undefined {
   if (slot.status !== 'ok' || slot.totalMicros === undefined) return current
   const currency = slot.currency ?? 'CNY'
-  if (current === undefined || current.currency !== currency || slot.totalMicros > current.micros) {
-    const next: StoredBalancePeak = { micros: slot.totalMicros, updatedAt: Date.now(), currency }
-    writeBalancePeak(provider, next)
-    return next
+  const existing = current?.byCurrency[currency]
+  if (existing !== undefined && slot.totalMicros <= existing.micros) return current
+  const merged: StoredBalancePeak = {
+    byCurrency: {
+      ...current?.byCurrency,
+      [currency]: { micros: slot.totalMicros, updatedAt: Date.now() },
+    },
   }
-  return current
+  writeBalancePeak(provider, merged)
+  return merged
 }
 
 /** One controller per settings surface; never a module-level singleton. */
@@ -158,6 +181,8 @@ export class FinanceAuditController {
         state.peaks = peaks
       })
       this.stopProgressPolling()
+      this.autoFetchFlaggedProviders(listResult.value)
+      this.refreshSyncStatus(generation)
     } catch (error) {
       if (generation !== this.generation) return
       this.store.update(state => {
@@ -165,6 +190,25 @@ export class FinanceAuditController {
         state.error = messageOf(error)
       })
       this.stopProgressPolling()
+    }
+  }
+
+  /**
+   * Honor the per-provider "auto-fetch balance" overlay from the Provider
+   * configuration card (browser-local). When the user flags a fetch-capable
+   * provider for auto-fetching, the host's `listProviders` may still gate it
+   * off (no per-provider entry, or an entry with auto-fetch off), so the slot
+   * comes back `unsupported`. Re-fetch those rows with `refreshBalance`
+   * (which bypasses the gate) so the overview shows the live balance on open
+   * instead of a dead "cannot fetch" state.
+   */
+  private autoFetchFlaggedProviders(list: FinanceListProvidersResult): void {
+    const overrides = readAllDshProviderOverrides()
+    for (const row of list.providers) {
+      const flagged = row.hostMeta?.supportsBalanceFetch === true
+        && row.balance.status === 'unsupported'
+        && overrides[row.provider]?.autoFetchBalance === true
+      if (flagged) void this.refreshProvider(row.provider)
     }
   }
 
@@ -270,5 +314,29 @@ export class FinanceAuditController {
   dispose(): void {
     this.generation += 1
     this.stopProgressPolling()
+  }
+
+  /**
+   * Fire-and-forget poll of the host's last sync status. Surfaces a stale
+   * or failed community price table in the dashboard header so the user
+   * notices when the bundle-default fallback has been in use too long.
+   *
+   * The card's own syncState is the authoritative UI; this is a best-effort
+   * mirror for the dashboard. Generation-guarded so a stale callback can't
+   * overwrite a fresher load.
+   */
+  private refreshSyncStatus(generation: number): void {
+    const remote = this.remote as { getSyncStatus?: () => Promise<{ ok: boolean; value?: { appliedAt?: number } | null; error?: { message: string } }> }
+    const getter = remote.getSyncStatus
+    if (getter === undefined) return
+    void getter().then((result) => {
+      if (generation !== this.generation) return
+      if (!result.ok) return
+      const value = result.value
+      if (value === null || value === undefined) return
+      const appliedAt = value.appliedAt
+      if (typeof appliedAt !== 'number' || appliedAt === 0) return
+      this.store.update(state => { state.lastSyncAppliedAt = appliedAt })
+    })
   }
 }

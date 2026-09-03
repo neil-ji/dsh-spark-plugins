@@ -15,7 +15,7 @@ test('dist 导出齐全（基础组件 + 工具 + 主题）', () => {
     'OnboardingSurface', 'RiskConfirmation', 'FishLogo', 'BrandWordmark',
     'CodeBlock', 'JsonBlock', 'MarkdownText', 'MessageText',
     'Checkbox', 'Textarea', 'SegmentedControl', 'SearchInput',
-    'ListRow', 'SettingsCardHeader',
+    'ListRow', 'SettingsCardHeader', 'Money',
     'setThemePreference', 'useIsDark', 'extractMarkdownPlainText',
     'writeClipboard',
   ]) {
@@ -94,4 +94,48 @@ test('ListRow / SettingsCardHeader SSR 渲染', () => {
     expandLabel: '展开', collapseLabel: '收起',
   }))
   assert.ok(header.includes('记忆插件') && header.includes('容量与召回参数') && header.includes('未保存'))
+})
+
+test('Money 输出金额 + 货币码（默认 amountCode）', () => {
+  // 12_340_000 micros = 12.34 CNY → 12.3 (>= 10 → 1 位小数)
+  const html = renderToStaticMarkup(React.createElement(kit.Money, { micros: 12_340_000, currency: 'CNY' }))
+  assert.ok(html.includes('12.3'), '应当渲染 12.3')
+  assert.ok(html.includes('CNY'), '应当渲染 CNY')
+  assert.ok(html.includes('class="'), '应当带 size_m* class')
+})
+
+test('Money 各档位精度（formatMicros 助手）', () => {
+  // >= 100 整数；>= 10 一位小数；< 10 两位
+  assert.equal(kit.formatMicros(12_340_000), '12.3')    // 12.34 → 1 位
+  assert.equal(kit.formatMicros(326_000_000), '326')      // 326 → 整数
+  assert.equal(kit.formatMicros(1_234_567), '1.23')       // 1.23 → 2 位
+  assert.equal(kit.formatMicros(0), '0.00')               // 0
+  assert.equal(kit.formatMicros(-1_000_000), '-1.00')     // 负数也能处理
+})
+
+test('Money 各种 variant 都不抛错并能 SSR 渲染', () => {
+  for (const variant of ['amount', 'amountCode', 'codeAmount', 'codeOnly']) {
+    for (const size of ['sm', 'md', 'lg', 'xl']) {
+      const html = renderToStaticMarkup(React.createElement(kit.Money, { micros: 1_000_000, currency: 'CNY', variant, size }))
+      assert.ok(typeof html === 'string' && html.length > 0, variant + '/' + size + ' 应当渲染')
+    }
+  }
+})
+
+test('Money amountOnly 不渲染货币码', () => {
+  const html = renderToStaticMarkup(React.createElement(kit.Money, { micros: 5_000_000, currency: 'CNY', variant: 'amount' }))
+  assert.ok(html.includes('5.00'))
+  assert.ok(!html.includes('CNY'), 'amountOnly 不应包含货币码')
+})
+
+test('Money codeOnly 仅渲染货币码', () => {
+  const html = renderToStaticMarkup(React.createElement(kit.Money, { micros: 5_000_000, currency: 'USD', variant: 'codeOnly' }))
+  assert.ok(html.includes('USD'))
+  assert.ok(!html.includes('5.00'), 'codeOnly 不应包含金额')
+})
+
+test('Money estimated 标记带 ~', () => {
+  const html = renderToStaticMarkup(React.createElement(kit.Money, { micros: 1_000_000, currency: 'CNY', estimated: true }))
+  assert.ok(html.includes('~'), 'estimated 应当带 ~ 标记')
+  assert.ok(html.includes('(estimated)'), 'aria-label 应当声明 estimated')
 })

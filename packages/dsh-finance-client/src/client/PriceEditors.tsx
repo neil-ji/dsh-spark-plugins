@@ -4,7 +4,7 @@
  * price-forms.ts for (de)serialization on the save boundary.
  */
 
-import { Input, SegmentedControl } from 'dsh-ui-kit'
+import { Input, Pill, SegmentedControl } from 'dsh-ui-kit'
 import type {
   PriceEntryDraft,
   PriceModelDraft,
@@ -37,30 +37,39 @@ export function RateFields({ rate, onChange, t, idPrefix }: {
   const set = (field: keyof RateDraft, text: string): void => {
     onChange({ ...rate, [field]: text })
   }
-  const invalid = !validRateDraft(rate)
   const fields: Array<[keyof RateDraft, string]> = [
     ['input', t('rateInput')],
     ['cacheRead', t('rateCacheRead')],
     ['cacheWrite', t('rateCacheWrite')],
     ['output', t('rateOutput')],
   ]
+  // Per-field validity so the bad field alone shows red (and announces
+  // itself to screen readers via aria-invalid), not the whole row.
+  const isFieldInvalid = (key: keyof RateDraft): boolean => {
+    const value = rate[key].trim()
+    return value !== '' && !validMicrosDraft(value)
+  }
   return (
     <div className={css.rateGrid}>
-      {fields.map(([key, label]) => (
-        <label key={key} className={`${css.rateField} ${invalid ? css.invalid : ''}`} htmlFor={`${idPrefix}-${key}`}>
-          <span className={css.rateLabel}>{label}</span>
-          <Input
-            id={`${idPrefix}-${key}`}
-            className={css.rateInput}
-            type="text"
-            inputMode="numeric"
-            value={rate[key]}
-            spellCheck={false}
-            onChange={(event) => set(key, event.currentTarget.value)}
-          />
-          <span className={css.rateUnit}>{t('rateUnit')}</span>
-        </label>
-      ))}
+      {fields.map(([key, label]) => {
+        const bad = isFieldInvalid(key)
+        return (
+          <label key={key} className={`${css.rateField} ${bad ? css.invalid : ''}`} htmlFor={`${idPrefix}-${key}`}>
+            <span className={css.rateLabel}>{label}</span>
+            <Input
+              id={`${idPrefix}-${key}`}
+              className={css.rateInput}
+              type="text"
+              inputMode="numeric"
+              value={rate[key]}
+              spellCheck={false}
+              aria-invalid={bad}
+              onChange={(event) => set(key, event.currentTarget.value)}
+            />
+            <span className={css.rateUnit}>{t('rateUnit')}</span>
+          </label>
+        )
+      })}
     </div>
   )
 }
@@ -168,14 +177,24 @@ function PriceEntryEditor({ entry, index, t, disabled, onChange, onRemove }: {
           <div className={css.rateBlock}><span className={css.rateBlockTitle}>{t('offPeakRate')}</span><RateFields rate={entry.offPeak} idPrefix={`price-entry-${index}-offpeak`} t={t} onChange={(offPeak) => onChange({ ...entry, offPeak })} /></div>
           <div className={css.rateBlock}><span className={css.rateBlockTitle}>{t('peakRate')}</span><RateFields rate={entry.peak} idPrefix={`price-entry-${index}-peak`} t={t} onChange={(peak) => onChange({ ...entry, peak })} /></div>
           <div className={`${css.scheduleRow} ${scheduleInvalid ? css.invalid : ''}`}>
-            <label className={css.scheduleField} htmlFor={`price-entry-${index}-hours`}>
+            <div className={css.scheduleField}>
               <span>{t('peakHours')}</span>
+              <div className={css.presetRow}>
+                {HOUR_PRESETS.map((preset) => (
+                  <PresetPill key={preset.label} value={preset.value} current={entry.peakHours} label={preset.label} onSet={(next) => onChange({ ...entry, peakHours: next })} />
+                ))}
+              </div>
               <Input id={`price-entry-${index}-hours`} type="text" value={entry.peakHours} placeholder="9-12, 14-18" spellCheck={false} disabled={disabled} onChange={(event) => onChange({ ...entry, peakHours: event.currentTarget.value })} />
-            </label>
-            <label className={css.scheduleField} htmlFor={`price-entry-${index}-days`}>
+            </div>
+            <div className={css.scheduleField}>
               <span>{t('peakDays')}</span>
+              <div className={css.presetRow}>
+                {DAY_PRESETS.map((preset) => (
+                  <PresetPill key={preset.label} value={preset.value} current={entry.peakDays} label={preset.label} onSet={(next) => onChange({ ...entry, peakDays: next })} />
+                ))}
+              </div>
               <Input id={`price-entry-${index}-days`} type="text" value={entry.peakDays} placeholder="1,2,3,4,5" spellCheck={false} disabled={disabled} onChange={(event) => onChange({ ...entry, peakDays: event.currentTarget.value })} />
-            </label>
+            </div>
           </div>
         </div>
       )}
@@ -244,5 +263,48 @@ export function PriceTableEditor({ value, onChange, disabled, t }: {
         {t('addModel')}
       </button>
     </div>
+  )
+}
+
+
+/**
+ * Quick-pick presets for the peak-hours / peak-days free-text inputs.
+ * One click fills the field with a known deepseek-shaped schedule. The
+ * free-text field stays so power users can still type custom schedules
+ * (e.g. an off-peak lunch hour that doesn't match any preset).
+ */
+const HOUR_PRESETS: ReadonlyArray<{ label: string; value: string }> = [
+  { label: 'deepseek', value: '9-12, 14-18' },
+  { label: 'aliyun', value: '9-12, 13-18' },
+  { label: 'extended', value: '8-22' },
+  { label: 'all day', value: '0-24' },
+]
+
+const DAY_PRESETS: ReadonlyArray<{ label: string; value: string }> = [
+  { label: '工作日', value: '1,2,3,4,5' },
+  { label: '周末', value: '6,7' },
+  { label: '全周', value: '1,2,3,4,5,6,7' },
+]
+
+/**
+ * One-click preset for a single peak-hours / peak-days input. The Pill
+ * is `interactive` so the user can click to set the value (which then
+ * propagates through onChange), or click again to toggle off (set to
+ * empty). Visual state mirrors the current draft.
+ */
+function PresetPill({ value, current, onSet, label }: {
+  value: string
+  current: string
+  label: string
+  onSet: (next: string) => void
+}): JSX.Element {
+  const active = current.trim() === value
+  return (
+    <Pill
+      active={active}
+      onClick={(): void => onSet(active ? '' : value)}
+    >
+      {label}
+    </Pill>
   )
 }

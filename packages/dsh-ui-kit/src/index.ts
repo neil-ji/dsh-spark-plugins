@@ -74,3 +74,5 @@ export {
   useIsDark,
 } from './theme.ts'
 export type { ThemePreference } from './theme.ts'
+export { Money, formatMicros } from "./Money.tsx"
+export type { MoneyProps, MoneyVariant, MoneySize } from "./Money.tsx"

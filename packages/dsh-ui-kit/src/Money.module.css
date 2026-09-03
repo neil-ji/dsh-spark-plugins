@@ -1,0 +1,72 @@
+/* Money: unified currency display. Sizing tokens pick the text size;
+   .amount vs .code lets callers tint the two pieces independently. */
+
+.root {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Sizing tokens. sm: KPI / inline stat; md: balance row amount;
+   lg: card title; xl: hero number (donut center). */
+.size_sm {
+  font-size: 11px;
+  line-height: 16px;
+}
+.size_md {
+  font-size: 13px;
+  line-height: 18px;
+}
+.size_lg {
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 600;
+}
+.size_xl {
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.amount {
+  color: var(--dsw-alias-label-primary);
+}
+
+.code {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 0.78em;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* When muted, both pieces drop to a softer tone — used when the
+   amount is supporting info and the surrounding card is the
+   primary visual element. */
+.muted .amount {
+  color: var(--dsw-alias-label-secondary);
+  font-weight: 500;
+}
+.muted .code {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* codeOnly layout: collapse the gap, no amount rendered. Used for
+   axis labels. */
+.codeOnly {
+  gap: 0;
+}
+.codeOnly .code {
+  font-size: inherit;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* amountOnly: drop the trailing gap so the number reads inline with
+   the surrounding text. */
+.amountOnly {
+  gap: 0;
+}

@@ -18,7 +18,7 @@ import type { FinanceAuditState } from './controller.ts'
 import type { FinanceKey } from './locales.ts'
 import { readFinancePrefs } from './persist.ts'
 import type { FinancePrefs, StoredBalancePeak } from './persist.ts'
-import { BarChart, Button, DonutChart, TrendChart, CHART_PALETTE, OTHER_CHART_COLOR, niceCeil } from 'dsh-ui-kit'
+import { BarChart, Button, DonutChart, Money, TrendChart, CHART_PALETTE, OTHER_CHART_COLOR, niceCeil, formatMicros as moneyFormatMicros } from 'dsh-ui-kit'
 import type { ChartDatum } from 'dsh-ui-kit'
 import css from './FinanceAuditSection.module.css'
 import { BalanceGrid } from './BalanceGrid.tsx'
@@ -40,17 +40,19 @@ export interface FinanceAuditInjected {
 export interface FinanceAuditSectionProps extends SettingsSectionOwnerProps, FinanceAuditInjected {}
 
 /**
- * Format a micros value with its currency code, matching the BalanceCard
- * pattern (amount first, code trailing). Falls back to `—` when the
- * upstream reports an unknown / blank currency code so a typo never
- * crashes the chart center label.
+ * Format a micros value with its currency code, matching the
+ * BalanceCard pattern (amount first, code trailing). Falls back to
+ * the amount alone when the upstream reports an unknown / blank
+ * currency code so a typo never crashes the chart center label.
+ *
+ * Now a thin wrapper over dsh-ui-kit's `formatMicros` (renamed —
+ * it expects integer micros, the only sane unit). The single
+ * source of truth for precision rules lives in ui-kit's Money.tsx.
  */
 function formatMicros(micros: number, currency: string): string {
-  const major = micros / 1_000_000
-  const text = major >= 100 ? major.toFixed(0) : major >= 10 ? major.toFixed(1) : major.toFixed(2)
+  const text = moneyFormatMicros(micros)
   return currency === '' ? text : `${text} ${currency}`
 }
-
 function formatTokens(tokens: number): string {
   if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(2)}M`
   if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}k`
@@ -65,10 +67,14 @@ function currencySymbol(currency: string): string {
 
 
 /** Compact axis label for a micros value: currency symbol + up to two decimals. */
+/**
+ * Chart-axis variant: currency symbol prefix, amount suffix. Used for
+ * bar/donut/trend axis ticks where space is tight and a symbol is
+ * faster to read than a 3-letter code. Delegates the precision
+ * rule to dsh-ui-kit's `formatMicros`.
+ */
 function formatAxisLabel(micros: number, currency: string): string {
-  const yuan = micros / 1_000_000
-  const text = yuan >= 100 ? yuan.toFixed(0) : yuan >= 10 ? yuan.toFixed(1) : yuan.toFixed(2)
-  return `${currencySymbol(currency)}${text}`
+  return `${currencySymbol(currency)}${moneyFormatMicros(micros)}`
 }
 
 /** "2026-01-15" -> "01-15" for axis tick labels. */
@@ -171,11 +177,19 @@ const LEGACY_COLOR = '#94a3b8'
 /** Plan (subscription) routes: list-price equivalents, never cash flow. */
 const PLAN_COLOR = '#a855f7'
 
-function KpiCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
+function KpiCard({ label, value, sub, spark }: {
+  label: string
+  value: string
+  sub?: string
+  spark?: JSX.Element
+}): JSX.Element {
   return (
     <div className={css.kpi}>
       <div className={css.kpiLabel}>{label}</div>
-      <div className={css.kpiValue}>{value}</div>
+      <div className={css.kpiValueRow}>
+        <div className={css.kpiValue}>{value}</div>
+        {spark !== undefined ? spark : null}
+      </div>
       {sub === undefined ? null : <div className={css.kpiSub}>{sub}</div>}
     </div>
   )
@@ -186,11 +200,67 @@ const HOD_H = 220
 const HOD_PAD = { top: 14, right: 10, bottom: 30, left: 50 }
 
 /**
- * 24 local hour-of-day cost bars, colored by time band (amber = peak hour,
- * brand blue = off-peak, slate = flat-era line). Hovering pops the hour's
- * cost, tokens, and band breakdown; the stats row summarizes the peak/off-peak
- * split and the potential shift savings.
+ * Compact sparkline showing a 14-day trend for the KPI tile. SVG only
+ * — no chart-library dep. Empty array → muted "no data" label. The
+ * `label` doubles as the SVG's aria-label so screen readers describe
+ * the trend shape, not just the visual.
  */
+function Sparkline({ values, label, width = 80, height = 20 }: {
+  values: readonly number[]
+  label: string
+  width?: number
+  height?: number
+}): JSX.Element {
+  if (values.length === 0) {
+    return <span className={css.sparklineEmpty} aria-label={label}>—</span>
+  }
+  const max = Math.max(...values, 1)
+  const stepX = values.length > 1 ? width / (values.length - 1) : width
+  const points = values
+    .map((v, i) => `${(i * stepX).toFixed(1)},${(height - (v / max) * height).toFixed(1)}`)
+    .join(' ')
+  return (
+    <svg
+      className={css.sparkline}
+      viewBox={`0 0 ${width} ${height}`}
+      width={width}
+      height={height}
+      role="img"
+      aria-label={label}
+    >
+      <polyline points={points} fill="none" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  )
+}
+
+/**
+ * "Last updated N min ago" hint under the dashboard title. The 30-min
+ * auto-refresh is silent — without this hint the user has no way to
+ * tell whether a number they saw 20 minutes ago is still current.
+ * Renders a soft "awaiting first data" placeholder when generatedAt
+ * is absent (older hosts / first paint before the first load).
+ */
+function LastUpdatedAt({ generatedAt, t }: {
+  generatedAt: number | undefined
+  t: (key: FinanceKey) => string
+}): JSX.Element {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (generatedAt === undefined) return
+    const id = setInterval(() => setNow(Date.now()), 60_000)
+    return () => clearInterval(id)
+  }, [generatedAt])
+  if (generatedAt === undefined) {
+    return <span className={css.lastUpdated} role="status">{t('lastUpdatedNever')}</span>
+  }
+  const minutes = Math.max(0, Math.round((now - generatedAt) / 60_000))
+  return (
+    <span className={css.lastUpdated} role="status">
+      {t('lastUpdated').replace('{minutes}', String(minutes))}
+    </span>
+  )
+}
+
 function HourOfDayChart({ byHourOfDay, split, currency, windowStartMs, t }: {
   byHourOfDay: readonly FinanceHourOfDayRow[]
   split: FinancePeakValleySplit
@@ -525,11 +595,12 @@ export function FinanceAuditSection(props: FinanceAuditSectionProps) {
       t={t}
       refresh={refresh}
       refreshProvider={refreshProvider}
+      generatedAt={state.ledger?.generatedAt}
     />
   )
 }
 
-function FinanceReady({ providerList, ledger, peaks, staleSync, t, refresh, refreshProvider }: {
+function FinanceReady({ providerList, ledger, peaks, staleSync, t, refresh, refreshProvider, generatedAt }: {
   providerList: FinanceListProvidersResult
   ledger: FinanceLedger
   peaks: Readonly<Record<string, StoredBalancePeak>>
@@ -537,6 +608,8 @@ function FinanceReady({ providerList, ledger, peaks, staleSync, t, refresh, refr
   t: (key: FinanceKey) => string
   refresh: () => void
   refreshProvider: (provider: string) => Promise<void>
+  /** Last ledger build time (ms epoch); passed down for the head's "last updated N min ago" hint. */
+  generatedAt: number | undefined
 }) {
   const [refreshingProviders, setRefreshingProviders] = useState<Record<string, boolean>>({})
   const handleRefreshProvider = useCallback((provider: string) => {
@@ -650,6 +723,7 @@ function FinanceReady({ providerList, ledger, peaks, staleSync, t, refresh, refr
         <div>
           <div className={css.title}>{t('title')}</div>
           <div className={css.subtitle}>{t('subtitle')}</div>
+          <LastUpdatedAt generatedAt={generatedAt} t={t} />
         </div>
         <div className={css.actions}>
           <Button variant="outline" onClick={refresh}>{t('refresh')}</Button>
@@ -678,8 +752,16 @@ function FinanceReady({ providerList, ledger, peaks, staleSync, t, refresh, refr
 
       {charts.kpis ? (
         <div className={css.kpis}>
-          <KpiCard label={t('totalInput')} value={formatTokens(ledger.totals.uncachedInputTokens)} />
-          <KpiCard label={t('totalOutput')} value={formatTokens(ledger.totals.outputTokens)} />
+          <KpiCard
+            label={t('totalInput')}
+            value={formatTokens(ledger.totals.uncachedInputTokens)}
+            spark={<Sparkline values={(ledger.byDay ?? []).slice(-14).map(r => r.usage.uncachedInputTokens)} label={t('totalInput')} />}
+          />
+          <KpiCard
+            label={t('totalOutput')}
+            value={formatTokens(ledger.totals.outputTokens)}
+            spark={<Sparkline values={(ledger.byDay ?? []).slice(-14).map(r => r.usage.outputTokens)} label={t('totalOutput')} />}
+          />
           <KpiCard label={t('sessions')} value={String(ledger.sessionCount)} />
           <KpiCard label={t('workspaces')} value={String(ledger.workspaceCount)} />
         </div>
