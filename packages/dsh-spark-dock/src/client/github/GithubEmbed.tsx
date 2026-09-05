@@ -63,5 +63,9 @@ export function GithubEmbedPane(): ReactNode {
   if (injected === undefined) {
     return <div className="dock-empty">GitHub 连接模块加载中…</div>
   }
-  return <GithubSection controller={injected.controller} useSnapshot={injected.useSnapshot} t={injected.t} />
+  return (
+    <div className="dock-embed dock-embed-connector">
+      <GithubSection controller={injected.controller} useSnapshot={injected.useSnapshot} t={injected.t} />
+    </div>
+  )
 }

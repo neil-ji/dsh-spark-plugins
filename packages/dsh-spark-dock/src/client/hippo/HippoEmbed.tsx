@@ -26,7 +26,7 @@ function fallbackT(key: Parameters<MemorySectionProps['t']>[0]): string {
 export function HippoEmbedPane(): ReactNode {
   const t = hippoT ?? fallbackT
   return (
-    <div data-plugin="dsh-hippomemo" className="hippomemo-dock-scope">
+    <div data-plugin="dsh-hippomemo" className="dock-embed hippomemo-dock-scope">
       <MemorySection api={api} t={t} />
     </div>
   )

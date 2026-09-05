@@ -76,5 +76,5 @@ export function FinanceEmbedPane(): ReactNode {
   if (injected === undefined) {
     return <div className="dock-empty">财务审计模块加载中…</div>
   }
-  return <FinanceCard {...injected.card} />
+  return <FinanceCard {...injected.card} defaultOpen />
 }

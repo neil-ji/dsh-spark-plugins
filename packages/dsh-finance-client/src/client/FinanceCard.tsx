@@ -46,6 +46,8 @@ export interface FinanceCardInjected extends Omit<FinanceCardFace, 'hooks'> {
 
 export interface FinanceCardProps extends FinanceCardInjected {
   t: (key: FinanceKey) => string
+  /** 初始展开（设置卡默认折叠；dock 内嵌传 true，避免整屏空白）。 */
+  defaultOpen?: boolean
 }
 
 /** One labelled control: input/textarea + override/invalid badges + reset. */
@@ -419,7 +421,7 @@ export function FinanceCardBody({
 export function FinanceCard(props: FinanceCardProps) {
   const { t } = props
   const state = props.useFinanceCard(snapshot => snapshot)
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(props.defaultOpen === true)
   const cardRef = useRef<HTMLLIElement | null>(null)
   // Commit 21 followup: the dashboard's empty-state "open config" action dispatches
   // this window event. We catch it, expand the card, and scroll it into view

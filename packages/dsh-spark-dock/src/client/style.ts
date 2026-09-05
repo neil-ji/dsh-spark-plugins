@@ -119,6 +119,21 @@ export const DOCK_CSS = [
   '[data-plugin="dsh-spark-dock"] .dock-narr .lab { flex: none; color: var(--dsw-alias-label-tertiary); }',
   '[data-plugin="dsh-spark-dock"] .dock-pill.mini { padding: 1px 7px; font-size: 10px; cursor: default; }',
   '[data-plugin="dsh-spark-dock"] .dock-pill.mini.accent { background: color-mix(in srgb, var(--accent) 16%, transparent); border-color: transparent; color: var(--accent); }',
-  '[data-plugin="dsh-spark-dock"] .dock-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 16px; font-size: 14px; line-height: 1.5; }',
+  '[data-plugin="dsh-spark-dock"] .dock-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 14px 16px; font-size: 14px; line-height: 1.5; }',
   '[data-plugin="dsh-spark-dock"] .dock-empty { padding: 32px 12px; text-align: center; font-size: 13px; color: var(--dsw-alias-label-tertiary); }',
+
+  /* ── 内嵌页 compat 层（2026-09 UIUX 收敛）────────────────────────────
+   * 原则：dock 标题栏已给出模块名与描述，内嵌页自己的设置页级标题
+   * （H2 大标题 + 一句简介）在 overlay 里是三层 chrome 冗余，压掉；
+   * 正文密度向 13px 靠拢；不碰组件内部的业务样式。 */
+  /* hippomemo：类名稳定，直接压标题与简介 */
+  '[data-plugin="dsh-spark-dock"] .hippomemo-title, [data-plugin="dsh-spark-dock"] .hippomemo-intro { display: none; }',
+  /* github / npm：css-modules hash 类不可寻址，用结构选择器
+   * （两包的 section 根部均为 h2.title + p.intro 相邻对） */
+  '.dock-embed-connector :is(h1, h2):first-of-type, .dock-embed-connector :is(h1, h2):first-of-type + p { display: none; }',
+  /* 内嵌正文密度：设置页 16px 基准 → overlay 13px；列表/表单间距收紧 */
+  '.dock-embed { font-size: 13px; line-height: 1.45; }',
+  '.dock-embed :is(h1, h2) { font-size: 15px; line-height: 1.35; margin: 0 0 8px; }',
+  '.dock-embed :is(h3) { font-size: 13px; margin: 0 0 6px; }',
+  '.dock-embed p { font-size: 13px; }',
 ].join('\n')

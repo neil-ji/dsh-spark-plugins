@@ -56,5 +56,9 @@ export function NpmEmbedPane(): ReactNode {
   if (injected === undefined) {
     return <div className="dock-empty">npm 连接模块加载中…</div>
   }
-  return <NpmSection controller={injected.controller} useSnapshot={injected.useSnapshot} t={injected.t} />
+  return (
+    <div className="dock-embed dock-embed-connector">
+      <NpmSection controller={injected.controller} useSnapshot={injected.useSnapshot} t={injected.t} />
+    </div>
+  )
 }
