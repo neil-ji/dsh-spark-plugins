@@ -73,14 +73,11 @@ export async function apply(ctx: ClientContext): Promise<void> {
   }, 'npm-ui: pushed invalidations')
 
   const injected = (): NpmSectionInjected => ({ controller, useSnapshot, t })
+  void injected
 
-  ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section',
-    id: 'npm',
-    order: 30,
-    label: () => t('nav'),
-    inject: injected,
-  }, NpmSection))
+  // 入口退位（2026-09）：完整设置页已由 dsh-spark-dock 悬浮球内嵌
+  // （dock import 本包 ./embed 的 NpmSection），这里不再注册
+  // settings.section。字典、remote mount 与失效监听保留。
 
   // Plugin configuration card in the Plugins settings section (设置 → 插件 → 插件配置页).
   // Bound to the npm settings namespace the host service registers; rendered only

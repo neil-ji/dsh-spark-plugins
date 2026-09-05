@@ -72,14 +72,11 @@ export async function apply(ctx: ClientContext): Promise<void> {
   }, 'github-ui: pushed invalidations')
 
   const injected = (): GithubSectionInjected => ({ controller, useSnapshot, t })
+  void injected
 
-  ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section',
-    id: 'github',
-    order: 20,
-    label: () => t('nav'),
-    inject: injected,
-  }, GithubSection))
+  // 入口退位（2026-09）：完整设置页已由 dsh-spark-dock 悬浮球内嵌
+  // （dock import 本包 ./embed 的 GithubSection），这里不再注册
+  // settings.section。字典、remote mount 与失效监听保留。
 
   // Plugin configuration card in the Plugins settings section (设置 → 插件 → 插件配置页).
   // Bound to the `github` settings namespace the host service registers; rendered only
