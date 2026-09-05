@@ -634,6 +634,9 @@ importers:
       dsh-hippomemo:
         specifier: workspace:*
         version: link:../dsh-hippomemo
+      dsh-spark-finance-client:
+        specifier: workspace:*
+        version: link:../dsh-finance-client
       dsh-spark-plugin-kit:
         specifier: workspace:*
         version: link:../dsh-plugin-kit

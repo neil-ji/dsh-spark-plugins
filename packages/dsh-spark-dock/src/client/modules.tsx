@@ -5,7 +5,7 @@
  */
 import type { ReactNode } from 'react'
 import { SparksPane, ProposalsPane, ScriptsPane, GraphPane } from './spark/SparkModule.tsx'
-import { FinancePane } from './finance/FinanceModule.tsx'
+import { FinanceEmbedPane } from './finance/FinanceEmbed.tsx'
 import { HippoEmbedPane } from './hippo/HippoEmbed.tsx'
 import { GithubEmbedPane } from './github/GithubEmbed.tsx'
 import { NpmEmbedPane } from './npm/NpmEmbed.tsx'
@@ -80,7 +80,7 @@ export const DOCK_MODULES: DockModule[] = [
     id: 'finance', label: '成本', name: '财务审计 Finance',
     sub: '余额 · Token 用量与成本总览',
     accent: 'var(--acc-finance, #22c55e)', icon: <FinanceIcon />,
-    panes: [{ id: 'main', label: '总览', render: () => <FinancePane /> }],
+    panes: [{ id: 'main', label: '总览', render: () => <FinanceEmbedPane /> }],
   },
   {
     id: 'github', label: 'GitHub', name: 'GitHub 连接',

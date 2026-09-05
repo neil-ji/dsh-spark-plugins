@@ -27,6 +27,7 @@
     "dsh-connector-github-ui": "workspace:*",
     "dsh-connector-npm-ui": "workspace:*",
     "dsh-hippomemo": "workspace:*",
+    "dsh-spark-finance-client": "workspace:*",
     "dsh-spark-plugin-kit": "workspace:*",
     "dsh-spark-wire": "workspace:*"
   },

@@ -1,0 +1,80 @@
+/**
+ * Finance embed: renders the FULL dsh-spark-finance-client settings card
+ * inside the dock panel（定位：dock 完全取代设置页入口）——dashboard + 配置
+ * 编辑 + 价格同步 + Provider 管理一体。装配方式镜像原 client/index.ts 的
+ * apply：mount remote.finance → FinanceAuditController + FinanceCardController
+ * （settingsScope('finance')）→ 拼装 FinanceCard 的注入面。
+ */
+import { useEffect, useState, type ReactNode } from 'react'
+import { bindSnapshotSelector, type SnapshotSelectorHook } from 'dsh-spark-plugin-kit/client'
+import {
+  FinanceAuditController,
+  FinanceCard,
+  FinanceCardController,
+  financeRemoteContribution,
+  type FinanceAuditInjected,
+  type FinanceAuditState,
+  type FinanceCardInjected,
+  type FinanceRemote,
+  type FinanceKey,
+} from 'dsh-spark-finance-client/embed'
+
+interface FinanceInjected {
+  card: FinanceCardInjected & FinanceAuditInjected
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let injected: FinanceInjected | undefined
+let started = false
+const listeners = new Set<() => void>()
+
+/** 由 client 入口在 apply 时调用：异步装配注入面，完成后通知 pane 重渲染。 */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function startFinanceEmbed(ctx: any): void {
+  if (started) return
+  started = true
+  void Promise.resolve(ctx.remote.$mount(financeRemoteContribution)).catch(() => {
+    // 原 finance-client 插件同场加载时已 mount 过 → 直接复用
+  }).then(() => {
+    const finance = ctx.reflect.get('remote.finance')
+    if (finance === undefined) return // finance 宿主未加载：pane 保持失败态
+    const controller = new FinanceAuditController(finance)
+    const useSnapshot = bindSnapshotSelector(controller.store) as SnapshotSelectorHook<FinanceAuditState>
+    const t = ctx.locale.bind('settings.finance') as (key: FinanceKey) => string
+    const refresh = (): void => { void controller.load() }
+    const refreshProvider = (provider: string): Promise<void> => controller.refreshProvider(provider)
+
+    const cardController = new FinanceCardController(
+      ctx.settingsScope.bind({ namespace: 'finance' }),
+      finance as unknown as FinanceRemote,
+    )
+    cardController.ensureAutoSync()
+    const cardFace = cardController.inject()
+    const cardInjected: FinanceCardInjected = {
+      ...cardFace,
+      useFinanceCard: bindSnapshotSelector(cardFace.hooks.financeCard) as FinanceCardInjected['useFinanceCard'],
+      dashboardRefresh: refresh,
+      refreshProvider,
+      useSnapshot,
+    }
+    injected = {
+      card: { ...cardInjected, useSnapshot, t, refresh, refreshProvider },
+    }
+    for (const l of listeners) l()
+  }).catch((err: unknown) => {
+    console.warn('[dsh-spark-dock] finance remote mount failed:', err)
+  })
+}
+
+export function FinanceEmbedPane(): ReactNode {
+  const [, bump] = useState(0)
+  useEffect(() => {
+    function remount(): void { bump((n) => n + 1) }
+    listeners.add(remount)
+    return () => { listeners.delete(remount) }
+  }, [])
+  if (injected === undefined) {
+    return <div className="dock-empty">财务审计模块加载中…</div>
+  }
+  return <FinanceCard {...injected.card} />
+}

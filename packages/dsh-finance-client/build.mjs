@@ -108,3 +108,22 @@ await buildAtomic({
   plugins: [cssModulesPlugin()],
   logLevel: 'info',
 })
+
+// embed half: 纯库入口给 dsh-spark-dock 内嵌——同 client 的 css-modules
+// 内联与 external 口径，但无 ModuleLoader banner/footer、不注册槽位。
+// 产物必须是 .cjs：本包 "type": "module"（同 github-ui 的教训）。
+await buildAtomic({
+  entryPoints: { 'embed': 'src/client/embed.ts' },
+  outdir: 'lib',
+  bundle: true,
+  format: 'cjs',
+  platform: 'browser',
+  target: 'es2022',
+  external: [
+    'react',
+    'react/jsx-runtime',
+  ],
+  plugins: [cssModulesPlugin()],
+  outExtension: { '.js': '.cjs' },
+  logLevel: 'info',
+})

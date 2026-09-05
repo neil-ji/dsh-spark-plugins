@@ -8,13 +8,14 @@ import type { ClientContext } from 'dsh-spark-plugin-kit/client'
 import { injectPluginStyle } from 'dsh-spark-plugin-kit/client'
 import { en as ghEn, zh as ghZh } from 'dsh-connector-github-ui/embed'
 import { en as npmEn, zh as npmZh } from 'dsh-connector-npm-ui/embed'
+import { en as finEn, zh as finZh } from 'dsh-spark-finance-client/embed'
 import { en, HIPPOMEMO_CSS, zh } from 'dsh-hippomemo/embed'
 import { DockOverlay } from './DockOverlay.tsx'
 import { setHippoT } from './hippo/HippoEmbed.tsx'
 import { startGithubEmbed } from './github/GithubEmbed.tsx'
 import { startNpmEmbed } from './npm/NpmEmbed.tsx'
+import { startFinanceEmbed } from './finance/FinanceEmbed.tsx'
 import { DOCK_CSS } from './style.ts'
-import { setFinanceRemoteGetter } from './finance/financeRemote.ts'
 import { setReflectGetter } from './reflect.ts'
 
 export const inject = ['slots', 'locale', 'remote', 'remote.credentials', 'settingsScope'] as const
@@ -62,9 +63,11 @@ export function apply(ctx: ClientContext): void {
     try { anyCtx.locale.register('settings.npm', lang, dict) } catch { /* already registered */ }
   }
   startNpmEmbed(ctx)
-  // finance 余额数据源：remote.finance 由 finance-client 异步 $mount，
-  // 必须惰性读取（面板加载时再取），不能在 apply 时同步缓存。
-  setFinanceRemoteGetter(() => (ctx as unknown as { reflect: { get(id: string): unknown } }).reflect.get('remote.finance'))
+  // finance 内嵌：字典重复容忍 + 异步装配（remote.finance + settingsScope）。
+  for (const [lang, dict] of [['zh', finZh], ['en', finEn]] as const) {
+    try { anyCtx.locale.register('settings.finance', lang, dict) } catch { /* already registered */ }
+  }
+  startFinanceEmbed(ctx)
   setReflectGetter((id) => (ctx as unknown as { reflect: { get(id: string): unknown } }).reflect.get(id))
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const slots = (ctx as any).slots as {
