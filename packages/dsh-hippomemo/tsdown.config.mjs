@@ -61,4 +61,18 @@ export default [
       intro: 'var module = { exports: {} }; var exports = module.exports;',
     },
   },
+  {
+    // embed：给 dsh-spark-dock 内嵌用的纯库入口——同 client 的内联/external
+    // 规则，但无 ModuleLoader banner/footer、不注册槽位。
+    name: 'dsh-hippomemo/client-embed',
+    entry: { embed: 'src/client/embed.ts' },
+    outDir: 'lib',
+    format: ['cjs'],
+    platform: 'browser',
+    target: 'es2020',
+    dts: false,
+    clean: false,
+    external: ['react', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'],
+    deps: { alwaysBundle: [/^dsh-spark-plugin-kit/, /^dsh-ui-kit/] },
+  },
 ]

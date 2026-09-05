@@ -58,6 +58,8 @@ await buildAtomic({
     'react',
     'react/jsx-runtime',
     'react-dom',
+    // 平台模块由宿主模块表 require 提供（同各插件 client bundle 的 external 口径）
+    '@deepseek-ai/*',
   ],
   banner: { js: wrapper.banner },
   footer: { js: wrapper.footer },

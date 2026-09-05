@@ -24,6 +24,7 @@
     "cordis.patch.yml"
   ],
   "dependencies": {
+    "dsh-hippomemo": "workspace:*",
     "dsh-spark-plugin-kit": "workspace:*",
     "dsh-spark-wire": "workspace:*"
   },
@@ -35,6 +36,10 @@
       "platform": "web",
       "inject": [
         "@deepseek-ai/dsh-client-modules",
+        "@deepseek-ai/dsh-client-store",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-primitives",
+        "@deepseek-ai/dsh-client-ui-settings",
         "@deepseek-ai/dsh-client-ui-slots"
       ]
     }

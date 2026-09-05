@@ -625,6 +625,9 @@ importers:
 
   packages/dsh-spark-dock:
     dependencies:
+      dsh-hippomemo:
+        specifier: workspace:*
+        version: link:../dsh-hippomemo
       dsh-spark-plugin-kit:
         specifier: workspace:*
         version: link:../dsh-plugin-kit

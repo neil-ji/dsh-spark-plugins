@@ -6,7 +6,7 @@
 import type { ReactNode } from 'react'
 import { SparksPane, ProposalsPane, ScriptsPane, GraphPane } from './spark/SparkModule.tsx'
 import { FinancePane } from './finance/FinanceModule.tsx'
-import { HippoOverviewPane, HippoMemoriesPane, HippoPrefsPane, HippoEvolutionPane } from './hippo/HippoModule.tsx'
+import { HippoEmbedPane } from './hippo/HippoEmbed.tsx'
 import { GithubPane, NpmPane } from './connector/ConnectorModule.tsx'
 
 export interface DockPane {
@@ -56,12 +56,10 @@ const sparkPanes = [
   { id: 'graph', label: 'Graph', render: () => <GraphPane /> },
 ]
 
-/** hippomemo：真实数据（/hippomemo http api）。 */
+/** hippomemo：全功能内嵌官方 MemorySection（dock 取代设置页入口）。
+ *  组件自带 4 tab 总览/记忆/偏好/进化 + CRUD + SSE，无需 dock 子页。 */
 const hippoPanes = [
-  { id: 'overview', label: '总览', render: () => <HippoOverviewPane /> },
-  { id: 'memories', label: '记忆', render: () => <HippoMemoriesPane /> },
-  { id: 'prefs', label: '偏好', render: () => <HippoPrefsPane /> },
-  { id: 'evolution', label: '进化', render: () => <HippoEvolutionPane /> },
+  { id: 'memories', label: '记忆', render: () => <HippoEmbedPane /> },
 ]
 
 export const DOCK_MODULES: DockModule[] = [
@@ -73,7 +71,7 @@ export const DOCK_MODULES: DockModule[] = [
   },
   {
     id: 'hippomemo', label: '记忆', name: '记忆 HippoMemo',
-    sub: '四脑区总览 · 搜索/筛选 · 我的偏好 · 进化引擎',
+    sub: '四脑区总览 · 记忆 CRUD · 我的偏好 · 进化引擎',
     accent: 'var(--acc-hippomemo, #3b82f6)', icon: <HippoIcon />,
     panes: hippoPanes,
   },
