@@ -6,14 +6,16 @@
  */
 import type { ClientContext } from 'dsh-spark-plugin-kit/client'
 import { injectPluginStyle } from 'dsh-spark-plugin-kit/client'
+import { en as ghEn, zh as ghZh } from 'dsh-connector-github-ui/embed'
 import { en, HIPPOMEMO_CSS, zh } from 'dsh-hippomemo/embed'
 import { DockOverlay } from './DockOverlay.tsx'
 import { setHippoT } from './hippo/HippoEmbed.tsx'
+import { startGithubEmbed } from './github/GithubEmbed.tsx'
 import { DOCK_CSS } from './style.ts'
 import { setFinanceRemoteGetter } from './finance/financeRemote.ts'
 import { setReflectGetter } from './reflect.ts'
 
-export const inject = ['slots', 'locale'] as const
+export const inject = ['slots', 'locale', 'remote', 'remote.credentials', 'settingsScope'] as const
 
 /** 幂等注入插件级 CSS（与 registerSettingsSection 的 injectPluginStyle 同形）。 */
 function injectDockStyle(): () => void {
@@ -48,6 +50,11 @@ export function apply(ctx: ClientContext): void {
   const removeHippoCss = injectPluginStyle(hippoCss, 'hippomemo', 'dsh-hippomemo')
   void removeHippoCss
   setHippoT(anyCtx.locale.bind('hippomemo.settings'))
+  // github 内嵌：注册其字典（重复容忍）+ 异步装配 remote/controller 注入面。
+  for (const [lang, dict] of [['zh', ghZh], ['en', ghEn]] as const) {
+    try { anyCtx.locale.register('settings.github', lang, dict) } catch { /* already registered */ }
+  }
+  startGithubEmbed(ctx)
   // finance 余额数据源：remote.finance 由 finance-client 异步 $mount，
   // 必须惰性读取（面板加载时再取），不能在 apply 时同步缓存。
   setFinanceRemoteGetter(() => (ctx as unknown as { reflect: { get(id: string): unknown } }).reflect.get('remote.finance'))

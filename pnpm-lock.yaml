@@ -625,6 +625,9 @@ importers:
 
   packages/dsh-spark-dock:
     dependencies:
+      dsh-connector-github-ui:
+        specifier: workspace:*
+        version: link:../dsh-github-ui
       dsh-hippomemo:
         specifier: workspace:*
         version: link:../dsh-hippomemo

@@ -7,7 +7,8 @@ import type { ReactNode } from 'react'
 import { SparksPane, ProposalsPane, ScriptsPane, GraphPane } from './spark/SparkModule.tsx'
 import { FinancePane } from './finance/FinanceModule.tsx'
 import { HippoEmbedPane } from './hippo/HippoEmbed.tsx'
-import { GithubPane, NpmPane } from './connector/ConnectorModule.tsx'
+import { GithubEmbedPane } from './github/GithubEmbed.tsx'
+import { NpmPane } from './connector/ConnectorModule.tsx'
 
 export interface DockPane {
   id: string
@@ -85,7 +86,7 @@ export const DOCK_MODULES: DockModule[] = [
     id: 'github', label: 'GitHub', name: 'GitHub 连接',
     sub: '令牌 · 操作权限 · Git 身份与代理',
     accent: 'var(--acc-github, #8b5cf6)', icon: <GithubIcon />,
-    panes: [{ id: 'main', label: '连接', render: () => <GithubPane /> }],
+    panes: [{ id: 'main', label: '连接', render: () => <GithubEmbedPane /> }],
   },
   {
     id: 'npm', label: 'npm', name: 'npm 发布',
