@@ -35,6 +35,7 @@ import {
   type SparkId,
 } from 'dsh-spark-wire'
 import { JsonlSparkStorage } from './storage.ts'
+import type { ScriptService } from './script-service.ts'
 import { registerSparkHttpRoutes } from './http.ts'
 import type { SparkChangedEvent, SparkRecordId, SparkStorage, HippoPutInput } from './types.ts'
 import { buildHippoInputFromSpark, deriveTitle } from './types.ts'
@@ -76,9 +77,11 @@ export class SparkService extends Service {
   private readonly maxRecords: number
   private storage: SparkStorage
   private httpRegistered = false
+  private readonly scriptService: ScriptService | undefined
 
-  constructor(ctx: Context, config: SparkConfig = {}) {
+  constructor(ctx: Context, config: SparkConfig = {}, scriptService?: ScriptService) {
     super(ctx, 'spark')
+    this.scriptService = scriptService
     this.filePath = config.filePath ?? defaultFilePath()
     this.maxRecords = config.maxRecords ?? DEFAULT_MAX_RECORDS
     this.storage = new JsonlSparkStorage(this.filePath)
@@ -96,7 +99,7 @@ export class SparkService extends Service {
 
   private ensureRegistered(ctx: Context): void {
     if (this.httpRegistered) return
-    registerSparkHttpRoutes(ctx, this)
+    registerSparkHttpRoutes(ctx, this, this.scriptService)
     this.httpRegistered = true
   }
 

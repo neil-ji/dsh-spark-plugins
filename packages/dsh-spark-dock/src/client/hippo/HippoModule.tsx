@@ -4,6 +4,7 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import { createDockHippomemoApi, type DockHippomemoApi, type MemoryRow, type PendingCandidate } from './hippoApi.ts'
+import { subscribeStream } from '../streams.ts'
 
 const api: DockHippomemoApi = createDockHippomemoApi()
 
@@ -35,7 +36,7 @@ export function HippoOverviewPane(): JSX.Element {
 
   useEffect(() => {
     void load()
-    return api.events(() => { void load() })
+    return subscribeStream('/hippomemo/events', () => { void load() })
   }, [load])
 
   return (
@@ -79,7 +80,7 @@ export function HippoMemoriesPane(): JSX.Element {
     return () => clearTimeout(t)
   }, [q, load])
 
-  useEffect(() => api.events(() => { void load(q) }), [load, q])
+  useEffect(() => subscribeStream('/hippomemo/events', () => { void load(q) }), [load, q])
 
   return (
     <div className="dock-stack">

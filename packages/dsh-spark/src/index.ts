@@ -36,11 +36,12 @@ export const name = 'dsh-spark'
 export const inject = ['webServer', 'tools', 'systemPrompt'] as const
 
 export function apply(ctx: Context, config: SparkConfig = {}): void {
-  const _spark = new SparkService(ctx, config)
+  // Script service must exist before SparkService: the spark HTTP routes carry
+  // the /scripts/* prefix and need the script service passed through.
+  const _script = new ScriptService(ctx)
+  const _spark = new SparkService(ctx, config, _script)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const _emerge = new EmergeService(ctx)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const _script = new ScriptService(ctx)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const _valence = new ValenceService(ctx)
   registerSparkTools(ctx)

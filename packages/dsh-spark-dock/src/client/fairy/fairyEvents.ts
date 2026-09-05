@@ -6,7 +6,16 @@
  * Restraint rules (carried over from the preview decision):
  *  - event-driven only, no polling;
  *  - a 4s dedupe window keeps SSE bursts from machine-gunning the bubble.
+ *
+ * Connection discipline: all streams go through the shared refcounted
+ * registry in reflect-adjacent `streams.ts` — Chrome caps ~6 connections
+ * per host, and three always-on EventSources per tab starve every fetch
+ * (list requests hang at "加载中"). Only the sparks stream stays resident
+ * (fairy + sparks pane share it); the other streams live only while their
+ * pane is mounted.
  */
+import { subscribeStream } from '../streams.ts'
+
 export type FairyMood = 'happy' | 'alert' | 'think' | 'sad' | 'cheer'
 
 export interface FairyAnnouncement {
@@ -20,7 +29,6 @@ type Listener = (a: FairyAnnouncement) => void
 const listeners = new Set<Listener>()
 let lastAt = 0
 let lastText = ''
-let sources: EventSource[] = []
 
 function announce(a: FairyAnnouncement): void {
   const now = Date.now()
@@ -30,39 +38,19 @@ function announce(a: FairyAnnouncement): void {
   for (const l of listeners) l(a)
 }
 
-function listen(url: string, map: (data: string) => FairyAnnouncement | null): void {
-  const es = new EventSource(url)
-  es.onmessage = (ev) => {
-    let operation = ''
-    try {
-      const parsed = JSON.parse(ev.data) as { operation?: string }
-      operation = parsed.operation ?? ''
-    } catch { /* keepalive frames */ }
-    const a = map(operation)
-    if (a !== null) announce(a)
-  }
-  sources.push(es)
-}
+let resident = false
 
-/** Subscribe to real event streams; returns a disposer. */
+/** Fairy's resident subscription: exactly ONE stream stays open for the dock. */
 export function startFairyEvents(): () => void {
-  listen('/sparks/events', (op) => {
-    if (op === 'capture') return { mood: 'happy', text: '捕获了新火花 ✦', src: 'Sparks' }
-    if (op === 'crystallize') return { mood: 'cheer', text: '火花结晶成功 ✦', src: 'Sparks · crystallize' }
-    return null
-  })
-  listen('/proposals/events', (op) =>
-    op === 'reflect' || op === 'resolve'
-      ? { mood: 'think', text: '涌现提议有更新', src: 'Sparks · emerge' }
-      : null)
-  listen('/hippomemo/events', (op) =>
-    op === 'put'
-      ? { mood: 'alert', text: '新增了一条记忆', src: 'HippoMemo' }
-      : null)
-  return () => {
-    for (const es of sources) es.close()
-    sources = []
+  if (!resident) {
+    resident = true
+    subscribeStream('/sparks/events', (op) => {
+      if (op === 'capture') announce({ mood: 'happy', text: '捕获了新火花 ✦', src: 'Sparks' })
+      else if (op === 'crystallize') announce({ mood: 'cheer', text: '火花结晶成功 ✦', src: 'Sparks · crystallize' })
+      else if (op === 'reflect' || op === 'resolve') announce({ mood: 'think', text: '涌现提议有更新', src: 'Sparks · emerge' })
+    })
   }
+  return () => { /* resident stream lives for the dock's lifetime */ }
 }
 
 export function onFairyAnnouncement(l: Listener): () => void {

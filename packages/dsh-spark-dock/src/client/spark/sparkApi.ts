@@ -32,7 +32,6 @@ export interface DockSparksApi {
   reflect(): Promise<unknown>
   listScripts(limit?: number): Promise<ScriptView[]>
   invokeScript(id: string): Promise<unknown>
-  subscribe(onChange: () => void): () => void
 }
 
 export function createDockSparksApi(): DockSparksApi {
@@ -79,11 +78,6 @@ export function createDockSparksApi(): DockSparksApi {
     },
     async invokeScript(id) {
       return request(`/scripts/${encodeURIComponent(id)}/invoke`, { method: 'POST', body: '{}' })
-    },
-    subscribe(onChange) {
-      const es = new EventSource('/sparks/events')
-      es.onmessage = onChange
-      return () => es.close()
     },
   }
 }

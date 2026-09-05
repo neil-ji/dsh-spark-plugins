@@ -623,6 +623,37 @@ importers:
         specifier: ^4.0.0
         version: 4.4.3
 
+  packages/dsh-spark-dock:
+    dependencies:
+      dsh-spark-plugin-kit:
+        specifier: workspace:*
+        version: link:../dsh-plugin-kit
+      dsh-spark-wire:
+        specifier: workspace:*
+        version: link:../dsh-spark-wire
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: ^4.0.1
+        version: 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
+      '@deepseek-ai/dsh-client-ui-slots':
+        specifier: 0.1.2-rc.1
+        version: 0.1.2-rc.1(@deepseek-ai/cordis@4.0.1)
+      '@types/react':
+        specifier: ~18.3.1
+        version: 18.3.31
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.12
+      lightningcss:
+        specifier: ^1.22.0
+        version: 1.33.0
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+
   packages/dsh-spark-ui:
     dependencies:
       dsh-spark-plugin-kit:
@@ -2824,19 +2855,19 @@ snapshots:
     dependencies:
       '@deepseek-ai/cordis': 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
       '@deepseek-ai/cordis-plugin-loader': 1.0.2(@deepseek-ai/cordis@4.0.1)
-      '@deepseek-ai/cosmokit': 1.8.2
+      '@deepseek-ai/cosmokit': 1.8.3
       js-yaml: 4.3.1
     optional: true
 
   '@deepseek-ai/cordis-plugin-loader@1.0.2(@deepseek-ai/cordis@4.0.1)':
     dependencies:
       '@deepseek-ai/cordis': 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
-      '@deepseek-ai/cosmokit': 1.8.2
+      '@deepseek-ai/cosmokit': 1.8.3
     optional: true
 
   '@deepseek-ai/cordis@4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)':
     dependencies:
-      '@deepseek-ai/cosmokit': 1.8.2
+      '@deepseek-ai/cosmokit': 1.8.3
       '@standard-schema/spec': 1.1.0
     optionalDependencies:
       '@deepseek-ai/cordis-plugin-include': 1.0.6(@deepseek-ai/cordis-plugin-loader@1.0.2)(@deepseek-ai/cordis@4.0.1)

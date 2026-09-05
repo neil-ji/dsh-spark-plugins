@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import type { SparkView, ProposalView, ScriptView } from 'dsh-spark-wire'
 import { createDockSparksApi, type DockSparksApi } from './sparkApi.ts'
+import { subscribeStream } from '../streams.ts'
 
 const api: DockSparksApi = createDockSparksApi()
 
@@ -54,7 +55,7 @@ export function SparksPane(): JSX.Element {
   const [busy, setBusy] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
 
-  useEffect(() => api.subscribe(reload), [reload])
+  useEffect(() => subscribeStream('/sparks/events', () => reload()), [reload])
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -134,6 +135,7 @@ export function SparksPane(): JSX.Element {
 export function ProposalsPane(): JSX.Element {
   const { data: proposals, error, reload } = useApiResource<ProposalView[]>(() => api.listProposals({ status: 'pending', limit: 50 }), [])
   const [busy, setBusy] = useState(false)
+  useEffect(() => subscribeStream('/proposals/events', () => reload()), [reload])
   return (
     <div className="dock-stack">
       <div className="dock-modbar">
@@ -172,6 +174,7 @@ export function ProposalsPane(): JSX.Element {
 export function ScriptsPane(): JSX.Element {
   const { data: scripts, error, reload } = useApiResource<ScriptView[]>(() => api.listScripts(), [])
   const [message, setMessage] = useState<string | null>(null)
+  useEffect(() => subscribeStream('/scripts/events', () => reload()), [reload])
   return (
     <div className="dock-stack">
       <ErrorNote error={error} />

@@ -77,7 +77,6 @@ export interface DockHippomemoApi {
   narrative(): Promise<RecallNarrative>
   preferences(): Promise<PreferenceListResult>
   evolveRun(dryRun: boolean): Promise<EvolveReport>
-  events(onChange: () => void): () => void
 }
 
 export function createDockHippomemoApi(): DockHippomemoApi {
@@ -96,10 +95,5 @@ export function createDockHippomemoApi(): DockHippomemoApi {
     evolveRun: (dryRun) => request<EvolveReport>('/hippomemo/evolve', {
       method: 'POST', body: JSON.stringify({ dryRun }),
     }),
-    events: (onChange) => {
-      const source = new EventSource('/hippomemo/events')
-      source.onmessage = onChange
-      return () => { source.close() }
-    },
   }
 }
