@@ -62,7 +62,7 @@ pnpm typecheck    # 类型检查全部包
 pnpm test         # 测试全部包（含根 vitest，共 255 用例）
 pnpm dev          # 构建全部 + 安装到 web profile
 pnpm dev --run    # 构建 + 安装 + 前台启动 dogfood（dsh --profile web --port 3999）
-pnpm install:profile  # 仅重新安装到 profile（依赖 file: 链接）
+pnpm install:profile  # 仅重新安装到 profile（pack→tarball，与普通用户安装同路径）
 pnpm escape       # 启动「应急逃生」profile（纯官方 web，端口 3998）
 pnpm escape:init  # 仅初始化/刷新逃生 profile（幂等）
 pnpm finance:sync-prices  # 从 models.dev 社区价格表同步非 DeepSeek 计价进 bundle（--dry-run 预览、--fx 调汇率）
@@ -71,10 +71,15 @@ pnpm finance:sync-prices  # 从 models.dev 社区价格表同步非 DeepSeek 计
 ## 本地运行机制
 
 1. `pnpm dev` 先构建所有包（DSH 加载的是 `lib/` 产物）。
-2. `scripts/install-profile.mjs` 按 `plugin-registry.json` 的映射，把各插件以 `file:` 依赖写入
-   `~/.dsh/profiles/web/package.json`，并把本 monorepo 的 `packages/*` 挂载进 profile 的
-   `pnpm-workspace.yaml`（workspace:` 依赖因此解析到本地源码），最后在 profile 目录 `pnpm install`。
-3. `dsh --profile web --port 3999` 启动 dogfood 验证。
+2. `scripts/install-profile.mjs` 按 `plugin-registry.json` 的映射走**与普通用户一致的
+   pack→tarball 安装路径**：对插件及其 workspace 库依赖闭包逐个 `pnpm pack` 到
+   `.pack-profile/`，写入 profile `package.json`（`file:<tgz>`）并用 `overrides` 钉住
+   闭包依赖，**不挂载本 monorepo、不产生任何硬链接/活链接**。
+3. `dsh --profile web --port 3999` 重启 dogfood 验证（宿主必须重启才重建 client 模块图，
+   验证以 `/plugins/??...&rev=` 的 rev 变化为准）。
+
+> 版本纪律：dsh client-modules 按「插件版本」缓存产物字节——改码后必须 bump 该插件
+> `package.json` 的版本号，再跑安装脚本 + 重启宿主，否则宿主继续供旧字节。
 
 > 注意：`3080` 是常驻工作服务，验证一律走 `3999`，不要动 3080。
 
@@ -94,14 +99,13 @@ pnpm escape:init   # 只初始化/刷新，不启动；之后手动 dsh --profil
 - 逃生 profile 目录：`~/.dsh/profiles/escape`（用官方 `initProfile` + web 模板创建，
   含 `cordis.patch.yml` 空补丁层；已有文件不会被覆盖）。
 - 初始化脚本：`scripts/escape-profile.mjs`（从全局 dsh 安装解析 `dsh-app-boot` API）。
-- 应急三板斧：先 `pnpm escape` 拿到干净 GUI → 再排查 `pnpm install:profile` 刷新 web profile
-  → 最后重启/验证 3080。
+- 应急三板斧：先 `pnpm escape` 拿到干净 GUI → 再排查 `pnpm install:profile` 重装 web profile
+  插件 → 最后重启/验证 3080。
 
 ## 依赖版本策略
 
-- 所有 `@deepseek-ai/*` 通过 `pnpm-workspace.yaml` 的 `overrides` 强制为 `0.1.1-rc.2`
-  （与全局 dsh 内部依赖版本一致；npm latest 仍是残缺的 rc.1 系列，必须逐包精确钉版，
-  避免多实例类型分裂与运行时加载失败）。
+- 所有 `@deepseek-ai/*` 通过 `pnpm-workspace.yaml` 的 `overrides` 强制为 `0.1.2-rc.1`
+  （与全局 dsh 内部依赖版本一致；必须逐包精确钉版，避免多实例类型分裂与运行时加载失败）。
 - 插件包之间用 `workspace:*` 依赖，构建时内联或按需解析。
 
 ## 新增一个插件

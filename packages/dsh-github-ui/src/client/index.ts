@@ -36,7 +36,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 const NS = 'settings.github'
 
 /** Required client services. */
-export const inject = ['slots', 'locale', 'remote', 'settingsScope']
+export const inject = ['slots', 'locale', 'remote', 'remote.credentials', 'settingsScope']
 
 /**
  * Mount the Github settings page.

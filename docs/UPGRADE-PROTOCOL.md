@@ -44,11 +44,12 @@ pnpm dryrun:dsh-upgrade           # typecheck 全绿才继续；红了就先把�
 #   b. 根 package.json 与 packages/*/package.json 里的 @deepseek-ai/dsh-* 钉版同步更新
 #      （^0.1.0-rc.x 的 caret 只匹配同 tuple 的 rc.x，不会自动吃到 0.1.1-rc.x，必须显式钉）
 #   c. pnpm install && pnpm typecheck && pnpm test
-#   d. pnpm install:profile（重写 ~/.dsh/profiles/web 的 bundle 依赖）
+#   d. pnpm install:profile（pack→tarball 重装 ~/.dsh/profiles/web 的插件；
+#      改码的插件必须先 bump 版本号——client-modules 按版本缓存产物字节）
 
 # 3) 3999 狗粮验证（先验证，再让 3080 吃新状态）
 dsh --profile web --port 3999     # 访问 http://127.0.0.1:3999 逐项验证插件功能
-# 确认无误后，3080 的 dsh web 会因 profile watch 自动重启吃到新状态（无需手动重启）。
+# 确认无误后让 3080 吃新状态：重启 3080（watch 自动重启不保证触发，2026-09-05 实测未触发）。
 # ⚠️ 除非用户明确同意，不要 kill/restart 3080。
 ```
 

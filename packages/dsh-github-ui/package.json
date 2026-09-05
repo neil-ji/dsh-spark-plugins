@@ -1,6 +1,6 @@
 {
   "name": "dsh-connector-github-ui",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "DSH GitHub 连接器 client：连接配置设置页（连接状态、令牌、操作权限），UI 对齐 DSH 设计系统",
   "type": "module",
   "main": "lib/index.js",

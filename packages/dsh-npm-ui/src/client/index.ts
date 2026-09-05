@@ -38,7 +38,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 const NS = 'settings.npm'
 
 /** Required client services. */
-export const inject = ['slots', 'locale', 'remote', 'settingsScope']
+export const inject = ['slots', 'locale', 'remote', 'remote.credentials', 'settingsScope']
 
 /**
  * Mount the npm release settings page.

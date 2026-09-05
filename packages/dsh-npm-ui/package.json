@@ -1,6 +1,6 @@
 {
   "name": "dsh-connector-npm-ui",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "DSH npm 发布管线 client：发布状态设置页，UI 对齐 DSH 设计系统",
   "type": "module",
   "main": "lib/index.js",
