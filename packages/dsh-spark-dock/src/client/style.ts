@@ -27,6 +27,22 @@ export const DOCK_CSS = [
   '[data-plugin="dsh-spark-dock"] .dock-iconbtn::before { content: ""; position: absolute; inset: -5px; }',
   '[data-plugin="dsh-spark-dock"] .dock-iconbtn:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary-foreground, #fff); }',
   '[data-plugin="dsh-spark-dock"] .dock-iconbtn svg { width: 15px; height: 15px; }',
+
+  /* 模块 tab 导航 */
+  '[data-plugin="dsh-spark-dock"] .dock-nav { display: flex; gap: 4px; margin: 0 12px; padding: 6px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 13px; }',
+  '[data-plugin="dsh-spark-dock"] .dock-tab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 2px 7px; border-radius: 10px; border: none; background: transparent; color: var(--dsw-alias-label-tertiary); cursor: pointer; position: relative; font: 500 11px/1 var(--dsw-font-family, inherit); }',
+  '[data-plugin="dsh-spark-dock"] .dock-tab svg { width: 17px; height: 17px; }',
+  '[data-plugin="dsh-spark-dock"] .dock-tab:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary-foreground, #fff); }',
+  '[data-plugin="dsh-spark-dock"] .dock-tab.active { color: var(--accent); }',
+  '[data-plugin="dsh-spark-dock"] .dock-tab.active::after { content: ""; position: absolute; bottom: 1px; width: 16px; height: 2px; border-radius: 2px; background: var(--accent); }',
+  '[data-plugin="dsh-spark-dock"] .dock-tab:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 2px; }',
+
+  /* 模块内子页 tab */
+  '[data-plugin="dsh-spark-dock"] .subtabbar { display: flex; gap: 3px; padding: 3px; margin-bottom: 10px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; }',
+  '[data-plugin="dsh-spark-dock"] .subtab { flex: 1; padding: 6px 4px; border: none; border-radius: 7px; background: transparent; color: var(--dsw-alias-label-secondary); font: 500 11px/1 var(--dsw-font-family, inherit); cursor: pointer; position: relative; }',
+  '[data-plugin="dsh-spark-dock"] .subtab::before { content: ""; position: absolute; inset: -4px; }',
+  '[data-plugin="dsh-spark-dock"] .subtab.on { background: var(--dsw-alias-interactive-bg-active, rgba(255,255,255,.11)); color: var(--dsw-alias-label-primary-foreground, #fff); }',
+  '[data-plugin="dsh-spark-dock"] .subtab:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 1px; }',
   '[data-plugin="dsh-spark-dock"] .dock-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 16px; font-size: 14px; line-height: 1.5; }',
   '[data-plugin="dsh-spark-dock"] .dock-empty { padding: 32px 12px; text-align: center; font-size: 13px; color: var(--dsw-alias-label-tertiary); }',
 ].join('\n')

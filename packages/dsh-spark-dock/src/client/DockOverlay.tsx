@@ -7,12 +7,14 @@
  *  - shell.overlay 是 click-through 层，本组件根节点自带 pointer-events: auto
  */
 import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { DOCK_MODULES } from './modules.tsx'
 
 const M = 16
 const BALL = 48
 const GAP = 12
 const POS_KEY = 'dsh.spark-dock:pos'
 const OPEN_KEY = 'dsh.spark-dock:open'
+const ACTIVE_KEY = 'dsh.spark-dock:active'
 
 interface Pt { x: number; y: number }
 
@@ -41,6 +43,20 @@ export function DockOverlay(): JSX.Element {
   const panelRef = useRef<HTMLDivElement | null>(null)
   const posRef = useRef<Pt>(loadPos())
   const [open, setOpen] = useState(() => localStorage.getItem(OPEN_KEY) === '1')
+  const [activeId, setActiveId] = useState(() => {
+    const saved = localStorage.getItem(ACTIVE_KEY)
+    return DOCK_MODULES.some((m) => m.id === saved) ? saved! : DOCK_MODULES[0].id
+  })
+  const activeModule = DOCK_MODULES.find((m) => m.id === activeId) ?? DOCK_MODULES[0]
+  const [paneId, setPaneId] = useState(activeModule.panes[0].id)
+  // 切模块时子页回落到第一个
+  useEffect(() => { setPaneId(activeModule.panes[0].id) }, [activeModule])
+  const activePane = activeModule.panes.find((p) => p.id === paneId) ?? activeModule.panes[0]
+
+  const selectModule = useCallback((id: string) => {
+    setActiveId(id)
+    localStorage.setItem(ACTIVE_KEY, id)
+  }, [])
 
   const layoutBall = useCallback(() => {
     const ball = ballRef.current
@@ -198,10 +214,17 @@ export function DockOverlay(): JSX.Element {
         </svg>
         <span className="dock-badge" aria-hidden="true">4</span>
       </button>
-      <div ref={panelRef} className={open ? 'dock-panel open' : 'dock-panel'} role="dialog" aria-label="Spark Dock">        <div className="dock-titlebar">
+      <div
+        ref={panelRef}
+        className={open ? 'dock-panel open' : 'dock-panel'}
+        role="dialog"
+        aria-label="Spark Dock"
+        style={{ '--accent': activeModule.accent } as React.CSSProperties}
+      >
+        <div className="dock-titlebar">
           <div className="titles">
-            <div className="name">Spark Dock</div>
-            <div className="sub">插件统一面板</div>
+            <div className="name">{activeModule.name}</div>
+            <div className="sub">{activeModule.sub}</div>
           </div>
           <div className="spacer" />
           <button
@@ -215,8 +238,40 @@ export function DockOverlay(): JSX.Element {
             </svg>
           </button>
         </div>
+        <nav className="dock-nav" aria-label="插件模块">
+          {DOCK_MODULES.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              role="tab"
+              aria-selected={m.id === activeModule.id}
+              className={m.id === activeModule.id ? 'dock-tab active' : 'dock-tab'}
+              style={{ '--accent': m.accent } as React.CSSProperties}
+              onClick={() => selectModule(m.id)}
+            >
+              {m.icon}
+              <span>{m.label}</span>
+            </button>
+          ))}
+        </nav>
         <div className="dock-body">
-          <div className="dock-empty">面板框架将于下一阶段接入（tab + 模块注册）。</div>
+          {activeModule.panes.length > 1 && (
+            <div className="subtabbar" role="tablist" aria-label={`${activeModule.name} 子页`}>
+              {activeModule.panes.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={p.id === activePane.id}
+                  className={p.id === activePane.id ? 'subtab on' : 'subtab'}
+                  onClick={() => setPaneId(p.id)}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {activePane.render()}
         </div>
       </div>
     </div>
