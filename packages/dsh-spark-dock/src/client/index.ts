@@ -7,6 +7,7 @@
 import type { ClientContext } from 'dsh-spark-plugin-kit/client'
 import { DockOverlay } from './DockOverlay.tsx'
 import { DOCK_CSS } from './style.ts'
+import { setFinanceRemoteGetter } from './finance/financeRemote.ts'
 
 export const inject = ['slots'] as const
 
@@ -28,6 +29,9 @@ function injectDockStyle(): () => void {
  */
 export function apply(ctx: ClientContext): void {
   const removeStyle = injectDockStyle()
+  // finance 余额数据源：remote.finance 由 finance-client 异步 $mount，
+  // 必须惰性读取（面板加载时再取），不能在 apply 时同步缓存。
+  setFinanceRemoteGetter(() => (ctx as unknown as { reflect: { get(id: string): unknown } }).reflect.get('remote.finance'))
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const slots = (ctx as any).slots as {
     inject(name: string, register: () => unknown): unknown

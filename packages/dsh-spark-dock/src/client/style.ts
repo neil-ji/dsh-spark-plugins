@@ -71,6 +71,13 @@ export const DOCK_CSS = [
   '[data-plugin="dsh-spark-dock"] select.dock-field.sel { width: auto; }',
   '[data-plugin="dsh-spark-dock"] .dock-error { padding: 8px 10px; border: 1px solid var(--dsw-alias-state-error-primary); border-radius: 8px; color: var(--dsw-alias-state-error-primary); font-size: 12px; }',
   '[data-plugin="dsh-spark-dock"] .dock-ok { padding: 8px 10px; border: 1px solid var(--dsw-alias-state-success-primary); border-radius: 8px; color: var(--dsw-alias-state-success-primary); font-size: 12px; }',
+  '[data-plugin="dsh-spark-dock"] .dock-sdot { width: 9px; height: 9px; border-radius: 50%; background: var(--dsw-alias-label-tertiary); display: inline-block; flex: none; }',
+  '[data-plugin="dsh-spark-dock"] .dock-sdot.done { background: var(--dsw-alias-state-success-primary); }',
+  '[data-plugin="dsh-spark-dock"] .dock-sdot.warn { background: var(--dsw-alias-state-warn-primary); }',
+  '[data-plugin="dsh-spark-dock"] .dock-sdot.error { background: var(--dsw-alias-state-error-primary); }',
+  '[data-plugin="dsh-spark-dock"] .dock-row .amount { font-size: 13px; color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; }',
+  '[data-plugin="dsh-spark-dock"] .dock-hint { font-size: 11px; color: var(--dsw-alias-label-tertiary); }',
+  '[data-plugin="dsh-spark-dock"] .grow-spacer { flex: 1; }',
   '[data-plugin="dsh-spark-dock"] .dock-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 16px; font-size: 14px; line-height: 1.5; }',
   '[data-plugin="dsh-spark-dock"] .dock-empty { padding: 32px 12px; text-align: center; font-size: 13px; color: var(--dsw-alias-label-tertiary); }',
 ].join('\n')

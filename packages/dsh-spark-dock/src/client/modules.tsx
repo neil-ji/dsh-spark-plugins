@@ -5,6 +5,7 @@
  */
 import type { ReactNode } from 'react'
 import { SparksPane, ProposalsPane, ScriptsPane, GraphPane } from './spark/SparkModule.tsx'
+import { FinancePane } from './finance/FinanceModule.tsx'
 
 export interface DockPane {
   id: string
@@ -75,7 +76,7 @@ export const DOCK_MODULES: DockModule[] = [
     id: 'finance', label: '成本', name: '财务审计 Finance',
     sub: '余额 · Token 用量与成本总览',
     accent: 'var(--acc-finance, #22c55e)', icon: <FinanceIcon />,
-    panes: [{ id: 'main', label: '总览', render: placeholder('成本', '总览', 'Phase 4') }],
+    panes: [{ id: 'main', label: '总览', render: () => <FinancePane /> }],
   },
   {
     id: 'github', label: 'GitHub', name: 'GitHub 连接',
