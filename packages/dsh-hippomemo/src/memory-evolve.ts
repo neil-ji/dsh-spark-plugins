@@ -70,7 +70,21 @@ export interface HippomemoEvolveConfig {
   reviewTimeoutMs?: number
 }
 
-export const Config = z.object({
+export const Config: z<{
+  enabled: boolean
+  intervalMs: number
+  dryRun: boolean
+  decayMinRecalls: number
+  graceDays: number
+  probationDays: number
+  dupTitleThreshold: number
+  maxConsolidations: number
+  reviewEnabled: boolean
+  reviewProvider: string
+  reviewModel: string
+  reviewMaxTokens: number
+  reviewTimeoutMs: number
+}> = z.object({
   enabled: z.boolean().default(true),
   intervalMs: z.number().step(1).min(60_000).default(6 * 3_600_000),
   dryRun: z.boolean().default(false),

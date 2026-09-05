@@ -8,7 +8,7 @@
  * 内部对 slots.register 的深层泛型约束做封装（类型细节收敛在包内），
  * 调用处仍保留组件的 props 类型检查。
  */
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ClientContext } from './context.ts'
 import type { ComponentType } from 'react'
 
 export interface SettingsSectionOptions<I extends object> {
@@ -45,7 +45,13 @@ export function registerSettingsSection<I extends object, P extends object = I>(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const anyCtx = ctx as any
   anyCtx.effect(
-    () => anyCtx.locale.register(namespace, dictionaries),
+    () => {
+      // 0.1.2 locale.register 按语言逐条注册（rc.2 形态是 register(ns, { zh, en })）。
+      const disposers = Object.entries(dictionaries).map(([lang, dict]) =>
+        anyCtx.locale.register(namespace, lang, dict),
+      )
+      return () => { for (const dispose of disposers) dispose() }
+    },
     namespace + ': dictionaries',
   )
   const t = anyCtx.locale.bind(namespace)
@@ -90,3 +96,4 @@ export type {
 } from './settings-card.ts'
 export { bindSnapshotSelector } from './snapshot.ts'
 export type { SnapshotSelectorHook } from './snapshot.ts'
+export type { ClientContext } from './context.ts'

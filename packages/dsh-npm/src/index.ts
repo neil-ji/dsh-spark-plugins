@@ -6,7 +6,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type { GitHubService } from 'dsh-connector-github'
-import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import Schema from '@deepseek-ai/schemastery'
 import { NPM_HOST_CONTRIBUTION } from 'dsh-connector-npm-wire'
 import type {} from '@deepseek-ai/dsh-typert-registry'
@@ -23,7 +23,7 @@ export const name = 'dsh-connector-npm'
 export const inject = ['credentials', 'shell', 'tools', 'typert']
 
 /** 本插件拥有的设置命名空间（设置 → 插件 → 插件配置页可编辑）。 */
-export const NPM_SETTINGS_NAMESPACE = settingsNamespace('npm')
+export const NPM_SETTINGS_NAMESPACE = 'npm' as SettingsNamespace
 
 /** 连接器配置 schema：registry 根地址 + npm 凭据引用（granular token）。 */
 const NpmConfigSchema = Schema.object({
@@ -44,9 +44,11 @@ export function apply(ctx: Context, config: Record<string, never> = {}): void {
   // 外层变量，若按值传入初始 thunk，后续配置修改永远不会被 NpmService 看到。
   const entry: NpmConnectorConfig = {}
   let configSource: () => NpmConnectorConfig = () => entry
-  installSettingsSection(ctx, NPM_SETTINGS_NAMESPACE, NpmConfigSchema, entry, {
-    setSource: source => { configSource = source },
-    onChange: () => {},
+  ctx.inject(['settings'], (sctx) => {
+    sctx.settings.installSection(ctx, NPM_SETTINGS_NAMESPACE, NpmConfigSchema, entry, {
+      setSource: source => { configSource = source },
+      onChange: () => {},
+    })
   })
 
   const npm = new NpmService(ctx, () => configSource())

@@ -120,7 +120,10 @@ describe('dsh-spark-finance-client apply', () => {
   it('registers locale dictionaries for settings.finance', async () => {
     const { ctx } = fakeCtx()
     await apply(ctx)
-    expect(ctx.locale.register).toHaveBeenCalledWith('settings.finance', expect.objectContaining({ zh: expect.any(Object), en: expect.any(Object) }))
+    // 0.1.2：locale.register 按语言逐条注册。
+    expect(ctx.locale.register).toHaveBeenCalledWith('settings.finance', 'zh', expect.objectContaining({ addModel: expect.any(String) }))
+    expect(ctx.locale.register).toHaveBeenCalledWith('settings.finance', 'en', expect.objectContaining({ addModel: expect.any(String) }))
+    expect(ctx.locale.register).toHaveBeenCalledTimes(2)
   })
 
   it('disposes the remote mount on teardown', async () => {

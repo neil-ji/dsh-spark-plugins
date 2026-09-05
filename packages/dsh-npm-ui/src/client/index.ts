@@ -2,8 +2,7 @@
  * dsh-npm-ui client half: mounts the npm Remote namespace and registers the
  * npm release section into the Web settings modal sidebar.
  */
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
-import type { ConnectionHandle } from '@deepseek-ai/dsh-api-remotes/client'
+import type { ClientContext } from 'dsh-spark-plugin-kit/client'
 // Type-only: pulls the settings shell's SlotMap merge (settings.section).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: pulls the settings.plugin.item slot declaration.
@@ -39,16 +38,19 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 const NS = 'settings.npm'
 
 /** Required client services. */
-export const inject = ['slots', 'locale', 'connection', 'remote', 'settingsScope']
+export const inject = ['slots', 'locale', 'remote', 'settingsScope']
 
 /**
  * Mount the npm release settings page.
  * @param ctx - client root context.
  */
 export async function apply(ctx: ClientContext): Promise<void> {
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'npm-ui: copy')
-
-  const connection = ctx.get('connection') as ConnectionHandle
+  // 0.1.2 locale.register 按语言逐条注册。
+  ctx.effect(() => {
+    const offZh = ctx.locale.register(NS, 'zh', zh)
+    const offEn = ctx.locale.register(NS, 'en', en)
+    return () => { offZh(); offEn() }
+  }, 'npm-ui: copy')
 
   // Mount the npm Remote namespace BEFORE the page can call it.
   await ctx.remote.$mount(NPM_REMOTE_CONTRIBUTION)
@@ -57,7 +59,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
   // read it through reflect to avoid a deadlock on its inject declaration.
   const npm = ctx.reflect.get('remote.npm') as TypertRemoteNamespaceMap['npm']
 
-  const controller = new NpmUiStore(connection.api, npm)
+  const controller = new NpmUiStore(ctx, npm)
   const useSnapshot = bindSnapshotSelector(controller.store)
   const t = ctx.locale.bind(NS)
 

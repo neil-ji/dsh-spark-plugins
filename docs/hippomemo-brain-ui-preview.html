@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>hippomemo · 脑科学记忆插件 v3 完整预览（mock）</title>
+<style>
+  :root {
+    --slate-50:#F8FAFC; --slate-100:#F1F5F9; --slate-200:#E2E8F0; --slate-300:#CBD5E1;
+    --slate-400:#94A3B8; --slate-500:#64748B; --slate-600:#475569; --slate-700:#334155;
+    --slate-800:#1E293B; --slate-900:#0F172A;
+    --accent:#2563EB; --accent-tint:#EFF6FF; --accent-border:#DBEAFE;
+    --red:#DC2626; --red-tint:#FEF2F2;
+    --amber:#D97706; --amber-tint:#FFFBEB;
+    --green:#16A34A; --green-tint:#F0FDF4;
+    --violet:#7C3AED; --violet-tint:#F5F3FF;
+    --pink:#DB2777; --pink-tint:#FDF2F8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+    background: var(--slate-50); color: var(--slate-800);
+    font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased;
+  }
+  .page { width: 1080px; margin: 0 auto; padding: 28px 0 48px; }
+  .mono { font-family: 'SF Mono','JetBrains Mono','Fira Code',Consolas,Menlo,monospace; }
+  .num { font-variant-numeric: tabular-nums; }
+  .icon { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; vertical-align: -2px; }
+
+  .page-head { padding-bottom: 16px; border-bottom: 1px solid var(--slate-200); margin-bottom: 18px; }
+  .page-head h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+  .page-head .sub { font-size: 12px; color: var(--slate-500); margin-top: 2px; }
+
+  .panel { background:#fff; border:1px solid var(--slate-200); border-radius:12px; padding:16px 18px; margin-top:14px; }
+  .panel-title { font-size:13px; font-weight:600; color:var(--slate-700); margin-bottom:10px; display:flex; align-items:center; gap:6px; }
+  .panel-title .tag { font-size:10px; font-weight:500; color:var(--slate-400); border:1px solid var(--slate-200); border-radius:8px; padding:1px 8px; }
+  .panel-title .count { margin-left:auto; font-size:12px; color:var(--slate-400); font-weight:400; }
+
+  /* ===== 脑区状态条 ===== */
+  .brain-strip { border:1px solid var(--slate-200); border-radius:10px; background:linear-gradient(90deg,#fff,var(--slate-50)); padding:10px 14px; margin-top:4px; }
+  .brain-strip .row1 { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  .brain-region { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--slate-500); padding:4px 10px; border-radius:14px; border:1px solid transparent; cursor:pointer; transition: background 160ms, border-color 160ms; }
+  .brain-region:hover { background:var(--slate-100); }
+  .brain-region .dot { width:10px; height:10px; border-radius:50%; flex:none; position:relative; }
+  .brain-region .dot.pfc    { background:var(--accent); }
+  .brain-region .dot.amy    { background:var(--red); }
+  .brain-region .dot.hippo  { background:var(--violet); }
+  .brain-region .dot.cortex { background:var(--slate-600); }
+  .brain-region .name { font-weight:500; }
+  .brain-region .val { font-size:11px; color:var(--slate-400); }
+  .brain-strip .narration { margin-top:6px; font-size:12px; color:var(--slate-500); border-top:1px dashed var(--slate-200); padding-top:6px; min-height:18px; display:flex; align-items:center; gap:8px; }
+  .narration .lbl { color:var(--slate-400); font-size:11px; }
+  .narration .txt { color:var(--slate-600); }
+
+  @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(37,99,235,.5)} 100%{box-shadow:0 0 0 14px rgba(37,99,235,0)} }
+  @keyframes amyFlash { 0%{box-shadow:0 0 0 0 rgba(220,38,38,.6)} 100%{box-shadow:0 0 0 16px rgba(220,38,38,0)} }
+  @keyframes hippoFlash { 0%{box-shadow:0 0 0 0 rgba(124,58,237,.6)} 100%{box-shadow:0 0 0 14px rgba(124,58,237,0)} }
+  @keyframes cortexWave { 0%{box-shadow:0 0 0 0 rgba(71,85,105,.5)} 100%{box-shadow:0 0 0 12px rgba(71,85,105,0)} }
+  @keyframes slideIn { from{opacity:0; transform:translateY(-6px)} to{opacity:1; transform:translateY(0)} }
+  .brain-region.anim-pfc .dot.pfc { animation: pulse 0.9s ease-out; }
+  .brain-region.anim-amy .dot.amy { animation: amyFlash 0.9s ease-out; }
+  .brain-region.anim-hippo .dot.hippo { animation: hippoFlash 0.9s ease-out; }
+  .brain-region.anim-cortex .dot.cortex { animation: cortexWave 0.9s ease-out; }
+  .slide-in { animation: slideIn 0.35s ease-out; }
+  @media (prefers-reduced-motion: reduce) {
+    .brain-region.anim-pfc .dot.pfc, .brain-region.anim-amy .dot.amy,
+    .brain-region.anim-hippo .dot.hippo, .brain-region.anim-cortex .dot.cortex { animation: none; }
+    .slide-in { animation: none; }
+  }
+
+  .brain-expand { display:none; margin-top:10px; border-top:1px solid var(--slate-100); padding-top:10px; }
+  .brain-expand.open { display:block; }
+  .brain-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .brain-card { border:1px solid var(--slate-100); border-radius:8px; padding:10px 12px; }
+  .brain-card h5 { font-size:12px; font-weight:600; margin-bottom:2px; display:flex; align-items:center; gap:6px; }
+  .brain-card p { font-size:11px; color:var(--slate-500); line-height:1.5; }
+  .brain-card .role { font-size:10px; color:var(--slate-400); margin-top:2px; }
+
+  /* ===== 需要我处理 ===== */
+  .todo-list { display:flex; flex-direction:column; gap:6px; }
+  .todo-item { display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid var(--slate-100); border-radius:8px; background:var(--slate-50); }
+  .todo-item.done { opacity:.5; text-decoration:line-through; }
+  .todo-item .kind-icon { width:22px; height:22px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:12px; flex:none; }
+  .todo-item .kind-icon.warn { background:var(--amber-tint); color:var(--amber); }
+  .todo-item .kind-icon.info { background:var(--accent-tint); color:var(--accent); }
+  .todo-item .kind-icon.danger { background:var(--red-tint); color:var(--red); }
+  .todo-item .body { flex:1; min-width:0; }
+  .todo-item .body .t { font-size:13px; font-weight:500; }
+  .todo-item .body .d { font-size:11px; color:var(--slate-400); margin-top:1px; }
+  .todo-item .act { flex:none; font-size:12px; color:var(--accent); cursor:pointer; padding:4px 8px; border-radius:6px; }
+  .todo-item .act:hover { background:var(--accent-tint); }
+
+  /* ===== AI 最近在用 ===== */
+  .recall-timeline { position:relative; padding-left:16px; }
+  .recall-timeline::before { content:''; position:absolute; left:5px; top:4px; bottom:4px; width:2px; background:var(--slate-200); }
+  .recall-item { position:relative; padding:8px 0 8px 4px; cursor:pointer; }
+  .recall-item::before { content:''; position:absolute; left:-16px; top:13px; width:10px; height:10px; border-radius:50%; background:#fff; border:2px solid var(--slate-300); }
+  .recall-item.injected::before { border-color:var(--accent); background:var(--accent); }
+  .recall-item.suppressed::before { border-color:var(--amber); background:var(--amber); }
+  .recall-item.cited::before { border-color:var(--green); background:var(--green); }
+  .recall-item:hover { background:var(--slate-50); border-radius:6px; }
+  .recall-item .when { font-size:11px; color:var(--slate-400); }
+  .recall-item .what { font-size:13px; margin-top:1px; }
+  .recall-item .what .m { font-weight:500; }
+  .recall-item .what .sub { color:var(--slate-400); font-size:12px; }
+  .recall-item .why { font-size:11px; color:var(--slate-400); margin-top:1px; }
+  .recall-item.suppressed .why { color:var(--amber); }
+
+  /* ===== 偏好专区 ===== */
+  .pref-strip { border:1px solid var(--slate-200); border-radius:10px; overflow:hidden; }
+  .pref-head { display:flex; align-items:center; gap:8px; padding:8px 12px; background:var(--slate-50); border-bottom:1px solid var(--slate-100); }
+  .pref-head .t { font-size:12px; font-weight:600; }
+  .pref-head .meta { font-size:11px; color:var(--slate-400); margin-left:auto; }
+  .pref-row { display:flex; align-items:center; gap:10px; padding:10px 12px; border-bottom:1px solid var(--slate-50); }
+  .pref-row:last-child { border-bottom:none; }
+  .pref-row.retired { opacity:.45; }
+  .pref-row .src { font-size:10px; border-radius:8px; padding:2px 8px; flex:none; font-weight:500; }
+  .pref-row .src.amy { background:var(--red-tint); color:var(--red); }
+  .pref-row .src.hand { background:var(--accent-tint); color:var(--accent); }
+  .pref-row .body { flex:1; min-width:0; }
+  .pref-row .body .t { font-size:13px; }
+  .pref-row .body .stats { font-size:11px; color:var(--slate-400); margin-top:1px; }
+  .pref-row .body .stats .hit { color:var(--green); font-weight:500; }
+  .pref-row .body .stats .decay { color:var(--amber); }
+  .pref-row .ops { display:flex; gap:4px; flex:none; }
+  .pref-row .ops .op { font-size:11px; color:var(--slate-400); cursor:pointer; padding:2px 6px; border-radius:6px; }
+  .pref-row .ops .op:hover { background:var(--slate-100); color:var(--slate-700); }
+  .pref-row .ops .op.confirm:hover { background:var(--green-tint); color:var(--green); }
+  .pref-row .ops .op.forget:hover { background:var(--red-tint); color:var(--red); }
+
+  /* ===== 全部记忆 ===== */
+  .mem-toolbar { display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
+  .mem-toolbar .search { flex:1; min-width:180px; height:30px; border:1px solid var(--slate-200); border-radius:6px; display:flex; align-items:center; padding:0 10px; font-size:12px; color:var(--slate-400); gap:6px; }
+  .mem-toolbar .search input { flex:1; border:none; outline:none; background:none; font:inherit; font-size:12px; color:var(--slate-700); }
+  .mem-toolbar .filter { height:30px; padding:0 10px; border:1px solid var(--slate-200); border-radius:6px; display:flex; align-items:center; font-size:12px; color:var(--slate-500); cursor:pointer; gap:6px; }
+  .mem-toolbar .filter.on { background:var(--accent-tint); color:var(--accent); border-color:var(--accent-border); }
+  .mem-list { margin-top:4px; }
+  .mem-row { display:flex; align-items:center; gap:10px; padding:9px 12px; border-bottom:1px solid var(--slate-100); cursor:pointer; }
+  .mem-row:hover { background:var(--slate-50); }
+  .mem-row:last-child { border-bottom:none; }
+  .mem-row .title { flex:1; min-width:0; font-size:13px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .mem-row .meta { font-size:11px; color:var(--slate-400); flex:none; }
+  .mem-row .pill { font-size:10px; border-radius:8px; padding:1px 8px; flex:none; font-weight:500; }
+  .mem-row .pill.pref { background:var(--accent-tint); color:var(--accent); }
+  .mem-row .pill.kind { background:var(--slate-100); color:var(--slate-500); }
+  .mem-row .pill.link { background:var(--violet-tint); color:var(--violet); cursor:pointer; }
+  .mem-pager { display:flex; gap:4px; align-items:center; margin-top:10px; font-size:12px; color:var(--slate-400); flex-wrap:wrap; }
+  .mem-pager .pg { min-width:24px; height:24px; border-radius:4px; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; border:1px solid transparent; }
+  .mem-pager .pg:hover { background:var(--slate-100); }
+  .mem-pager .pg.on { background:var(--slate-800); color:#fff; }
+  .mem-pager .pg-gap { padding:0 2px; }
+  .mem-pager .right { margin-left:auto; display:flex; gap:4px; align-items:center; }
+
+  /* ===== 记忆详情 modal ===== */
+  .modal-mask { position:fixed; inset:0; background:rgba(15,23,42,.4); z-index:50; display:none; align-items:flex-start; justify-content:center; padding:60px 20px; overflow-y:auto; }
+  .modal-mask.open { display:flex; }
+  .modal { background:#fff; border-radius:12px; width:680px; max-width:100%; box-shadow:0 20px 50px rgba(15,23,42,.25); }
+  .modal-head { display:flex; align-items:flex-start; gap:10px; padding:16px 18px; border-bottom:1px solid var(--slate-100); }
+  .modal-head .t { flex:1; min-width:0; }
+  .modal-head .t h3 { font-size:15px; font-weight:600; }
+  .modal-head .t .pills { display:flex; gap:6px; margin-top:4px; flex-wrap:wrap; }
+  .modal-head .close { cursor:pointer; color:var(--slate-400); padding:4px; border-radius:6px; }
+  .modal-head .close:hover { background:var(--slate-100); color:var(--slate-700); }
+  .modal-body { padding:16px 18px; }
+  .modal-body .content { white-space:pre-wrap; font-size:13px; line-height:1.6; color:var(--slate-700); padding:12px; background:var(--slate-50); border-radius:8px; margin-bottom:12px; }
+  .modal-body .facts { display:grid; grid-template-columns:1fr 1fr; gap:8px 16px; }
+  .modal-body .fact dt { font-size:11px; color:var(--slate-400); }
+  .modal-body .fact dd { font-size:12px; color:var(--slate-700); margin-top:1px; overflow-wrap:anywhere; }
+  .modal-body .tags { display:flex; gap:6px; margin-top:12px; flex-wrap:wrap; }
+  .modal-body .tags .tag { font-size:11px; color:var(--slate-500); background:var(--slate-100); padding:2px 8px; border-radius:8px; }
+
+  /* lineage */
+  .lineage { margin-top:14px; border-top:1px solid var(--slate-100); padding-top:12px; }
+  .lineage h4 { font-size:12px; font-weight:600; margin-bottom:8px; display:flex; align-items:center; gap:6px; }
+  .lineage-row { display:flex; align-items:center; gap:6px; font-size:12px; padding:4px 0; flex-wrap:wrap; }
+  .lineage-row .node { padding:3px 10px; border-radius:8px; border:1px solid; white-space:nowrap; font-size:11px; }
+  .lineage-row .node.spark { color:var(--violet); border-color:var(--violet); background:var(--violet-tint); }
+  .lineage-row .node.crystal { color:var(--slate-600); border-color:var(--slate-200); background:#fff; }
+  .lineage-row .node.hippo { color:var(--slate-800); border-color:var(--slate-300); background:var(--slate-100); }
+  .lineage-row .arrow { color:var(--slate-300); }
+  .lineage-row .meta { font-size:10px; color:var(--slate-400); }
+  .lineage-note { font-size:11px; color:var(--slate-400); margin-top:6px; }
+
+  .demo-cta { margin-top:16px; padding:12px 14px; background:var(--slate-100); border-radius:8px; font-size:12px; color:var(--slate-500); }
+  .btn { display:inline-flex; align-items:center; height:26px; padding:0 12px; border-radius:6px; font-size:12px; font-weight:500; cursor:pointer; border:1px solid var(--slate-200); background:#fff; color:var(--slate-600); }
+  .btn:hover { background:var(--slate-100); }
+  .toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:var(--slate-800); color:#fff; font-size:12px; padding:8px 16px; border-radius:8px; opacity:0; transition:opacity .25s; pointer-events:none; z-index:60; }
+  .toast.show { opacity:1; }
+  .disclaimer { margin-top:32px; padding-top:12px; border-top:1px solid var(--slate-200); font-size:11px; color:var(--slate-400); }
+</style>
+</head>
+<body>
+<div class="page" id="app">
+  <div class="page-head">
+    <h1>hippomemo · 脑科学记忆插件 v3 完整预览</h1>
+    <div class="sub mono">完整 mock · 四象限 + 脑区状态条 + 偏好专区 + 全部记忆（可搜索/筛选/分页）+ 详情/lineage + 操作交互</div>
+  </div>
+
+  <!-- 脑区状态条 -->
+  <div class="panel">
+    <div class="panel-title"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v4M12 12v6M9 9h6M9 15h6"/></svg> 记忆库 <span class="tag">实时</span></div>
+    <div class="brain-strip">
+      <div class="row1">
+        <div class="brain-region" id="r-pfc"><span class="dot pfc"></span><span class="name">前额叶</span><span class="val">注入 <span id="v-inject">5</span> / 抑制 <span id="v-suppress">23</span></span></div>
+        <div class="brain-region" id="r-amy"><span class="dot amy"></span><span class="name">杏仁核</span><span class="val" id="v-amy">识别到 1 偏好</span></div>
+        <div class="brain-region" id="r-hippo"><span class="dot hippo"></span><span class="name">海马体</span><span class="val" id="v-hippo">最近结晶 1</span></div>
+        <div class="brain-region" id="r-cortex"><span class="dot cortex"></span><span class="name">新皮层</span><span class="val" id="v-cortex">128 条记忆</span></div>
+        <span style="flex:1"></span>
+        <button class="btn" onclick="toggleBrain()">脑区图 <span id="brainChev">▾</span></button>
+      </div>
+      <div class="narration"><span class="lbl">旁白</span><span class="txt" id="narrationTxt">前额叶过滤了 23 条低相关候选，注入 5 条。</span></div>
+      <div class="brain-expand" id="brainExpand">
+        <div class="brain-grid">
+          <div class="brain-card"><h5><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent)"></span>前额叶 · 主动抑制</h5><p>对注入上下文的相关记忆做 relevance 过滤（阈值 + kind 加权 + 衰减）。</p><div class="role">认知层 Phase 3 · cognitive filter</div></div>
+          <div class="brain-card"><h5><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--red)"></span>杏仁核 · 偏好提取</h5><p>从你的语气强度中识别潜在偏好（"不要 X""总是 Y"），写入 preference。</p><div class="role">认知层 Phase 6 · valence miner</div></div>
+          <div class="brain-card"><h5><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--violet)"></span>海马体 · 情景捕获</h5><p>spark 流捕获灵感，结晶为长期记忆（kind/tags/importance 由你定）。</p><div class="role">认知层 Phase 1+2 · crystallize</div></div>
+          <div class="brain-card"><h5><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--slate-600)"></span>新皮层 · 长期语义</h5><p>记忆的持久存储层：召回/引用/自净化都作用在这里。</p><div class="role">hippomemo MemoryRecord</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 需要我处理 + AI 最近在用 -->
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+    <div class="panel">
+      <div class="panel-title"><svg class="icon" viewBox="0 0 24 24"><path d="M12 3 2 21h20L12 3z"/><path d="M12 9v5M12 17.5v.5"/></svg> 需要我处理 <span class="tag">行动</span><span class="count num" id="todoCount">3 项</span></div>
+      <div class="todo-list" id="todoList"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v4M12 12v6M9 9h6M9 15h6"/></svg> AI 最近在用 <span class="tag">验证</span><span class="count">3 分钟前</span></div>
+      <div class="recall-timeline">
+        <div class="recall-item injected" onclick="openDetail('mem-inject')">
+          <div class="when">14:02 · 本会话</div>
+          <div class="what"><span class="m">注入 5 条</span> <span class="sub">偏好命中 3 · 前额叶放行</span></div>
+          <div class="why">阈值 0.10 · preference 加权 1.3×</div>
+        </div>
+        <div class="recall-item suppressed" onclick="openDetail('mem-suppress')">
+          <div class="when">14:02 · 本会话</div>
+          <div class="what"><span class="m">抑制 23 条</span> <span class="sub">低相关候选被过滤</span></div>
+          <div class="why">3 条因阈值 · 1 条因衰减至 40%</div>
+        </div>
+        <div class="recall-item cited" onclick="openDetail('mem-1')">
+          <div class="when">13:58 · 上一会话</div>
+          <div class="what"><span class="m">引用 2 条</span> <span class="sub">agent 提到记忆 id</span></div>
+          <div class="why">「不要在 prompt 里内嵌凭据」命中</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 偏好专区 -->
+  <div class="panel">
+    <div class="panel-title"><svg class="icon" viewBox="0 0 24 24"><path d="m12 2 3 7 7 .8-5.3 4.8L18 22l-6-3.5L6 22l1.3-7.4L2 9.8 9 9z"/></svg> 我的偏好 <span class="tag">另一种材质</span><span class="count num"><span id="prefActive">3</span> 条 · 命中率 86%</span></div>
+    <div class="pref-strip">
+      <div class="pref-head"><span class="t">偏好列表</span><span class="meta">自动挖 = 杏仁核 · 手敲 = 用户声明</span></div>
+      <div id="prefList"></div>
+    </div>
+  </div>
+
+  <!-- 全部记忆 -->
+  <div class="panel">
+    <div class="panel-title"><svg class="icon" viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M8 4v16M8 9h12"/></svg> 全部记忆 <span class="tag">浏览</span><span class="count num" id="memCount"></span></div>
+    <div class="mem-toolbar">
+      <div class="search"><svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="memSearch" placeholder="搜索记忆..." oninput="onSearch()"></div>
+      <div class="filter" data-k="" onclick="setFilter(this,'')" id="f-all">全部</div>
+      <div class="filter" data-k="preference" onclick="setFilter(this,'preference')">偏好</div>
+      <div class="filter" data-k="fact" onclick="setFilter(this,'fact')">事实</div>
+      <div class="filter" data-k="constraint" onclick="setFilter(this,'constraint')">约束</div>
+      <div class="filter" data-k="insight" onclick="setFilter(this,'insight')">洞见</div>
+      <div class="filter" data-k="decision" onclick="setFilter(this,'decision')">决策</div>
+    </div>
+    <div class="mem-list" id="memList"></div>
+    <div class="mem-pager" id="memPager"></div>
+  </div>
+
+  <div class="demo-cta">
+    <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M10 8.5v7l6-3.5-6-3.5z"/></svg> 动画演示（mock）：
+    <button class="btn" onclick="demoEvent('pfc','前额叶过滤了 23 条低相关候选，注入 5 条。')">前额叶脉冲</button>
+    <button class="btn" onclick="demoEvent('amy','杏仁核识别到一个偏好：不要在 prompt 里内嵌凭据。')">杏仁核微光</button>
+    <button class="btn" onclick="demoEvent('hippo','灵感已结晶为长期记忆：用 env 注入更安全。')">海马体闪光</button>
+    <button class="btn" onclick="demoEvent('cortex','记忆库已更新：新写入 1 条，归档 1 条。')">新皮层波纹</button>
+  </div>
+
+  <div class="disclaimer">完整 mock：四象限 + 脑区状态条（可展开/动画/旁白）+ 偏好专区（操作交互）+ 全部记忆（搜索/筛选/分页/详情/lineage）。所有数据为演示值；真实实现依赖 host 功能层 F10（召回事件）+ F11（候选池）。</div>
+</div>
+
+<!-- 详情 modal -->
+<div class="modal-mask" id="modal">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="t" id="modalTitle"></div>
+      <span class="close" onclick="closeModal()"><svg class="icon" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ============ Mock 数据 ============
+const KINDS = { preference:'偏好', fact:'事实', constraint:'约束', insight:'洞见', decision:'决策' }
+let memories = [
+  { id:'mem-1', kind:'preference', title:'不要在 system prompt 里内嵌凭据明文，应该用环境变量注入', content:'system prompt 内嵌凭据会让 model 缓存命中下降（凭据在每次调用都"变化"），还会在审计日志里出现明文。改用 env 注入。', tags:['security','env','credentials'], importance:0.60, scope:'global', proven:true, workspaces:3, createdAt:'3 天前', recall:142, cited:12, sourceSparkId:'sp-7a3b9f02' },
+  { id:'mem-2', kind:'fact', title:'gitignore 需忽略 .env*，防止凭据被误提交', content:'项目根 .gitignore 必须包含 .env 和 .env.local，否则开发者的本地凭据可能被 push 到远端仓库。', tags:['git','gitignore','security'], importance:0.80, scope:'global', proven:true, workspaces:3, createdAt:'2 小时前', recall:86, cited:9 },
+  { id:'mem-3', kind:'constraint', title:'任何分支不允许 force push', content:'force push 会覆盖远端历史，多人协作时破坏他人工作。用 revert 或新建分支代替。', tags:['git','workflow','team'], importance:0.90, scope:'global', proven:true, workspaces:3, createdAt:'1 周前', recall:28, cited:5 },
+  { id:'mem-4', kind:'insight', title:'插件装入 profile 用 file: 而非 link:，否则 client 路由 404', content:'file: 依赖会让 client bundle 走正确的模块表；link: 在部分环境会命中错误路由。', tags:['dsh','plugin','profile'], importance:0.70, scope:'workspace', proven:false, workspaces:1, createdAt:'昨天', recall:41, cited:3 },
+  { id:'mem-5', kind:'preference', title:'开源发布默认选 MIT 协议', content:'个人开源项目默认 MIT（宽松、无传染性、业界最常用）。GPL 仅在明确需要 copyleft 时使用。', tags:['open-source','license','mit'], importance:0.55, scope:'global', proven:false, workspaces:2, createdAt:'3 天前', recall:22, cited:2, decay:45 },
+  { id:'mem-6', kind:'decision', title:'monorepo 采用 pnpm workspace + 单 lockfile', content:'选定 pnpm workspace 管理 dsh-spark-plugins 多包，单一 pnpm-lock.yaml 保证依赖一致性。', tags:['monorepo','pnpm','architecture'], importance:0.75, scope:'workspace', proven:false, workspaces:1, createdAt:'1 个月前', recall:64, cited:7 },
+  { id:'mem-7', kind:'fact', title:'DeepSeek 官方 API 计价有峰谷（工作日高峰/空闲半价）', content:'工作日 9-12 / 14-18 为高峰价，其余时段半价。批量任务可错峰省钱。', tags:['api','pricing','deepseek'], importance:0.85, scope:'global', proven:true, workspaces:2, createdAt:'2 周前', recall:97, cited:11 },
+  { id:'mem-8', kind:'preference', title:'任何分支不允许 force push', content:'force push 会覆盖远端历史，多人协作时破坏他人工作。用 revert 或新建分支代替。', tags:['git','workflow'], importance:0.60, scope:'global', proven:true, workspaces:3, createdAt:'1 周前', recall:33, cited:5 },
+  { id:'mem-9', kind:'insight', title:'dsh-ui-kit 的 Chart 原语是纯自绘 SVG，finance 已迁移复用', content:'DonutChart/BarChart/TrendChart 在 dsh-ui-kit/src/Charts.tsx，finance 57/57 迁移后全绿，hippomemo 统计 tab 复用。', tags:['dsh','ui-kit','chart'], importance:0.68, scope:'workspace', proven:false, workspaces:1, createdAt:'3 天前', recall:30, cited:4, sourceSparkId:'sp-1f23ee09' },
+  { id:'mem-10', kind:'fact', title:'hippomemo-evolve 复核失败时回退方向是推迟观察期', content:'LLM 复核不可用时不应用确定性 probation，改为推迟——archiving durable 是假阳性，什么都不做永远安全。', tags:['hippomemo','evolve','llm-review'], importance:0.82, scope:'workspace', proven:true, workspaces:1, createdAt:'6 天前', recall:52, cited:6 },
+  // 第 2 页 mock
+  { id:'mem-11', kind:'decision', title:'hippo 反扩大化：globalProven 证据化', content:'global 记忆必须跨工作区观测证据（seenWorkspaces>=3）才自动证明，否则降级 workspace。', tags:['hippomemo','global','privacy'], importance:0.78, scope:'workspace', proven:false, workspaces:1, createdAt:'4 天前', recall:45, cited:5 },
+  { id:'mem-12', kind:'preference', title:'代码审查用英文，日常讨论用中文', content:'技术 PR 和代码注释用英文保持可移植性；IM 和设计讨论用中文表达更自然。', tags:['language','workflow'], importance:0.50, scope:'global', proven:false, workspaces:2, createdAt:'5 天前', recall:18, cited:1, decay:62 },
+  { id:'mem-13', kind:'fact', title:'spark 结晶是幂等的（重复结晶同一 spark 不重复建记忆）', content:'spark.crystallized 非空时再次结晶返回已有 hippoId，不会重复创建。', tags:['spark','crystallize','idempotent'], importance:0.72, scope:'workspace', proven:false, workspaces:1, createdAt:'8 天前', recall:38, cited:3 },
+  { id:'mem-14', kind:'insight', title:'valence miner 从语气强度挖偏好，不是字面语义', content:'ALL CAPS/感叹/挫败标记升 intensity，触发 extractPreferences 抓 "不要 X""总是 Y" 短语。', tags:['spark','valence','preference'], importance:0.66, scope:'workspace', proven:false, workspaces:1, createdAt:'9 天前', recall:26, cited:2 },
+  { id:'mem-15', kind:'decision', title:'记忆默认 scope=workspace，显式才 global', content:'normalizeRecord 默认 workspace（绑定源工作区），防误标 global 污染其他工作区。', tags:['hippomemo','scope','default'], importance:0.74, scope:'workspace', proven:true, workspaces:1, createdAt:'1 个月前', recall:59, cited:8 },
+  { id:'mem-16', kind:'fact', title:'recallMode=cognitive 时取 recallLimit×multiplier 候选再筛', content:'cognitive 模式 fetch 更多候选，scoreRelevanceAdjusted 过滤低于阈值，preference 加权 1.3×。', tags:['hippomemo','cognitive','recall'], importance:0.70, scope:'workspace', proven:false, workspaces:1, createdAt:'2 天前', recall:34, cited:2 },
+  { id:'mem-17', kind:'preference', title:'不在生成代码里塞 TODO 注释', content:'TODO 会变成永久债务。要么现在做，要么建 issue 追踪，不留 TODO 在代码里。', tags:['code','todo','quality'], importance:0.58, scope:'global', proven:false, workspaces:2, createdAt:'1 周前', recall:15, cited:1, decay:50 },
+  { id:'mem-18', kind:'insight', title:'content-visibility:auto 可做 0 依赖列表虚化', content:'配合 contain-intrinsic-size 避免长列表滚动卡顿，Safari 18+ / Chrome / Edge 均支持。', tags:['css','perf','virtualization'], importance:0.63, scope:'workspace', proven:false, workspaces:1, createdAt:'昨天', recall:21, cited:2 },
+  { id:'mem-19', kind:'decision', title:'UI 图标统一用内联 stroke SVG，不用 emoji', content:'dsh-ui-kit icons 全 SVG currentColor，语义靠图标+文字双通道，不靠 emoji/颜色单通道。', tags:['ui','icon','a11y'], importance:0.60, scope:'workspace', proven:false, workspaces:1, createdAt:'3 小时前', recall:12, cited:0 },
+  { id:'mem-20', kind:'fact', title:'F10 召回事件记录是 AI 最近在用象限的数据源', content:'context.ts 注入后记一条 event：注入/抑制/原因，GET /hippomemo/recall/events 消费。', tags:['hippomemo','f10','design'], importance:0.71, scope:'workspace', proven:false, workspaces:1, createdAt:'1 小时前', recall:9, cited:0 },
+]
+
+const todos = [
+  { id:'t1', kind:'warn', icon:'warn', t:'偏好「开源发布默认选 MIT」已 45 天未命中', d:'衰减中 · 是否仍坚持？', act:'确认' },
+  { id:'t2', kind:'danger', icon:'danger', t:'「gitignore 忽略 .env」与「.env 防误提交」疑似重复', d:'标题重叠 0.83 · 建议合并', act:'合并' },
+  { id:'t3', kind:'info', icon:'info', t:'「旧 monorepo 迁移经验」已过期 30 天', d:'观察期结束，无引用', act:'归档' },
+]
+
+const prefs = [
+  { id:'p1', src:'amy', t:'不要在 system prompt 里内嵌凭据明文，应该用环境变量注入', hit:3, last:'2 分钟前', decay:null, confirmed:true },
+  { id:'p2', src:'hand', t:'开源发布默认选 MIT 协议', hit:2, last:'3 天前', decay:45, confirmed:false },
+  { id:'p3', src:'amy', t:'任何分支不允许 force push', hit:5, last:'已证明', decay:null, confirmed:true },
+]
+
+// ============ 状态 ============
+let filterKind = ''
+let searchQ = ''
+let page = 1
+const PER_PAGE = 10
+
+// ============ 渲染 ============
+function kindPill(kind) {
+  return kind === 'preference'
+    ? '<span class="pill pref">偏好</span>'
+    : '<span class="pill kind">' + (KINDS[kind] || kind) + '</span>'
+}
+
+function renderTodos() {
+  const el = document.getElementById('todoList')
+  if (todos.length === 0) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--slate-400);padding:10px">没有待处理项 <svg class="icon" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></div>'
+    document.getElementById('todoCount').textContent = '0 项'
+    return
+  }
+  el.innerHTML = todos.map(t =>
+    '<div class="todo-item slide-in" id="' + t.id + '">'
+    + '<span class="kind-icon ' + t.icon + '"><svg class="icon" viewBox="0 0 24 24">'
+    + (t.icon === 'warn' ? '<path d="M12 3 2 21h20L12 3z"/><path d="M12 9v5M12 17.5v.5"/>'
+      : t.icon === 'danger' ? '<path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/>'
+      : '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>')
+    + '</svg></span>'
+    + '<div class="body"><div class="t">' + t.t + '</div><div class="d">' + t.d + '</div></div>'
+    + '<span class="act" onclick="resolveTodo(\'' + t.id + '\')">' + t.act + '</span>'
+    + '</div>'
+  ).join('')
+  document.getElementById('todoCount').textContent = todos.length + ' 项'
+}
+
+function renderPrefs() {
+  const el = document.getElementById('prefList')
+  const active = prefs.filter(p => !p.retired)
+  el.innerHTML = active.map((p, i) =>
+    '<div class="pref-row slide-in" style="animation-delay:' + (i*0.06) + 's">'
+    + '<span class="src ' + p.src + '">' + (p.src === 'amy' ? '杏仁核 · 自动' : '手敲') + '</span>'
+    + '<div class="body"><div class="t">' + p.t + '</div>'
+    + '<div class="stats">命中 <span class="hit">' + p.hit + '×</span> · 最近 ' + p.last + (p.decay ? ' · <span class="decay">衰减中 ' + p.decay + '%</span>' : ' · 未衰减') + '</div></div>'
+    + '<div class="ops">'
+    + (p.confirmed ? '' : '<span class="op confirm" onclick="confirmPref(\'' + p.id + '\')">确认</span>')
+    + '<span class="op" onclick="revisePref(\'' + p.id + '\')">修订</span>'
+    + '<span class="op forget" onclick="forgetPref(\'' + p.id + '\')">遗忘</span>'
+    + '</div>'
+    + '</div>'
+  ).join('')
+  document.getElementById('prefActive').textContent = active.length
+}
+
+function filteredMemories() {
+  let list = memories
+  if (filterKind) list = list.filter(m => m.kind === filterKind)
+  if (searchQ) list = list.filter(m => (m.title + m.content + (m.tags||[]).join(' ')).toLowerCase().includes(searchQ.toLowerCase()))
+  return list
+}
+
+function renderMemories() {
+  const list = filteredMemories()
+  const totalPages = Math.max(1, Math.ceil(list.length / PER_PAGE))
+  if (page > totalPages) page = totalPages
+  const slice = list.slice((page-1)*PER_PAGE, page*PER_PAGE)
+  const el = document.getElementById('memList')
+  if (slice.length === 0) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--slate-400);padding:14px;text-align:center">没有匹配的记忆</div>'
+  } else {
+    el.innerHTML = slice.map(m =>
+      '<div class="mem-row" onclick="openDetail(\'' + m.id + '\')">'
+      + kindPill(m.kind)
+      + (m.sourceSparkId ? '<span class="pill link" title="来自火花" onclick="event.stopPropagation();openLineage(\'' + m.id + '\')">🔗</span>' : '')
+      + '<span class="title">' + m.title + '</span>'
+      + '<span class="meta num">' + m.importance.toFixed(2) + ' · ' + m.createdAt + '</span>'
+      + '</div>'
+    ).join('')
+  }
+  document.getElementById('memCount').textContent = list.length + ' 条 · 第 ' + page + '/' + totalPages + ' 页'
+  // pager
+  let pager = ''
+  const pages = pageItems(page, totalPages)
+  for (const p of pages) {
+    if (p === 'gap') pager += '<span class="pg-gap">…</span>'
+    else pager += '<span class="pg' + (p === page ? ' on' : '') + '" onclick="goPage(' + p + ')">' + p + '</span>'
+  }
+  document.getElementById('memPager').innerHTML = pager + '<span class="right">每页 ' + PER_PAGE + ' ▾</span>'
+}
+
+function pageItems(cur, total) {
+  if (total <= 7) return Array.from({length: total}, (_,i) => i+1)
+  const start = Math.max(2, Math.min(cur-1, total-4))
+  const end = Math.min(start+3, total-1)
+  const items = [1]
+  if (start > 2) items.push('gap')
+  for (let n=start; n<=end; n++) items.push(n)
+  if (end < total-1) items.push('gap')
+  items.push(total)
+  return items
+}
+
+function goPage(p) { page = p; renderMemories() }
+function onSearch() { searchQ = document.getElementById('memSearch').value; page = 1; renderMemories() }
+function setFilter(el, k) {
+  filterKind = k; page = 1
+  document.querySelectorAll('.filter').forEach(f => f.classList.remove('on'))
+  el.classList.add('on')
+  renderMemories()
+}
+
+// ============ 详情 + lineage ============
+function openDetail(id) {
+  const m = memories.find(x => x.id === id) || memories[0]
+  if (!m) return
+  const pills = [kindPill(m.kind)]
+  if (m.scope === 'global') pills.push('<span class="pill kind">全局' + (m.proven ? ' · 已证明' : ' · 未证明') + '</span>')
+  else pills.push('<span class="pill kind">' + m.scope + '</span>')
+  document.getElementById('modalTitle').innerHTML =
+    '<h3>' + m.title + '</h3><div class="pills">' + pills.join('') + '</div>'
+  let lineageHtml = ''
+  if (m.sourceSparkId) {
+    lineageHtml = '<div class="lineage"><h4><svg class="icon" viewBox="0 0 24 24"><path d="M6 3v12a3 3 0 0 0 3 3h6M6 3l-3 3 3 3M18 21V9a3 3 0 0 0-3-3H9M18 21l-3-3 3-3"/></svg>来源溯源</h4>'
+    + '<div class="lineage-row">'
+    + '<span class="node spark">spark · ' + m.sourceSparkId + '</span>'
+    + '<span class="arrow">──结晶──▶</span>'
+    + '<span class="node crystal">kind=' + m.kind + ' · importance ' + m.importance.toFixed(2) + '</span>'
+    + '<span class="arrow">──▶</span>'
+    + '<span class="node hippo">memory · ' + m.id + '</span>'
+    + '</div>'
+    + '<div class="lineage-note">这条记忆由 spark 流结晶而来 · 点击行首的溯源图标可直接查看 lineage</div>'
+    + '</div>'
+  } else {
+    lineageHtml = '<div class="lineage"><h4><svg class="icon" viewBox="0 0 24 24"><path d="M6 3v12a3 3 0 0 0 3 3h6M6 3l-3 3 3 3M18 21V9a3 3 0 0 0-3-3H9M18 21l-3-3 3-3"/></svg>来源溯源</h4>'
+    + '<div class="lineage-row"><span class="node crystal">直接写入</span><span class="arrow">──▶</span><span class="node hippo">memory · ' + m.id + '</span></div>'
+    + '<div class="lineage-note">这条记忆由工具/手动直接写入，无 spark 来源</div>'
+    + '</div>'
+  }
+  document.getElementById('modalBody').innerHTML =
+    '<div class="content">' + m.content + '</div>'
+    + '<dl class="facts">'
+    + '<div class="fact"><dt>重要性</dt><dd class="num">' + m.importance.toFixed(2) + '</dd></div>'
+    + '<div class="fact"><dt>召回</dt><dd class="num">' + m.recall + '×</dd></div>'
+    + '<div class="fact"><dt>引用</dt><dd class="num">' + m.cited + '×</dd></div>'
+    + '<div class="fact"><dt>创建</dt><dd>' + m.createdAt + '</dd></div>'
+    + '</dl>'
+    + '<div class="tags">' + (m.tags||[]).map(t => '<span class="tag">#' + t + '</span>').join('') + '</div>'
+    + lineageHtml
+  document.getElementById('modal').classList.add('open')
+}
+
+function openLineage(id) { openDetail(id) }
+function closeModal() { document.getElementById('modal').classList.remove('open') }
+document.getElementById('modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal() })
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal() })
+
+// ============ 操作交互 ============
+function toast(msg) {
+  const el = document.getElementById('toast')
+  el.textContent = msg
+  el.classList.add('show')
+  setTimeout(() => el.classList.remove('show'), 2000)
+}
+function resolveTodo(id) {
+  const t = todos.find(x => x.id === id)
+  todos.splice(todos.findIndex(x => x.id === id), 1)
+  renderTodos()
+  toast('已处理：' + (t ? t.t.slice(0, 24) + '…' : ''))
+}
+function confirmPref(id) {
+  const p = prefs.find(x => x.id === id)
+  if (p) { p.confirmed = true; p.decay = null }
+  renderPrefs()
+  toast('已确认这条偏好')
+}
+function revisePref(id) { toast('修订偏好（mock：打开编辑）') }
+function forgetPref(id) {
+  const p = prefs.find(x => x.id === id)
+  if (p) p.retired = true
+  renderPrefs()
+  toast('已遗忘这条偏好')
+}
+
+// ============ 脑区动画 ============
+function toggleBrain() {
+  document.getElementById('brainExpand').classList.toggle('open')
+  document.getElementById('brainChev').textContent =
+    document.getElementById('brainExpand').classList.contains('open') ? '▴' : '▾'
+}
+function demoEvent(region, narration) {
+  const el = document.getElementById('r-' + region)
+  el.classList.remove('anim-pfc','anim-amy','anim-hippo','anim-cortex')
+  void el.offsetWidth
+  el.classList.add('anim-' + region)
+  document.getElementById('narrationTxt').textContent = narration
+}
+
+// ============ 初始化 ============
+renderTodos(); renderPrefs(); renderMemories()
+</script>
+</body>
+</html>

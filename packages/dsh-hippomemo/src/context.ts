@@ -27,7 +27,7 @@ export interface HippomemoContextConfig {
   maxRecallChars?: number
 }
 
-export const Config = z.object({
+export const Config: z<{ recallLimit: number; maxRecallChars: number }> = z.object({
   recallLimit: z.number().step(1).min(1).default(5),
   maxRecallChars: z.number().step(1).min(1).default(8_000),
 })

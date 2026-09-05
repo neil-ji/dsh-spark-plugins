@@ -7,7 +7,7 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button, Input, Pill, SettingsCardHeader, Textarea } from 'dsh-ui-kit'
-import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { textCardField } from 'dsh-spark-plugin-kit/client'
 import type { CardFieldSpec, CardFieldWrite, StagedSettingsCardState, StagedCardActions } from 'dsh-spark-plugin-kit/client'
 import type { NpmKey } from './locales.ts'

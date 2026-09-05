@@ -14,7 +14,7 @@ import type {} from '@deepseek-ai/dsh-session-persistence'
 import type {} from '@deepseek-ai/dsh-session-projection'
 import type {} from '@deepseek-ai/dsh-session-projection-cache'
 import type {} from '@deepseek-ai/dsh-workspace'
-import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { fetchFinanceBalance, FinanceBalanceError } from './balance.ts'
 import { backfillFinanceHourly, buildFinanceLedger } from './ledger.ts'
@@ -91,7 +91,7 @@ export {
 } from './pricing.ts'
 
 /** Settings namespace for user-editable price and base/balance connection facts. */
-const NS = settingsNamespace('finance')
+const NS = 'finance' as SettingsNamespace
 
 /**
  * Pull `prices` out of one side (base / user) of the active settings
@@ -104,7 +104,7 @@ const NS = settingsNamespace('finance')
  */
 function readDescriptorPrices(
   ctx: Context,
-  ns: ReturnType<typeof settingsNamespace>,
+  ns: SettingsNamespace,
   side: 'base' | 'user',
 ): FinanceConfigInput['prices'] {
   // A cordis context throws (instead of returning undefined) when a service
@@ -255,15 +255,17 @@ export class FinanceService extends TypertRemoteService {
     super(ctx, 'finance')
     this.configSource = () => config
     this.compositionPrices = config.prices ?? {}
-    installSettingsSection(ctx, NS, FinanceService.Config, config, {
-      setSource: source => {
-        this.configSource = source
-        this.refreshLayerCaches()
-      },
-      onChange: () => {
-        this.ledgerCache = undefined
-        this.refreshLayerCaches()
-      },
+    ctx.inject(['settings'], (sctx) => {
+      sctx.settings.installSection(ctx, NS, FinanceService.Config, config, {
+        setSource: source => {
+          this.configSource = source
+          this.refreshLayerCaches()
+        },
+        onChange: () => {
+          this.ledgerCache = undefined
+          this.refreshLayerCaches()
+        },
+      })
     })
 
     // Projection registration is optional: headless compositions without the

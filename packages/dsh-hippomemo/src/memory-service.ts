@@ -4,7 +4,7 @@
  */
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import type { Domain, KvTable } from '@deepseek-ai/dsh-storage-domain'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import { hippomemoDomainSpec } from './spec.ts'
@@ -54,7 +54,7 @@ interface ResolvedConfig {
 }
 
 /** 本插件拥有的设置命名空间（设置 → 插件 → 插件配置页可编辑）。 */
-export const HIPPOMEMO_SETTINGS_NAMESPACE = settingsNamespace('hippomemo')
+export const HIPPOMEMO_SETTINGS_NAMESPACE = 'hippomemo' as SettingsNamespace
 
 const DEFAULT_CONFIG: ResolvedConfig = {
   maxMemories: 10_000,
@@ -97,7 +97,7 @@ function resolveConfig(config: HippomemoConfig = {}): ResolvedConfig {
 export class MemoryService extends Service {
   static inject = ['storageDomain', 'webServer']
 
-  static Config = z.object({
+  static Config: z<HippomemoConfig> = z.object({
     maxMemories: z.number().step(1).min(1).default(DEFAULT_CONFIG.maxMemories),
     defaultRecallLimit: z.number().step(1).min(1).default(DEFAULT_CONFIG.defaultRecallLimit),
     maxRecallChars: z.number().step(1).min(1).default(DEFAULT_CONFIG.maxRecallChars),
@@ -119,9 +119,11 @@ export class MemoryService extends Service {
     this.core = new MemoryCore(this.configSource)
     // 注册 hippomemo 设置命名空间：配置文件作为 base 层，用户层覆盖后
     // configSource 返回解析后的当前配置，限制项热更新立即生效。
-    installSettingsSection(ctx, HIPPOMEMO_SETTINGS_NAMESPACE, MemoryService.Config, config, {
-      setSource: source => { this.configSource = () => resolveConfig(source()) },
-      onChange: () => {},
+    ctx.inject(['settings'], (sctx) => {
+      sctx.settings.installSection(ctx, HIPPOMEMO_SETTINGS_NAMESPACE, MemoryService.Config, config, {
+        setSource: source => { this.configSource = () => resolveConfig(source()) },
+        onChange: () => {},
+      })
     })
   }
 

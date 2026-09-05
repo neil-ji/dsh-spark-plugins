@@ -1,0 +1,453 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>hippomemo · 重建预览（Knowledge Base 调性）</title>
+<style>
+  /* Design tokens — Knowledge Base palette (ui-ux-pro-max Result1) */
+  :root {
+    /* slate 灰阶 */
+    --slate-50:  #F8FAFC;
+    --slate-100: #F1F5F9;
+    --slate-200: #E2E8F0;
+    --slate-300: #CBD5E1;
+    --slate-400: #94A3B8;
+    --slate-500: #64748B;
+    --slate-600: #475569;  /* primary */
+    --slate-700: #334155;
+    --slate-800: #1E293B;  /* foreground */
+    --slate-900: #0F172A;
+    /* 单一强调色 */
+    --accent:        #2563EB;  /* link blue */
+    --accent-tint:   #EFF6FF;
+    --accent-border: #DBEAFE;
+    /* destructive */
+    --destructive:        #DC2626;
+    --destructive-tint:   #FEF2F2;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    background: var(--slate-50); color: var(--slate-800);
+    font-size: 14px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { width: 1100px; margin: 0 auto; padding: 28px 0 48px; }
+  .mono { font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', Consolas, Menlo, monospace; font-variant-numeric: tabular-nums; }
+  .num  { font-variant-numeric: tabular-nums; }
+
+  /* ===== Header ===== */
+  .page-head { padding-bottom: 16px; border-bottom: 1px solid var(--slate-200); margin-bottom: 20px; }
+  .page-head h1 { font-size: 18px; font-weight: 600; color: var(--slate-900); letter-spacing: -0.01em; }
+  .page-head .sub { font-size: 12px; color: var(--slate-500); margin-top: 2px; }
+
+  /* ===== Section ===== */
+  .section { background: #fff; border: 1px solid var(--slate-200); border-radius: 8px; padding: 16px 20px; margin-top: 14px; }
+  .section h2 { font-size: 13px; font-weight: 600; color: var(--slate-700); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 10px; }
+
+  /* ===== Tab ===== */
+  .seg { display: inline-flex; background: var(--slate-100); border-radius: 6px; padding: 2px; }
+  .seg span { padding: 4px 12px; border-radius: 4px; font-size: 13px; color: var(--slate-500); cursor: default; }
+  .seg span.on { background: #fff; color: var(--slate-800); font-weight: 500; border: 1px solid var(--slate-200); }
+
+  /* ===== KPI 状态快照条 ===== */
+  .kpi-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 12px; }
+  .kpi { padding: 12px 14px; background: #fff; border: 1px solid var(--slate-200); border-radius: 8px; }
+  .kpi .k { font-size: 11px; color: var(--slate-500); text-transform: uppercase; letter-spacing: 0.04em; }
+  .kpi .v { font-size: 20px; font-weight: 600; color: var(--slate-900); margin-top: 2px; line-height: 1.3; }
+  .kpi .h { font-size: 11px; color: var(--slate-400); margin-top: 1px; }
+
+  /* ===== Toolbar (search + filters) ===== */
+  .toolbar { display: flex; gap: 8px; align-items: center; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--slate-100); }
+  .toolbar .search { flex: 1; height: 32px; padding: 0 10px; background: #fff; border: 1px solid var(--slate-200); border-radius: 6px; font-size: 13px; color: var(--slate-500); display: flex; align-items: center; gap: 6px; }
+  .toolbar .search .icon { color: var(--slate-400); }
+  .toolbar .select { height: 32px; padding: 0 28px 0 10px; background: #fff; border: 1px solid var(--slate-200); border-radius: 6px; font-size: 12px; color: var(--slate-600); display: flex; align-items: center; gap: 6px; }
+  .toolbar .select::after { content: ''; width: 8px; height: 8px; border-right: 1.5px solid var(--slate-400); border-bottom: 1.5px solid var(--slate-400); transform: rotate(-45deg); margin-left: auto; }
+
+  /* ===== Button ===== */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 4px; height: 32px; padding: 0 12px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: default; }
+  .btn.primary { background: var(--slate-800); color: #fff; border: 1px solid var(--slate-800); }
+  .btn.outline { background: #fff; color: var(--slate-700); border: 1px solid var(--slate-200); }
+  .btn .icon { width: 14px; height: 14px; }
+
+  /* ===== Memory row（一行 ≤ 3 pill） ===== */
+  .mem-list { margin-top: 8px; display: flex; flex-direction: column; }
+  .mem-row {
+    display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center;
+    padding: 12px 14px; border-bottom: 1px solid var(--slate-100); cursor: default;
+  }
+  .mem-row:hover { background: var(--slate-50); }
+  .mem-row:last-child { border-bottom: none; }
+  .mem-row .main { min-width: 0; }
+  .mem-row .title-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .mem-row .title { font-size: 13px; font-weight: 500; color: var(--slate-800); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mem-row .meta { font-size: 11px; color: var(--slate-400); margin-top: 2px; display: flex; gap: 8px; }
+  .mem-row .meta .sep { color: var(--slate-200); }
+
+  /* Pills — 只有 preference 染蓝，其他走灰阶 */
+  .pill {
+    display: inline-flex; align-items: center; gap: 3px;
+    height: 20px; padding: 0 8px; border-radius: 10px;
+    font-size: 11px; font-weight: 500; white-space: nowrap;
+    background: var(--slate-100); color: var(--slate-600);
+  }
+  .pill.preference { background: var(--accent-tint); color: var(--accent); }
+  .pill.archived { color: var(--slate-400); text-decoration: line-through; background: transparent; padding: 0; }
+
+  /* Row 右侧操作 */
+  .mem-row .ops { display: flex; gap: 4px; align-items: center; flex: none; }
+  .ops .icon-btn {
+    width: 28px; height: 28px; border-radius: 4px; border: 1px solid transparent;
+    background: transparent; color: var(--slate-400); cursor: default;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .ops .icon-btn:hover { background: var(--slate-100); color: var(--slate-600); }
+  .ops .icon-btn.danger:hover { background: var(--destructive-tint); color: var(--destructive); }
+  .ops .icon-btn .icon { width: 14px; height: 14px; }
+
+  /* ===== Icon (内联 SVG 通用) ===== */
+  .icon { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .icon.size12 { width: 12px; height: 12px; }
+  .icon.size16 { width: 16px; height: 16px; }
+
+  /* ===== Chart card (Knowledge Base 风格 — slate 梯度) ===== */
+  .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+  .chart-card { background: #fff; border: 1px solid var(--slate-200); border-radius: 8px; padding: 14px 16px; }
+  .chart-card h3 { font-size: 13px; font-weight: 600; color: var(--slate-800); margin-bottom: 10px; }
+  .chart-card .legend { font-size: 11px; color: var(--slate-500); margin-top: 6px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .chart-card .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+
+  /* ===== Pagination ===== */
+  .pager { display: flex; align-items: center; gap: 4px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--slate-100); font-size: 12px; color: var(--slate-500); }
+  .pager .num-btn { min-width: 28px; height: 28px; border-radius: 4px; border: 1px solid transparent; background: transparent; color: var(--slate-500); display: inline-flex; align-items: center; justify-content: center; padding: 0 8px; font-size: 12px; }
+  .pager .num-btn.on { background: var(--slate-800); color: #fff; border-color: var(--slate-800); }
+  .pager .gap { color: var(--slate-300); padding: 0 4px; }
+
+  /* ===== Compare 前后 ===== */
+  .compare {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+    margin: 18px 0;
+  }
+  .compare-card {
+    background: #fff; border: 1px solid var(--slate-200); border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .compare-card.before { border-left: 3px solid var(--destructive); }
+  .compare-card.after  { border-left: 3px solid var(--accent); }
+  .compare-card h3 { font-size: 13px; font-weight: 600; color: var(--slate-800); margin-bottom: 6px; }
+  .compare-card p { font-size: 12px; color: var(--slate-500); line-height: 1.55; }
+  .compare-card ul { margin: 8px 0 0 18px; font-size: 12px; color: var(--slate-600); line-height: 1.6; }
+
+  /* ===== Section header bar ===== */
+  .section-header { display: flex; align-items: baseline; justify-content: space-between; }
+  .section-header h2 { font-size: 16px; font-weight: 600; color: var(--slate-900); }
+  .section-header .right { font-size: 12px; color: var(--slate-500); }
+
+  /* ===== Pill row demo ===== */
+  .pill-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+  /* ===== Settings panel (PluginCard 重设计) ===== */
+  .settings-card {
+    background: #fff; border: 1px solid var(--slate-200); border-radius: 8px;
+    padding: 0; margin-top: 14px; overflow: hidden;
+  }
+  .settings-card .card-head {
+    display: flex; align-items: center; gap: 8px; padding: 12px 16px;
+    border-bottom: 1px solid var(--slate-200); cursor: default;
+  }
+  .settings-card .card-head .name { font-size: 13px; font-weight: 600; color: var(--slate-800); flex: 1; }
+  .settings-card .card-head .desc { font-size: 12px; color: var(--slate-500); }
+  .settings-card .card-body { padding: 14px 16px; }
+  .settings-card .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; }
+  .settings-card .field label { font-size: 12px; font-weight: 500; color: var(--slate-700); }
+  .settings-card .field .input {
+    height: 32px; padding: 0 10px; border: 1px solid var(--slate-200); border-radius: 6px;
+    background: #fff; font-size: 13px; color: var(--slate-800); display: flex; align-items: center;
+  }
+  .settings-card .field .input.overridden { border-color: var(--accent); background: var(--accent-tint); }
+  .settings-card .field .hint { font-size: 11px; color: var(--slate-500); }
+
+  .disclaimer { margin-top: 32px; padding-top: 12px; border-top: 1px solid var(--slate-200); font-size: 11px; color: var(--slate-400); }
+</style>
+</head>
+<body>
+
+<!-- ============ Header ============ -->
+<div class="page">
+  <div class="page-head">
+    <h1>hippomemo · 重建预览（Knowledge Base 调性 · 单一强调色 · ≤3 pill / 行）</h1>
+    <div class="sub mono">demo data · mock UI · 视觉验收用，非真实代码</div>
+  </div>
+
+  <!-- ============ Before / After 对比 ============ -->
+  <div class="compare">
+    <div class="compare-card before">
+      <h3>之前（问题诊断）</h3>
+      <p>5-7 个饱和色 Pill 挤一行 · ⭐🔗🧠 emoji 抢戏 · 营销紫 / 琥珀 CTA 抢视觉 · 5 tab 平铺 · 主面板直接是列表</p>
+      <ul>
+        <li>用户问"我有多少记忆"需要去统计 tab 才知道</li>
+        <li>preference 与 fact 用 ⭐ 区分，颜色/位置一致</li>
+        <li>128 条记忆全量 render，scroll 卡顿</li>
+        <li>脑科学品牌叙事标签塞到 UI 上，强迫用户接收</li>
+      </ul>
+    </div>
+    <div class="compare-card after">
+      <h3>之后（这一版的目标）</h3>
+      <p>slate 灰阶骨架 + 单一蓝强调 · KPI 状态快照前置 · 一行 ≤ 3 pill · SVG icon 替 emoji · 2 个 tab · CSS 虚化</p>
+      <ul>
+        <li>KPI 条就在主面板第一屏：总数 / 偏好命中 / 进化候选 / 最近 recall</li>
+        <li>preference 是唯一染蓝的 kind — 视觉权重最高</li>
+        <li><code class="mono">content-visibility: auto</code> 零依赖虚化</li>
+        <li>脑科学只在 intro 一句话；UI 不重复</li>
+      </ul>
+    </div>
+  </div>
+
+
+  <!-- ============ Section 1: 主面板（记忆 tab） ============ -->
+  <div class="section">
+    <div class="section-header">
+      <h2>记忆 · 主面板</h2>
+      <div class="right">
+        <span class="seg"><span class="on">记忆</span><span>统计</span></span>
+      </div>
+    </div>
+
+    <!-- KPI 状态快照 — 第一屏 -->
+    <div class="kpi-strip">
+      <div class="kpi">
+        <div class="k">总记忆</div>
+        <div class="v num">128</div>
+        <div class="h">活跃 124 · 已归档 4</div>
+      </div>
+      <div class="kpi">
+        <div class="k">偏好命中</div>
+        <div class="v num">86<span style="font-size:13px;color:var(--slate-500);font-weight:400">%</span></div>
+        <div class="h">本轮 3 / 5 召回</div>
+      </div>
+      <div class="kpi">
+        <div class="k">进化候选</div>
+        <div class="v num">7</div>
+        <div class="h">待您决断</div>
+      </div>
+      <div class="kpi">
+        <div class="k">最近 recall</div>
+        <div class="v num">2<span style="font-size:13px;color:var(--slate-500);font-weight:400"> min ago</span></div>
+        <div class="h">详情面板查看</div>
+      </div>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <div class="search">
+        <svg class="icon size12" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        搜索记忆...
+      </div>
+      <div class="select">全部类型</div>
+      <div class="select">活跃</div>
+      <span style="flex:1"></span>
+      <div class="btn primary">
+        <svg class="icon size16" viewBox="0 0 24 24"><path d="M12 5v14M19 12H5"/></svg>
+        新建
+      </div>
+    </div>
+
+    <!-- 列表 — 一行 ≤ 3 pill -->
+    <div class="mem-list">
+
+      <!-- preference — 唯一染蓝的 -->
+      <div class="mem-row">
+        <div class="main">
+          <div class="title-row">
+            <span class="pill preference">
+              <svg class="icon size12" viewBox="0 0 24 24"><path d="m12 2 3 7 7 .8-5.3 4.8L18 22l-6-3.5L6 22l1.3-7.4L2 9.8 9 9z"/></svg>
+              偏好
+            </span>
+            <span class="title">不要在 system prompt 里内嵌凭据明文，应该用环境变量注入</span>
+          </div>
+          <div class="meta">
+            <span>全局 · 已证明</span>
+            <span class="sep">·</span>
+            <span>importance 0.60</span>
+            <span class="sep">·</span>
+            <span>3 天前</span>
+          </div>
+        </div>
+        <div class="ops">
+          <button class="icon-btn" title="编辑" aria-label="编辑">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          </button>
+          <button class="icon-btn" title="归档" aria-label="归档">
+            <svg class="icon" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="5" rx="1"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M10 13h4"/></svg>
+          </button>
+          <button class="icon-btn danger" title="删除" aria-label="删除">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- fact -->
+      <div class="mem-row">
+        <div class="main">
+          <div class="title-row">
+            <span class="title">gitignore 需忽略 .env*，防止凭据被误提交</span>
+          </div>
+          <div class="meta">
+            <span>全局 · 已证明</span>
+            <span class="sep">·</span>
+            <span>importance 0.80</span>
+            <span class="sep">·</span>
+            <span>2 小时前</span>
+          </div>
+        </div>
+        <div class="ops">
+          <button class="icon-btn"><svg class="icon" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+          <button class="icon-btn"><svg class="icon" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="5" rx="1"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M10 13h4"/></svg></button>
+          <button class="icon-btn danger"><svg class="icon" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
+        </div>
+      </div>
+
+      <!-- constraint (灰 pill) -->
+      <div class="mem-row">
+        <div class="main">
+          <div class="title-row">
+            <span class="pill">约束</span>
+            <span class="title">任何分支不允许 force push</span>
+          </div>
+          <div class="meta">
+            <span>全局 · 已证明</span>
+            <span class="sep">·</span>
+            <span>importance 0.90</span>
+            <span class="sep">·</span>
+            <span>1 周前</span>
+          </div>
+        </div>
+        <div class="ops">
+          <button class="icon-btn"><svg class="icon" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+          <button class="icon-btn"><svg class="icon" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="5" rx="1"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M10 13h4"/></svg></button>
+          <button class="icon-btn danger"><svg class="icon" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
+        </div>
+      </div>
+
+      <!-- archived — pill 装饰去掉 -->
+      <div class="mem-row">
+        <div class="main">
+          <div class="title-row">
+            <span class="pill archived">已归档</span>
+            <span class="title" style="color:var(--slate-500)">旧的 monorepo 迁移经验（已废弃）</span>
+          </div>
+          <div class="meta">
+            <span>项目</span>
+            <span class="sep">·</span>
+            <span>importance 0.30</span>
+            <span class="sep">·</span>
+            <span>3 个月前</span>
+          </div>
+        </div>
+        <div class="ops">
+          <button class="icon-btn"><svg class="icon" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+          <button class="icon-btn" title="恢复" aria-label="恢复"><svg class="icon" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>
+          <button class="icon-btn danger"><svg class="icon" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Pagination -->
+    <div class="pager">
+      <span>第 1 / 13 页 · 每页 10 条</span>
+      <span style="flex:1"></span>
+      <button class="num-btn on">1</button>
+      <button class="num-btn">2</button>
+      <button class="num-btn">3</button>
+      <span class="gap">…</span>
+      <button class="num-btn">13</button>
+    </div>
+  </div>
+
+
+  <!-- ============ Section 2: 统计 tab ============ -->
+  <div class="section">
+    <div class="section-header">
+      <h2>统计</h2>
+      <div class="right">
+        <span class="seg"><span>记忆</span><span class="on">统计</span></span>
+      </div>
+    </div>
+
+    <div class="chart-grid">
+      <div class="chart-card">
+        <h3>按类型召回分布</h3>
+        <svg width="100%" height="80" viewBox="0 0 380 80" preserveAspectRatio="none">
+          <g font-size="11" fill="var(--slate-600)">
+            <text x="0" y="14">偏好</text>
+            <rect x="50" y="6" width="240" height="12" rx="2" fill="#2563EB"/>
+            <text x="296" y="16" fill="var(--slate-800)" font-weight="600">142×</text>
+
+            <text x="0" y="38">事实</text>
+            <rect x="50" y="30" width="120" height="12" rx="2" fill="var(--slate-400)"/>
+            <text x="176" y="40" fill="var(--slate-800)" font-weight="600">86×</text>
+
+            <text x="0" y="62">约束</text>
+            <rect x="50" y="54" width="40" height="12" rx="2" fill="var(--slate-300)"/>
+            <text x="96" y="64" fill="var(--slate-800)" font-weight="600">28×</text>
+          </g>
+        </svg>
+        <div class="legend"><span><i style="background:#2563EB"></i>偏好（命中加权）</span></div>
+      </div>
+
+      <div class="chart-card">
+        <h3>近 30 天引用趋势</h3>
+        <svg width="100%" height="80" viewBox="0 0 380 80" preserveAspectRatio="none">
+          <path d="M0,60 L40,52 L80,58 L120,40 L160,48 L200,30 L240,36 L280,22 L320,28 L360,18 L380,16"
+                fill="none" stroke="#2563EB" stroke-width="1.5"/>
+          <circle cx="380" cy="16" r="2.5" fill="#2563EB"/>
+        </svg>
+        <div class="legend">8-1 · 8-30 · 总引用 96 次</div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ============ Section 3: PluginCard (重设计) ============ -->
+  <div class="section">
+    <div class="section-header">
+      <h2>设置 · 插件配置卡（设置 → 插件）</h2>
+      <div class="right">仅 3 字段 · Knowledge Base 风</div>
+    </div>
+
+    <div class="settings-card">
+      <div class="card-head">
+        <span class="name">hippomemo</span>
+        <span class="desc">长期记忆 · 自动召回</span>
+        <svg class="icon" viewBox="0 0 24 24" style="transform:rotate(180deg)"><path d="m6 9 6 6 6-6"/></svg>
+      </div>
+      <div class="card-body">
+        <div class="field">
+          <label>最大记忆数</label>
+          <div class="input">10000</div>
+          <div class="hint">达到上限后新的记忆会被拒绝。</div>
+        </div>
+        <div class="field">
+          <label>默认召回条数</label>
+          <div class="input overridden">5</div>
+          <div class="hint">已覆盖默认值 · <a style="color:var(--accent)">重置</a></div>
+        </div>
+        <div class="field">
+          <label>召回字符预算</label>
+          <div class="input">8000</div>
+          <div class="hint">单次召回拼接进上下文的字符上限。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <div class="disclaimer">
+    以上数据均为演示数据 · 视觉 mock · 验收后再回写真实组件文件（packages/dsh-hippomemo/src/client/）· 配色 token 全部复用 dsw-* 体系，不引入新色板
+  </div>
+
+</div>
+
+</body>
+</html>

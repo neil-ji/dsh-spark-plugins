@@ -16,7 +16,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import type { JsonValue } from '@deepseek-ai/dsh-tools'
+import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import type { GitHubService } from 'dsh-connector-github'
 import type { NpmService } from './npm-service.ts'
 import { NpmNeedsTokenError, NpmOtpError, firstReleaseScript } from './npm-service.ts'

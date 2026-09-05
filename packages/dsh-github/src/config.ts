@@ -7,11 +7,11 @@
  * package's own Typert Remote methods instead.
  */
 import Schema from '@deepseek-ai/schemastery'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import type { GithubConfigView } from 'dsh-connector-wire'
 
 /** Settings namespace owned by this connector. */
-export const GITHUB_SETTINGS_NAMESPACE = settingsNamespace('github')
+export const GITHUB_SETTINGS_NAMESPACE = 'github' as SettingsNamespace
 
 /** User-editable configuration. Dangerous operations default to off / are absent. */
 export interface GithubConfig {

@@ -13,7 +13,7 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button, Checkbox, Input, Pill, SegmentedControl, SettingsCardHeader } from 'dsh-ui-kit'
-import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { booleanCardField, choiceCardField, textCardField } from 'dsh-spark-plugin-kit/client'
 import type { CardFieldSpec, StagedSettingsCardState, StagedCardActions } from 'dsh-spark-plugin-kit/client'
 import type { GithubKey } from './locales.ts'

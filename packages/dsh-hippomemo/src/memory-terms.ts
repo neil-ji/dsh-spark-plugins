@@ -27,7 +27,14 @@ export interface HippomemoTermsConfig {
   timeoutMs?: number
 }
 
-export const Config = z.object({
+export const Config: z<{
+  enabled: boolean
+  provider: string
+  model: string
+  maxTerms: number
+  maxOutputTokens: number
+  timeoutMs: number
+}> = z.object({
   enabled: z.boolean().default(true),
   provider: z.string(),
   model: z.string(),

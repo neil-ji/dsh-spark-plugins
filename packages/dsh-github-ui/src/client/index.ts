@@ -2,8 +2,7 @@
  * dsh-github-ui client half: mounts the github Remote namespace and registers
  * the Github settings section into the Web settings modal sidebar.
  */
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
-import type { ConnectionHandle } from '@deepseek-ai/dsh-api-remotes/client'
+import type { ClientContext } from 'dsh-spark-plugin-kit/client'
 // Type-only: pulls the settings shell's SlotMap merge (settings.section).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: pulls the settings.plugin.item slot declaration.
@@ -37,16 +36,19 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 const NS = 'settings.github'
 
 /** Required client services. */
-export const inject = ['slots', 'locale', 'connection', 'remote', 'settingsScope']
+export const inject = ['slots', 'locale', 'remote', 'settingsScope']
 
 /**
  * Mount the Github settings page.
  * @param ctx - client root context.
  */
 export async function apply(ctx: ClientContext): Promise<void> {
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'github-ui: copy')
-
-  const connection = ctx.get('connection') as ConnectionHandle
+  // 0.1.2 locale.register 按语言逐条注册。
+  ctx.effect(() => {
+    const offZh = ctx.locale.register(NS, 'zh', zh)
+    const offEn = ctx.locale.register(NS, 'en', en)
+    return () => { offZh(); offEn() }
+  }, 'github-ui: copy')
 
   // Mount the github Remote namespace BEFORE the page can call it (avoids
   // the section racing an unfinished $mount).
@@ -56,7 +58,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
   // read it through reflect to avoid a deadlock on its inject declaration.
   const github = ctx.reflect.get('remote.github') as TypertRemoteNamespaceMap['github']
 
-  const controller = new GithubSettingsStore(connection.api, github)
+  const controller = new GithubSettingsStore(ctx, github)
   const useSnapshot = bindSnapshotSelector(controller.store)
   const t = ctx.locale.bind(NS)
 

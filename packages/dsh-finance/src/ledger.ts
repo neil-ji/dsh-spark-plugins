@@ -127,13 +127,16 @@ function extractProjection(values: Partial<SessionProjectionMap>, title: string 
 }
 
 async function readProjection(ctx: Context, header: SessionHeader, signal?: AbortSignal): Promise<SessionProjectionRead> {
-  const cached = ctx.sessionProjectionCache.cachedSnapshot(header)
+  // 0.1.2: the cache identity needs the session's inherited-event count, which
+  // only persistence metadata carries — inspect once, then cache-first fold.
+  const inspection = await ctx.sessionPersistence.inspect(header.id, signal)
+  const cached = ctx.sessionProjectionCache.cachedSnapshot(inspection.meta, inspection.inheritedEventCount)
   if (cached !== undefined) {
     return extractProjection(cached.values, typeof cached.values.title === 'string' ? cached.values.title : null)
   }
-  // No cached rows at all (a session that never checkpointed): one cold read
-  // refolds the core projections — including tokenUsage — from the log.
-  const snapshot = await ctx.sessionProjectionCache.coldSnapshot(header.id, signal)
+  // No cached rows at all (a session that never checkpointed): fold the core
+  // projections — including tokenUsage — from the inspected log.
+  const snapshot = ctx.sessionProjectionCache.coldSnapshot(inspection.meta, inspection.inheritedEventCount, inspection.events)
   return extractProjection(snapshot.values, typeof snapshot.values.title === 'string' ? snapshot.values.title : null)
 }
 
@@ -519,12 +522,14 @@ export async function backfillFinanceHourly(
     scanned += 1
     if (progress !== undefined) progress.scanned = scanned
     const header = snapshot.header
-    const cached = ctx.sessionProjectionCache.cachedSnapshot(header)
-    if (cached !== undefined && cached.values.financeUsageHourly !== undefined) continue
     try {
-      await ctx.sessionProjectionCache.coldSnapshot(header.id, signal)
-      rescanned += 1
-      if (progress !== undefined) progress.rescanned = rescanned
+      const inspection = await ctx.sessionPersistence.inspect(header.id, signal)
+      const cached = ctx.sessionProjectionCache.cachedSnapshot(inspection.meta, inspection.inheritedEventCount)
+      if (cached === undefined || cached.values.financeUsageHourly === undefined) {
+        ctx.sessionProjectionCache.coldSnapshot(inspection.meta, inspection.inheritedEventCount, inspection.events)
+        rescanned += 1
+        if (progress !== undefined) progress.rescanned = rescanned
+      }
     } catch (error) {
       ctx.logger?.warn?.(`finance rescan: session ${String(header.id)} replay failed`, error)
     }

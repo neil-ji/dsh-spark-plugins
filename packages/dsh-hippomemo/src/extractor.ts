@@ -39,7 +39,17 @@ export interface HippomemoExtractorConfig {
   flushOnDispose?: boolean
 }
 
-export const Config = z.object({
+export const Config: z<{
+  enabled: boolean
+  provider: string
+  model: string
+  maxOutputTokens: number
+  timeoutMs: number
+  maxCandidatesPerTurn: number
+  deferMs: number
+  batchMaxTurns: number
+  flushOnDispose: boolean
+}> = z.object({
   enabled: z.boolean().default(true),
   provider: z.string(),
   model: z.string(),
@@ -86,7 +96,7 @@ interface AgentLike {
   id: string
   session: {
     header?: { cwd?: string }
-    events: readonly {
+    snapshotEvents(fromSeq?: number, toSeqExclusive?: number): readonly {
       type: string
       data: any
     }[]
@@ -211,7 +221,7 @@ export function apply(ctx: Context, config: HippomemoExtractorConfig = {}): void
 }
 
 function collectTurnMessagesFromAgent(agent: AgentLike, turn: number): TurnMessage[] {
-  const events = agent.session.events
+  const events = agent.session.snapshotEvents()
   let start = -1
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index]

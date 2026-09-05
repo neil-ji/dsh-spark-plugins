@@ -7,16 +7,33 @@
  * token used for the connection test travels over the Remote one way and is
  * never persisted by the connector.
  */
-import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
-import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
-import type { CredentialView, IApiClient } from '@deepseek-ai/dsh-api-remotes/client'
-import type { TypertRemoteNamespaceMap } from '@deepseek-ai/dsh-typert-protocol'
+import type { Context } from '@deepseek-ai/cordis'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { RemoteResult, TypertRemoteNamespaceMap } from '@deepseek-ai/dsh-typert-protocol'
 import type {
   NpmStatusView, NpmTokenStatusView, NpmTokenTestView,
 } from 'dsh-connector-npm-wire'
 
 /** The mounted npm Remote namespace (created by ctx.remote.$mount). */
 type NpmNamespace = TypertRemoteNamespaceMap['npm']
+
+/** Credential-seam facts for one reference (0.1.2 远端 wire 视图，不含值本身）。 */
+export interface CredentialView {
+  configured: boolean
+  source?: string
+  writable: boolean
+}
+
+declare module '@deepseek-ai/dsh-typert-protocol' {
+  interface TypertRemoteNamespaceMap {
+    credentials: {
+      describe(refs: readonly string[]): Promise<RemoteResult<Record<string, CredentialView>>>
+      set(ref: string, value: string): Promise<RemoteResult<unknown>>
+      unset(ref: string): Promise<RemoteResult<unknown>>
+    }
+  }
+}
 
 /** Conventional credential reference for the npm granular token. */
 export const NPM_TOKEN_REF = 'NPM_TOKEN'
@@ -49,7 +66,7 @@ export class NpmUiStore {
   private generation = 0
 
   constructor(
-    private readonly api: Pick<IApiClient, 'credentials'>,
+    private readonly ctx: Context,
     private readonly npm: NpmNamespace,
   ) {}
 
@@ -64,19 +81,18 @@ export class NpmUiStore {
     const generation = ++this.generation
     this.store.update((s) => { s.status = 'loading'; s.error = null })
     try {
-      const [result, credentialResponse] = await Promise.all([
+      const [result, credentialResult] = await Promise.all([
         this.npm['status.get'](),
-        this.api.credentials.describe({ refs: [NPM_TOKEN_REF] }),
+        this.ctx.remote.credentials.describe([NPM_TOKEN_REF]),
       ])
       if (!result.ok) throw new Error(result.error.message)
-      const credentialResult = credentialResponse.result
       if (!credentialResult.ok) throw new Error(credentialResult.error.message)
       if (generation !== this.generation) return
       this.store.update((s) => {
         s.status = 'ready'
         s.error = null
         s.statusView = result.value
-        s.credential = credentialResult.value.credentials[NPM_TOKEN_REF]
+        s.credential = credentialResult.value[NPM_TOKEN_REF]
       })
       let token: NpmTokenStatusView | undefined
       try {
@@ -113,8 +129,8 @@ export class NpmUiStore {
   /** Persist the token value into the credential seam (write-only). */
   async saveToken(value: string): Promise<string | undefined> {
     try {
-      const response = await this.api.credentials.set({ ref: NPM_TOKEN_REF, value })
-      if (!response.result.ok) return response.result.error.message
+      const response = await this.ctx.remote.credentials.set(NPM_TOKEN_REF, value)
+      if (!response.ok) return response.error.message
       await this.load()
       return undefined
     } catch (error) {
@@ -125,8 +141,8 @@ export class NpmUiStore {
   /** Remove the stored token. */
   async removeToken(): Promise<string | undefined> {
     try {
-      const response = await this.api.credentials.unset({ ref: NPM_TOKEN_REF })
-      if (!response.result.ok) return response.result.error.message
+      const response = await this.ctx.remote.credentials.unset(NPM_TOKEN_REF)
+      if (!response.ok) return response.error.message
       await this.load()
       return undefined
     } catch (error) {

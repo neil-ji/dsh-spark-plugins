@@ -44,13 +44,20 @@ function makeCtx(
   coldProjectionValues: Record<string, Record<string, unknown>> = projectionValues,
 ) {
   const snapshots = headers.map(header => ({ header, revision: 'rev-' + header.id }))
-  const coldSnapshot = vi.fn(async (id: string) => ({ asOfSeq: 1, values: coldProjectionValues[id] ?? {} }))
+  // 0.1.2：coldSnapshot 是同步纯折叠（meta, inheritedEventCount, events）；
+  // 折叠输入改由 sessionPersistence.inspect 提供的存储元数据 + 完整日志。
+  const coldSnapshot = vi.fn((meta: Header) => ({ asOfSeq: 1, values: coldProjectionValues[meta.id] ?? {} }))
+  const inspect = vi.fn(async (id: string) => {
+    const meta = headers.find(header => header.id === id) ?? ({ id } as Header)
+    return { meta, inheritedEventCount: 0, events: [] as never[] }
+  })
+  const coldSessionIds = (): string[] => coldSnapshot.mock.calls.map(call => (call[0] as Header).id)
   return {
     ctx: {
-      sessionPersistence: { listSnapshots: async () => snapshots },
+      sessionPersistence: { listSnapshots: async () => snapshots, inspect },
       sessionProjectionCache: {
-        cachedSnapshot: (header: Header) => {
-          const values = projectionValues[header.id]
+        cachedSnapshot: (meta: Header) => {
+          const values = projectionValues[meta.id]
           return values === undefined ? undefined : { asOfSeq: 1, values }
         },
         coldSnapshot,
@@ -65,6 +72,7 @@ function makeCtx(
       },
     } as never,
     coldSnapshot,
+    coldSessionIds,
   }
 }
 
@@ -161,13 +169,13 @@ describe('buildFinanceLedger', () => {
   })
 
   it('falls back to a cold read only when no cached rows exist', async () => {
-    const { ctx, coldSnapshot } = makeCtx([
+    const { ctx, coldSnapshot, coldSessionIds } = makeCtx([
       { id: 'a', createdAt: 1000 },
     ], {}, {
       'a': { tokenUsage: tokenUsage(50, 25), title: 'Cold only' },
     })
     const ledger = await buildFinanceLedger(ctx, config)
-    expect(coldSnapshot).toHaveBeenCalledWith('a', undefined)
+    expect(coldSessionIds()).toContain('a')
     expect(ledger.sessions[0].usage.uncachedInputTokens).toBe(50)
     expect(ledger.sessions[0].costMicros).toBe(300) // 50 input + 25 output at default rates
   })
@@ -648,7 +656,7 @@ describe('buildFinanceLedger peak/valley split', () => {
 
 describe('backfillFinanceHourly', () => {
   it('replays only sessions whose cached cut lacks the hourly unit', async () => {
-    const { ctx, coldSnapshot } = makeCtx([
+    const { ctx, coldSnapshot, coldSessionIds } = makeCtx([
       { id: 'old', createdAt: 1000 },
       { id: 'new', createdAt: 2000 },
     ], {
@@ -662,19 +670,19 @@ describe('backfillFinanceHourly', () => {
     const result = await backfillFinanceHourly(ctx)
     expect(result.sessionCount).toBe(2)
     expect(result.rescanned).toBe(1)
-    expect(coldSnapshot).toHaveBeenCalledWith('old', undefined)
-    expect(coldSnapshot).not.toHaveBeenCalledWith('new', undefined)
+    expect(coldSessionIds()).toContain('old')
+    expect(coldSessionIds()).not.toContain('new')
   })
 
   it('replays sessions with no cached rows at all', async () => {
-    const { ctx, coldSnapshot } = makeCtx([
+    const { ctx, coldSnapshot, coldSessionIds } = makeCtx([
       { id: 'a', createdAt: 1000 },
     ], {}, {
       'a': { tokenUsage: tokenUsage(1, 1), title: 'A' },
     })
     const result = await backfillFinanceHourly(ctx)
     expect(result.rescanned).toBe(1)
-    expect(coldSnapshot).toHaveBeenCalledWith('a', undefined)
+    expect(coldSessionIds()).toContain('a')
   })
 
   it('reports progress through the optional sink while scanning', async () => {

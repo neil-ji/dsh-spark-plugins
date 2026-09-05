@@ -12,6 +12,8 @@
  *   node scripts/dryrun-upgrade.mjs                      # 目标 = npm latest
  *   node scripts/dryrun-upgrade.mjs --target 0.1.2-rc.1  # 指定版本
  *   node scripts/dryrun-upgrade.mjs --keep               # 保留临时目录不清理
+ *   node scripts/dryrun-upgrade.mjs --hold dsh-client-runtime,dsh-host-apiproxy
+ *     # 混合钉版：指定包保持现钉版不升（上游漏发/已移除但本地仍需时用），可多次或逗号分隔
  * 退出码：0 = typecheck 全绿；1 = 有包编译失败；2 = 过程出错。
  * 不触碰：本仓库、~/.dsh/profiles/web（3080/3999）、全局 dsh 安装。
  */
@@ -29,6 +31,13 @@ const argv = process.argv.slice(2)
 const keep = argv.includes('--keep')
 const targetIdx = argv.indexOf('--target')
 const targetOverride = targetIdx >= 0 ? argv[targetIdx + 1] : undefined
+const holdPkgs = new Set(
+  argv
+    .flatMap((a, i) => (a === '--hold' && argv[i + 1] ? [argv[i + 1]] : []))
+    .flatMap((s) => s.split(','))
+    .map((s) => s.trim().replace(/^@deepseek-ai\//, ''))
+    .filter(Boolean),
+)
 
 function sh(cmd, opts = {}) {
   const r = spawnSync('/bin/bash', ['-c', cmd], { encoding: 'utf8', stdio: ['ignore', 'inherit', 'inherit'], ...opts })
@@ -46,13 +55,17 @@ async function npmLatest() {
 }
 
 // 把 yaml 里 @deepseek-ai/dsh-* 的钉版替换成 target（overrides + minimumReleaseAgeExclude）
-function rewriteYaml(yaml, target) {
+function rewriteYaml(yaml, target, hold) {
   const lines = yaml.split('\n')
   const out = []
   for (const line of lines) {
     if (/^\s*['"]?@deepseek-ai\/dsh-[a-z0-9-]+['"]?:\s*['"]?[^\s'"#]+['"]?\s*$/.test(line)) {
+      const held = [...hold].some((h) => line.includes('@deepseek-ai/' + h + "'") || line.includes('@deepseek-ai/' + h + ':'))
+      if (held) { out.push(line); continue }
       out.push(line.replace(/:\s*['"]?[^\s'"#]+['"]?\s*$/, ': ' + JSON.stringify(target)))
     } else if (/^\s*-\s+['"]?@deepseek-ai\/dsh-[a-z0-9-]+@[^'"]+['"]?\s*$/.test(line)) {
+      const held = [...hold].some((h) => line.includes('@deepseek-ai/' + h + '@'))
+      if (held) { out.push(line); continue }
       out.push(line.replace(/@[^'"]+['"]?\s*$/, '@' + target + (line.trimEnd().endsWith("'") ? "'" : '')))
     } else {
       out.push(line)
@@ -61,12 +74,12 @@ function rewriteYaml(yaml, target) {
   return out.join('\n')
 }
 
-function rewriteRootPkg(json, target) {
+function rewriteRootPkg(json, target, hold) {
   for (const section of ['dependencies', 'devDependencies', 'peerDependencies']) {
     const deps = json[section]
     if (!deps) continue
     for (const name of Object.keys(deps)) {
-      if (name.startsWith('@deepseek-ai/dsh-')) deps[name] = target
+      if (name.startsWith('@deepseek-ai/dsh-') && !hold.has(name.replace('@deepseek-ai/', ''))) deps[name] = target
     }
   }
   return json
@@ -88,12 +101,12 @@ async function main() {
 
   // 2. 重写钉版
   const yamlPath = path.join(WORK, 'pnpm-workspace.yaml')
-  writeFileSync(yamlPath, rewriteYaml(readFileSync(yamlPath, 'utf8'), target))
+  writeFileSync(yamlPath, rewriteYaml(readFileSync(yamlPath, 'utf8'), target, holdPkgs))
   const pkgPath = path.join(WORK, 'package.json')
-  const pkgJson = rewriteRootPkg(JSON.parse(readFileSync(pkgPath, 'utf8')), target)
+  const pkgJson = rewriteRootPkg(JSON.parse(readFileSync(pkgPath, 'utf8')), target, holdPkgs)
   writeFileSync(pkgPath, JSON.stringify(pkgJson, null, 2) + '\n')
 
-  console.log('已重写 pnpm-workspace.yaml / package.json 钉版为 ' + target)
+  console.log('已重写 pnpm-workspace.yaml / package.json 钉版为 ' + target + (holdPkgs.size ? '（hold 不升：' + [...holdPkgs].join(', ') + '）' : ''))
 
   // 3. 干净安装
   console.log('\n[pnpm install] …')

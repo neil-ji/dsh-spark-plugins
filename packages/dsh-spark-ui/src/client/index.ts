@@ -2,7 +2,7 @@
  * dsh-spark-ui client entry: mounts the Sparks section into the Web
  * settings modal sidebar (设置 → 火花).
  */
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ClientContext } from 'dsh-spark-plugin-kit/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'

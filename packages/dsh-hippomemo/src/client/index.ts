@@ -2,7 +2,7 @@
  * dsh-hippomemo client entry: registers the "Memory" settings section and the
  * plugin configuration card (设置 → 插件 → 插件配置页).
  */
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ClientContext } from 'dsh-spark-plugin-kit/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: brings the `settings.plugin.item` slot declaration into the program.

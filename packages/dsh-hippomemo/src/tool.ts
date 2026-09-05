@@ -192,7 +192,7 @@ function requireDirectHuman(ctx: Context, exec: ToolRunContext): void {
     throw new HarnessError('memory update/forget requires a top-level agent', 'HIPPOMEMO_DIRECT_HUMAN_REQUIRED')
   }
 
-  const events = agent.session.events
+  const events = agent.session.snapshotEvents()
   let start = -1
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index]

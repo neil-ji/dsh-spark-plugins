@@ -45,7 +45,8 @@ export default [
     target: 'es2020',
     dts: false,
     clean: false,
-    external: ['react', 'react-dom', /^@deepseek-ai\/dsh-client-/],
+    // 0.1.2: client-store 等新客户端包内联进 bundle；只有模块表种子里的平台包 external。
+    external: ['react', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'],
     // dsh-spark-plugin-kit 是纯库（无 dsh.client 声明、非 loader entry），tsdown 默认把
     // dependencies external 化会让 client 在运行时 require 落空（HARNESS 报
     // "missed the module table"）；显式内联，与其他 client 插件一致只 external 平台模块。

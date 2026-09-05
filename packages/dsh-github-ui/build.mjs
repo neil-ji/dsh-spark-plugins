@@ -106,7 +106,6 @@ await buildAtomic({
     'react',
     'react/jsx-runtime',
     'react-dom',
-    '@deepseek-ai/dsh-client-runtime/client',
   ],
   banner: { js: wrapper.banner },
   footer: { js: wrapper.footer },

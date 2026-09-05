@@ -14,17 +14,15 @@ import { transform } from 'lightningcss'
 
 const ID = 'dsh-connector-github-ui'
 
-/** Specifiers the shell seeds into the module table (external for the bundle). */
+/** Specifiers the shell seeds into the module table (external for the bundle).
+ *  0.1.2 种子表（apps/web platform.ts）：client-runtime 已移除，client-store 等新客户端包内联。 */
 const PLATFORM_MODULES = [
   'react', 'react/jsx-runtime', 'react-dom', 'react-dom/client', '@deepseek-ai/cordis',
   '@deepseek-ai/dsh-client-ui-slots',
   '@deepseek-ai/dsh-client-ui-primitives',
-  '@deepseek-ai/dsh-client-ui-attachment',
-  '@deepseek-ai/dsh-client-schema-form',
 ]
 
-/** Plus the documented snapshot-store exemption. */
-const CLIENT_EXTERNALS = [...PLATFORM_MODULES, '@deepseek-ai/dsh-client-runtime/client'] as const
+const CLIENT_EXTERNALS = [...PLATFORM_MODULES] as const
 
 const CSS_VIRTUAL_PREFIX = '\0dsh-css:'
 const CSS_VIRTUAL_SUFFIX = '.mjs'

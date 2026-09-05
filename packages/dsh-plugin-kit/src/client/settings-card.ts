@@ -11,8 +11,9 @@
  * CardForm 未从 dsh-client-ui-settings-plugins 公开导出，这里按同一语义
  * 收敛到公共层供多插件复用）。
  */
-import type { SettingsScope, SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
-import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 
 /** 保存一个字段时执行的一次写入。 */
 export type CardFieldWrite = { kind: 'set'; value: unknown } | { kind: 'clear' }

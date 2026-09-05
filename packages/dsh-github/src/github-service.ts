@@ -7,7 +7,6 @@
 import { type Context } from '@deepseek-ai/cordis'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
-import { installSettingsSection } from '@deepseek-ai/dsh-settings'
 import type { ShellExecutor } from '@deepseek-ai/dsh-shell'
 import {
   Config, GITHUB_SETTINGS_NAMESPACE, toConfigView,
@@ -77,10 +76,12 @@ export class GitHubService extends TypertRemoteService {
     // Register the settings namespace for local persistence + hot reload.
     // This is NOT the apiproxy settings.describe allowlist — the Web UI uses the
     // @Remote config methods below instead.
-    installSettingsSection(ctx, GITHUB_SETTINGS_NAMESPACE, Config, entry, {
-      setSource: (current) => { this.source = current },
-      onChange: () => {},
-      validate: assertServiceableGithubConfig,
+    ctx.inject(['settings'], (sctx) => {
+      sctx.settings.installSection(ctx, GITHUB_SETTINGS_NAMESPACE, Config, entry, {
+        setSource: (current) => { this.source = current },
+        onChange: () => {},
+        validate: assertServiceableGithubConfig,
+      })
     })
   }
 

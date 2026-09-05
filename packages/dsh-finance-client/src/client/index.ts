@@ -12,8 +12,10 @@
  * backfill blocks the side the user happened to click.)
  */
 
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ClientContext } from 'dsh-spark-plugin-kit/client'
 import type { ClientRemote } from '@deepseek-ai/dsh-api-remotes/client'
+// Type-only: pulls ctx.remote (api-remotes re-declares it for consumers).
+import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import { bindSnapshotSelector } from 'dsh-spark-plugin-kit/client'
 import type { SnapshotSelectorHook } from 'dsh-spark-plugin-kit/client'
 import financeRemote from 'dsh-spark-finance/remote'
@@ -47,7 +49,7 @@ const NS = 'settings.finance'
  * it would make this plugin wait for a service it mounts itself. After
  * `$mount` resolves, `ctx.reflect.get('remote.finance')` reads the namespace
  * without the inject requirement. */
-export const inject = ['slots', 'locale', 'remote', 'connection', 'settingsScope']
+export const inject = ['slots', 'locale', 'remote', 'settingsScope']
 
 /**
  * Mount the finance Remote and register the plugin configuration card once
@@ -55,7 +57,12 @@ export const inject = ['slots', 'locale', 'remote', 'connection', 'settingsScope
  * the dashboard view and the editor — see FinanceCard.tsx for the layout.
  */
 export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-finance: dictionaries')
+  // 0.1.2 locale.register 按语言逐条注册。
+  ctx.effect(() => {
+    const offZh = ctx.locale.register(NS, 'zh', zh)
+    const offEn = ctx.locale.register(NS, 'en', en)
+    return () => { offZh(); offEn() }
+  }, 'ui-finance: dictionaries')
   const disposeRemote = await ctx.remote.$mount(financeRemote)
 
   // Cordis rejects `ctx.remote.finance` without an inject declaration, and

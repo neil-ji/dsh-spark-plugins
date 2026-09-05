@@ -10,7 +10,7 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button, DisclosureRow, IconThinkOutline16, Input, Pill, SettingsCardHeader } from 'dsh-ui-kit'
-import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { StagedSettingsCardState, StagedCardActions } from 'dsh-spark-plugin-kit/client'
 import type { HippomemoLocaleKey } from './locales.ts'
 
