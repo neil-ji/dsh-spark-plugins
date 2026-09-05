@@ -628,6 +628,9 @@ importers:
       dsh-connector-github-ui:
         specifier: workspace:*
         version: link:../dsh-github-ui
+      dsh-connector-npm-ui:
+        specifier: workspace:*
+        version: link:../dsh-npm-ui
       dsh-hippomemo:
         specifier: workspace:*
         version: link:../dsh-hippomemo

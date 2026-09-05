@@ -8,7 +8,7 @@ import { SparksPane, ProposalsPane, ScriptsPane, GraphPane } from './spark/Spark
 import { FinancePane } from './finance/FinanceModule.tsx'
 import { HippoEmbedPane } from './hippo/HippoEmbed.tsx'
 import { GithubEmbedPane } from './github/GithubEmbed.tsx'
-import { NpmPane } from './connector/ConnectorModule.tsx'
+import { NpmEmbedPane } from './npm/NpmEmbed.tsx'
 
 export interface DockPane {
   id: string
@@ -92,6 +92,6 @@ export const DOCK_MODULES: DockModule[] = [
     id: 'npm', label: 'npm', name: 'npm 发布',
     sub: 'granular token · 注册表与套件包状态',
     accent: 'var(--acc-npm, #cb3837)', icon: <NpmIcon />,
-    panes: [{ id: 'main', label: '发布', render: () => <NpmPane /> }],
+    panes: [{ id: 'main', label: '发布', render: () => <NpmEmbedPane /> }],
   },
 ]

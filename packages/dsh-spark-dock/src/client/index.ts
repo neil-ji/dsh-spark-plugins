@@ -7,10 +7,12 @@
 import type { ClientContext } from 'dsh-spark-plugin-kit/client'
 import { injectPluginStyle } from 'dsh-spark-plugin-kit/client'
 import { en as ghEn, zh as ghZh } from 'dsh-connector-github-ui/embed'
+import { en as npmEn, zh as npmZh } from 'dsh-connector-npm-ui/embed'
 import { en, HIPPOMEMO_CSS, zh } from 'dsh-hippomemo/embed'
 import { DockOverlay } from './DockOverlay.tsx'
 import { setHippoT } from './hippo/HippoEmbed.tsx'
 import { startGithubEmbed } from './github/GithubEmbed.tsx'
+import { startNpmEmbed } from './npm/NpmEmbed.tsx'
 import { DOCK_CSS } from './style.ts'
 import { setFinanceRemoteGetter } from './finance/financeRemote.ts'
 import { setReflectGetter } from './reflect.ts'
@@ -55,6 +57,11 @@ export function apply(ctx: ClientContext): void {
     try { anyCtx.locale.register('settings.github', lang, dict) } catch { /* already registered */ }
   }
   startGithubEmbed(ctx)
+  // npm 内嵌：同 github 模式（字典重复容忍 + 异步装配）。
+  for (const [lang, dict] of [['zh', npmZh], ['en', npmEn]] as const) {
+    try { anyCtx.locale.register('settings.npm', lang, dict) } catch { /* already registered */ }
+  }
+  startNpmEmbed(ctx)
   // finance 余额数据源：remote.finance 由 finance-client 异步 $mount，
   // 必须惰性读取（面板加载时再取），不能在 apply 时同步缓存。
   setFinanceRemoteGetter(() => (ctx as unknown as { reflect: { get(id: string): unknown } }).reflect.get('remote.finance'))
