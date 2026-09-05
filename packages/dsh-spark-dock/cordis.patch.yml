@@ -1,0 +1,7 @@
+# dsh-spark-dock bundle patch.
+# Loads the dock client bundle (floating ball + unified panel) into the web
+# client's shell.overlay slot. No host-side service row — the package is
+# client-only by design.
+- insert:
+    - id: spark-dock
+      name: 'dsh-spark-dock'

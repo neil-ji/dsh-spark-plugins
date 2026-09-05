@@ -1,0 +1,100 @@
+/* ───────── Fairy 人格动效（纯 UI 模拟） ───────── */
+  #ballFace { width: 46px; height: 46px; color: var(--dsw-alias-label-primary-foreground);
+    animation: bob 3.4s ease-in-out infinite; }
+  #ballFace .eye ellipse, #ballFace .eye circle { transform-box: fill-box; transform-origin: center; }
+  #ballFace .eyes-happy, #ballFace .m-open, #ballFace .m-frown, #ballFace .acc { display: none; }
+  #ballFace .blush { transition: opacity 200ms ease; }
+
+  @keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-1.3px); } }
+  @keyframes ahoge-wiggle { 0%,100% { transform: rotate(-9deg); } 50% { transform: rotate(9deg); } }
+  #ahoge { transform-origin: 24px 9px; animation: ahoge-wiggle 2.8s ease-in-out infinite; }
+
+  /* 眨眼（JS 加 .blink，只压眼球，瞳孔保持跟随位移） */
+  .dock-ball.blink .eyeball { transform: scaleY(.12); }
+
+  /* 说话（气泡可见期间） */
+  .dock-ball.talking .m-smile { display: none; }
+  .dock-ball.talking .m-open { display: block; animation: talk .3s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: center; }
+  @keyframes talk { from { transform: scaleY(.45); } to { transform: scaleY(1); } }
+
+  /* 打招呼 / 开心 / 应援：弧形笑眼 + 腮红 */
+  .dock-ball[data-mood="greet"] .eyeball, .dock-ball[data-mood="greet"] .pupil,
+  .dock-ball[data-mood="happy"] .eyeball, .dock-ball[data-mood="happy"] .pupil,
+  .dock-ball[data-mood="cheer"] .eyeball, .dock-ball[data-mood="cheer"] .pupil { display: none; }
+  .dock-ball[data-mood="greet"] .eyes-happy, .dock-ball[data-mood="happy"] .eyes-happy,
+  .dock-ball[data-mood="cheer"] .eyes-happy { display: block; }
+  .dock-ball[data-mood="greet"] .blush, .dock-ball[data-mood="happy"] .blush,
+  .dock-ball[data-mood="cheer"] .blush { opacity: .55; }
+  .dock-ball[data-mood="greet"] #ballFace { animation: tilt .72s var(--ease-spring) 1; }
+  @keyframes tilt { 0% { transform: rotate(0); } 35% { transform: rotate(-9deg); } 70% { transform: rotate(7deg); } 100% { transform: rotate(0); } }
+
+  /* 思考 */
+  .dock-ball[data-mood="think"] .acc-think { display: block; }
+  .dock-ball[data-mood="think"] .acc-think circle { animation: thinkdot 1.3s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+  .dock-ball[data-mood="think"] .acc-think circle:nth-child(2) { animation-delay: .18s; }
+  .dock-ball[data-mood="think"] .acc-think circle:nth-child(3) { animation-delay: .36s; }
+  .dock-ball[data-mood="think"] .pupil { transform: translate(1px, -2.4px) !important; }
+  @keyframes thinkdot { 0%,100% { opacity: .25; transform: scale(.8); } 45% { opacity: 1; transform: scale(1.12); } }
+
+  /* 应援：掏出双应援棒挥舞 + 弹跳 */
+  .dock-ball[data-mood="cheer"] .acc-cheer { display: block; }
+  .dock-ball[data-mood="cheer"] .stick.sl { transform-origin: 5px 40px; animation: waveL .46s ease-in-out infinite alternate; }
+  .dock-ball[data-mood="cheer"] .stick.sr { transform-origin: 43px 40px; animation: waveR .46s ease-in-out infinite alternate; }
+  @keyframes waveL { from { transform: rotate(-24deg); } to { transform: rotate(26deg); } }
+  @keyframes waveR { from { transform: rotate(24deg); } to { transform: rotate(-26deg); } }
+  .dock-ball[data-mood="cheer"] #ballFace { animation: bounce .55s ease-in-out infinite; }
+  @keyframes bounce { 0%,100% { transform: translateY(0); } 45% { transform: translateY(-5px) scale(1.03); } }
+
+  /* 播报/alert：睁大眼 + 张嘴 + 呆毛闪烁 */
+  .dock-ball[data-mood="alert"] .eyeball { transform: scale(1.14); }
+  .dock-ball[data-mood="alert"] .m-smile { display: none; }
+  .dock-ball[data-mood="alert"] .m-open { display: block; transform: scale(.72); transform-box: fill-box; transform-origin: center; }
+  .dock-ball[data-mood="alert"] #ahoge { animation: flash 1s ease-in-out infinite; }
+  @keyframes flash { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+
+  /* 委屈/失败：汗滴 + 皱嘴 + 垂头 */
+  .dock-ball[data-mood="sad"] .acc-sweat { display: block; animation: drip 1.6s ease-in-out infinite; }
+  .dock-ball[data-mood="sad"] .m-smile { display: none; }
+  .dock-ball[data-mood="sad"] .m-frown { display: block; }
+  .dock-ball[data-mood="sad"] .eyeball { transform: scaleY(.72); }
+  .dock-ball[data-mood="sad"] #ballFace { transform: translateY(1.4px); }
+  @keyframes drip { 0% { opacity: 0; transform: translateY(-1px); } 35% { opacity: 1; } 100% { opacity: 0; transform: translateY(2.5px); } }
+
+  /* 打盹：眯眼 + Zzz（瞳孔隐藏） */
+  .dock-ball[data-mood="sleepy"] .eyeball { transform: scaleY(.22); }
+  .dock-ball[data-mood="sleepy"] .pupil { opacity: 0; }
+  .dock-ball[data-mood="sleepy"] .acc-zzz { display: block; }
+  .dock-ball[data-mood="sleepy"] .m-smile { opacity: .6; }
+  .dock-ball[data-mood="sleepy"] #ballFace { animation: none; }
+  .dock-ball[data-mood="sleepy"] .z1 { animation: zfloat 2.4s ease-in-out infinite; }
+  .dock-ball[data-mood="sleepy"] .z2 { animation: zfloat 2.4s ease-in-out .5s infinite; }
+  @keyframes zfloat { 0% { opacity: 0; transform: translate(0, 3px); } 40% { opacity: .95; } 100% { opacity: 0; transform: translate(3px, -5px); } }
+
+  /* 戳一下 / 被吵醒：挤压弹回 */
+  .dock-ball[data-mood="poke"] #ballFace { animation: squish .5s var(--ease-spring) 1; }
+  .dock-ball[data-mood="poke"] .m-smile { display: none; }
+  .dock-ball[data-mood="poke"] .m-open { display: block; transform: scale(.66); transform-box: fill-box; transform-origin: center; }
+  @keyframes squish { 0% { transform: scale(1); } 35% { transform: scale(1.16, .84); } 70% { transform: scale(.94, 1.06); } 100% { transform: scale(1); } }
+
+  /* 拖拽中：抱紧（瞪圆 + 小 o 嘴） */
+  .dock-ball.dragging .eyeball { transform: scale(1.18); }
+  .dock-ball.dragging .m-smile { display: none; }
+  .dock-ball.dragging .m-open { display: block; transform: scale(.62); transform-box: fill-box; transform-origin: center; }
+  .dock-ball.dragging #ballFace { animation: none; }
+
+  /* ───────── 播报气泡 ───────── */
+  .dock-bubble { position: fixed; z-index: 9300; max-width: 250px; padding: 9px 12px;
+    border-radius: 14px; background: var(--dsw-alias-bg-module-platform);
+    border: 1px solid var(--dsw-alias-border-l1); box-shadow: var(--dsw-shadow-lv2);
+    color: var(--dsw-alias-label-primary-foreground); font: 500 12px/1.5 var(--dsw-font-family);
+    opacity: 0; transform: scale(.82) translateY(8px); transform-origin: bottom center;
+    pointer-events: none; transition: transform var(--t-enter) var(--ease-spring), opacity var(--t-enter) ease; }
+  .dock-bubble.show { opacity: 1; transform: none; }
+  .dock-bubble b { color: var(--dock-accent); }
+  .dock-bubble .src { display: block; margin-top: 2px; font-size: 11px; color: var(--dsw-alias-label-tertiary); }
+  .dock-bubble::after { content: ""; position: absolute; left: calc(50% - 5px); bottom: -5px; width: 9px; height: 9px;
+    background: var(--dsw-alias-bg-module-platform); border-right: 1px solid var(--dsw-alias-border-l1);
+    border-bottom: 1px solid var(--dsw-alias-border-l1); transform: rotate(45deg); }
+  .dock-bubble.below { transform-origin: top center; }
+  .dock-bubble.below::after { bottom: auto; top: -5px; transform: rotate(225deg); }
+  .dock-bubble.tail-right::after { left: auto; right: 10px; }

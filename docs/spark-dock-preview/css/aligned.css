@@ -1,0 +1,82 @@
+/* ───────── 对齐存量 Feature 的辅助样式 ───────── */
+  .subtabbar { display: flex; gap: 3px; padding: 3px; margin-bottom: 10px;
+    background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; }
+  .subtab { flex: 1; padding: 6px 4px; border: none; border-radius: 7px; background: transparent;
+    color: var(--dsw-alias-label-secondary); font: 500 11px/1 var(--dsw-font-family); cursor: pointer; }
+  .subtab.on { background: var(--dsw-alias-bg-module-platform); color: var(--dsw-alias-label-primary-foreground); }
+  .subtab:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 1px; }
+  .subpane { display: none; }
+  .subpane.active { display: block; animation: modin var(--t-enter) var(--ease-out); }
+
+  .modbar { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+  .modbar .grow { flex: 1; }
+  .subpill { position: relative; border: 1px solid var(--dsw-alias-border-l2); background: transparent;
+    color: var(--dsw-alias-label-secondary); font: 500 11px/1 var(--dsw-font-family);
+    padding: 5px 9px; border-radius: 8px; cursor: pointer; }
+  .subpill::before { content: ""; position: absolute; inset: -4px; }
+  .subpill.on, .subpill:active { background: var(--dsw-alias-interactive-bg-active); color: var(--dsw-alias-label-primary-foreground); }
+
+  .fieldrow { display: flex; align-items: center; gap: 6px; }
+  .sel { height: 32px; border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-2);
+    color: var(--dsw-alias-label-secondary); border-radius: 9px; padding: 0 8px; font: 400 12px/1 var(--dsw-font-family); }
+  .sel:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); }
+
+  .card.list { padding: 4px; }
+  .pager { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--dsw-alias-label-tertiary); margin-top: 8px; flex-wrap: wrap; }
+  .pager span:first-child { margin-right: auto; }
+
+  .sdot { width: 9px; height: 9px; border-radius: 50%; background: var(--dsw-alias-label-tertiary); display: inline-block; flex: none; }
+  .sdot.done { background: var(--dsw-alias-state-success-primary); }
+  .sdot.warn { background: var(--dsw-alias-state-warn-primary); }
+  .sdot.error { background: var(--dsw-alias-state-error-primary); }
+  .cryst { color: var(--dsw-alias-state-success-primary); font-weight: 600; }
+  .row.off .ttl { text-decoration: line-through; opacity: .55; }
+
+  .panelhead { display: flex; align-items: center; gap: 6px; }
+  .panelhead b { font-size: 13px; }
+  .bstrip { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 10px; }
+  .bregion { display: flex; align-items: center; gap: 7px; padding: 9px 10px; border-radius: 10px;
+    border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-2);
+    color: var(--dsw-alias-label-primary-foreground); font: 500 12px/1.2 var(--dsw-font-family);
+    cursor: pointer; text-align: left; }
+  .bregion:hover { background: var(--dsw-alias-interactive-bg-hover); }
+  .bregion span { display: block; font-size: 11px; color: var(--dsw-alias-label-tertiary); margin-top: 2px; }
+  .narration { display: flex; gap: 8px; margin-top: 10px; font-size: 11px; color: var(--dsw-alias-label-secondary);
+    border-top: 1px dashed var(--dsw-alias-border-l1); padding-top: 8px; }
+  .narration .labsub { flex: none; }
+
+  .prefmeta { font-size: 11px; color: var(--dsw-alias-label-tertiary); margin: 2px 0 6px; }
+  .pill.pref { background: color-mix(in srgb, var(--acc-hippomemo) 16%, transparent); border-color: transparent; color: var(--acc-hippomemo); }
+  .pill.model { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); }
+  .pillwrap { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0; }
+
+  .check { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 12px; color: var(--dsw-alias-label-primary-foreground); cursor: pointer; }
+  .check input { accent-color: var(--dsw-alias-brand-primary); width: 15px; height: 15px; }
+
+  .table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .table th, .table td { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
+  .table th { color: var(--dsw-alias-label-tertiary); font-weight: 600; font-size: 11px; }
+  .table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .muted { color: var(--dsw-alias-label-tertiary); }
+  .code { font-family: var(--dsw-font-mono); font-size: 12px; }
+
+  .legend { display: flex; gap: 14px; font-size: 11px; color: var(--dsw-alias-label-secondary); margin-top: 8px; }
+  .legend i { display: inline-block; width: 18px; height: 0; border-top: 2px solid; margin-right: 5px; vertical-align: middle; }
+  .legend i.dash { border-top-style: dashed; }
+
+  .ringwrap { display: flex; align-items: center; gap: 16px; }
+  .ring { position: relative; width: 88px; height: 88px; border-radius: 50%; display: grid; place-items: center; flex: none; }
+  .ring::after { content: ""; position: absolute; inset: 24%; background: var(--dsw-alias-bg-layer-1); border-radius: 50%; }
+  .ring span { position: relative; z-index: 1; font-weight: 700; font-size: 12px; color: var(--dsw-alias-label-primary-foreground); }
+  .split-leg { flex: 1; display: flex; flex-direction: column; gap: 7px; font-size: 12px; color: var(--dsw-alias-label-primary-foreground); }
+  .sl { display: flex; align-items: center; gap: 7px; }
+  .sq { width: 9px; height: 9px; border-radius: 3px; flex: none; }
+
+  .bars { display: flex; align-items: flex-end; gap: 2px; height: 56px; }
+  .barc { flex: 1; display: flex; align-items: flex-end; height: 100%; }
+  .barc i { display: block; width: 100%; border-radius: 2px 2px 0 0; background: var(--acc-finance); min-height: 2px; }
+
+  .sparkline { color: var(--acc-finance); display: block; margin-top: 3px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; font-size: 12px; }
+
+  .btn.sm, .btn.ghost.sm { height: 26px; padding: 0 11px; font-size: 12px; border-radius: 13px; }

@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spark Dock — 悬浮球统一接入 · 设计预览</title>
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/dock.css">
+  <link rel="stylesheet" href="css/aligned.css">
+  <link rel="stylesheet" href="css/fairy.css">
+</head>
+<body data-theme="dark">
+
+  <div class="preview-bar" role="toolbar" aria-label="预览控制">
+    <button data-theme-toggle type="button">☾ 暗色 / ☀ 亮色</button>
+    <span class="divider"></span>
+    <button data-reduced-toggle type="button">动效：开</button>
+    <span class="divider"></span>
+    <button data-fairy="event" type="button">随机事件</button>
+    <button data-fairy="cheer" type="button">应援</button>
+    <button data-fairy="think" type="button">思考</button>
+    <button data-fairy="sleepy" type="button">打盹</button>
+    <button data-fairy="greet" type="button">打招呼</button>
+  </div>
+
+  <div class="scene" aria-hidden="true">
+    <aside class="scene-sidebar">
+      <div class="brand">DeepSeek Harness</div>
+      <div class="chat active">新对话</div>
+      <div class="chat">插件归档</div>
+      <div class="chat">价格同步</div>
+      <div class="chat">脑区 UI 重构</div>
+    </aside>
+    <main class="scene-main">
+      <div class="scene-thread">
+        <div class="scene-msg">把 HippoMemo 的记忆结构理成四象限，我需要清理工具。</div>
+        <div class="scene-msg user">好的，我先读一下当前脑区分布…</div>
+      </div>
+      <div class="scene-composer">输入你的问题…</div>
+    </main>
+  </div>
+
+  <!-- 面板 -->
+  <div class="dock-panel" id="panel" role="dialog" aria-label="Spark Dock">
+    <div class="dock-head">
+      <div class="dock-titlebar">
+        <div class="titles">
+          <div class="name" id="modName">火花流</div>
+          <div class="sub" id="modSub">灵感 · 关联 · 直觉的认知层</div>
+        </div>
+        <div class="spacer"></div>
+        <button class="dock-iconbtn" id="pinBtn" type="button" aria-label="固定/浮窗切换" title="固定/浮窗">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1v7M4 4l2-1.3L10.7 8 8.6 9.3M9 8.5l2.3 2.3-1.4 1.4L4.5 8.1M6.5 9.5l-3 3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="dock-iconbtn" id="closeBtn" type="button" aria-label="收起面板">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4l8 8M12 4l-8 8" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <nav class="dock-nav" id="dockNav" aria-label="插件模块"></nav>
+    </div>
+
+    <div class="dock-body" id="dockBody"></div>
+  </div>
+
+  <!-- 球：Fairy 式小脸（呆毛火花 + 表情系统 + 配件层） -->
+  <button class="dock-ball" id="ball" type="button" aria-label="打开 Spark Dock" aria-expanded="false" aria-haspopup="dialog">
+    <svg id="ballFace" viewBox="0 0 48 48" aria-hidden="true">
+      <!-- 呆毛：品牌 4 芒火花 -->
+      <path id="ahoge" d="M24 0.8c.4 2.7 2.2 4.5 4.9 4.9-2.7.4-4.5 2.2-4.9 4.9-.4-2.7-2.2-4.5-4.9-4.9 2.7-.4 4.5-2.2 4.9-4.9z" fill="var(--dock-accent)"/>
+      <!-- 腮红 -->
+      <ellipse class="blush" cx="11" cy="28.5" rx="3.4" ry="1.9" fill="var(--acc-spark)" opacity="0"/>
+      <ellipse class="blush" cx="37" cy="28.5" rx="3.4" ry="1.9" fill="var(--acc-spark)" opacity="0"/>
+      <!-- 眼睛（普通 / 开心弧） -->
+      <g class="eyes">
+        <g class="eye"><ellipse class="eyeball" cx="16.5" cy="23" rx="2.8" ry="4.3" fill="currentColor"/><circle class="pupil" cx="16.5" cy="21.4" r="1.05" fill="var(--dsw-alias-bg-module-platform)"/></g>
+        <g class="eye"><ellipse class="eyeball" cx="31.5" cy="23" rx="2.8" ry="4.3" fill="currentColor"/><circle class="pupil" cx="31.5" cy="21.4" r="1.05" fill="var(--dsw-alias-bg-module-platform)"/></g>
+        <g class="eyes-happy">
+          <path d="M12.6 24 Q16.5 19.6 20.4 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/>
+          <path d="M27.6 24 Q31.5 19.6 35.4 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/>
+        </g>
+      </g>
+      <!-- 嘴型：微笑 / 张嘴 / 委屈 -->
+      <path class="mouth m-smile" d="M19.6 30.6 Q24 34.4 28.4 30.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <ellipse class="mouth m-open" cx="24" cy="31.8" rx="2.7" ry="3.3" fill="currentColor"/>
+      <path class="mouth m-frown" d="M19.8 33.4 Q24 29.8 28.2 33.4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <!-- 应援棒 -->
+      <g class="acc acc-cheer">
+        <g class="stick sl"><rect x="3.9" y="27" width="2.4" height="13.5" rx="1.2" fill="var(--dock-accent)"/><path d="M5.1 20.6c.3 1.9 1.5 3.1 3.4 3.4-1.9.3-3.1 1.5-3.4 3.4-.3-1.9-1.5-3.1-3.4-3.4 1.9-.3 3.1-1.5 3.4-3.4z" fill="var(--acc-spark)"/></g>
+        <g class="stick sr"><rect x="41.7" y="27" width="2.4" height="13.5" rx="1.2" fill="var(--dock-accent)"/><path d="M42.9 20.6c.3 1.9 1.5 3.1 3.4 3.4-1.9.3-3.1 1.5-3.4 3.4-.3-1.9-1.5-3.1-3.4-3.4 1.9-.3 3.1-1.5 3.4-3.4z" fill="var(--acc-spark)"/></g>
+      </g>
+      <!-- 思考泡 -->
+      <g class="acc acc-think" fill="var(--acc-spark)">
+        <circle cx="37" cy="14" r="1.7"/><circle cx="41" cy="9.5" r="2.3"/><circle cx="45" cy="4.5" r="1.4"/>
+      </g>
+      <!-- Zzz -->
+      <g class="acc acc-zzz" fill="currentColor" font-family="inherit" font-weight="700">
+        <text class="z1" x="37" y="12" font-size="8">Z</text>
+        <text class="z2" x="42" y="7" font-size="6">z</text>
+      </g>
+      <!-- 汗滴 -->
+      <path class="acc acc-sweat" d="M40.5 13.5C42.9 16.9 42.9 19.4 40.5 20.4 38.1 19.4 38.1 16.9 40.5 13.5Z" fill="var(--acc-cool)"/>
+    </svg>
+    <span class="dock-badge" id="ballBadge" hidden>0</span>
+  </button>
+
+  <script src="js/modules.js"></script>
+  <script src="js/dock.js"></script>
+  <script src="js/fairy.js"></script>
+</body>
+</html>
