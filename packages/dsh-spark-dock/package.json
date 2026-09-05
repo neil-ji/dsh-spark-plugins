@@ -1,6 +1,6 @@
 {
   "name": "dsh-spark-dock",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "DSH Spark Dock：宿主 web 的全局悬浮球 + 插件统一面板（shell.overlay 入口）",
   "type": "module",
   "main": "lib/index.js",
@@ -24,7 +24,8 @@
     "cordis.patch.yml"
   ],
   "dependencies": {
-    "dsh-spark-plugin-kit": "workspace:*"
+    "dsh-spark-plugin-kit": "workspace:*",
+    "dsh-spark-wire": "workspace:*"
   },
   "dsh": {
     "bundle": {

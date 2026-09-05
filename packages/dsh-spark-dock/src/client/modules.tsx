@@ -4,6 +4,7 @@
  * （原则：dock 不写业务，只消费各包已导出的 client api / 组件）。
  */
 import type { ReactNode } from 'react'
+import { SparksPane, ProposalsPane, ScriptsPane, GraphPane } from './spark/SparkModule.tsx'
 
 export interface DockPane {
   id: string
@@ -39,22 +40,25 @@ const FinanceIcon = () => stroke('M12 7.6v8.8|M9 8.5c0-.6 1.3-1 3-1s3 .4 3 1-1.2
 const GithubIcon = () => stroke('M6 8.4v7.2|M18 11.4c0 2-1 3.2-2.4 3.8|M6 12c1.8 0 3.6.8 5.4 2.4')
 const NpmIcon = () => stroke('M12 3 21 8.2v7.6L12 21 3 15.8V8.2 12 3z|M3 8.2l9 5.2 9-5.2|M12 13.4V21')
 
-/** 子页占位（Phase 3+ 逐个替换为真实数据渲染）。 */
+/** 子页占位（后续阶段逐个替换为真实数据渲染）。 */
 const placeholder = (moduleLabel: string, paneLabel: string, phase: string) => () => (
   <div className="dock-empty">{moduleLabel} · {paneLabel} — 真实数据接入于 {phase}。</div>
 )
+
+/** spark：真实数据（dsh-spark http api）。 */
+const sparkPanes = [
+  { id: 'sparks', label: '火花流', render: () => <SparksPane /> },
+  { id: 'proposals', label: '涌现提议', render: () => <ProposalsPane /> },
+  { id: 'scripts', label: '脚本目录', render: () => <ScriptsPane /> },
+  { id: 'graph', label: 'Graph', render: () => <GraphPane /> },
+]
 
 export const DOCK_MODULES: DockModule[] = [
   {
     id: 'spark', label: '火花', name: '火花流 Sparks',
     sub: '手动捕获 · 结晶 · 涌现提议 · 脚本目录 · Graph',
     accent: 'var(--acc-spark, #f59e0b)', icon: <SparkIcon />,
-    panes: [
-      { id: 'sparks', label: '火花流', render: placeholder('火花', '火花流', 'Phase 3') },
-      { id: 'proposals', label: '涌现提议', render: placeholder('火花', '涌现提议', 'Phase 3') },
-      { id: 'scripts', label: '脚本目录', render: placeholder('火花', '脚本目录', 'Phase 3') },
-      { id: 'graph', label: 'Graph', render: placeholder('火花', 'Graph', 'Phase 3') },
-    ],
+    panes: sparkPanes,
   },
   {
     id: 'hippomemo', label: '记忆', name: '记忆 HippoMemo',

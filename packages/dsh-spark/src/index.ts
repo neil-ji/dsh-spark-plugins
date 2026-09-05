@@ -33,7 +33,7 @@ export type { ProposalView, ProposalType, ProposalLeverage, ProposalStatus, Refl
 export type { ScriptView, ScriptStep, ScriptStepKind, ScriptCapture, ScriptInvokeResult } from 'dsh-spark-wire'
 
 export const name = 'dsh-spark'
-export const inject = ['webServer'] as const
+export const inject = ['webServer', 'tools', 'systemPrompt'] as const
 
 export function apply(ctx: Context, config: SparkConfig = {}): void {
   const _spark = new SparkService(ctx, config)
