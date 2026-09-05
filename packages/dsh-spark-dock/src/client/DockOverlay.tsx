@@ -115,6 +115,7 @@ export function DockOverlay(): JSX.Element {
     const onResize = () => {
       posRef.current = clampToView(posRef.current)
       layoutBall()
+      try { localStorage.setItem(POS_KEY, JSON.stringify(posRef.current)) } catch { /* ignore */ }
       layoutPanel(open)
     }
     window.addEventListener('resize', onResize)
@@ -230,7 +231,7 @@ export function DockOverlay(): JSX.Element {
         aria-haspopup="dialog"
       >
         <FairyFace mood={mood} />
-        <span className="dock-badge" aria-hidden="true">4</span>
+        {/* badge 等 pending 计数有真实数据源后再恢复 */}
       </button>
       {bubble !== null && (
         <div ref={bubbleRef} className={'dock-bubble' + (mood !== null ? ' mood-' + mood : '')}>

@@ -18,6 +18,10 @@ const streams = new Map<string, StreamState>()
 
 function open(url: string, state: StreamState): void {
   state.es = new EventSource(url)
+  state.es.onerror = () => {
+    // EventSource 会自动重连；这里只留一条诊断线索（URL 永久失败时占坑可见）
+    console.warn(`[dsh-spark-dock] SSE ${url} error (readyState=${state.es?.readyState})`)
+  }
   state.es.onmessage = (ev) => {
     let operation = ''
     try {

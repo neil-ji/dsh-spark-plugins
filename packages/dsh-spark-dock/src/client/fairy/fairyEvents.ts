@@ -1,7 +1,6 @@
 /**
- * Fairy event layer: subscribes to the real plugin event streams
- * (/sparks/events, /proposals/events, /hippomemo/events) and translates
- * them into ball moods + bubble announcements.
+ * Fairy event layer: subscribes to the real plugin event streams via the
+ * shared registry and translates them into ball moods + bubble announcements.
  *
  * Restraint rules (carried over from the preview decision):
  *  - event-driven only, no polling;
@@ -47,11 +46,15 @@ export function startFairyEvents(): () => void {
     subscribeStream('/sparks/events', (op) => {
       if (op === 'capture') announce({ mood: 'happy', text: '捕获了新火花 ✦', src: 'Sparks' })
       else if (op === 'crystallize') announce({ mood: 'cheer', text: '火花结晶成功 ✦', src: 'Sparks · crystallize' })
-      else if (op === 'reflect' || op === 'resolve') announce({ mood: 'think', text: '涌现提议有更新', src: 'Sparks · emerge' })
     })
   }
   return () => { /* resident stream lives for the dock's lifetime */ }
 }
+// 注意：proposals 的 reflect/resolve 与 hippomemo 的 put 播报在连接收敛时被
+// 有意裁掉（sparks/changed 只发 capture/update/delete/crystallize，把
+// reflect/resolve 挂在这里是死分支）。若要恢复，需在对应 pane 打开期间
+// 临时接管 announce（其 SSE 只在 pane 挂载时存在，见 streams.ts），
+// 而不是另开常驻流。
 
 export function onFairyAnnouncement(l: Listener): () => void {
   listeners.add(l)
