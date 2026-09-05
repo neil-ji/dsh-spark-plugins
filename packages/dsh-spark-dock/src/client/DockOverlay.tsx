@@ -103,11 +103,11 @@ export function DockOverlay(): JSX.Element {
     panel.style.transformOrigin = `${openRight ? 'left' : 'right'} ${openUp ? 'bottom' : 'top'}`
   }, [])
 
-  // 开合状态持久化 + 面板定位
+  // 开合状态持久化 + 面板定位（宽模块切换会改面板宽度，需重定位）
   useEffect(() => {
     localStorage.setItem(OPEN_KEY, open ? '1' : '0')
     layoutPanel(open)
-  }, [open, layoutPanel])
+  }, [open, activeModule.id, layoutPanel])
 
   // 初始定位 + resize（resize 时把球夹回视口）
   useEffect(() => {
@@ -244,7 +244,11 @@ export function DockOverlay(): JSX.Element {
         className={open ? 'dock-panel open' : 'dock-panel'}
         role="dialog"
         aria-label="Spark Dock"
-        style={{ '--accent': activeModule.accent } as React.CSSProperties}
+        style={{
+          '--accent': activeModule.accent,
+          // 宽模块（finance/hippomemo）用 680px，其余 560px
+          '--dock-panel-w': activeModule.wide === true ? '680px' : '560px',
+        } as React.CSSProperties}
       >
         <div className="dock-titlebar">
           <div className="titles">

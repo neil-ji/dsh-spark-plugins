@@ -136,4 +136,8 @@ export const DOCK_CSS = [
   '.dock-embed :is(h1, h2) { font-size: 15px; line-height: 1.35; margin: 0 0 8px; }',
   '.dock-embed :is(h3) { font-size: 13px; margin: 0 0 6px; }',
   '.dock-embed p { font-size: 13px; }',
+  /* hippomemo 分段控件通栏（与 dock subtabbar 同宽对齐） */
+  '[data-plugin="dsh-spark-dock"] .hippomemo-tabs { align-self: stretch; }',
+  /* connector 按钮不被 flex column 拉伸成全宽白胶囊，回落紧凑尺寸 */
+  '.dock-embed-connector button { align-self: flex-start; }',
 ].join('\n')

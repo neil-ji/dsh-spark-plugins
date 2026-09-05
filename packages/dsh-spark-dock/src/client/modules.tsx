@@ -24,6 +24,8 @@ export interface DockModule {
   /** 模块强调色（css color 值），驱动 tab 激活态与面板内 pill。 */
   accent: string
   icon: ReactNode
+  /** 宽面板（680px）：长表单/多列模块（finance、hippomemo）开启。 */
+  wide?: boolean
   panes: DockPane[]
 }
 
@@ -73,13 +75,13 @@ export const DOCK_MODULES: DockModule[] = [
   {
     id: 'hippomemo', label: '记忆', name: '记忆 HippoMemo',
     sub: '四脑区总览 · 记忆 CRUD · 我的偏好 · 进化引擎',
-    accent: 'var(--acc-hippomemo, #3b82f6)', icon: <HippoIcon />,
+    accent: 'var(--acc-hippomemo, #3b82f6)', icon: <HippoIcon />, wide: true,
     panes: hippoPanes,
   },
   {
     id: 'finance', label: '成本', name: '财务审计 Finance',
     sub: '余额 · Token 用量与成本总览',
-    accent: 'var(--acc-finance, #22c55e)', icon: <FinanceIcon />,
+    accent: 'var(--acc-finance, #22c55e)', icon: <FinanceIcon />, wide: true,
     panes: [{ id: 'main', label: '总览', render: () => <FinanceEmbedPane /> }],
   },
   {
