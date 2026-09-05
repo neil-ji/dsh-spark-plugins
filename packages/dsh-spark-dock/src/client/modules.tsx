@@ -6,6 +6,7 @@
 import type { ReactNode } from 'react'
 import { SparksPane, ProposalsPane, ScriptsPane, GraphPane } from './spark/SparkModule.tsx'
 import { FinancePane } from './finance/FinanceModule.tsx'
+import { HippoOverviewPane, HippoMemoriesPane, HippoPrefsPane, HippoEvolutionPane } from './hippo/HippoModule.tsx'
 
 export interface DockPane {
   id: string
@@ -54,6 +55,14 @@ const sparkPanes = [
   { id: 'graph', label: 'Graph', render: () => <GraphPane /> },
 ]
 
+/** hippomemo：真实数据（/hippomemo http api）。 */
+const hippoPanes = [
+  { id: 'overview', label: '总览', render: () => <HippoOverviewPane /> },
+  { id: 'memories', label: '记忆', render: () => <HippoMemoriesPane /> },
+  { id: 'prefs', label: '偏好', render: () => <HippoPrefsPane /> },
+  { id: 'evolution', label: '进化', render: () => <HippoEvolutionPane /> },
+]
+
 export const DOCK_MODULES: DockModule[] = [
   {
     id: 'spark', label: '火花', name: '火花流 Sparks',
@@ -65,12 +74,7 @@ export const DOCK_MODULES: DockModule[] = [
     id: 'hippomemo', label: '记忆', name: '记忆 HippoMemo',
     sub: '四脑区总览 · 搜索/筛选 · 我的偏好 · 进化引擎',
     accent: 'var(--acc-hippomemo, #3b82f6)', icon: <HippoIcon />,
-    panes: [
-      { id: 'overview', label: '总览', render: placeholder('记忆', '总览', 'Phase 5') },
-      { id: 'memories', label: '记忆', render: placeholder('记忆', '记忆', 'Phase 5') },
-      { id: 'prefs', label: '偏好', render: placeholder('记忆', '偏好', 'Phase 5') },
-      { id: 'evolution', label: '进化', render: placeholder('记忆', '进化', 'Phase 5') },
-    ],
+    panes: hippoPanes,
   },
   {
     id: 'finance', label: '成本', name: '财务审计 Finance',

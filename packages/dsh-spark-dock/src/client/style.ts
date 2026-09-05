@@ -78,6 +78,13 @@ export const DOCK_CSS = [
   '[data-plugin="dsh-spark-dock"] .dock-row .amount { font-size: 13px; color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; }',
   '[data-plugin="dsh-spark-dock"] .dock-hint { font-size: 11px; color: var(--dsw-alias-label-tertiary); }',
   '[data-plugin="dsh-spark-dock"] .grow-spacer { flex: 1; }',
+  '[data-plugin="dsh-spark-dock"] .dock-statrow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }',
+  '[data-plugin="dsh-spark-dock"] .dock-stat .k { font-size: 11px; color: var(--dsw-alias-label-tertiary); }',
+  '[data-plugin="dsh-spark-dock"] .dock-stat .v { font-size: 17px; font-weight: 700; margin-top: 2px; color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; }',
+  '[data-plugin="dsh-spark-dock"] .dock-narr { display: flex; gap: 8px; margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--dsw-alias-border-l1); font-size: 11px; color: var(--dsw-alias-label-secondary); }',
+  '[data-plugin="dsh-spark-dock"] .dock-narr .lab { flex: none; color: var(--dsw-alias-label-tertiary); }',
+  '[data-plugin="dsh-spark-dock"] .dock-pill.mini { padding: 1px 7px; font-size: 10px; cursor: default; }',
+  '[data-plugin="dsh-spark-dock"] .dock-pill.mini.accent { background: color-mix(in srgb, var(--accent) 16%, transparent); border-color: transparent; color: var(--accent); }',
   '[data-plugin="dsh-spark-dock"] .dock-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 16px; font-size: 14px; line-height: 1.5; }',
   '[data-plugin="dsh-spark-dock"] .dock-empty { padding: 32px 12px; text-align: center; font-size: 13px; color: var(--dsw-alias-label-tertiary); }',
 ].join('\n')
