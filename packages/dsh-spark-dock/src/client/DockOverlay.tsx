@@ -8,6 +8,7 @@
  */
 import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { DOCK_MODULES } from './modules.tsx'
+import { FairyFace, useFairy } from './fairy/FairyFace.tsx'
 
 const M = 16
 const BALL = 48
@@ -52,6 +53,7 @@ export function DockOverlay(): JSX.Element {
   // 切模块时子页回落到第一个
   useEffect(() => { setPaneId(activeModule.panes[0].id) }, [activeModule])
   const activePane = activeModule.panes.find((p) => p.id === paneId) ?? activeModule.panes[0]
+  const { mood, bubble } = useFairy()
 
   const selectModule = useCallback((id: string) => {
     setActiveId(id)
@@ -199,6 +201,24 @@ export function DockOverlay(): JSX.Element {
     return () => document.removeEventListener('keydown', onKey)
   }, [open])
 
+  // 气泡定位：球上方居中，贴顶时翻到下方，左右夹取（demo positionBubble 移植）
+  const bubbleRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const el = bubbleRef.current
+    const ball = ballRef.current
+    if (el === null || ball === null) return
+    const br = ball.getBoundingClientRect()
+    const bw = el.offsetWidth
+    const bh = el.offsetHeight
+    const m = 12
+    let y = br.top - bh - 12
+    if (y < m) y = br.bottom + 12
+    let x = br.left + br.width / 2 - bw / 2
+    x = Math.max(m, Math.min(window.innerWidth - bw - m, x))
+    el.style.left = x + 'px'
+    el.style.top = y + 'px'
+  }, [bubble])
+
   return (
     <div data-plugin="dsh-spark-dock">
       <button
@@ -209,11 +229,15 @@ export function DockOverlay(): JSX.Element {
         aria-expanded={open}
         aria-haspopup="dialog"
       >
-        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <path d="M12 2.6c.7 5.2 4.2 8.7 9.4 9.4-5.2.7-8.7 4.2-9.4 9.4-.7-5.2-4.2-8.7-9.4-9.4 5.2-.7 8.7-4.2 9.4-9.4z" />
-        </svg>
+        <FairyFace mood={mood} />
         <span className="dock-badge" aria-hidden="true">4</span>
       </button>
+      {bubble !== null && (
+        <div ref={bubbleRef} className={'dock-bubble' + (mood !== null ? ' mood-' + mood : '')}>
+          {bubble.text}
+          <span className="src">— {bubble.src}</span>
+        </div>
+      )}
       <div
         ref={panelRef}
         className={open ? 'dock-panel open' : 'dock-panel'}

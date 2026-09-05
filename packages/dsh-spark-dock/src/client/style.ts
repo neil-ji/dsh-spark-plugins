@@ -82,6 +82,35 @@ export const DOCK_CSS = [
   '[data-plugin="dsh-spark-dock"] .dock-scopes { font-size: 11px; color: var(--dsw-alias-label-tertiary); margin: 6px 0 8px; }',
   '[data-plugin="dsh-spark-dock"] .dock-hline { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 6px 0 2px; }',
   '[data-plugin="dsh-spark-dock"] .dock-hline b { font-size: 12px; font-weight: 700; color: var(--dsw-alias-label-primary); }',
+
+  /* ── Fairy 表情层（docs/spark-dock-preview fairy.css 子集） ── */
+  '[data-plugin="dsh-spark-dock"] .fairy-face { width: 46px; height: 46px; overflow: visible; color: var(--dsw-alias-label-primary-foreground, #fff); animation: dock-bob 3.4s ease-in-out infinite; }',
+  '[data-plugin="dsh-spark-dock"] .fairy-face .ahoge { transform-origin: 24px 9px; animation: dock-ahoge 2.8s ease-in-out infinite; }',
+  '[data-plugin="dsh-spark-dock"] .fairy-face .eyes-happy, [data-plugin="dsh-spark-dock"] .fairy-face .mouth-open, [data-plugin="dsh-spark-dock"] .fairy-face .mouth-frown, [data-plugin="dsh-spark-dock"] .fairy-face .acc-think { display: none; }',
+  '[data-plugin="dsh-spark-dock"] .fairy-face .blush { opacity: 0; }',
+  '@keyframes dock-bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-1.3px); } }',
+  '@keyframes dock-ahoge { 0%,100% { transform: rotate(-9deg); } 50% { transform: rotate(9deg); } }',
+  /* happy/cheer：弧形笑眼 + 腮红 + 弹跳 */
+  '[data-plugin="dsh-spark-dock"] .fairy-face.mood-happy .eyes-normal, [data-plugin="dsh-spark-dock"] .fairy-face.mood-cheer .eyes-normal { display: none; }',
+  '[data-plugin="dsh-spark-dock"] .fairy-face.mood-happy .eyes-happy, [data-plugin="dsh-spark-dock"] .fairy-face.mood-cheer .eyes-happy { display: block; }',
+  '[data-plugin="dsh-spark-dock"] .fairy-face.mood-happy .blush, [data-plugin="dsh-spark-dock"] .fairy-face.mood-cheer .blush { opacity: .55; }',
+  '[data-plugin="dsh-spark-dock"] .fairy-face.mood-cheer { animation: dock-bounce .55s ease-in-out infinite; }',
+  '@keyframes dock-bounce { 0%,100% { transform: translateY(0); } 45% { transform: translateY(-5px) scale(1.03); } }',
+  /* alert：张嘴 + 呆毛闪烁 */
+  '[data-plugin="dsh-spark-dock"] .fairy-face.mood-alert .mouth-smile { display: none; }',
+  '[data-plugin="dsh-spark-dock"] .fairy-face.mood-alert .mouth-open { display: block; transform: scale(.72); transform-box: fill-box; transform-origin: center; }',
+  '[data-plugin="dsh-spark-dock"] .fairy-face.mood-alert .ahoge { animation: dock-flash 1s ease-in-out infinite; }',
+  '@keyframes dock-flash { 0%,100% { opacity: 1; } 50% { opacity: .35; } }',
+  /* think：思考泡 */
+  '[data-plugin="dsh-spark-dock"] .fairy-face.mood-think .acc-think { display: block; }',
+  /* sad：委屈嘴 */
+  '[data-plugin="dsh-spark-dock"] .fairy-face.mood-sad .mouth-smile { display: none; }',
+  '[data-plugin="dsh-spark-dock"] .fairy-face.mood-sad .mouth-frown { display: block; }',
+
+  /* ── 播报气泡 ── */
+  '[data-plugin="dsh-spark-dock"] .dock-bubble { position: fixed; z-index: 9300; max-width: 250px; padding: 9px 12px; border-radius: 14px; background: var(--dsw-alias-bg-module-platform); border: 1px solid var(--dsw-alias-border-l1); box-shadow: var(--dsw-shadow-lv2, 0 8px 24px rgba(10,18,38,.16)); color: var(--dsw-alias-label-primary-foreground, #fff); font: 500 12px/1.5 var(--dsw-font-family, inherit); pointer-events: auto; }',
+  '[data-plugin="dsh-spark-dock"] .dock-bubble .src { display: block; margin-top: 2px; font-size: 11px; color: var(--dsw-alias-label-tertiary); }',
+  '[data-plugin="dsh-spark-dock"] .dock-bubble.mood-alert { border-color: var(--dsw-alias-state-warn-primary); }',
   '[data-plugin="dsh-spark-dock"] .grow-spacer { flex: 1; }',
   '[data-plugin="dsh-spark-dock"] .dock-statrow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }',
   '[data-plugin="dsh-spark-dock"] .dock-stat .k { font-size: 11px; color: var(--dsw-alias-label-tertiary); }',
