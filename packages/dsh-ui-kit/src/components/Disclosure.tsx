@@ -7,6 +7,8 @@ export interface DisclosureProps {
   description?: ReactNode
   /** 折叠体内容 */
   children: ReactNode
+  /** 头部右侧插槽（如未保存徽标） */
+  trailing?: ReactNode
   defaultOpen?: boolean
   open?: boolean
   onToggle?: (open: boolean) => void
@@ -14,7 +16,7 @@ export interface DisclosureProps {
 }
 
 /** Spark UI Kit 折叠头 — dock 面板头形制，grid-rows 高度动画 + aria-expanded */
-export function Disclosure({ name, description, children, defaultOpen = false, open, onToggle, className }: DisclosureProps) {
+export function Disclosure({ name, description, children, trailing, defaultOpen = false, open, onToggle, className }: DisclosureProps) {
   const [innerOpen, setInnerOpen] = useState(defaultOpen)
   const isOpen = open ?? innerOpen
   const panelId = useId()
@@ -35,6 +37,7 @@ export function Disclosure({ name, description, children, defaultOpen = false, o
           <span className={css.name}>{name}</span>
           {description && <span className={css.desc}>{description}</span>}
         </span>
+        {trailing}
       </button>
       <div id={panelId} className={css.panel}>
         <div className={css.panelInner}>

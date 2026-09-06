@@ -62,7 +62,7 @@ function Loaded({ injected }: { injected: NpmSectionInjected }): ReactNode {
       <div className={styles.section}>
         <h2 className={styles.title}>{t('title')}</h2>
         <p className={styles.error}>{t('loadFailed') + ': ' + (state.error ?? '')}</p>
-        <Button variant="outline" onClick={() => { void controller.load() }}>{t('retry')}</Button>
+        <Button variant="secondary" onClick={() => { void controller.load() }}>{t('retry')}</Button>
       </div>
     )
   }
@@ -75,7 +75,7 @@ function Loaded({ injected }: { injected: NpmSectionInjected }): ReactNode {
       {/* Connection status + token management */}
       <div className={styles.card}>
         <div className={styles.row}>
-          <StateDot state={tokenLogin !== null && tokenLogin !== undefined ? 'done' : credentialConfigured ? 'warning' : 'error'} />
+          <StateDot status={tokenLogin !== null && tokenLogin !== undefined ? 'live' : credentialConfigured ? 'idle' : 'error'} />
           <span className={styles.cardTitle}>
             {tokenLogin !== null && tokenLogin !== undefined ? t('connectedAs') : t('notConnected')}
           </span>
@@ -120,7 +120,7 @@ function Loaded({ injected }: { injected: NpmSectionInjected }): ReactNode {
           </span>
           <span className={styles.growSpacer} />
           <Button
-            variant="outline"
+            variant="secondary"
             size="sm"
             disabled={busy}
             onClick={() => {
@@ -138,7 +138,7 @@ function Loaded({ injected }: { injected: NpmSectionInjected }): ReactNode {
             {busy ? t('testing') : t('testConnection')}
           </Button>
           {credentialConfigured
-            ? <Button variant="outline" size="sm" disabled={busy} onClick={() => { void run(() => controller.removeToken()) }}>{t('removeToken')}</Button>
+            ? <Button variant="secondary" size="sm" disabled={busy} onClick={() => { void run(() => controller.removeToken()) }}>{t('removeToken')}</Button>
             : null}
         </div>
         {state.token !== undefined
@@ -149,7 +149,7 @@ function Loaded({ injected }: { injected: NpmSectionInjected }): ReactNode {
       {/* Registry + kit packages (read-only status) */}
       <div className={styles.card}>
         <div className={styles.row}>
-          <StateDot state={statusView?.ok === true ? 'done' : statusView === undefined ? 'warning' : 'error'} />
+          <StateDot status={statusView?.ok === true ? 'live' : statusView === undefined ? 'idle' : 'error'} />
           <span className={styles.cardTitle}>{t('registry')}</span>
           {statusView !== undefined
             ? (
@@ -160,7 +160,7 @@ function Loaded({ injected }: { injected: NpmSectionInjected }): ReactNode {
             ? <span className={styles.muted}>{statusView.registry}</span>
             : null}
           <span className={styles.growSpacer} />
-          <Button variant="outline" size="sm" onClick={() => { void controller.load() }}>{t('retry')}</Button>
+          <Button variant="secondary" size="sm" onClick={() => { void controller.load() }}>{t('retry')}</Button>
         </div>
         {statusView !== undefined && statusView.error !== null
           ? <p className={styles.error}>{statusView.error}</p>
@@ -170,7 +170,7 @@ function Loaded({ injected }: { injected: NpmSectionInjected }): ReactNode {
             <div className={styles.packageList}>
               {statusView.packages.map((pkg) => (
                 <div key={pkg.name} className={styles.packageRow}>
-                  <StateDot state={pkg.exists ? 'done' : 'error'} />
+                  <StateDot status={pkg.exists ? 'live' : 'error'} />
                   <code className={styles.packageName}>{pkg.name}</code>
                   <span className={styles.muted}>
                     {pkg.exists
