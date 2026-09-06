@@ -1,8 +1,7 @@
 # dsh-spark bundle patch.
-# Inserts both the host row (registers ctx.spark service) and the Web UI row
-# (loads the dsh-spark-ui client bundle into the settings modal).
+# Inserts the host row (registers ctx.spark service).
+# 入口退位（2026-09）：spark-ui 行已移除——设置 Modal 的「火花」section 随
+# dsh-spark-ui 退役，完整功能由 dsh-spark-dock 悬浮球内嵌。
 - insert:
     - id: spark
       name: 'dsh-spark'
-    - id: spark-ui
-      name: 'dsh-spark-ui'

@@ -1,25 +1,18 @@
 /**
- * dsh-npm-ui client half: mounts the npm Remote namespace and registers the
- * npm release section into the Web settings modal sidebar.
+ * dsh-npm-ui client half: registers the npm dictionaries and mounts the npm
+ * Remote namespace into the web client shell.
+ *
+ * 入口退位（2026-09）：完整设置页与插件配置卡片均已由 dsh-spark-dock 悬浮球
+ * 内嵌（dock import 本包 ./embed 的 NpmSection 并自行 mount remote），
+ * 这里不再注册 settings.section / settings.plugin.item。
  */
 import type { ClientContext } from 'dsh-spark-plugin-kit/client'
-// Type-only: pulls the settings shell's SlotMap merge (settings.section).
-import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
-// Type-only: pulls the settings.plugin.item slot declaration.
-import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 // Type-only: pulls ctx.locale.
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Type-only: pulls ctx.remote (api-remotes re-declares it for consumers).
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
-import { bindSnapshotSelector } from 'dsh-spark-plugin-kit/client'
-import type { TypertRemoteNamespaceMap } from '@deepseek-ai/dsh-typert-protocol'
+import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import { NPM_REMOTE_CONTRIBUTION } from 'dsh-connector-npm-wire'
-import { StagedSettingsCard } from 'dsh-spark-plugin-kit/client'
-import { NpmPluginCard } from './NpmPluginCard.tsx'
-import { NPM_CARD_SPECS } from './NpmPluginCard.tsx'
-import { NpmSection } from './NpmSection.tsx'
-import type { NpmSectionInjected } from './NpmSection.tsx'
-import { NpmUiStore } from './store.ts'
 import { en, zh, type NpmKey } from './locales.ts'
 
 export type { NpmSectionInjected, NpmSectionProps } from './NpmSection.tsx'
@@ -38,10 +31,10 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 const NS = 'settings.npm'
 
 /** Required client services. */
-export const inject = ['slots', 'locale', 'remote', 'remote.credentials', 'settingsScope']
+export const inject = ['locale', 'remote']
 
 /**
- * Mount the npm release settings page.
+ * Mount the npm Remote namespace and register dictionaries.
  * @param ctx - client root context.
  */
 export async function apply(ctx: ClientContext): Promise<void> {
@@ -52,44 +45,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
     return () => { offZh(); offEn() }
   }, 'npm-ui: copy')
 
-  // Mount the npm Remote namespace BEFORE the page can call it.
+  // Keep the npm Remote namespace mounted in the shell; the dock embed
+  // mounts its own, duplicate $mount of the same contribution is tolerated.
   await ctx.remote.$mount(NPM_REMOTE_CONTRIBUTION)
-
-  // The mounted namespace is a dynamic cordis service (remote.npm):
-  // read it through reflect to avoid a deadlock on its inject declaration.
-  const npm = ctx.reflect.get('remote.npm') as TypertRemoteNamespaceMap['npm']
-
-  const controller = new NpmUiStore(ctx, npm)
-  const useSnapshot = bindSnapshotSelector(controller.store)
-  const t = ctx.locale.bind(NS)
-
-  ctx.effect(() => {
-    const refresh = (): void => { controller.refreshIfLoaded() }
-    const disposers = [
-      ctx.remote.$on('credentials/reference-updated', refresh),
-      ctx.remote.$on('settings/document-updated', refresh),
-    ]
-    return () => { for (const dispose of disposers) dispose() }
-  }, 'npm-ui: pushed invalidations')
-
-  const injected = (): NpmSectionInjected => ({ controller, useSnapshot, t })
-  void injected
-
-  // 入口退位（2026-09）：完整设置页已由 dsh-spark-dock 悬浮球内嵌
-  // （dock import 本包 ./embed 的 NpmSection），这里不再注册
-  // settings.section。字典、remote mount 与失效监听保留。
-
-  // Plugin configuration card in the Plugins settings section (设置 → 插件 → 插件配置页).
-  // Bound to the npm settings namespace the host service registers; rendered only
-  // while that namespace is served to this client.
-  const card = new StagedSettingsCard(
-    ctx.settingsScope.bind({ namespace: 'npm' }),
-    NPM_CARD_SPECS,
-  )
-  ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
-    name: 'settings.plugin.item',
-    key: 'npm',
-    locale: NS,
-    inject: () => ({ ...card.actions(), hooks: { npmCard: card.store } }),
-  }, NpmPluginCard))
 }

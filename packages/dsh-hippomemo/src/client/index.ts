@@ -1,20 +1,19 @@
 /**
- * dsh-hippomemo client entry: registers the "Memory" settings section and the
- * plugin configuration card (设置 → 插件 → 插件配置页).
+ * dsh-hippomemo client entry: dictionary + plugin CSS injection only.
+ *
+ * 入口退位（2026-09）：完整设置页与插件配置卡片均已由 dsh-spark-dock 悬浮球
+ * 内嵌（dock import 本包 ./embed 的 MemorySection），这里不再注册
+ * settings.section / settings.plugin.item。保留字典 + CSS 注入
+ * （dock 内嵌也用同一份，幂等）。
  */
 import type { ClientContext } from 'dsh-spark-plugin-kit/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
-import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
-// Type-only: brings the `settings.plugin.item` slot declaration into the program.
-import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
-import { choiceCardField, injectPluginStyle, numberCardField, StagedSettingsCard } from 'dsh-spark-plugin-kit/client'
+import { injectPluginStyle } from 'dsh-spark-plugin-kit/client'
 // 显式拉取 Spark token CSS 字符串并走 injectPluginStyle 注入。hippomemo 用 tsdown/rolldown 打包，
 // ui-kit 自注入的 .mjs 副作用会被 rolldown 判"可能纯"而整棵剪掉；sparkTokenCss 作为"已用值"
 // 导入不会被剪，此处显式注入保证 --spk-*/--dsw-* token 层落到页面（否则组件被冲淡成低对比灰）。
 import { sparkTokenCss } from 'dsh-ui-kit'
-import { createHippomemoApi } from './api.ts'
-import { HippomemoPluginCard } from './HippomemoPluginCard.tsx'
 import { HIPPOMEMO_CSS } from './style.ts'
 import { en, zh, type HippomemoLocaleKey } from './locales.ts'
 
@@ -26,15 +25,9 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 
 const NS = 'hippomemo.settings'
 
-/** hippomemo 设置命名空间（宿主 MemoryService 注册）。 */
-const SETTINGS_NAMESPACE = 'hippomemo'
-
-export const inject = ['slots', 'locale', 'settingsScope']
+export const inject = ['locale']
 
 export function apply(ctx: ClientContext): void {
-  // 入口退位（2026-09）：完整设置页已由 dsh-spark-dock 悬浮球内嵌
-  // （dock import 本包 ./embed 的 MemorySection），这里不再注册
-  // settings.section。保留字典 + CSS 注入（dock 内嵌也用同一份，幂等）。
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const anyCtx = ctx as any
   anyCtx.effect(() => {
@@ -47,23 +40,4 @@ export function apply(ctx: ClientContext): void {
   injectPluginStyle(hippoCss, 'hippomemo', 'hippomemo')
   // 注入 Spark token 层（幂等：同一 style id 只注入一次；即便 ui-kit 自注入已存在也安全）。
   injectPluginStyle(sparkTokenCss, 'dsh-ui-kit/tokens', 'dsh-ui-kit')
-
-  // 插件配置卡片：绑定 hippomemo 设置命名空间，编辑容量与召回参数。
-  const card = new StagedSettingsCard(
-    ctx.settingsScope.bind({ namespace: SETTINGS_NAMESPACE }),
-    [
-      numberCardField('maxMemories'),
-      numberCardField('defaultRecallLimit'),
-      numberCardField('maxRecallChars'),
-      choiceCardField('recallMode', ['firehose', 'cognitive']),
-      numberCardField('cognitiveRelevanceThreshold'),
-      numberCardField('cognitiveRecallMultiplier'),
-    ],
-  )
-  ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
-    name: 'settings.plugin.item',
-    key: 'hippomemo',
-    locale: NS,
-    inject: () => ({ ...card.actions(), hooks: { hippomemoCard: card.store } }),
-  }, HippomemoPluginCard))
 }

@@ -1,25 +1,18 @@
 /**
- * dsh-github-ui client half: mounts the github Remote namespace and registers
- * the Github settings section into the Web settings modal sidebar.
+ * dsh-github-ui client half: registers the github dictionaries and mounts the
+ * github Remote namespace into the web client shell.
+ *
+ * 入口退位（2026-09）：完整设置页与插件配置卡片均已由 dsh-spark-dock 悬浮球
+ * 内嵌（dock import 本包 ./embed 的 GithubSection 并自行 mount remote），
+ * 这里不再注册 settings.section / settings.plugin.item。
  */
 import type { ClientContext } from 'dsh-spark-plugin-kit/client'
-// Type-only: pulls the settings shell's SlotMap merge (settings.section).
-import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
-// Type-only: pulls the settings.plugin.item slot declaration.
-import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 // Type-only: pulls ctx.locale.
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Type-only: pulls ctx.remote (api-remotes re-declares it for consumers).
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
-import { bindSnapshotSelector } from 'dsh-spark-plugin-kit/client'
-import type { TypertRemoteNamespaceMap } from '@deepseek-ai/dsh-typert-protocol'
+import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import { GITHUB_REMOTE_CONTRIBUTION } from 'dsh-connector-wire'
-import { StagedSettingsCard } from 'dsh-spark-plugin-kit/client'
-import { GithubPluginCard } from './GithubPluginCard.tsx'
-import { GITHUB_CARD_SPECS } from './GithubPluginCard.tsx'
-import { GithubSection } from './GithubSection.tsx'
-import type { GithubSectionInjected } from './GithubSection.tsx'
-import { GithubSettingsStore } from './store.ts'
 import { en, zh, type GithubKey } from './locales.ts'
 
 export type { GithubSectionInjected, GithubSectionProps } from './GithubSection.tsx'
@@ -36,10 +29,10 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 const NS = 'settings.github'
 
 /** Required client services. */
-export const inject = ['slots', 'locale', 'remote', 'remote.credentials', 'settingsScope']
+export const inject = ['locale', 'remote']
 
 /**
- * Mount the Github settings page.
+ * Mount the github Remote namespace and register dictionaries.
  * @param ctx - client root context.
  */
 export async function apply(ctx: ClientContext): Promise<void> {
@@ -50,45 +43,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
     return () => { offZh(); offEn() }
   }, 'github-ui: copy')
 
-  // Mount the github Remote namespace BEFORE the page can call it (avoids
-  // the section racing an unfinished $mount).
+  // Keep the github Remote namespace mounted in the shell; the dock embed
+  // mounts its own, duplicate $mount of the same contribution is tolerated.
   await ctx.remote.$mount(GITHUB_REMOTE_CONTRIBUTION)
-
-  // The mounted namespace is a dynamic cordis service (remote.github):
-  // read it through reflect to avoid a deadlock on its inject declaration.
-  const github = ctx.reflect.get('remote.github') as TypertRemoteNamespaceMap['github']
-
-  const controller = new GithubSettingsStore(ctx, github)
-  const useSnapshot = bindSnapshotSelector(controller.store)
-  const t = ctx.locale.bind(NS)
-
-  ctx.effect(() => {
-    const refresh = (): void => { controller.refreshIfLoaded() }
-    const disposers = [
-      ctx.remote.$on('credentials/reference-updated', refresh),
-      ctx.remote.$on('settings/document-updated', refresh),
-    ]
-    return () => { for (const dispose of disposers) dispose() }
-  }, 'github-ui: pushed invalidations')
-
-  const injected = (): GithubSectionInjected => ({ controller, useSnapshot, t })
-  void injected
-
-  // 入口退位（2026-09）：完整设置页已由 dsh-spark-dock 悬浮球内嵌
-  // （dock import 本包 ./embed 的 GithubSection），这里不再注册
-  // settings.section。字典、remote mount 与失效监听保留。
-
-  // Plugin configuration card in the Plugins settings section (设置 → 插件 → 插件配置页).
-  // Bound to the `github` settings namespace the host service registers; rendered only
-  // while that namespace is served to this client.
-  const card = new StagedSettingsCard(
-    ctx.settingsScope.bind({ namespace: 'github' }),
-    GITHUB_CARD_SPECS,
-  )
-  ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
-    name: 'settings.plugin.item',
-    key: 'github',
-    locale: NS,
-    inject: () => ({ ...card.actions(), hooks: { githubCard: card.store } }),
-  }, GithubPluginCard))
 }
