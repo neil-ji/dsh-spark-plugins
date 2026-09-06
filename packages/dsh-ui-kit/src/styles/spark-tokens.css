@@ -59,7 +59,10 @@ body {
   --spk-blur: 16px;
 }
 
-/* ── Dark（对齐 dock 预览暗色） ── */
+/* ── Dark（对齐 dock 预览暗色） ──
+   * 宿主（dsh web）用 body[data-ds-dark-theme] 作为暗色信号、从不设 data-theme；
+   * 预览/demo 用 body[data-theme="dark"]。两个选择器都覆盖，保证两种宿主都能吃到暗色语义。 */
+body[data-ds-dark-theme],
 body[data-theme="dark"] {
   color-scheme: dark;
   /* dock 层次面（bg-layer-1/2、module-platform） */
@@ -102,7 +105,10 @@ body[data-theme="dark"] {
   --spk-terminal-bg: #0d1117;
 }
 
-/* ── Light（对齐 dock 预览亮色；灰纸底 + 纯白卡保证轮廓） ── */
+/* ── Light（对齐 dock 预览亮色；灰纸底 + 纯白卡保证轮廓） ──
+   * 宿主亮色默认 body 无任何 theme 属性，因此 light 语义必须不带选择器门槛
+   * （body 默认即 light）；body[data-ds-dark-theme]/body[data-theme="dark"] 在其后覆盖。 */
+body,
 body[data-theme="light"] {
   color-scheme: light;
   --spk-layer-1: #ffffff;

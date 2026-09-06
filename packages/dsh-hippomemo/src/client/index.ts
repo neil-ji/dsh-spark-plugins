@@ -9,6 +9,10 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import { choiceCardField, injectPluginStyle, numberCardField, StagedSettingsCard } from 'dsh-spark-plugin-kit/client'
+// 显式拉取 Spark token CSS 字符串并走 injectPluginStyle 注入。hippomemo 用 tsdown/rolldown 打包，
+// ui-kit 自注入的 .mjs 副作用会被 rolldown 判"可能纯"而整棵剪掉；sparkTokenCss 作为"已用值"
+// 导入不会被剪，此处显式注入保证 --spk-*/--dsw-* token 层落到页面（否则组件被冲淡成低对比灰）。
+import { sparkTokenCss } from 'dsh-ui-kit'
 import { createHippomemoApi } from './api.ts'
 import { HippomemoPluginCard } from './HippomemoPluginCard.tsx'
 import { HIPPOMEMO_CSS } from './style.ts'
@@ -41,6 +45,8 @@ export function apply(ctx: ClientContext): void {
   // tsdown/esbuild 产物形态可能是 join 好的 string 或源码 string[]，双态兼容。
   const hippoCss = Array.isArray(HIPPOMEMO_CSS) ? HIPPOMEMO_CSS.join('\n') : HIPPOMEMO_CSS
   injectPluginStyle(hippoCss, 'hippomemo', 'hippomemo')
+  // 注入 Spark token 层（幂等：同一 style id 只注入一次；即便 ui-kit 自注入已存在也安全）。
+  injectPluginStyle(sparkTokenCss, 'dsh-ui-kit/tokens', 'dsh-ui-kit')
 
   // 插件配置卡片：绑定 hippomemo 设置命名空间，编辑容量与召回参数。
   const card = new StagedSettingsCard(

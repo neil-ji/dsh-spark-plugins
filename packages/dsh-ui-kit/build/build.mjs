@@ -109,12 +109,41 @@ writeFileSync(path.join(stylesOutDir, 'tokens.css'), tokens)
 writeFileSync(path.join(stylesOutDir, 'tokens.css.d.ts'), 'declare const css: string\nexport default css\n')
 console.log(`[build] tokens.css aggregated (${(tokens.length / 1024).toFixed(0)}KB)`)
 
+// 3b. tokens.mjs — 自注入模块：任何消费者 import dsh-ui-kit 时把 --spk-*/--dsw-* token 层写到
+//     document.head（幂等，id=dsh-ui-kit/tokens）。这是"五插件面板冲淡/低对比"的根治：
+//     此前 tokens.css 只在 dist/styles/ 下存在，却没有任何插件 client 入口 import/inject 它，
+//     页面 body 上 --spk-label/--spk-brand/--spk-border-2 全为 empty，var(--spk-*) 落到初值。
+//     链路：barrel（./index.ts）与 cx.ts 都 import 该 .mjs 并 re-export/引用 sparkTokenLayer。
+// 关键：DOM 写入必须是**顶层、无 if 守卫**的语句。rolldown/rollup 会把"被 if 包裹的副作用"
+// 判为可能纯而整棵剪掉（esbuild 在 sideEffects=数组 glob 时对裸副作用 import 也会剪）。
+// 这些 client 插件 bundle 全部在浏览器 DOM 里跑（必有 document），因此去掉 SSR 守卫；
+// 幂等判断用单条顶层表达式 `document.querySelector(...) || _append()` 完成，不再包 if。
+const tokenInjector = [
+  '/* generated: Spark token layer self-injector (base + spark-tokens + dsw-bridge) */',
+  'const _id = "dsh-ui-kit/tokens"',
+  'const _css = ' + JSON.stringify(tokens),
+  'const _append = () => {',
+  '  const el = document.createElement("style")',
+  '  el.setAttribute("data-dsh-ui-kit", _id)',
+  '  el.textContent = _css',
+  '  document.head.appendChild(el)',
+  '}',
+  'typeof document !== "undefined" && (document.querySelector(\'style[data-dsh-ui-kit="\' + _id + \'"]\') || _append())',
+  'export const sparkTokenLayer = true',
+  // 供 rolldown 消费者（如 hippomemo 用 tsdown/rolldown 打包，会剪掉上面的自注入副作用）
+  // 显式获取 token CSS 字符串再自家 injectPluginStyle；作为"已用值"导入故不会被剪掉。
+  'export const sparkTokenCss = _css',
+].join('\n')
+writeFileSync(path.join(stylesOutDir, 'tokens.mjs'), tokenInjector)
+console.log(`[build] tokens.mjs self-injector emitted (${(tokenInjector.length / 1024).toFixed(0)}KB)`)
+
 // 4. JS: one ESM file per source module (tree-shakeable), imports rewritten
 //    so consumers resolve .js modules and the generated css/katex injectors.
 //    Bare imports (react, shiki, katex, micromark, ...) are left untouched:
 //    consumers decide whether to externalize (host-provided react) or bundle.
 const esmOutDir = path.join(distDir, 'esm')
-const jsFiles = walk(srcDir).filter((f) => /\.(ts|tsx)$/.test(f))
+// 仅转换可执行 .ts/.tsx；排除 .d.ts（我的 src/styles/tokens.mjs.d.ts 声明文件不该被当源码转译）。
+const jsFiles = walk(srcDir).filter((f) => /\.(ts|tsx)$/.test(f) && !f.endsWith('.d.ts'))
 for (const rel of jsFiles) {
   const { code } = await transformJs(readFileSync(path.join(srcDir, rel), 'utf8'), {
     loader: rel.endsWith('.tsx') ? 'tsx' : 'ts',
@@ -137,11 +166,19 @@ for (const rel of jsFiles) {
   // .ts/.tsx relative imports -> .js (esm mirrors src structure)
   out = out.replace(/(from\s+['"])(\.\/?[^'"]+)\.tsx?(['"])/g, '$1$2.js$3')
   out = out.replace(/(import\s+['"])(\.\/?[^'"]+)\.tsx?(['"])/g, '$1$2.js$3')
+  // ./styles/tokens.mjs (由 cx.ts 携带的 token 自注入副作用) -> dist/styles/tokens.mjs。
+  // cx.js 在 dist/esm/ 下，向上一级到 dist/，再进 styles/。
+  out = out.replace(/(from\s+['"])(\.\/styles\/tokens\.mjs)(['"])/g, (_m, pre, _p, q) => pre + '../styles/tokens.mjs' + q)
+  out = out.replace(/(import\s+['"])(\.\/styles\/tokens\.mjs)(['"])/g, (_m, pre, _p, q) => pre + '../styles/tokens.mjs' + q)
   const outRel = rel.replace(/\.tsx?$/, '.js')
   mkdirSync(path.dirname(path.join(esmOutDir, outRel)), { recursive: true })
   writeFileSync(path.join(esmOutDir, outRel), out)
 }
 // Aggregating entry: thin re-export barrel so consumers can tree-shake.
+// 注意：token 自注入的副作用 import 不能挂在这个 barrel 上——esbuild 在把 dsh-ui-kit
+// 作为依赖打包时，会裸 import ./styles/tokens.mjs 的副作用import整个树摇掉
+// （sideEffects 用数组 glob 时对裸副作用 import 不可靠）。因此 token 注入改由
+// cx.ts 每组件必 import 的已用模块携带（见 cx.ts 顶部 import），保证副作用执行。
 writeFileSync(path.join(distDir, 'index.js'), "export * from './esm/index.js'")
 console.log(`[build] esm modules: ${jsFiles.length} files -> dist/esm`)
 

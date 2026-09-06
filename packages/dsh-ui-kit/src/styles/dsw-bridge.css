@@ -44,6 +44,7 @@ body {
   --dsw-font-family: var(--spk-font);
 }
 
+body[data-ds-dark-theme],
 body[data-theme="dark"] {
   --dsw-static-green-500: #34d399;
   --dsw-static-violet-500: #a78bfa;

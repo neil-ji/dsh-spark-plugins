@@ -6,6 +6,14 @@
  * `--spk-acc-spark / hippomemo / finance / github / npm`。
  */
 
+// token 层自注入：import dsh-ui-kit 时把 --spk-*/--dsw-* token 写到 document.head。
+// 必须从 barrel 再导出 sparkTokenLayer/sparkTokenCss，否则 rolldown 会把 cx.ts 里对该 .mjs 的
+// 引用当作"未使用的副作用"整棵剪掉，页面 --spk-* 变 empty → 组件被冲淡成低对比灰。
+// 模块由 build/build.mjs 生成 dist/styles/tokens.mjs（幂等，id=dsh-ui-kit/tokens）。
+// sparkTokenCss：供 rolldown 打包的消费者（如 hippomemo/tsdown）显式拿 CSS 字符串走
+// injectPluginStyle 注入；sparkTokenLayer 仅供持有副作用。
+export { sparkTokenCss, sparkTokenLayer } from './styles/tokens.mjs'
+
 // 基础
 export { Button, type ButtonProps, type ButtonVariant, type ButtonSize } from './components/Button.tsx'
 export { Input, Textarea, type InputProps, type TextareaProps } from './components/Input.tsx'
