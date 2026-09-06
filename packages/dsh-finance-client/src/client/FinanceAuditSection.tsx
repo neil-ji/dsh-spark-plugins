@@ -177,61 +177,9 @@ const LEGACY_COLOR = '#94a3b8'
 /** Plan (subscription) routes: list-price equivalents, never cash flow. */
 const PLAN_COLOR = '#a855f7'
 
-function KpiCard({ label, value, sub, spark }: {
-  label: string
-  value: string
-  sub?: string
-  spark?: JSX.Element
-}): JSX.Element {
-  return (
-    <div className={css.kpi}>
-      <div className={css.kpiLabel}>{label}</div>
-      <div className={css.kpiValueRow}>
-        <div className={css.kpiValue}>{value}</div>
-        {spark !== undefined ? spark : null}
-      </div>
-      {sub === undefined ? null : <div className={css.kpiSub}>{sub}</div>}
-    </div>
-  )
-}
-
 const HOD_W = 640
 const HOD_H = 220
 const HOD_PAD = { top: 14, right: 10, bottom: 30, left: 50 }
-
-/**
- * Compact sparkline showing a 14-day trend for the KPI tile. SVG only
- * — no chart-library dep. Empty array → muted "no data" label. The
- * `label` doubles as the SVG's aria-label so screen readers describe
- * the trend shape, not just the visual.
- */
-function Sparkline({ values, label, width = 80, height = 20 }: {
-  values: readonly number[]
-  label: string
-  width?: number
-  height?: number
-}): JSX.Element {
-  if (values.length === 0) {
-    return <span className={css.sparklineEmpty} aria-label={label}>—</span>
-  }
-  const max = Math.max(...values, 1)
-  const stepX = values.length > 1 ? width / (values.length - 1) : width
-  const points = values
-    .map((v, i) => `${(i * stepX).toFixed(1)},${(height - (v / max) * height).toFixed(1)}`)
-    .join(' ')
-  return (
-    <svg
-      className={css.sparkline}
-      viewBox={`0 0 ${width} ${height}`}
-      width={width}
-      height={height}
-      role="img"
-      aria-label={label}
-    >
-      <polyline points={points} fill="none" stroke="currentColor" strokeWidth="1.5" />
-    </svg>
-  )
-}
 
 /**
  * "Last updated N min ago" hint under the dashboard title. The 30-min
@@ -750,27 +698,43 @@ function FinanceReady({ providerList, ledger, peaks, staleSync, t, refresh, refr
         </section>
       ) : null}
 
+      {/* Hero 总览：总成本大数字第一眼位（含套餐等价时取等价值），吸收原两行 KPI */}
       {charts.kpis ? (
-        <div className={css.kpis}>
-          <KpiCard
-            label={t('totalInput')}
-            value={formatTokens(ledger.totals.uncachedInputTokens)}
-            spark={<Sparkline values={(ledger.byDay ?? []).slice(-14).map(r => r.usage.uncachedInputTokens)} label={t('totalInput')} />}
-          />
-          <KpiCard
-            label={t('totalOutput')}
-            value={formatTokens(ledger.totals.outputTokens)}
-            spark={<Sparkline values={(ledger.byDay ?? []).slice(-14).map(r => r.usage.outputTokens)} label={t('totalOutput')} />}
-          />
-          <KpiCard label={t('sessions')} value={String(ledger.sessionCount)} />
-          <KpiCard label={t('workspaces')} value={String(ledger.workspaceCount)} />
-        </div>
-      ) : null}
-      {(ledger.planEquivalentCostMicros ?? 0) > 0 && charts.kpis ? (
-        <div className={css.kpis}>
-          <KpiCard label={t('meteredSpend')} value={formatMicros(ledger.meteredCostMicros ?? ledger.totalCostMicros, ledger.currency)} sub={t('meteredSpendHint')} />
-          <KpiCard label={t('planEquivalent')} value={formatMicros(ledger.planEquivalentCostMicros ?? 0, ledger.currency)} sub={t('planEquivalentHint')} />
-        </div>
+        <section className={css.hero}>
+          <div className={css.heroMain}>
+            <div className={css.heroLabel}>
+              {(ledger.planEquivalentCostMicros ?? 0) > 0 ? t('planEquivalent') : t('trendTotal')}
+            </div>
+            <div className={css.heroValue}>
+              {formatMicros((ledger.planEquivalentCostMicros ?? 0) > 0
+                ? (ledger.planEquivalentCostMicros ?? 0)
+                : ledger.totalCostMicros, ledger.currency)}
+            </div>
+            {(ledger.planEquivalentCostMicros ?? 0) > 0 ? (
+              <div className={css.heroSub}>
+                {t('meteredSpend')} {formatMicros(ledger.meteredCostMicros ?? ledger.totalCostMicros, ledger.currency)}
+              </div>
+            ) : null}
+          </div>
+          <div className={css.heroStats}>
+            <div className={css.heroStat}>
+              <span className={css.heroStatValue}>{formatTokens(ledger.totals.uncachedInputTokens)}</span>
+              <span className={css.heroStatLabel}>{t('totalInput')}</span>
+            </div>
+            <div className={css.heroStat}>
+              <span className={css.heroStatValue}>{formatTokens(ledger.totals.outputTokens)}</span>
+              <span className={css.heroStatLabel}>{t('totalOutput')}</span>
+            </div>
+            <div className={css.heroStat}>
+              <span className={css.heroStatValue}>{String(ledger.sessionCount)}</span>
+              <span className={css.heroStatLabel}>{t('sessions')}</span>
+            </div>
+            <div className={css.heroStat}>
+              <span className={css.heroStatValue}>{String(ledger.workspaceCount)}</span>
+              <span className={css.heroStatLabel}>{t('workspaces')}</span>
+            </div>
+          </div>
+        </section>
       ) : null}
       {ledger.windowedSinceMs == null ? (
         <div className={css.peakValleyNotes}>{t('peakValleyHint')}</div>

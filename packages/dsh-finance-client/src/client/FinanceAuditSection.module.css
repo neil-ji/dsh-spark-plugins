@@ -91,10 +91,71 @@
   background: var(--dsw-alias-interactive-bg-hover-accent, var(--dsw-alias-interactive-bg-hover));
 }
 
-.kpis {
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  gap: 12px 24px;
+  align-items: end;
+  padding: 14px 16px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 12px;
+  background:
+    radial-gradient(140% 160% at 8% 0%, color-mix(in srgb, var(--acc-finance, #22c55e) 9%, transparent) 0%, transparent 55%),
+    var(--dsw-alias-bg-layer-1, var(--dsw-alias-bg-layer-2));
+}
+
+.heroLabel {
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.heroValue {
+  font-size: 27px;
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--dsw-alias-label-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.heroSub {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.heroStats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
+}
+
+.heroStat {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.heroStatValue {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--dsw-alias-label-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.heroStatLabel {
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+@media (max-width: 640px) {
+  .hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .heroStats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 /* Commit 22: per-provider balance list — compact single-line rows. */
