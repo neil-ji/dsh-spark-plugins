@@ -88,7 +88,7 @@ function Loaded({ injected }: { injected: NpmSectionInjected }): ReactNode {
         </div>
         {state.test !== undefined
           ? (
-            <p className={state.test.ok ? styles.notice : styles.error} role="status">
+            <p className={state.test.ok ? styles.notice : styles.error} role={state.test.ok ? 'status' : 'alert'}>
               {state.test.ok
                 ? t('testOk') + (state.test.login !== null ? ': ' + state.test.login : '')
                 : t('testFail') + ': ' + (state.test.detail ?? '')}
