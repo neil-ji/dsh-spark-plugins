@@ -74,6 +74,9 @@ export const DOCK_CSS = [
   '[data-plugin="dsh-spark-dock"] .dock-row.off .ttl { text-decoration: line-through; opacity: .55; }',
   '[data-plugin="dsh-spark-dock"] .cryst { color: var(--dsw-alias-state-success-primary); font-weight: 600; }',
   '[data-plugin="dsh-spark-dock"] .dock-pill { position: relative; display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 3px 9px; border-radius: 999px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); cursor: pointer; }',
+  /* 热区扩容：pill 视觉小，命中区向外扩 4px（≥ 触控下限的兜底） */
+  '[data-plugin="dsh-spark-dock"] .dock-pill::before { content: ""; position: absolute; inset: -4px; border-radius: 999px; }',
+  '[data-plugin="dsh-spark-dock"] .dock-pill:disabled { opacity: .55; cursor: default; }',
   '[data-plugin="dsh-spark-dock"] .dock-pill.on { background: var(--accent, var(--dsw-alias-brand-primary)); border-color: transparent; color: var(--dsw-alias-label-primary-foreground, #fff); }',
   '[data-plugin="dsh-spark-dock"] .dock-modbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }',
   '[data-plugin="dsh-spark-dock"] .dock-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px; border-radius: 16px; border: none; background: var(--dsw-alias-button-primary-fill, var(--dsw-alias-brand-primary)); color: var(--dsw-alias-label-primary-foreground, #fff); font: 600 13px/1 var(--dsw-font-family, inherit); cursor: pointer; }',
@@ -138,7 +141,15 @@ export const DOCK_CSS = [
   '[data-plugin="dsh-spark-dock"] .dock-pill.mini { padding: 1px 7px; font-size: 10px; cursor: default; }',
   '[data-plugin="dsh-spark-dock"] .dock-pill.mini.accent { background: color-mix(in srgb, var(--accent) 16%, transparent); border-color: transparent; color: var(--accent); }',
   '[data-plugin="dsh-spark-dock"] .dock-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 14px 16px; font-size: 14px; line-height: 1.5; }',
-  '[data-plugin="dsh-spark-dock"] .dock-empty { padding: 32px 12px; text-align: center; font-size: 13px; color: var(--dsw-alias-label-tertiary); }',
+  '[data-plugin="dsh-spark-dock"] .dock-empty { padding: 28px 12px; text-align: center; color: var(--dsw-alias-label-tertiary); }',
+  '[data-plugin="dsh-spark-dock"] .dock-empty .empty-ico { width: 26px; height: 26px; opacity: .55; margin-bottom: 6px; }',
+  '[data-plugin="dsh-spark-dock"] .dock-empty .empty-txt { font-size: 13px; color: var(--dsw-alias-label-secondary); }',
+  '[data-plugin="dsh-spark-dock"] .dock-empty .empty-hint { font-size: 11px; margin-top: 4px; color: var(--dsw-alias-label-tertiary); }',
+  '[data-plugin="dsh-spark-dock"] .dock-empty.loading .empty-ico { animation: dock-empty-pulse 1.4s ease-in-out infinite; }',
+  '@keyframes dock-empty-pulse { 0%,100% { opacity: .25; } 50% { opacity: .7; } }',
+  /* 可见表单标签（替代 placeholder-only） */
+  '[data-plugin="dsh-spark-dock"] .dock-lab { display: block; font-size: 11px; font-weight: 600; color: var(--dsw-alias-label-secondary); margin: 0 2px 4px; }',
+  '[data-plugin="dsh-spark-dock"] .dock-btn .btn-ico { width: 13px; height: 13px; flex: none; }',
 
   /* ── 内嵌页 compat 层（2026-09 UIUX 收敛）────────────────────────────
    * 原则：dock 标题栏已给出模块名与描述，内嵌页自己的设置页级标题
