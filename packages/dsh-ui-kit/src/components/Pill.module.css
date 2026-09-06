@@ -1,0 +1,29 @@
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font: 500 var(--spk-text-xs, 11px) / 1.6 var(--spk-font);
+  background: var(--spk-layer-2);
+  border: 1px solid var(--spk-border);
+  color: var(--spk-label-2);
+  white-space: nowrap;
+}
+
+.neutral { /* 默认 layer-2 灰胶囊 */ }
+
+.brand,
+.success,
+.warn,
+.error,
+.tint {
+  --pill-acc: var(--spk-brand);
+  border-color: transparent;
+  background: color-mix(in srgb, var(--pill-acc) 14%, transparent);
+  color: var(--pill-acc);
+}
+.brand { --pill-acc: var(--spk-brand); }
+.success { --pill-acc: var(--spk-success); }
+.warn { --pill-acc: var(--spk-warn); }
+.error { --pill-acc: var(--spk-error); }

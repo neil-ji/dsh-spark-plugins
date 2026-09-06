@@ -1,0 +1,51 @@
+.btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 16px;
+  font: 600 var(--spk-text-md, 13px) / 1 var(--spk-font);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background var(--spk-dur-fast) var(--spk-ease-out),
+    color var(--spk-dur-fast) var(--spk-ease-out),
+    transform var(--spk-dur-fast) var(--spk-ease-out);
+}
+.btn:active:not(:disabled) { transform: scale(0.97); }
+.btn:focus-visible { outline: 2px solid var(--spk-brand); outline-offset: 2px; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.primary { background: var(--spk-brand); color: var(--spk-on-brand); }
+.primary:hover:not(:disabled) { background: var(--spk-brand-hover); }
+
+.secondary {
+  background: transparent;
+  border: 1px solid var(--spk-border-2);
+  color: var(--spk-label-2);
+  font-weight: 500;
+}
+.secondary:hover:not(:disabled) { background: var(--spk-hover); color: var(--spk-label); }
+
+.ghost { background: transparent; color: var(--spk-label-2); font-weight: 500; }
+.ghost:hover:not(:disabled) { background: var(--spk-hover); color: var(--spk-label); }
+
+.danger { background: var(--spk-error); color: #fff; }
+.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--spk-error) 85%, #000); }
+
+.sm { height: 26px; padding: 0 11px; font-size: var(--spk-text-sm, 12px); border-radius: 13px; }
+.loading { pointer-events: none; opacity: 0.85; }
+
+.spinner {
+  width: 11px;
+  height: 11px;
+  border: 2px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }

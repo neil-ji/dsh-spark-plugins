@@ -1,0 +1,42 @@
+.root { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; }
+.backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(5, 8, 15, 0.55);
+  animation: fade-in var(--spk-dur-med) var(--spk-ease-out);
+}
+.modal {
+  position: relative;
+  width: min(440px, calc(100vw - 40px));
+  background: var(--spk-platform-solid);
+  border: 1px solid var(--spk-border);
+  border-radius: 20px;
+  box-shadow: var(--spk-shadow-float);
+  animation: modal-in var(--spk-dur-med) var(--spk-ease-spring);
+}
+@keyframes modal-in { from { opacity: 0; transform: scale(0.94); } }
+@keyframes fade-in { from { opacity: 0; } }
+
+.head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 0; }
+.title {
+  margin: 0;
+  font: 700 var(--spk-text-lg, 15px) / 1.3 var(--spk-font);
+  color: var(--spk-label);
+}
+.close {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--spk-label-2);
+  cursor: pointer;
+}
+.close:hover { background: var(--spk-hover); color: var(--spk-label); }
+.close:focus-visible { outline: 2px solid var(--spk-brand); outline-offset: 2px; }
+
+.body { padding: 10px 16px 2px; font: 400 var(--spk-text-md, 13px) / 1.6 var(--spk-font); color: var(--spk-label-2); }
+.body :strong { color: var(--spk-brand); font-weight: 600; }
+.foot { display: flex; justify-content: flex-end; gap: 8px; padding: 16px; }

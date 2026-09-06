@@ -1,7 +1,7 @@
 {
   "name": "dsh-ui-kit",
-  "version": "0.2.1",
-  "description": "复刻 DSH 设计系统的本地 React 组件库（零 cordis）：按钮/输入/Pill/图表/Markdown 渲染全套",
+  "version": "0.3.0",
+  "description": "Spark 设计语言的 React 组件库（从 0 复刻 docs/spark-ui-kit-demo）：Button/Input/Pill/Segmented/ListRow/Disclosure/SettingsCard/Modal/Toast/Terminal/Sparkline",
   "keywords": [
     "dsh",
     "deepseek-harness",
@@ -23,10 +23,6 @@
     "./tokens.css": {
       "types": "./dist/styles/tokens.css.d.ts",
       "default": "./dist/styles/tokens.css"
-    },
-    "./katex.css": {
-      "types": "./dist/katex/katex.min.css.d.ts",
-      "default": "./dist/katex/katex.min.css"
     },
     "./package.json": "./package.json"
   },

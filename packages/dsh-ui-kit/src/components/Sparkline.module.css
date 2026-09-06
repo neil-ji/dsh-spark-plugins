@@ -1,0 +1,18 @@
+.spark { display: block; width: 100%; height: auto; }
+
+.line { transition: stroke-dashoffset 1.1s var(--spk-ease-out) 0.15s; }
+.area { opacity: 0; transition: opacity 0.8s var(--spk-ease-out) 0.7s; }
+.dot {
+  transform: scale(0);
+  transform-origin: center;
+  transform-box: fill-box;
+  transition: transform 0.4s var(--spk-ease-spring) 1.05s;
+}
+.drawn .area { opacity: 1; }
+.drawn .dot { transform: scale(1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .line { stroke-dashoffset: 0 !important; transition: none !important; }
+  .area { opacity: 1 !important; transition: none !important; }
+  .dot { transform: none !important; transition: none !important; }
+}

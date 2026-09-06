@@ -1,0 +1,39 @@
+.terminal {
+  background: var(--spk-terminal-bg);
+  border: 1px solid var(--spk-border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 13px;
+  border-bottom: 1px solid var(--spk-border);
+}
+.bar span { width: 10px; height: 10px; border-radius: 50%; background: var(--spk-n-700); }
+.bar span:nth-child(1) { background: var(--spk-acc-npm); }
+.bar span:nth-child(2) { background: var(--spk-warn); }
+.bar span:nth-child(3) { background: var(--spk-success); }
+.bar em {
+  margin-left: auto;
+  font: 400 var(--spk-text-xs, 11px) / 1 var(--spk-font-mono);
+  font-style: normal;
+  color: var(--spk-n-500);
+}
+
+.pre { margin: 0; padding: 14px 16px; overflow-x: auto; }
+.pre code {
+  font: 400 var(--spk-text-sm, 12px) / 1.9 var(--spk-font-mono);
+  color: var(--spk-n-300);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.text { color: var(--spk-label); }
+.cmd { color: var(--spk-n-0, #fff); }
+.prompt { color: var(--spk-brand); font-weight: 600; }
+.ok { color: var(--spk-success); }
+.dim { color: var(--spk-n-500); }
+.error { color: var(--spk-error); }
+.cursor { color: var(--spk-brand); animation: blink 1.1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }

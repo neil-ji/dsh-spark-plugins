@@ -1,69 +1,51 @@
 /* ==========================================================================
-   Spark Design Language — `--spk-*`
-   独立悬浮球产品的自有设计系统。不再镜像 DSH（--dsw-*）：
-   本文件是唯一 token 源，末尾的 bridge 段把历史 --dsw-* 引用
-   全部重定向到 --spk-*，让既有组件/插件 CSS 立即以新语言渲染。
-
-   调性：暖炭（不是冷蓝黑）· 火花琥珀主品牌 · 玻璃浮层 · 五模块 accent。
-   主题切换沿用 body[data-ds-dark-theme] 属性开关（DOM 契约不变）。
+   Spark Design Language — tokens v3（与 docs/spark-dock-preview 同源）
+   中性冷灰骨架 + DSH 品牌蓝 #4d6bfe，克制、原生、无撞色。
+   变量名保持 --spk-*，组件层零改动。
    ========================================================================== */
 
 body {
-  /* ── 1. Primitives：暖中性阶（暖灰，黄相） ── */
+  /* primitives：中性冷灰阶（对齐 dsw-alias bg/label 灰阶） */
   --spk-n-0: #ffffff;
-  --spk-n-50: #faf9f6;
-  --spk-n-100: #f4f1ea;
-  --spk-n-150: #ebe6db;
-  --spk-n-200: #ded7c8;
-  --spk-n-300: #c8c0ae;
-  --spk-n-400: #a89f8c;
-  --spk-n-500: #8a8172;
-  --spk-n-600: #6b6355;
-  --spk-n-700: #4e483e;
-  --spk-n-800: #343028;
-  --spk-n-850: #28241e;
-  --spk-n-900: #1d1a16;
-  --spk-n-950: #14120f;
-  --spk-n-1000: #000000;
+  --spk-n-50: #f6f7f9;
+  --spk-n-100: #edeff3;
+  --spk-n-150: #e4e7ec;
+  --spk-n-200: #d4d8df;
+  --spk-n-300: #b3b9c4;
+  --spk-n-400: #868ea0;
+  --spk-n-500: #667085;
+  --spk-n-600: #5b6270;
+  --spk-n-700: #40485a;
+  --spk-n-800: #2d3749;
+  --spk-n-850: #232b3a;
+  --spk-n-900: #171c27;
+  --spk-n-950: #0b0e14;
 
-  /* 火花琥珀阶（品牌） */
-  --spk-spark-50: #fff9ec;
-  --spk-spark-100: #fef0d0;
-  --spk-spark-200: #fddf9e;
-  --spk-spark-300: #fbca66;
-  --spk-spark-400: #f9b033;
-  --spk-spark-500: #f59e0b;
-  --spk-spark-600: #d97706;
-  --spk-spark-700: #b45309;
-  --spk-spark-800: #92400e;
-  --spk-spark-900: #78350f;
+  /* 品牌蓝阶（DSH #4d6bfe） */
+  --spk-spark-300: #93a8ff;
+  --spk-spark-400: #6d85fe;
+  --spk-spark-500: #4d6bfe;
+  --spk-spark-600: #3d5af0;
+  --spk-spark-700: #2f46c8;
 
-  /* 语义色相 */
-  --spk-hue-success: #22c55e;
-  --spk-hue-warn: #f59e0b;
-  --spk-hue-error: #ef4444;
-  --spk-hue-info: #3b82f6;
-
-  /* ── 2. 模块 accent（五模块身份色） ── */
+  /* 五模块 accent（与 dock 预览一致） */
   --spk-acc-spark: #f59e0b;
   --spk-acc-hippomemo: #3b82f6;
   --spk-acc-finance: #22c55e;
   --spk-acc-github: #8b5cf6;
-  --spk-acc-npm: #e0533f;
+  --spk-acc-npm: #cb3837;
 
-  /* ── 3. 字体 / 字号 / 圆角 / 阴影 / 动效（模式无关） ── */
-  --spk-font:
-    "PingFang SC", -apple-system, "SF Pro Text", "Segoe UI", "Noto Sans SC",
-    "Microsoft YaHei", sans-serif;
-  --spk-font-mono:
-    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
-  --spk-text-2xs: 10px;
+  /* 字体 / 字号 / 圆角 / 动效（不变） */
+  --spk-font: "PingFang SC", -apple-system, "SF Pro Text", "Segoe UI",
+    "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  --spk-font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
   --spk-text-xs: 11px;
   --spk-text-sm: 12px;
   --spk-text-md: 13px;
   --spk-text-lg: 15px;
   --spk-text-xl: 17px;
   --spk-text-2xl: 22px;
+  --spk-text-3xl: 30px;
   --spk-radius-sm: 7px;
   --spk-radius-md: 10px;
   --spk-radius-lg: 14px;
@@ -75,240 +57,89 @@ body {
   --spk-dur-med: 220ms;
   --spk-dur-slow: 320ms;
   --spk-blur: 16px;
-
-  /* ── 4. 语义 tokens：Light（暖纸） ── */
-  color-scheme: light;
-  --spk-bg: var(--spk-n-50);
-  --spk-surface: var(--spk-n-0);
-  --spk-surface-2: var(--spk-n-100);
-  --spk-surface-3: var(--spk-n-150);
-  --spk-label: #1d1a16;
-  --spk-label-2: #5d564a;
-  --spk-label-3: #8a8172;
-  --spk-border: #e8e2d4;
-  --spk-border-2: #dbd3c1;
-  --spk-border-3: #c8c0ae;
-  --spk-brand: var(--spk-spark-500);
-  --spk-brand-hover: var(--spk-spark-600);
-  --spk-on-brand: #201a0c;
-  --spk-brand-soft: color-mix(in srgb, var(--spk-brand) 12%, transparent);
-  --spk-contrast-fill: #1d1a16;
-  --spk-contrast-fill-label: #faf9f6;
-  --spk-hover: rgba(29, 26, 22, 0.06);
-  --spk-active: rgba(29, 26, 22, 0.11);
-  --spk-success: var(--spk-hue-success);
-  --spk-success-soft: color-mix(in srgb, var(--spk-hue-success) 13%, transparent);
-  --spk-warn: var(--spk-hue-warn);
-  --spk-warn-soft: color-mix(in srgb, var(--spk-hue-warn) 15%, transparent);
-  --spk-error: #dc2626;
-  --spk-error-soft: color-mix(in srgb, var(--spk-hue-error) 11%, transparent);
-  --spk-focus: var(--spk-spark-600);
-  --spk-glass-bg: rgba(255, 253, 249, 0.78);
-  --spk-glass-border: rgba(29, 26, 22, 0.1);
-  --spk-shadow-1: 0 1px 3px rgba(43, 36, 22, 0.1);
-  --spk-shadow-2: 0 6px 20px rgba(43, 36, 22, 0.13);
-  --spk-shadow-3: 0 16px 44px rgba(43, 36, 22, 0.2);
-  --spk-code-bg: #f4f1ea;
-  --spk-code-fg: #443e33;
 }
 
-body[data-ds-dark-theme] {
-  /* ── 4b. 语义 tokens：Dark（暖炭 + 火光） ── */
+/* ── Dark（对齐 dock 预览暗色） ── */
+body[data-theme="dark"] {
   color-scheme: dark;
+  /* dock 层次面（bg-layer-1/2、module-platform） */
+  --spk-layer-1: #10141d;
+  --spk-layer-2: #171c27;
+  --spk-platform: #161b26;
+  --spk-platform-solid: #161b26;
   --spk-bg: var(--spk-n-950);
-  --spk-surface: var(--spk-n-900);
-  --spk-surface-2: var(--spk-n-850);
-  --spk-surface-3: var(--spk-n-800);
-  --spk-label: #f5f1e8;
-  --spk-label-2: #c8c0ae;
-  --spk-label-3: #8a8172;
-  --spk-border: rgba(245, 241, 232, 0.09);
-  --spk-border-2: rgba(245, 241, 232, 0.16);
-  --spk-border-3: rgba(245, 241, 232, 0.26);
+  --spk-bg-glow-1: rgba(77, 107, 254, 0.1);
+  --spk-bg-glow-2: rgba(124, 196, 255, 0.05);
+  --spk-surface: rgba(16, 20, 29, 0.85);
+  --spk-surface-solid: var(--spk-n-900);
+  --spk-surface-2: var(--spk-n-900);
+  --spk-label: #e8eaf0;
+  --spk-label-2: #9aa1af;
+  --spk-label-3: #868ea0;
+  --spk-border: #232b3a;
+  --spk-border-2: #2d3749;
   --spk-brand: var(--spk-spark-500);
   --spk-brand-hover: var(--spk-spark-400);
-  --spk-on-brand: #201a0c;
-  --spk-brand-soft: color-mix(in srgb, var(--spk-brand) 15%, transparent);
-  --spk-contrast-fill: #f5f1e8;
-  --spk-contrast-fill-label: #1d1a16;
-  --spk-hover: rgba(245, 241, 232, 0.08);
-  --spk-active: rgba(245, 241, 232, 0.14);
-  --spk-success: var(--spk-hue-success);
-  --spk-success-soft: color-mix(in srgb, var(--spk-hue-success) 16%, transparent);
-  --spk-warn: var(--spk-hue-warn);
-  --spk-warn-soft: color-mix(in srgb, var(--spk-hue-warn) 18%, transparent);
-  --spk-error: var(--spk-hue-error);
-  --spk-error-soft: color-mix(in srgb, var(--spk-hue-error) 15%, transparent);
-  --spk-focus: var(--spk-spark-400);
-  --spk-glass-bg: rgba(29, 26, 22, 0.72);
-  --spk-glass-border: rgba(245, 241, 232, 0.12);
-  --spk-shadow-1: 0 1px 3px rgba(0, 0, 0, 0.4);
-  --spk-shadow-2: 0 8px 24px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(245, 241, 232, 0.04);
-  --spk-shadow-3: 0 16px 48px rgba(0, 0, 0, 0.5);
-  --spk-code-bg: #28241e;
-  --spk-code-fg: #e8e2d4;
+  --spk-on-brand: #ffffff;
+  --spk-brand-soft: rgba(77, 107, 254, 0.16);
+  --spk-contrast-fill: #e8eaf0;
+  --spk-contrast-fill-label: #171c27;
+  --spk-hover: rgba(255, 255, 255, 0.06);
+  --spk-active: rgba(255, 255, 255, 0.11);
+  --spk-focus: rgba(109, 133, 254, 0.55);
+  --spk-success: #4ade80;
+  --spk-success-soft: rgba(74, 222, 128, 0.13);
+  --spk-warn: #f59e0b;
+  --spk-warn-soft: rgba(245, 158, 11, 0.13);
+  --spk-error: #f87171;
+  --spk-error-soft: rgba(248, 113, 113, 0.13);
+  --spk-info: #7cc4ff;
+  --spk-info-soft: rgba(124, 196, 255, 0.13);
+  --spk-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --spk-shadow-2: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --spk-shadow-float: 0 16px 48px rgba(0, 0, 0, 0.62), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --spk-glow: 0 0 22px rgba(77, 107, 254, 0.3);
+  --spk-terminal-bg: #0d1117;
 }
 
-/* ==========================================================================
-   5. Bridge：历史 --dsw-* → Spark tokens。
-   旧 Figma 镜像 sheet（design-platform.css）之后加载本文件即整体覆盖。
-   DeepSeek 蓝（--dsw-static-deepseek-* / neutral-bluish）在此被切断血缘：
-   一律重指向火花琥珀 / 暖中性。
-   ========================================================================== */
-body {
-  /* surfaces */
-  --dsw-alias-bg-base: var(--spk-bg);
-  --dsw-alias-bg-layer-0: var(--spk-surface);
-  --dsw-alias-bg-layer-1: var(--spk-surface);
-  --dsw-alias-bg-layer-2: var(--spk-surface-2);
-  --dsw-alias-bg-layer-3: var(--spk-surface-3);
-  --dsw-alias-bg-module-platform: var(--spk-surface);
-  --dsw-alias-bg-mask-1: rgba(20, 18, 15, 0.55);
-  --dsw-alias-surface-l1: var(--spk-surface);
-  --dsw-alias-tooltip-bg: var(--spk-surface-3);
-  --dsw-hovercard-bg: var(--spk-surface);
-  --dsw-specific-menu: var(--spk-surface);
-  --dsw-alias-markdown-code-block: var(--spk-code-bg);
-  --dsw-alias-markdown-code-block-banner: var(--spk-code-bg);
-  --dsw-alias-markdown-inline-code: var(--spk-code-bg);
-
-  /* labels */
-  --dsw-alias-label-primary: var(--spk-label);
-  --dsw-alias-label-primary-foreground: var(--spk-on-brand);
-  --dsw-alias-label-primary-inverted: var(--spk-label);
-  --dsw-alias-label-secondary: var(--spk-label-2);
-  --dsw-alias-label-tertiary: var(--spk-label-3);
-  --dsw-alias-label-caption: var(--spk-label-3);
-  --dsw-alias-label-dimmed: var(--spk-label-3);
-
-  /* borders */
-  --dsw-alias-border-l1: var(--spk-border);
-  --dsw-alias-border-l2: var(--spk-border-2);
-  --dsw-alias-border-l3: var(--spk-border-3);
-  --dsw-alias-border-l4: var(--spk-border-3);
-  --dsw-alias-border-inverted: var(--spk-label);
-
-  /* brand & buttons：蓝 → 火花 */
-  --dsw-alias-brand-primary: var(--spk-brand);
-  --dsw-alias-button-primary-fill: var(--spk-brand);
-  --dsw-alias-button-primary-hover: var(--spk-brand-hover);
-  --dsw-alias-button-contrast-fill: var(--spk-contrast-fill);
-  --dsw-alias-button-ghost-active-fill: var(--spk-brand-soft);
-  --dsw-alias-button-ghost-active-border: var(--spk-brand);
-  --dsw-alias-button-tool-bar-fill: var(--spk-surface-2);
-  --dsw-alias-button-tool-bar-hover: var(--spk-hover);
-
-  /* interactive */
-  --dsw-alias-interactive-bg-hover: var(--spk-hover);
-  --dsw-alias-interactive-bg-active: var(--spk-active);
-  --dsw-alias-interactive-bg-hover-accent: var(--spk-brand-soft);
-  --dsw-alias-interactive-bg-hover-danger: var(--spk-error-soft);
-
-  /* feedback & state */
-  --dsw-alias-feedback-focus: var(--spk-focus);
-  --dsw-alias-feedback-info-bg: var(--spk-brand-soft);
-  --dsw-alias-feedback-info-fg: var(--spk-label);
-  --dsw-alias-feedback-warning-bg: var(--spk-warn-soft);
-  --dsw-alias-feedback-warning-fg: var(--spk-warn);
-  --dsw-alias-state-success-primary: var(--spk-success);
-  --dsw-alias-state-success-secondary: var(--spk-success-soft);
-  --dsw-alias-state-warn-primary: var(--spk-warn);
-  --dsw-alias-state-warn-secondary: var(--spk-warn-soft);
-  --dsw-alias-state-warn-label: var(--spk-spark-700);
-  --dsw-alias-state-error-primary: var(--spk-error);
-  --dsw-alias-state-error-secondary: var(--spk-error-soft);
-  --dsw-alias-state-error-tint: var(--spk-error-soft);
-  --dsw-alias-state-info-tint: var(--spk-brand-soft);
-  --dsw-alias-state-business-primary: var(--spk-acc-hippomemo);
-
-  /* fonts */
-  --dsw-font-family: var(--spk-font);
-  --dsw-alias-font-mono: var(--spk-font-mono);
-  --dsw-font-markdown-base: var(--spk-font);
-  --dsw-font-markdown-base-strong: var(--spk-font);
-  --dsw-font-markdown-code: var(--spk-font-mono);
-  --dsw-font-markdown-code-block: var(--spk-font-mono);
-  --dsw-font-markdown-h1: var(--spk-font);
-  --dsw-font-markdown-h2: var(--spk-font);
-  --dsw-font-markdown-h3: var(--spk-font);
-  --dsw-font-markdown-h4: var(--spk-font);
-  --dsw-font-markdown-table: var(--spk-font);
-  --dsw-font-markdown-table-head: var(--spk-font);
-  --dsw-font-xs-13: var(--spk-text-md);
-
-  /* elevations & misc */
-  --dsw-shadow-lv2: var(--spk-shadow-2);
-  --dsw-shadow-lv3: var(--spk-shadow-3);
-  --dsw-mask-blur: var(--spk-blur);
-  --dsw-alias-scrollbar-bg-l1: var(--spk-border);
-  --dsw-alias-scrollbar-bg-l2: var(--spk-border-2);
-  --dsw-alias-scrollbar-hover-l1: var(--spk-border-2);
-  --dsw-alias-scrollbar-hover-l2: var(--spk-border-3);
-
-  /* static hues：暖阶重映射（切断冷蓝血缘） */
-  --dsw-static-amber-100: #fef0d0;
-  --dsw-static-amber-400: #f9b033;
-  --dsw-static-amber-500: #f59e0b;
-  --dsw-static-amber-600: #d97706;
-  --dsw-static-amber-900: #78350f;
-  --dsw-static-deepseek-50: #fff9ec;
-  --dsw-static-deepseek-100: #fef0d0;
-  --dsw-static-deepseek-200: #fddf9e;
-  --dsw-static-deepseek-400: #f9b033;
-  --dsw-static-deepseek-450: #f59e0b;
-  --dsw-static-deepseek-500: #f59e0b;
-  --dsw-static-deepseek-700: #b45309;
-  --dsw-static-deepseek-800: #4e483e;
-  --dsw-static-deepseek-900: #343028;
-  --dsw-static-blue-400: #60a5fa;
-  --dsw-static-blue-500: #3b82f6;
-  --dsw-static-blue-900: #1e3a8a;
-  --dsw-static-violet-500: #8b5cf6;
-  --dsw-static-green-100: #dcfce7;
-  --dsw-static-green-400: #4ade80;
-  --dsw-static-green-500: #22c55e;
-  --dsw-static-green-900: #14532d;
-  --dsw-static-red-400: #f87171;
-  --dsw-static-red-500: #ef4444;
-  --dsw-static-red-600: #dc2626;
-  --dsw-static-warning-500: #f59e0b;
-  --dsw-static-warning-700: #b45309;
-  --dsw-static-slate-500: #8a8172;
-  --dsw-static-white: #ffffff;
-}
-
-body[data-ds-dark-theme] {
-  /* dark 覆写：暖中性阶 + 深琥珀 */
-  --dsw-static-neutral-bluish-00: #ffffff;
-  --dsw-static-neutral-bluish-50: #faf9f6;
-  --dsw-static-neutral-bluish-60: #f0ede5;
-  --dsw-static-neutral-bluish-75: #e2ddd0;
-  --dsw-static-neutral-bluish-100: #d6cfc0;
-  --dsw-static-neutral-bluish-150: #c2baa8;
-  --dsw-static-neutral-bluish-200: #a89f8c;
-  --dsw-static-neutral-bluish-300: #8a8172;
-  --dsw-static-neutral-bluish-400: #6b6355;
-  --dsw-static-neutral-bluish-500: #57503f;
-  --dsw-static-neutral-bluish-550: #4e483e;
-  --dsw-static-neutral-bluish-600: #423d34;
-  --dsw-static-neutral-bluish-700: #37322b;
-  --dsw-static-neutral-bluish-750: #2f2b24;
-  --dsw-static-neutral-bluish-800: #28241e;
-  --dsw-static-neutral-bluish-850: #211e19;
-  --dsw-static-neutral-bluish-875: #1d1a16;
-  --dsw-static-neutral-bluish-900: #181511;
-  --dsw-static-neutral-bluish-950: #14120f;
-  --dsw-static-neutral-bluish-1000: #000000;
-  --dsw-static-neutral-200: #37322b;
-  --dsw-static-neutral-300: #423d34;
-  --dsw-static-neutral-550: #6b6355;
-  --dsw-static-neutral-600: #8a8172;
-  --dsw-static-neutral-700: #a89f8c;
-  --dsw-static-neutral-850: #c8c0ae;
-  --dsw-static-amber-100: #78350f;
-  --dsw-static-amber-400: #f9b033;
-  --dsw-static-amber-500: #f59e0b;
-  --dsw-static-amber-600: #fbbf24;
-  --dsw-static-amber-900: #fef0d0;
-  --dsw-static-warn-label: #fbbf24;
+/* ── Light（对齐 dock 预览亮色；灰纸底 + 纯白卡保证轮廓） ── */
+body[data-theme="light"] {
+  color-scheme: light;
+  --spk-layer-1: #ffffff;
+  --spk-layer-2: #edeff3;
+  --spk-platform: #1c2230;
+  --spk-platform-solid: #ffffff;
+  --spk-bg: var(--spk-n-50);
+  --spk-bg-glow-1: rgba(77, 107, 254, 0.08);
+  --spk-bg-glow-2: rgba(124, 196, 255, 0.06);
+  --spk-surface: rgba(255, 255, 255, 0.9);
+  --spk-surface-solid: var(--spk-n-0);
+  --spk-surface-2: var(--spk-n-50);
+  --spk-label: #1a1d24;
+  --spk-label-2: #5b6270;
+  --spk-label-3: #667085;
+  --spk-border: #d9dee6;
+  --spk-border-2: #c6ccd8;
+  --spk-brand: var(--spk-spark-500);
+  --spk-brand-hover: var(--spk-spark-600);
+  --spk-on-brand: #ffffff;
+  --spk-brand-soft: rgba(77, 107, 254, 0.1);
+  --spk-contrast-fill: #1a1d24;
+  --spk-contrast-fill-label: #ffffff;
+  --spk-hover: rgba(16, 24, 40, 0.05);
+  --spk-active: rgba(16, 24, 40, 0.09);
+  --spk-focus: rgba(77, 107, 254, 0.4);
+  --spk-success: #16a34a;
+  --spk-success-soft: rgba(22, 163, 74, 0.1);
+  --spk-warn: #d97706;
+  --spk-warn-soft: rgba(217, 119, 6, 0.1);
+  --spk-error: #dc2626;
+  --spk-error-soft: rgba(220, 38, 38, 0.08);
+  --spk-info: #2b7fd4;
+  --spk-info-soft: rgba(43, 127, 212, 0.1);
+  --spk-shadow-1: 0 1px 3px rgba(10, 18, 38, 0.08), 0 1px 2px rgba(10, 18, 38, 0.04);
+  --spk-shadow-2: 0 8px 24px rgba(10, 18, 38, 0.12);
+  --spk-shadow-float: 0 16px 48px rgba(10, 18, 38, 0.16), 0 0 0 1px rgba(10, 18, 38, 0.05);
+  --spk-glow: 0 0 20px rgba(77, 107, 254, 0.2);
+  --spk-terminal-bg: #171c27;
 }

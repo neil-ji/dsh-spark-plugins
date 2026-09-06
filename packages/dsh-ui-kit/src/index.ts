@@ -1,78 +1,33 @@
 /**
- * Cordis-free React primitives styled only through `--dsw-*` tokens.
+ * Spark UI Kit — 从 0 复刻 docs/spark-ui-kit-demo 的组件封装。
+ *
+ * 主题：消费 `--spk-*` CSS 变量（`dsh-ui-kit/tokens.css` 提供，
+ * `body[data-theme="dark" | "light"]` 切换）。五模块 accent：
+ * `--spk-acc-spark / hippomemo / finance / github / npm`。
  */
 
-export { StateDot } from './StateDot.tsx'
-export type { StateDotState } from './StateDot.tsx'
-export { DisclosureRow } from './DisclosureRow.tsx'
-export type { DisclosureRowProps } from './DisclosureRow.tsx'
-export { ListRow } from './ListRow.tsx'
-export type { ListRowProps } from './ListRow.tsx'
-export { SettingsCardHeader } from './SettingsCardHeader.tsx'
-export type { SettingsCardHeaderProps } from './SettingsCardHeader.tsx'
-export { Button } from './Button.tsx'
-export type { ButtonProps, ButtonVariant } from './Button.tsx'
-export { Checkbox } from './Checkbox.tsx'
-export { Textarea } from './Textarea.tsx'
-export { SegmentedControl } from './SegmentedControl.tsx'
-export type { SegmentedOption } from './SegmentedControl.tsx'
-export { DonutChart, BarChart, TrendChart, CHART_PALETTE, OTHER_CHART_COLOR, niceCeil } from './Charts.tsx'
-export type { ChartDatum, DonutChartProps, BarChartProps, TrendPoint, TrendChartProps } from './Charts.tsx'
-export { SearchInput } from './SearchInput.tsx'
-export { Pill } from './Pill.tsx'
-export { Input } from './Input.tsx'
-export { Menu } from './Menu.tsx'
-export type { MenuEntry, MenuItem, MenuSeparator, MenuLabel } from './Menu.tsx'
-export { useAnchoredMaxHeight } from './useAnchoredMaxHeight.ts'
-export { HoverCard } from './HoverCard.tsx'
-export { Modal } from './Modal.tsx'
-export { OnboardingSurface } from './OnboardingSurface.tsx'
-export { RiskConfirmation } from './RiskConfirmation.tsx'
-export type { RiskConfirmationProps } from './RiskConfirmation.tsx'
-export { ConnectionBanner } from './ConnectionBanner.tsx'
-export { FishLogo } from './FishLogo.tsx'
-export { BrandWordmark } from './BrandWordmark.tsx'
-export { Tooltip } from './Tooltip.tsx'
-export type { TooltipSide } from './Tooltip.tsx'
-export { Toast } from './Toast.tsx'
-export { writeClipboard } from './clipboard.ts'
-export { JsonTree } from './JsonTree.tsx'
-export type { JsonTreeProps, JsonTreeLabels } from './JsonTree.tsx'
-export { TerminalBlock, DEFAULT_TERMINAL_MAX_LINES } from './TerminalBlock.tsx'
-export type { TerminalBlockProps, TerminalBlockLabels } from './TerminalBlock.tsx'
-export { ReadBlock, DEFAULT_READ_MAX_LINES } from './ReadBlock.tsx'
-export type { ReadBlockProps, ReadBlockLine } from './ReadBlock.tsx'
-export { DiffBlock, DEFAULT_DIFF_MAX_LINES } from './DiffBlock.tsx'
-export type { DiffBlockProps, DiffHunk } from './DiffBlock.tsx'
-export { SearchBlock, DEFAULT_SEARCH_MAX_LINES } from './SearchBlock.tsx'
-export type {
-  SearchBlockProps, SearchMatchesBlockProps, SearchPathsBlockProps, SearchFileGroup, SearchBlockLineMatch,
-} from './SearchBlock.tsx'
-export { WebBlock } from './WebBlock.tsx'
-export type { WebBlockProps, WebSearchBlockProps, WebFetchBlockProps, WebSourceView } from './WebBlock.tsx'
-export { CodeBlock } from './markdown/CodeBlock.tsx'
-export type { CodeBlockProps } from './markdown/CodeBlock.tsx'
-export { JsonBlock } from './markdown/JsonBlock.tsx'
-export { MarkdownText } from './markdown/MarkdownText.tsx'
-export type { MarkdownCodeLabels, MarkdownFileMentions } from './markdown/MarkdownText.tsx'
-export { MessageText } from './markdown/MessageText.tsx'
-export { extractMarkdownPlainText } from './markdown/plain-text.ts'
-export type { MarkdownPlainTextMode, MarkdownPlainTextOptions } from './markdown/plain-text.ts'
-export * from './icons/index.tsx'
+// 基础
+export { Button, type ButtonProps, type ButtonVariant, type ButtonSize } from './components/Button.tsx'
+export { Input, Textarea, type InputProps, type TextareaProps } from './components/Input.tsx'
+export { SearchInput, type SearchInputProps } from './components/SearchInput.tsx'
+export { Checkbox, type CheckboxProps } from './components/Checkbox.tsx'
 
-// Theme
-export {
-  THEME_PREFERENCES,
-  DEFAULT_PREFERENCE,
-  isThemePreference,
-  resolveDark,
-  applyTheme,
-  setThemePreference,
-  getThemePreference,
-  getIsDark,
-  useThemePreference,
-  useIsDark,
-} from './theme.ts'
-export type { ThemePreference } from './theme.ts'
-export { Money, formatMicros } from "./Money.tsx"
-export type { MoneyProps, MoneyVariant, MoneySize } from "./Money.tsx"
+// 标识
+export { Pill, type PillProps, type PillTone } from './components/Pill.tsx'
+export { StateDot, type StateDotProps, type DotStatus } from './components/StateDot.tsx'
+
+// 容器与列表
+export { SegmentedControl, type SegmentedControlProps, type SegmentedOption } from './components/SegmentedControl.tsx'
+export { ListRow, type ListRowProps } from './components/ListRow.tsx'
+export { Disclosure, type DisclosureProps } from './components/Disclosure.tsx'
+export { SettingsCard, Stat, StatGrid, type SettingsCardProps, type StatProps } from './components/SettingsCard.tsx'
+
+// 浮层与反馈
+export { Modal, type ModalProps } from './components/Modal.tsx'
+export { toast, Toaster, type ToastItem, type ToastTone, type ToasterProps } from './components/Toast.tsx'
+
+// 终端与图表
+export { TerminalBlock, type TerminalBlockProps, type TerminalLine, type TerminalTone } from './components/TerminalBlock.tsx'
+export { Sparkline, type SparklineProps } from './components/Sparkline.tsx'
+
+export { cx } from './cx.js'
