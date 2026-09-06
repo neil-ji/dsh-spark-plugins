@@ -145,8 +145,9 @@ console.log(`[build] compiled ${moduleCss.length} css modules`)
 // 2. KaTeX
 emitKatex()
 
-// 3. tokens.css aggregate (cascade order: base -> design-platform -> gradients -> scrollbar -> shiki)
-const tokenOrder = ['base.css', 'design-platform.css', 'gradient-shadow-text.css', 'scrollbar.css', 'shiki.css']
+// 3. tokens.css aggregate (cascade order: base -> design-platform -> gradients -> scrollbar -> shiki -> spark-tokens)
+// spark-tokens.css 最后加载：--spk-* 为设计语言源，bridge 段覆盖全部历史 --dsw-* 别名
+const tokenOrder = ['base.css', 'design-platform.css', 'gradient-shadow-text.css', 'scrollbar.css', 'shiki.css', 'spark-tokens.css']
 const tokens = tokenOrder
   .map((f) => {
     const text = readFileSync(path.join(srcDir, 'styles', f), 'utf8')

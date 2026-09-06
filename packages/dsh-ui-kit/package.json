@@ -1,6 +1,6 @@
 {
   "name": "dsh-ui-kit",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "复刻 DSH 设计系统的本地 React 组件库（零 cordis）：按钮/输入/Pill/图表/Markdown 渲染全套",
   "keywords": [
     "dsh",
