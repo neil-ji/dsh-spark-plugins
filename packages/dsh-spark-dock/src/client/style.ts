@@ -7,12 +7,27 @@
 export const DOCK_CSS = [
   '[data-plugin="dsh-spark-dock"] { pointer-events: auto; font-family: var(--dsw-font-family, -apple-system, "PingFang SC", sans-serif); }',
 
-  /* 悬浮球 */
-  '[data-plugin="dsh-spark-dock"] .dock-ball { position: fixed; width: var(--dock-ball, 48px); height: var(--dock-ball, 48px); border-radius: 50%; display: grid; place-items: center; z-index: 9000; background: var(--dsw-alias-bg-module-platform); border: 1px solid var(--dsw-alias-border-l1); box-shadow: var(--dsw-shadow-lv2, 0 8px 24px rgba(10,18,38,.16)), inset 0 0 0 1px rgba(255,255,255,.07); color: var(--dsw-alias-label-primary-foreground, #fff); cursor: pointer; touch-action: none; transition: box-shadow 200ms ease; }',
-  '[data-plugin="dsh-spark-dock"] .dock-ball svg { width: 22px; height: 22px; overflow: visible; }',
-  '[data-plugin="dsh-spark-dock"] .dock-ball:active { transform: scale(.95); }',
-  '[data-plugin="dsh-spark-dock"] .dock-ball.dragging { cursor: grabbing; }',
+  /* 悬浮球 —— 2026-09 视觉主题重构：
+   * 球身 = 平台底色 + 火花暖色径向渐变；玻璃高光 = inset 顶部亮线 + backdrop blur；
+   * 品牌光晕 = ::before 径向 halo（呼吸）+ ::after hover 光环（preview 版回归）。
+   * mood 染光：--ball-glow 随 Fairy 情绪换色（alert→warn），全部 transform/opacity 动画。 */
+  '[data-plugin="dsh-spark-dock"] .dock-ball { --ball-glow: var(--acc-spark, #f59e0b); position: fixed; width: var(--dock-ball, 48px); height: var(--dock-ball, 48px); border-radius: 50%; display: grid; place-items: center; z-index: 9000; background: radial-gradient(118% 118% at 30% 20%, color-mix(in srgb, var(--ball-glow) 24%, var(--dsw-alias-bg-module-platform)) 0%, var(--dsw-alias-bg-module-platform) 62%); border: 1px solid color-mix(in srgb, var(--ball-glow) 34%, var(--dsw-alias-border-l1)); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); box-shadow: 0 8px 24px rgba(10,18,38,.32), 0 0 18px color-mix(in srgb, var(--ball-glow) 20%, transparent), inset 0 1px 0 rgba(255,255,255,.14), inset 0 0 0 1px rgba(255,255,255,.05); color: var(--dsw-alias-label-primary-foreground, #fff); cursor: pointer; touch-action: none; transition: transform 200ms cubic-bezier(.34,1.56,.64,1), box-shadow 240ms ease, border-color 240ms ease; }',
+  '[data-plugin="dsh-spark-dock"] .dock-ball::before { content: ""; position: absolute; inset: -8px; border-radius: 50%; pointer-events: none; background: radial-gradient(closest-side, color-mix(in srgb, var(--ball-glow) 32%, transparent), transparent 74%); opacity: .45; animation: dock-ball-halo 4.6s ease-in-out infinite; }',
+  '[data-plugin="dsh-spark-dock"] .dock-ball::after { content: ""; position: absolute; inset: -5px; border-radius: 50%; pointer-events: none; border: 1px solid var(--ball-glow); opacity: 0; transform: scale(.85); transition: opacity 200ms ease-out, transform 200ms ease-out; }',
+  '[data-plugin="dsh-spark-dock"] .dock-ball:hover { transform: scale(1.06); }',
+  '[data-plugin="dsh-spark-dock"] .dock-ball:hover::after { opacity: .55; transform: scale(1); }',
+  '[data-plugin="dsh-spark-dock"] .dock-ball:active { transform: scale(.94); transition-duration: 90ms; }',
+  '[data-plugin="dsh-spark-dock"] .dock-ball.dragging { cursor: grabbing; transform: scale(1.1); }',
+  '[data-plugin="dsh-spark-dock"] .dock-ball.dragging::before { opacity: .8; animation-play-state: paused; }',
+  /* 面板打开：halo 驻留 + 呼吸暂停，球读作「已激活」而非持续吸引注意 */
+  '[data-plugin="dsh-spark-dock"] .dock-ball[aria-expanded="true"]::before { opacity: .7; animation-play-state: paused; }',
+  /* mood 染光：换 --ball-glow 即可同时驱动渐变/边框/halo/投影 */
+  '[data-plugin="dsh-spark-dock"] .dock-ball.mood-alert { --ball-glow: var(--dsw-alias-state-warn-primary, #f59e0b); }',
+  '[data-plugin="dsh-spark-dock"] .dock-ball.mood-sad { --ball-glow: color-mix(in srgb, var(--dsw-alias-label-tertiary, #8a93a6) 70%, var(--acc-spark, #f59e0b)); }',
+  '[data-plugin="dsh-spark-dock"] .dock-ball svg { width: 24px; height: 24px; overflow: visible; filter: drop-shadow(0 1px 2px rgba(10,18,38,.35)); }',
   '[data-plugin="dsh-spark-dock"] .dock-ball:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 3px; }',
+  '@keyframes dock-ball-halo { 0%,100% { opacity: .45; transform: scale(1); } 50% { opacity: .75; transform: scale(1.06); } }',
+  '@media (prefers-reduced-motion: reduce) { [data-plugin="dsh-spark-dock"] .dock-ball, [data-plugin="dsh-spark-dock"] .dock-ball::before { animation: none; } [data-plugin="dsh-spark-dock"] .fairy-face, [data-plugin="dsh-spark-dock"] .fairy-face .ahoge { animation: none; } }',
   '[data-plugin="dsh-spark-dock"] .dock-badge { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; border-radius: 9px; padding: 0 5px; background: var(--dsw-alias-state-error-primary); color: #fff; font: 700 11px/18px var(--dsw-font-family, inherit); text-align: center; box-shadow: 0 0 0 2px var(--dsw-alias-bg-module-platform); }',
 
   /* 面板 */

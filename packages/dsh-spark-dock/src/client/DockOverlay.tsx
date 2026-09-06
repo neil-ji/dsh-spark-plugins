@@ -225,7 +225,7 @@ export function DockOverlay(): JSX.Element {
       <button
         ref={ballRef}
         type="button"
-        className="dock-ball"
+        className={'dock-ball' + (mood !== null ? ' mood-' + mood : '')}
         aria-label="打开 Spark Dock"
         aria-expanded={open}
         aria-haspopup="dialog"
