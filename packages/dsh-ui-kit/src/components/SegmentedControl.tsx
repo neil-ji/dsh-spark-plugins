@@ -12,6 +12,7 @@ export interface SegmentedControlProps<V extends string = string> {
   value: V
   onChange: (value: V) => void
   ariaLabel?: string
+  disabled?: boolean | undefined
   className?: string
 }
 
@@ -21,6 +22,7 @@ export function SegmentedControl<V extends string = string>({
   value,
   onChange,
   ariaLabel,
+  disabled,
   className,
 }: SegmentedControlProps<V>) {
   const rootRef = useRef<HTMLDivElement>(null)
@@ -49,7 +51,8 @@ export function SegmentedControl<V extends string = string>({
           type="button"
           role="tab"
           aria-selected={opt.value === value}
-          className={css.tab}
+          disabled={disabled}
+          className={cx(css.tab, disabled && css.disabledTab)}
           onClick={() => onChange(opt.value)}
         >
           {opt.label}

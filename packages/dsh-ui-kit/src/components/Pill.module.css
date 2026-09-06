@@ -27,3 +27,19 @@
 .success { --pill-acc: var(--spk-success); }
 .warn { --pill-acc: var(--spk-warn); }
 .error { --pill-acc: var(--spk-error); }
+
+.clickable {
+  appearance: none;
+  cursor: pointer;
+  font-family: var(--spk-font);
+  transition: background var(--spk-dur-fast) var(--spk-ease-out), color var(--spk-dur-fast) var(--spk-ease-out);
+}
+.clickable:hover { background: var(--spk-hover); color: var(--spk-label); }
+.clickable:focus-visible { outline: 2px solid var(--spk-brand); outline-offset: 2px; }
+.active {
+  --pill-acc: var(--spk-brand);
+  background: color-mix(in srgb, var(--pill-acc) 14%, transparent);
+  border-color: transparent;
+  color: var(--pill-acc);
+  font-weight: 600;
+}

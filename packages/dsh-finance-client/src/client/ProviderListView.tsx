@@ -59,7 +59,7 @@ export function ProviderListView({ rows, loadError, disabled, t, onSave, onClear
       <div className={css.providerList} data-testid="finance-provider-list-error">
         <p className={css.providerLocked}>{t('cardProvidersLoadError')}</p>
         <p className={css.providerLocked} title={loadError}>{loadError}</p>
-        <Button variant="outline" disabled={disabled} onClick={onRetry}>{t('retry')}</Button>
+        <Button variant="secondary" disabled={disabled} onClick={onRetry}>{t('retry')}</Button>
       </div>
     )
   }
@@ -199,7 +199,7 @@ function ProviderRowView({ row, disabled, t, onSave, onClear }: ProviderRowViewP
         {editing ? null : (
           <span className={css.providerValidity}>
             <Button
-              variant="outline"
+              variant="secondary"
               disabled={disabled}
               onClick={beginEdit}
               data-testid={`finance-provider-edit-${row.provider}`}
@@ -208,7 +208,7 @@ function ProviderRowView({ row, disabled, t, onSave, onClear }: ProviderRowViewP
             </Button>
             {row.override !== undefined ? (
               <Button
-                variant="outline"
+                variant="secondary"
                 disabled={disabled}
                 onClick={() => {
                   onClear(row.provider)
@@ -321,7 +321,7 @@ function ProviderRowView({ row, disabled, t, onSave, onClear }: ProviderRowViewP
                 {t('save')}
               </Button>
               <Button
-                variant="outline"
+                variant="secondary"
                 disabled={disabled}
                 onClick={() => setEditing(false)}
                 data-testid={`finance-provider-cancel-${row.provider}`}

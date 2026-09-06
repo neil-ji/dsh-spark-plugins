@@ -34,3 +34,6 @@
 .tab:hover { color: var(--spk-label); }
 .tab:focus-visible { outline: 2px solid var(--spk-brand); outline-offset: 1px; }
 .tab[aria-selected="true"] { color: #ffffff; }
+
+.disabledTab { opacity: 0.45; cursor: not-allowed; }
+.disabledTab:hover { color: var(--spk-label-2); }

@@ -1,0 +1,9 @@
+.money {
+  font-family: var(--spk-font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--spk-label);
+}
+.sm { font-size: var(--spk-text-sm, 12px); }
+.md { font-size: var(--spk-text-lg, 15px); }
+.lg { font-size: var(--spk-text-2xl, 22px); font-weight: 700; }
+.muted { color: var(--spk-label-3); }

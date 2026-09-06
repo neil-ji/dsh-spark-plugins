@@ -14,7 +14,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { SnapshotSelectorHook } from 'dsh-spark-plugin-kit/client'
-import { Button, Input, Pill, SegmentedControl, SettingsCardHeader, Textarea } from 'dsh-ui-kit'
+import { Button, Input, Pill, SegmentedControl, Disclosure, Textarea } from 'dsh-ui-kit'
 import { ProviderDefaultsEditor, PriceTableEditor, RateFields } from './PriceEditors.tsx'
 import { ProviderListView } from './ProviderListView.tsx'
 import { FinanceAuditSection } from './FinanceAuditSection.tsx'
@@ -411,7 +411,7 @@ export function FinanceCardBody({
 
       <div className={css.footer}>
         {state.failed ? <p className={css.failed} role="status">{t('saveFailed')}</p> : null}
-        <Button variant="outline" disabled={!state.dirty || state.saving} onClick={onDiscard}>{t('discard')}</Button>
+        <Button variant="secondary" disabled={!state.dirty || state.saving} onClick={onDiscard}>{t('discard')}</Button>
         <Button variant="primary" disabled={blocked} onClick={onSave}>{t(state.saving ? 'saving' : 'save')}</Button>
       </div>
     </div>
@@ -442,16 +442,14 @@ export function FinanceCard(props: FinanceCardProps) {
 
   return (
     <li ref={cardRef} className={open ? `${css.card} ${css.cardOpen}` : css.card}>
-      <SettingsCardHeader
-        title={t('cardTitle')}
+      <Disclosure
+        name={t('cardTitle')}
         description={t('cardDescription')}
         open={open}
         onToggle={() => setOpen(!open)}
         trailing={state.dirty ? <span className={css.pending}>{t('unsaved')}</span> : null}
-        expandLabel={t('cardExpand')}
-        collapseLabel={t('cardCollapse')}
-      />
-      {!open ? null : (
+      >
+        {open ? (
         <FinanceCardBody
           t={t}
           state={state}
@@ -473,7 +471,8 @@ export function FinanceCard(props: FinanceCardProps) {
           onClearDshProviderOverride={props.clearDshProviderOverride}
           onRetryListProviders={props.retryListProviders}
         />
-      )}
+        ) : null}
+      </Disclosure>
     </li>
   )
 }

@@ -1,0 +1,54 @@
+/* ── Donut ── */
+.donutWrap { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.donutSvg { width: 132px; height: 132px; flex-shrink: 0; }
+.donutTrack { stroke: var(--spk-layer-2); }
+.donutSlice { stroke-linecap: butt; transition: stroke-width var(--spk-dur-fast) var(--spk-ease-out); }
+.donutSlice:hover { stroke-width: 7; }
+.donutValue {
+  font: 700 5.5px var(--spk-font);
+  fill: var(--spk-label);
+  font-variant-numeric: tabular-nums;
+  transform: translateY(1px);
+}
+.donutLabel { font: 400 2.6px var(--spk-font); fill: var(--spk-label-3); }
+
+.legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1; }
+.legendItem { display: flex; align-items: center; gap: 7px; font: 400 var(--spk-text-xs, 11px) / 1.3 var(--spk-font); }
+.legendDot { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+.legendLabel { color: var(--spk-label-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
+.legendValue { color: var(--spk-label-3); font-variant-numeric: tabular-nums; }
+
+/* ── Bar ── */
+.barWrap { display: flex; flex-direction: column; gap: 8px; }
+.barRow { display: grid; grid-template-columns: minmax(56px, auto) 1fr auto; align-items: center; gap: 10px; }
+.barLabel {
+  font: 400 var(--spk-text-xs, 11px) / 1.3 var(--spk-font);
+  color: var(--spk-label-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  text-align: right;
+}
+.barTrack { display: block; height: 8px; border-radius: 4px; background: var(--spk-layer-2); overflow: hidden; }
+.barFill { display: block; height: 100%; border-radius: 4px; transition: width var(--spk-dur-med) var(--spk-ease-out); }
+.barValue { font: 500 var(--spk-text-xs, 11px) / 1 var(--spk-font-mono); color: var(--spk-label-2); font-variant-numeric: tabular-nums; }
+
+/* ── Trend ── */
+.trendWrap { position: relative; }
+.trendSvg { width: 100%; height: auto; display: block; }
+.trendArea { animation: trend-fade 0.8s var(--spk-ease-out) 0.5s backwards; }
+.trendLine { stroke: var(--spk-brand); stroke-width: 2; stroke-linecap: round; }
+.trendAxis { stroke: var(--spk-border); }
+.trendDot { fill: var(--spk-brand); stroke: var(--spk-bg); stroke-width: 1.5; }
+.trendTick { font: 400 9px var(--spk-font-mono); fill: var(--spk-label-3); }
+.trendHit { fill: transparent; }
+.trendMax {
+  position: absolute; top: 0; right: 0;
+  font: 400 10px / 1 var(--spk-font-mono);
+  color: var(--spk-label-3);
+  font-variant-numeric: tabular-nums;
+}
+@keyframes trend-fade { from { opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .trendArea { animation: none; }
+  .barFill { transition: none; }
+}

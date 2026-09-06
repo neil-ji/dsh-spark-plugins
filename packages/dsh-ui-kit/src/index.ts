@@ -28,6 +28,15 @@ export { Menu, type MenuProps, type MenuItem } from './components/Menu.tsx'
 export { Modal, type ModalProps } from './components/Modal.tsx'
 export { toast, Toaster, type ToastItem, type ToastTone, type ToasterProps } from './components/Toast.tsx'
 
+// 图表与金额
+export {
+  DonutChart, BarChart, TrendChart,
+  CHART_PALETTE, OTHER_CHART_COLOR, niceCeil,
+  type ChartDatum, type TrendPoint,
+  type DonutChartProps, type BarChartProps, type TrendChartProps,
+} from './components/Charts.tsx'
+export { Money, formatMicros, type MoneyProps, type MoneySize } from './components/Money.tsx'
+
 // 终端与图表
 export { TerminalBlock, type TerminalBlockProps, type TerminalLine, type TerminalTone } from './components/TerminalBlock.tsx'
 export { Sparkline, type SparklineProps } from './components/Sparkline.tsx'

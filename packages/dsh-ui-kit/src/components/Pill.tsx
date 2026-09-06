@@ -8,6 +8,10 @@ export interface PillProps {
   tone?: PillTone
   /** 直接指定模块 accent 色（如 var(--spk-acc-github)），优先级高于 tone */
   accentColor?: string
+  /** 提供 onClick 时渲染为可点按钮（过滤/切换 chip） */
+  onClick?: () => void
+  /** 可点态高亮（配 onClick 使用） */
+  active?: boolean
   className?: string
   children: ReactNode
 }
@@ -21,11 +25,15 @@ const toneClass: Record<PillTone, string> = {
 }
 
 /** Spark UI Kit 标识胶囊 — dock .pill / .pill.tint 形制 */
-export function Pill({ tone = 'neutral', accentColor, className, children }: PillProps) {
+export function Pill({ tone = 'neutral', accentColor, onClick, active = false, className, children }: PillProps) {
   const style = accentColor ? ({ '--pill-acc': accentColor } as CSSProperties) : undefined
+  const cls = cx(css.pill, accentColor ? css.tint : toneClass[tone], onClick && css.clickable, active && css.active, className)
+  if (!onClick) {
+    return <span className={cls} style={style}>{children}</span>
+  }
   return (
-    <span className={cx(css.pill, accentColor ? css.tint : toneClass[tone], className)} style={style}>
+    <button type="button" className={cls} style={style} onClick={onClick} aria-pressed={active}>
       {children}
-    </span>
+    </button>
   )
 }

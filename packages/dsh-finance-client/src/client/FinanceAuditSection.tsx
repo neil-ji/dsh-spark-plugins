@@ -528,7 +528,7 @@ export function FinanceAuditSection(props: FinanceAuditSectionProps) {
       <div className={css.status}>
         <div>{t('error')}</div>
         <div className={css.statusDetail}>{state.error}</div>
-        <Button variant="outline" onClick={refresh}>{t('refresh')}</Button>
+        <Button variant="secondary" onClick={refresh}>{t('refresh')}</Button>
       </div>
     )
   }
@@ -674,7 +674,7 @@ function FinanceReady({ providerList, ledger, peaks, staleSync, t, refresh, refr
           <LastUpdatedAt generatedAt={generatedAt} t={t} />
         </div>
         <div className={css.actions}>
-          <Button variant="outline" onClick={refresh}>{t('refresh')}</Button>
+          <Button variant="secondary" onClick={refresh}>{t('refresh')}</Button>
         </div>
       </div>
 
