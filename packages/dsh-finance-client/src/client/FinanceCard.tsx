@@ -175,7 +175,7 @@ function PriceSyncSection({ t, state, disabled, onSyncNow, onSetAutoSync }: {
 
       {lastError !== null
         ? (
-          <p className={css.syncError} role="status">
+          <p className={css.syncError} role="alert">
             {lastError} · {t('cardSyncRetryHint')}
           </p>
         )

@@ -534,6 +534,14 @@
   to { transform: rotate(360deg); }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+    border-top-color: var(--dsw-static-deepseek-500);
+    border-right-color: var(--dsw-static-deepseek-500);
+  }
+}
+
 .statusTitle {
   color: var(--dsw-alias-label-primary);
   font-size: 14px;
