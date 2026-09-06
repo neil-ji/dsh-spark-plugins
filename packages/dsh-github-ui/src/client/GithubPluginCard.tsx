@@ -229,7 +229,7 @@ function GithubCardBody({ t, state, onEdit, onReset, onSave, onDiscard }: {
       </div>
 
       <div className={styles.footer}>
-        {shell.failed ? <p className={styles.failed} role="status">{t('cardSaveFailed')}</p> : null}
+        {shell.failed ? <p className={styles.failed} role="alert">{t('cardSaveFailed')}</p> : null}
         <Button variant="outline" disabled={!shell.dirty || shell.saving} onClick={onDiscard}>{t('cardDiscard')}</Button>
         <Button variant="primary" disabled={blocked} onClick={onSave}>{t(shell.saving ? 'cardSaving' : 'cardSave')}</Button>
       </div>

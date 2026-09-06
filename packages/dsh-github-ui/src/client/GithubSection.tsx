@@ -236,7 +236,7 @@ function Loaded({ injected }: { injected: GithubSectionInjected }): ReactNode {
               </div>
               {proxyTest !== undefined
                 ? (
-                  <p className={proxyTest.ok ? styles.notice : styles.error} role="status">
+                  <p className={proxyTest.ok ? styles.notice : styles.error} role={proxyTest.ok ? 'status' : 'alert'}>
                     {proxyTest.ok
                       ? t('proxyOk') + ' · ' + t('proxyTarget') + ' ' + proxyTest.host + ' · ' + proxyTest.latencyMs + 'ms'
                       : t('proxyFail') + ': ' + (proxyTest.error ?? '')}
