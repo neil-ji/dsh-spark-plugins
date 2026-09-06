@@ -30,29 +30,32 @@ export const DOCK_CSS = [
   '@media (prefers-reduced-motion: reduce) { [data-plugin="dsh-spark-dock"] .dock-ball, [data-plugin="dsh-spark-dock"] .dock-ball::before { animation: none; } [data-plugin="dsh-spark-dock"] .fairy-face, [data-plugin="dsh-spark-dock"] .fairy-face .ahoge { animation: none; } }',
   '[data-plugin="dsh-spark-dock"] .dock-badge { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; border-radius: 9px; padding: 0 5px; background: var(--dsw-alias-state-error-primary); color: #fff; font: 700 11px/18px var(--dsw-font-family, inherit); text-align: center; box-shadow: 0 0 0 2px var(--dsw-alias-bg-module-platform); }',
 
-  /* 面板 */
-  '[data-plugin="dsh-spark-dock"] .dock-panel { position: fixed; z-index: 9100; width: var(--dock-panel-w, 560px); height: var(--dock-panel-h, 680px); display: flex; flex-direction: column; background: var(--dsw-alias-bg-module-platform); border: 1px solid var(--dsw-alias-border-l1); border-radius: 20px; box-shadow: var(--dsw-shadow-lv3, 0 16px 48px rgba(10,18,38,.28)); overflow: hidden; color: var(--dsw-alias-label-primary-foreground, #fff); opacity: 0; transform: scale(.94); pointer-events: none; transition: transform 220ms cubic-bezier(.34,1.56,.64,1), opacity 220ms ease; }',
+  /* 面板 —— 结构：flex row = 左 rail(56px) + 右主列 */
+  '[data-plugin="dsh-spark-dock"] .dock-panel { position: fixed; z-index: 9100; width: var(--dock-panel-w, 616px); height: var(--dock-panel-h, 680px); display: flex; flex-direction: row; background: var(--dsw-alias-bg-module-platform); border: 1px solid var(--dsw-alias-border-l1); border-radius: 20px; box-shadow: var(--dsw-shadow-lv3, 0 16px 48px rgba(10,18,38,.28)); overflow: hidden; color: var(--dsw-alias-label-primary-foreground, #fff); opacity: 0; transform: scale(.94); pointer-events: none; transition: transform 220ms cubic-bezier(.34,1.56,.64,1), opacity 220ms ease; }',
   '[data-plugin="dsh-spark-dock"] .dock-panel.open { opacity: 1; transform: scale(1); pointer-events: auto; }',
-  '[data-plugin="dsh-spark-dock"] .dock-titlebar { display: flex; align-items: center; gap: 8px; padding: 10px 12px 10px; }',
-  '[data-plugin="dsh-spark-dock"] .dock-titlebar .titles { min-width: 0; }',
-  '[data-plugin="dsh-spark-dock"] .dock-titlebar .name { font-size: 15px; font-weight: 700; line-height: 1.3; color: var(--dsw-alias-label-primary-foreground, #fff); }',
-  '[data-plugin="dsh-spark-dock"] .dock-titlebar .sub { font-size: 12px; color: var(--dsw-alias-label-tertiary); }',
-  '[data-plugin="dsh-spark-dock"] .dock-titlebar .spacer { flex: 1; }',
+
+  /* 左侧图标模块栏（activity rail） */
+  '[data-plugin="dsh-spark-dock"] .dock-rail { width: 56px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 0; background: var(--dsw-alias-bg-layer-2); border-right: 1px solid var(--dsw-alias-border-l1); }',
+  '[data-plugin="dsh-spark-dock"] .dock-tab { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; position: relative; border: none; background: transparent; color: var(--dsw-alias-label-tertiary); cursor: pointer; transition: background 160ms ease, color 160ms ease; }',
+  '[data-plugin="dsh-spark-dock"] .dock-tab svg { width: 19px; height: 19px; }',
+  '[data-plugin="dsh-spark-dock"] .dock-tab:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary-foreground, #fff); }',
+  '[data-plugin="dsh-spark-dock"] .dock-tab.active { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }',
+  '[data-plugin="dsh-spark-dock"] .dock-tab.active::before { content: ""; position: absolute; left: -8px; top: 50%; transform: translateY(-50%); width: 3px; height: 20px; border-radius: 0 3px 3px 0; background: var(--accent); }',
+  '[data-plugin="dsh-spark-dock"] .dock-tab:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 2px; }',
+
+  /* 右侧主列：模块头 / 子页 / 内容 */
+  '[data-plugin="dsh-spark-dock"] .dock-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }',
+  '[data-plugin="dsh-spark-dock"] .dock-head { display: flex; align-items: center; gap: 8px; padding: 12px 16px 8px; }',
+  '[data-plugin="dsh-spark-dock"] .dock-head .titles { min-width: 0; }',
+  '[data-plugin="dsh-spark-dock"] .dock-head .name { font-size: 15px; font-weight: 700; line-height: 1.3; color: var(--dsw-alias-label-primary-foreground, #fff); }',
+  '[data-plugin="dsh-spark-dock"] .dock-head .sub { font-size: 12px; color: var(--dsw-alias-label-tertiary); }',
+  '[data-plugin="dsh-spark-dock"] .dock-head .spacer { flex: 1; }',
   '[data-plugin="dsh-spark-dock"] .dock-iconbtn { position: relative; width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: transparent; border: none; color: var(--dsw-alias-label-secondary); cursor: pointer; }',
   '[data-plugin="dsh-spark-dock"] .dock-iconbtn::before { content: ""; position: absolute; inset: -5px; }',
   '[data-plugin="dsh-spark-dock"] .dock-iconbtn:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary-foreground, #fff); }',
   '[data-plugin="dsh-spark-dock"] .dock-iconbtn svg { width: 15px; height: 15px; }',
 
-  /* 模块 tab 导航 */
-  '[data-plugin="dsh-spark-dock"] .dock-nav { display: flex; gap: 4px; margin: 0 12px; padding: 6px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 13px; }',
-  '[data-plugin="dsh-spark-dock"] .dock-tab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 2px 7px; border-radius: 10px; border: none; background: transparent; color: var(--dsw-alias-label-tertiary); cursor: pointer; position: relative; font: 500 11px/1 var(--dsw-font-family, inherit); }',
-  '[data-plugin="dsh-spark-dock"] .dock-tab svg { width: 17px; height: 17px; }',
-  '[data-plugin="dsh-spark-dock"] .dock-tab:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary-foreground, #fff); }',
-  '[data-plugin="dsh-spark-dock"] .dock-tab.active { color: var(--accent); }',
-  '[data-plugin="dsh-spark-dock"] .dock-tab.active::after { content: ""; position: absolute; bottom: 1px; width: 16px; height: 2px; border-radius: 2px; background: var(--accent); }',
-  '[data-plugin="dsh-spark-dock"] .dock-tab:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 2px; }',
-
-  /* 模块内子页 tab */
+  /* 模块内子页 tab（主列内通栏） */
   '[data-plugin="dsh-spark-dock"] .subtabbar { display: flex; gap: 3px; padding: 3px; margin-bottom: 10px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; }',
   '[data-plugin="dsh-spark-dock"] .subtab { flex: 1; padding: 6px 4px; border: none; border-radius: 7px; background: transparent; color: var(--dsw-alias-label-secondary); font: 500 11px/1 var(--dsw-font-family, inherit); cursor: pointer; position: relative; }',
   '[data-plugin="dsh-spark-dock"] .subtab::before { content: ""; position: absolute; inset: -4px; }',

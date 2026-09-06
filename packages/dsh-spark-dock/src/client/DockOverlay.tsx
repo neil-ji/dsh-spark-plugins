@@ -60,6 +60,19 @@ export function DockOverlay(): JSX.Element {
     localStorage.setItem(ACTIVE_KEY, id)
   }, [])
 
+  // rail 纵向方向键导航（roving tabindex：只有激活 tab 在 Tab 序列里）
+  const railRef = useRef<HTMLDivElement | null>(null)
+  const onRailKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
+    e.preventDefault()
+    const idx = DOCK_MODULES.findIndex((m) => m.id === activeModule.id)
+    const next = DOCK_MODULES[(idx + (e.key === 'ArrowDown' ? 1 : -1) + DOCK_MODULES.length) % DOCK_MODULES.length]
+    selectModule(next.id)
+    requestAnimationFrame(() => {
+      railRef.current?.querySelector<HTMLButtonElement>('[aria-selected="true"]')?.focus()
+    })
+  }, [activeModule.id, selectModule])
+
   const layoutBall = useCallback(() => {
     const ball = ballRef.current
     if (!ball) return
@@ -246,44 +259,48 @@ export function DockOverlay(): JSX.Element {
         aria-label="Spark Dock"
         style={{
           '--accent': activeModule.accent,
-          // 宽模块（finance/hippomemo）用 680px，其余 560px
-          '--dock-panel-w': activeModule.wide === true ? '680px' : '560px',
+          // 宽模块（finance/hippomemo）内容区 680px，其余 560px；rail 56px 计入面板宽
+          '--dock-panel-w': activeModule.wide === true ? '736px' : '616px',
         } as React.CSSProperties}
       >
-        <div className="dock-titlebar">
-          <div className="titles">
-            <div className="name">{activeModule.name}</div>
-            <div className="sub">{activeModule.sub}</div>
-          </div>
-          <div className="spacer" />
-          <button
-            type="button"
-            className="dock-iconbtn"
-            aria-label="收起面板"
-            onClick={() => setOpen(false)}
-          >
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-              <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
-            </svg>
-          </button>
-        </div>
-        <nav className="dock-nav" aria-label="插件模块">
+        {/* 结构重构：左侧图标模块栏 + 右侧主列（模块头/子页/内容） */}
+        <div ref={railRef} className="dock-rail" role="tablist" aria-label="插件模块" aria-orientation="vertical" onKeyDown={onRailKeyDown}>
           {DOCK_MODULES.map((m) => (
             <button
               key={m.id}
               type="button"
               role="tab"
               aria-selected={m.id === activeModule.id}
+              aria-label={m.label}
+              title={m.label}
+              tabIndex={m.id === activeModule.id ? 0 : -1}
               className={m.id === activeModule.id ? 'dock-tab active' : 'dock-tab'}
               style={{ '--accent': m.accent } as React.CSSProperties}
               onClick={() => selectModule(m.id)}
             >
               {m.icon}
-              <span>{m.label}</span>
             </button>
           ))}
-        </nav>
-        <div className="dock-body">
+        </div>
+        <div className="dock-main">
+          <div className="dock-head">
+            <div className="titles">
+              <div className="name">{activeModule.name}</div>
+              <div className="sub">{activeModule.sub}</div>
+            </div>
+            <div className="spacer" />
+            <button
+              type="button"
+              className="dock-iconbtn"
+              aria-label="收起面板"
+              onClick={() => setOpen(false)}
+            >
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
+          <div className="dock-body">
           {activeModule.panes.length > 1 && (
             <div className="subtabbar" role="tablist" aria-label={`${activeModule.name} 子页`}>
               {activeModule.panes.map((p) => (
@@ -301,6 +318,7 @@ export function DockOverlay(): JSX.Element {
             </div>
           )}
           {activePane.render()}
+          </div>
         </div>
       </div>
     </div>
