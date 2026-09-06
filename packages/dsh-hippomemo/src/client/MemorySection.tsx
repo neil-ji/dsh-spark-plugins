@@ -417,6 +417,7 @@ function MemoryListPanel({ t, api, detailId, onDetail }: {
   const [tags, setTags] = useState<MemoryTagCount[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
     const timer = window.setTimeout(() => { setDebouncedQ(q); setPage(1) }, 250);
@@ -498,17 +499,16 @@ function MemoryListPanel({ t, api, detailId, onDetail }: {
         <Button variant='primary' size='md' icon={<IconPlusOutline16 />}
           onClick={() => { onDetail('new'); }}>{t('newMemory')}</Button>
       </div>
-      {loading ? <p className='hippomemo-status'>{t('loading')}</p> : null}
+      {loading ? <p className='hippomemo-status hippomemo-status-loading' role='status'>{t('loading')}</p> : null}
       {error.length > 0 && loading === false ? (
-        <p className='hippomemo-error'>{t('loadFailed')}: {error}
+        <p className='hippomemo-error' role='alert'>{t('loadFailed')}: {error}
           <Button variant='ghost' size='sm' onClick={reload}>{t('retry')}</Button></p>
       ) : null}
       {loading === false && error.length === 0 && records.length === 0
         ? <p className='hippomemo-empty'>{hasFilters ? t('emptySearch') : t('empty')}</p> : null}
       {records.length > 0 ? (
         <div className='hippomemo-list'>
-          {records.map(record => {
-            const archived = record.status === 'archived' || record.status === 'superseded';
+          {records.map(record => {            const archived = record.status === 'archived' || record.status === 'superseded';
             const meta: string[] = [];
             meta.push(t(record.scope));
             if (record.scope === 'global') {
@@ -530,7 +530,7 @@ function MemoryListPanel({ t, api, detailId, onDetail }: {
                     ) : null}
                     {scoped ? (
                       <Pill className='hippomemo-model-pill' title={(record.modelIds ?? []).join(', ')}>
-                        {'⚙ ' + (record.modelIds ?? [])[0] + ((record.modelIds?.length ?? 0) > 1 ? ' +' + String((record.modelIds?.length ?? 0) - 1) : '')}
+                        {(record.modelIds ?? [])[0] + ((record.modelIds?.length ?? 0) > 1 ? ' +' + String((record.modelIds?.length ?? 0) - 1) : '')}
                       </Pill>
                     ) : null}
                     {meta.map((part, index) => (
@@ -560,9 +560,13 @@ function MemoryListPanel({ t, api, detailId, onDetail }: {
                       icon={<IconEditOutline16 size={14} />} />
                     <Button size='sm' variant='ghost' title={t('delete')} aria-label={t('delete')}
                       className='hippomemo-icon-btn hippomemo-icon-btn-danger'
+                      disabled={deletingId !== null}
+                      aria-busy={deletingId === record.id}
                       onClick={async () => {
+                        if (deletingId !== null) return;
                         if (window.confirm(t('confirmDelete')) === false) return;
-                        await api.remove(record.id);
+                        setDeletingId(record.id);
+                        try { await api.remove(record.id); } finally { setDeletingId(null); }
                         reload();
                       }}
                       icon={<IconTrashOutline16 size={14} />} />
