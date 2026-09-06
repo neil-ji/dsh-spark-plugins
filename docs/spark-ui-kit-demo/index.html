@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spark UI Kit — 组件库重写 Demo</title>
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/components.css">
+<link rel="stylesheet" href="css/demo.css">
+<link rel="stylesheet" href="css/motion.css">
+</head>
+<body data-theme="dark">
+<div class="ambient" aria-hidden="true"><span></span><span></span></div>
+<a class="skip-link" href="#main">跳到内容</a>
+
+<!-- ═══ 顶栏 ═══ -->
+<header class="topbar">
+  <div class="topbar-brand">
+    <span class="spark-glyph" aria-hidden="true"></span>
+    <div>
+      <h1>Spark UI Kit</h1>
+      <p>组件库重写 · 视觉方向验收 Demo</p>
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <span class="pill pill--brand">v2.0-rc · 重写版</span>
+    <button class="theme-toggle" id="themeToggle" aria-label="切换明暗主题" aria-pressed="true">
+      <span class="theme-toggle-thumb" aria-hidden="true"></span>
+      <span class="theme-toggle-label">暗</span>
+    </button>
+  </div>
+</header>
+
+<div class="layout">
+  <!-- ═══ 侧栏导航 ═══ -->
+  <nav class="sidenav" aria-label="组件目录">
+    <p class="sidenav-title">组件</p>
+    <a href="#foundations">设计基元</a>
+    <a href="#buttons">Button 按钮</a>
+    <a href="#inputs">Input 输入</a>
+    <a href="#pills">Pill / StateDot 标识</a>
+    <a href="#segmented">SegmentedControl</a>
+    <a href="#listrow">ListRow 列表行</a>
+    <a href="#disclosure">Disclosure 折叠</a>
+    <a href="#card">SettingsCard 卡片</a>
+    <a href="#modal">Modal / Toast</a>
+    <a href="#terminal">Terminal 终端</a>
+    <a href="#charts">Sparkline 图表</a>
+    <div class="sidenav-accents" aria-label="五模块身份色">
+      <span style="--acc:var(--spk-acc-spark)"></span>
+      <span style="--acc:var(--spk-acc-hippomemo)"></span>
+      <span style="--acc:var(--spk-acc-finance)"></span>
+      <span style="--acc:var(--spk-acc-github)"></span>
+      <span style="--acc:var(--spk-acc-npm)"></span>
+    </div>
+  </nav>
+
+  <main id="main" class="content">
+    <!-- ═══ Hero ═══ -->
+    <section class="hero">
+      <p class="hero-kicker">不是换肤，是重写</p>
+      <h2>DSH 品牌蓝 · 中性冷灰 · 玻璃浮层</h2>
+      <p class="hero-sub">Spark 设计语言的组件基座：全新的 chrome 形制、层级与动效曲线。五模块 accent 贯穿所有组件，明暗双主题同一套 token 驱动。</p>
+      <div class="hero-actions">
+        <button class="spk-btn spk-btn--primary" id="heroCta">点燃一个 Toast</button>
+        <button class="spk-btn spk-btn--secondary" id="heroModal">打开 Modal</button>
+      </div>
+    </section>
+
+    <!-- ═══ 设计基元 ═══ -->
+    <section id="foundations" class="demo-section">
+      <header class="section-head"><h3>设计基元</h3><p>token · 色板 · 圆角 · 阴影</p></header>
+      <div class="card">
+        <div class="swatch-grid" id="swatchGrid"></div>
+        <div class="divider"></div>
+        <div class="meta-row">
+          <div class="meta-item"><span class="meta-dot" style="--acc:var(--spk-acc-spark)"></span><div><strong>Spark 蓝</strong><em>#4d6bfe DSH 品牌</em></div></div>
+          <div class="meta-item"><span class="meta-dot" style="--acc:var(--spk-acc-hippomemo)"></span><div><strong>Hippomemo 蓝</strong><em>记忆模块</em></div></div>
+          <div class="meta-item"><span class="meta-dot" style="--acc:var(--spk-acc-finance)"></span><div><strong>Finance 绿</strong><em>行情模块</em></div></div>
+          <div class="meta-item"><span class="meta-dot" style="--acc:var(--spk-acc-github)"></span><div><strong>GitHub 紫</strong><em>仓库模块</em></div></div>
+          <div class="meta-item"><span class="meta-dot" style="--acc:var(--spk-acc-npm)"></span><div><strong>npm 赤</strong><em>包模块</em></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ 按钮 ═══ -->
+    <section id="buttons" class="demo-section">
+      <header class="section-head"><h3>Button 按钮</h3><p>胶囊形制 · 品牌光晕 · 三态反馈</p></header>
+      <div class="card">
+        <div class="row">
+          <button class="spk-btn spk-btn--primary">主操作</button>
+          <button class="spk-btn spk-btn--secondary">次操作</button>
+          <button class="spk-btn spk-btn--ghost">幽灵</button>
+          <button class="spk-btn spk-btn--danger">危险</button>
+          <button class="spk-btn spk-btn--primary" disabled>禁用</button>
+          <button class="spk-btn spk-btn--primary is-loading" aria-busy="true"><span class="spinner" aria-hidden="true"></span>执行中</button>
+        </div>
+        <div class="row">
+          <button class="spk-btn spk-btn--primary spk-btn--sm">小号</button>
+          <button class="spk-btn spk-btn--secondary spk-btn--sm">小号</button>
+          <button class="icon-btn" aria-label="复制"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="8" height="8" rx="2"/><path d="M3 10V4a1 1 0 0 1 1-1h6"/></svg></button>
+          <button class="icon-btn" aria-label="设置"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4"/></svg></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ 输入 ═══ -->
+    <section id="inputs" class="demo-section">
+      <header class="section-head"><h3>Input 输入</h3><p>品牌聚焦环 · 行内校验 · 帮助文案</p></header>
+      <div class="card form-grid">
+        <div class="field">
+          <label class="field-label" for="f1">Token 名称 <span aria-hidden="true">*</span></label>
+          <input class="spk-input" id="f1" type="text" placeholder="ghp_••••••••" value="spark-prod-token">
+          <p class="field-help">存储在系统钥匙串，永不上传。</p>
+        </div>
+        <div class="field field--error">
+          <label class="field-label" for="f2">仓库地址</label>
+          <input class="spk-input" id="f2" type="text" value="neil-ji/dsh-spark-plugins;drop table">
+          <p class="field-error" role="alert">⚠ 含非法字符，仅允许 owner/repo 格式</p>
+        </div>
+        <div class="field">
+          <label class="field-label" for="f3">备注</label>
+          <textarea class="spk-textarea" id="f3" rows="3" placeholder="这个凭据用来做什么…"></textarea>
+        </div>
+        <div class="row row--gap-lg">
+          <label class="spk-checkbox"><input type="checkbox" checked><span class="spk-checkbox-box" aria-hidden="true"></span>开机自启</label>
+          <label class="spk-checkbox"><input type="checkbox"><span class="spk-checkbox-box" aria-hidden="true"></span>安静模式</label>
+          <label class="spk-search">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg>
+            <input type="search" placeholder="搜索组件…">
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ 标识 ═══ -->
+    <section id="pills" class="demo-section">
+      <header class="section-head"><h3>Pill / StateDot 标识</h3><p>状态 · 计数 · 呼吸点</p></header>
+      <div class="card">
+        <div class="row">
+          <span class="pill pill--brand">Spark</span>
+          <span class="pill" style="--pill-acc:var(--spk-acc-hippomemo)">Hippomemo</span>
+          <span class="pill" style="--pill-acc:var(--spk-acc-finance)">Finance</span>
+          <span class="pill" style="--pill-acc:var(--spk-acc-github)">GitHub</span>
+          <span class="pill" style="--pill-acc:var(--spk-acc-npm)">npm</span>
+          <span class="pill pill--success">已连接</span>
+          <span class="pill pill--warn">待验证</span>
+          <span class="pill pill--error">已失效</span>
+          <span class="pill pill--count">12 条新火花</span>
+        </div>
+        <div class="row">
+          <span class="statedot statedot--live" aria-label="运行中"></span>
+          <span class="statedot statedot--idle" aria-label="空闲"></span>
+          <span class="statedot statedot--error" aria-label="出错"></span>
+          <span class="statedot-label">Live 呼吸点 · 2s 周期，reduced-motion 下静止</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ 分段控制 ═══ -->
+    <section id="segmented" class="demo-section">
+      <header class="section-head"><h3>SegmentedControl</h3><p>玻璃滑块 · 弹簧位移</p></header>
+      <div class="card">
+        <div class="segmented" role="tablist" aria-label="视图切换" id="segDemo">
+          <span class="segmented-thumb" aria-hidden="true"></span>
+          <button role="tab" aria-selected="true">全部</button>
+          <button role="tab" aria-selected="false">已结晶</button>
+          <button role="tab" aria-selected="false">候选</button>
+          <button role="tab" aria-selected="false">已归档</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ 列表行 ═══ -->
+    <section id="listrow" class="demo-section">
+      <header class="section-head"><h3>ListRow 列表行</h3><p>accent 脊线 · 整行可点 · 独立 trailing</p></header>
+      <div class="card card--flush" id="listRowDemo"></div>
+    </section>
+
+    <!-- ═══ 折叠 ═══ -->
+    <section id="disclosure" class="demo-section">
+      <header class="section-head"><h3>Disclosure 折叠</h3><p>SettingsCardHeader · aria-expanded</p></header>
+      <div class="card card--flush" id="disclosureDemo"></div>
+    </section>
+
+    <!-- ═══ 设置卡 ═══ -->
+    <section id="card" class="demo-section">
+      <header class="section-head"><h3>SettingsCard 卡片</h3><p>模块卡头 · badge · 玻璃表面</p></header>
+      <div class="settings-card" style="--acc:var(--spk-acc-finance)">
+        <header class="settings-card-head">
+          <span class="settings-card-icon" aria-hidden="true">¥</span>
+          <div class="settings-card-titles">
+            <h4>Finance 行情</h4>
+            <p>A股 / 美股自选与净值同步</p>
+          </div>
+          <span class="pill pill--success">已连接</span>
+        </header>
+        <div class="settings-card-body">
+          <div class="stat-row">
+            <div class="stat"><em>今日盈亏</em><strong class="pos">+2,418.60</strong></div>
+            <div class="stat"><em>总净值</em><strong>186,302.44</strong></div>
+            <div class="stat"><em>仓位</em><strong>62%</strong></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ Modal / Toast ═══ -->
+    <section id="modal" class="demo-section">
+      <header class="section-head"><h3>Modal / Toast</h3><p>玻璃浮层 · 焦点陷阱 · 退出快于进入</p></header>
+      <div class="card row">
+        <button class="spk-btn spk-btn--primary" id="openModal">打开 Modal</button>
+        <button class="spk-btn spk-btn--secondary" data-toast="success">Success Toast</button>
+        <button class="spk-btn spk-btn--secondary" data-toast="error">Error Toast</button>
+        <button class="spk-btn spk-btn--ghost" data-toast="info">Info Toast</button>
+      </div>
+    </section>
+
+    <!-- ═══ 终端 ═══ -->
+    <section id="terminal" class="demo-section">
+      <header class="section-head"><h3>TerminalBlock 终端</h3><p>冷灰底 · 品牌提示符</p></header>
+      <div class="terminal" role="log" aria-label="终端输出示例">
+        <div class="terminal-bar"><span></span><span></span><span></span><em>spark · zsh</em></div>
+        <pre><code><span class="t-prompt">➜</span> <span class="t-cmd">spark crystallize --candidate 42</span>
+<span class="t-ok">✓</span> spark #42 结晶为 HippoInsight「demo 页先行验收再铺组件」
+<span class="t-dim">  confidence 0.92 · sources: 3 sparks · 84ms</span>
+<span class="t-prompt">➜</span> <span class="t-cursor" aria-hidden="true">▊</span></code></pre>
+      </div>
+    </section>
+
+    <!-- ═══ 图表 ═══ -->
+    <section id="charts" class="demo-section">
+      <header class="section-head"><h3>Sparkline 图表</h3><p>品牌蓝渐变填充 · hover 十字线</p></header>
+      <div class="card chart-card">
+        <div class="chart-head">
+          <div><em>记忆总量 · 近 30 天</em><strong id="chartValue">1,284</strong></div>
+          <span class="pill pill--success">+18%</span>
+        </div>
+        <svg id="sparkline" viewBox="0 0 560 140" preserveAspectRatio="none" role="img" aria-label="近30天记忆总量趋势图，整体上升"></svg>
+      </div>
+    </section>
+
+    <footer class="page-foot">
+      <p>Spark UI Kit 重写 Demo · token 源 <code>packages/dsh-ui-kit/src/styles/spark-tokens.css</code> · 备份 <code>docs/ui-kit-backup-20260907</code></p>
+    </footer>
+  </main>
+</div>
+
+<!-- Modal -->
+<div class="modal-root" id="modalRoot" hidden>
+  <div class="modal-backdrop" data-close></div>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <header class="modal-head">
+      <h4 id="modalTitle">确认执行结晶？</h4>
+      <button class="icon-btn" data-close aria-label="关闭">
+        <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 4 8 8M12 4l-8 8"/></svg>
+      </button>
+    </header>
+    <div class="modal-body">
+      <p>将把 <strong>3 条候选火花</strong> 结晶为 1 条 HippoInsight。此操作会合并原始 spark，可在 7 天内撤销。</p>
+    </div>
+    <footer class="modal-foot">
+      <button class="spk-btn spk-btn--ghost" data-close>取消</button>
+      <button class="spk-btn spk-btn--primary" id="modalConfirm">确认结晶</button>
+    </footer>
+  </div>
+</div>
+
+<div class="toast-region" id="toastRegion" aria-live="polite"></div>
+
+<script src="js/data.js"></script>
+<script src="js/components.js"></script>
+<script src="js/demo.js"></script>
+<script src="js/motion.js"></script>
+</body>
+</html>

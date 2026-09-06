@@ -221,7 +221,7 @@ function Loaded({ injected }: { injected: SparkSectionInjected }): ReactNode {
         <h2 className="spark-title">{t('title')}</h2>
         <p className="spark-intro">{t('intro')}</p>
         <div className="spark-error">{t('loadFailed') + ': ' + (state.error ?? '')}</div>
-        <Button variant="outline" disabled={busy} onClick={() => controller.load()}>{t('retry')}</Button>
+        <Button variant="secondary" disabled={busy} onClick={() => controller.load()}>{t('retry')}</Button>
       </div>
     )
   }
@@ -240,7 +240,7 @@ function Loaded({ injected }: { injected: SparkSectionInjected }): ReactNode {
         </div>
         <div className="spark-toolbar-right">
           <span className={'spark-live' + (state.live ? ' spark-live-on' : '')}>{state.live ? t('liveOn') : t('liveOff')}</span>
-          <Button variant="outline" disabled={busy} onClick={() => controller.load()}>{t('refresh')}</Button>
+          <Button variant="secondary" disabled={busy} onClick={() => controller.load()}>{t('refresh')}</Button>
           {tab === 'sparks' ? (
             <Button variant="primary" disabled={busy} onClick={() => setShowForm(value => !value)}>{showForm ? t('captureCancel') : t('capture')}</Button>
           ) : (
@@ -274,12 +274,12 @@ function Loaded({ injected }: { injected: SparkSectionInjected }): ReactNode {
 
 function TabButton<T extends string>({ current, value, onChange, children }: { current: T; value: T; onChange: (next: T) => void; children: ReactNode }): ReactNode {
   const active = current === value
-  return <Button variant={active ? 'primary' : 'outline'} onClick={() => onChange(value)}>{children}</Button>
+  return <Button variant={active ? 'primary' : 'secondary'} onClick={() => onChange(value)}>{children}</Button>
 }
 
 function FilterButton<T extends string>({ current, value, onChange, children }: { current: T; value: T; onChange: (next: T) => void; children: ReactNode }): ReactNode {
   const active = current === value
-  return <Button variant={active ? 'primary' : 'outline'} onClick={() => onChange(value)}>{children}</Button>
+  return <Button variant={active ? 'primary' : 'secondary'} onClick={() => onChange(value)}>{children}</Button>
 }
 
 interface SparksTabProps {
@@ -332,7 +332,7 @@ function SparksTab(props: SparksTabProps): ReactNode {
           </div>
           {formError !== null ? <div className="spark-error">{formError}</div> : null}
           <div className="spark-form-actions">
-            <Button variant="outline" type="button" disabled={busy} onClick={() => { setFormTitle(''); setFormContent(''); setFormTags('') }}>{t('captureCancel')}</Button>
+            <Button variant="secondary" type="button" disabled={busy} onClick={() => { setFormTitle(''); setFormContent(''); setFormTags('') }}>{t('captureCancel')}</Button>
             <Button variant="primary" type="submit" disabled={busy}>{t('captureSubmit')}</Button>
           </div>
         </form>
@@ -355,12 +355,12 @@ function SparksTab(props: SparksTabProps): ReactNode {
                 <h3 className="spark-card-title">{spark.title}</h3>
                 <div className="spark-card-actions">
                   {spark.crystallized === null && spark.status === 'active' ? (
-                    <Button variant="outline" disabled={busy} onClick={() => { void onCrystallize(spark) }}>{t('crystallize')}</Button>
+                    <Button variant="secondary" disabled={busy} onClick={() => { void onCrystallize(spark) }}>{t('crystallize')}</Button>
                   ) : null}
                   {spark.status === 'active' ? (
-                    <Button variant="outline" disabled={busy} onClick={() => { void onArchive(spark.id) }}>{t('archive')}</Button>
+                    <Button variant="secondary" disabled={busy} onClick={() => { void onArchive(spark.id) }}>{t('archive')}</Button>
                   ) : null}
-                  <Button variant="outline" disabled={busy} onClick={() => { void onDelete(spark.id) }}>{t('delete')}</Button>
+                  <Button variant="secondary" disabled={busy} onClick={() => { void onDelete(spark.id) }}>{t('delete')}</Button>
                 </div>
               </header>
               <p className="spark-card-content">{spark.content}</p>
@@ -412,10 +412,10 @@ function ProposalsTab(props: ProposalsTabProps): ReactNode {
                 </h3>
                 <div className="spark-card-actions">
                   {proposal.status === 'pending' ? (
-                    <Button variant="outline" disabled={busy} onClick={() => { void onResolve(proposal.id, 'accepted') }}>{t('proposalAccept')}</Button>
+                    <Button variant="secondary" disabled={busy} onClick={() => { void onResolve(proposal.id, 'accepted') }}>{t('proposalAccept')}</Button>
                   ) : null}
                   {proposal.status === 'pending' ? (
-                    <Button variant="outline" disabled={busy} onClick={() => { void onResolve(proposal.id, 'dismissed') }}>{t('proposalDismiss')}</Button>
+                    <Button variant="secondary" disabled={busy} onClick={() => { void onResolve(proposal.id, 'dismissed') }}>{t('proposalDismiss')}</Button>
                   ) : null}
                 </div>
               </header>
@@ -470,9 +470,9 @@ function ScriptsTab(props: ScriptsTabProps): ReactNode {
                 <header className="spark-card-head">
                   <h3 className="spark-card-title">{script.name}</h3>
                   <div className="spark-card-actions">
-                    <Button variant="outline" disabled={busy} onClick={() => { void onInvoke(script.id) }}>{t('scriptInvoke')}</Button>
-                    <Button variant="outline" disabled={busy} onClick={() => setExpandedScriptId(expanded ? null : script.id)}>{expanded ? '−' : '+'}</Button>
-                    <Button variant="outline" disabled={busy} onClick={() => { void onDelete(script.id, script.name) }}>{t('scriptDelete')}</Button>
+                    <Button variant="secondary" disabled={busy} onClick={() => { void onInvoke(script.id) }}>{t('scriptInvoke')}</Button>
+                    <Button variant="secondary" disabled={busy} onClick={() => setExpandedScriptId(expanded ? null : script.id)}>{expanded ? '−' : '+'}</Button>
+                    <Button variant="secondary" disabled={busy} onClick={() => { void onDelete(script.id, script.name) }}>{t('scriptDelete')}</Button>
                   </div>
                 </header>
                 <p className="spark-card-content">{script.description}</p>
@@ -496,8 +496,8 @@ function ScriptsTab(props: ScriptsTabProps): ReactNode {
                       ))}
                     </ol>
                     <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                      <Button variant="outline" disabled={busy} onClick={() => { void onRecordResult(script.id, true) }}>{t('scriptResultOk')}</Button>
-                      <Button variant="outline" disabled={busy} onClick={() => { void onRecordResult(script.id, false) }}>{t('scriptResultFail')}</Button>
+                      <Button variant="secondary" disabled={busy} onClick={() => { void onRecordResult(script.id, true) }}>{t('scriptResultOk')}</Button>
+                      <Button variant="secondary" disabled={busy} onClick={() => { void onRecordResult(script.id, false) }}>{t('scriptResultFail')}</Button>
                     </div>
                   </div>
                 ) : null}

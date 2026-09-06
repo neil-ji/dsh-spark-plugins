@@ -1,0 +1,144 @@
+/* ==========================================================================
+   motion.css — 灵动层：入场编排 · 指针微交互 · 环境光 · 生长动画
+   原则：进入用弹簧、退出更快；只动 transform/opacity；reduced-motion 全免
+   ========================================================================== */
+
+/* ── 环境光：两团慢漂移的色晕 ── */
+.ambient {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+.ambient span {
+  position: absolute;
+  width: 480px;
+  height: 480px;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.5;
+  will-change: transform;
+}
+.ambient span:nth-child(1) {
+  background: radial-gradient(circle, rgba(77, 107, 254, 0.13), transparent 65%);
+  top: -160px; right: -80px;
+  animation: drift-a 26s ease-in-out infinite alternate;
+}
+.ambient span:nth-child(2) {
+  background: radial-gradient(circle, rgba(124, 196, 255, 0.09), transparent 65%);
+  bottom: -180px; left: -120px;
+  animation: drift-b 32s ease-in-out infinite alternate;
+}
+@keyframes drift-a {
+  from { transform: translate(0, 0) scale(1); }
+  to { transform: translate(-90px, 70px) scale(1.15); }
+}
+@keyframes drift-b {
+  from { transform: translate(0, 0) scale(1); }
+  to { transform: translate(110px, -60px) scale(1.1); }
+}
+
+/* ── 滚动入场编排 ── */
+.reveal {
+  opacity: 0;
+  transform: translateY(20px) scale(0.985);
+  transition:
+    opacity 0.5s var(--spk-ease-out),
+    transform 0.55s var(--spk-ease-spring);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+.reveal.is-in { opacity: 1; transform: none; }
+
+/* 首屏 Hero 逐行浮入 */
+.hero-kicker, .hero h2, .hero-sub, .hero-actions {
+  opacity: 0;
+  transform: translateY(16px);
+  animation: hero-in 0.6s var(--spk-ease-spring) forwards;
+}
+.hero h2 { animation-delay: 80ms; }
+.hero-sub { animation-delay: 160ms; }
+.hero-actions { animation-delay: 240ms; }
+@keyframes hero-in { to { opacity: 1; transform: none; } }
+
+/* 色板弹入（交错由 JS 设 --pop-delay） */
+.swatch {
+  opacity: 0;
+  transform: scale(0.8) translateY(8px);
+  transition:
+    opacity 0.35s var(--spk-ease-out),
+    transform 0.45s var(--spk-ease-spring);
+  transition-delay: var(--pop-delay, 0ms);
+}
+.swatch-grid.is-in .swatch { opacity: 1; transform: none; }
+.swatch:hover { transform: translateY(-3px) scale(1.04); }
+
+/* ── 指针微交互（克制版：dock 语言不做辉光跟随） ── */
+.spk-btn--primary:hover:not(:disabled) { transform: translateY(-1px); }
+.spk-btn--primary:active:not(:disabled) { transform: scale(0.96) translateY(0); }
+.icon-btn:active { transform: scale(0.92); }
+
+/* 点击涟漪（JS 注入 .ripple 子元素） */
+.spk-btn { position: relative; overflow: hidden; }
+.ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.22;
+  transform: scale(0);
+  animation: ripple 0.55s var(--spk-ease-out) forwards;
+  pointer-events: none;
+}
+@keyframes ripple { to { transform: scale(2.6); opacity: 0; } }
+
+/* Pill 悬浮微弹 */
+.pill { transition: transform var(--spk-dur-fast) var(--spk-ease-spring); }
+.pill:hover { transform: translateY(-2px) scale(1.05); }
+
+/* StateDot hover 加速呼吸 */
+.statedot--live { transition: transform var(--spk-dur-fast) var(--spk-ease-spring); }
+.statedot--live:hover { transform: scale(1.5); }
+
+/* ── Sparkline 生长动画（JS 触发 is-drawn） ── */
+#sparkline .spark-line {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition: stroke-dashoffset 1.2s var(--spk-ease-out) 0.15s;
+}
+#sparkline.is-drawn .spark-line { stroke-dashoffset: 0; }
+#sparkline .spark-area {
+  opacity: 0;
+  transition: opacity 0.8s var(--spk-ease-out) 0.7s;
+}
+#sparkline.is-drawn .spark-area { opacity: 1; }
+#sparkline .spark-dot {
+  transform: scale(0);
+  transform-origin: center;
+  transform-box: fill-box;
+  transition: transform 0.4s var(--spk-ease-spring) 1.15s;
+}
+#sparkline.is-drawn .spark-dot { transform: scale(1); }
+
+/* SettingsCard 数字滚动占位（JS count-up，无需样式） */
+
+/* ── 主题切换瞬间的全局柔化 ── */
+body.theme-anim,
+body.theme-anim * {
+  transition: background-color 0.35s var(--spk-ease-out),
+    color 0.35s var(--spk-ease-out),
+    border-color 0.35s var(--spk-ease-out) !important;
+}
+
+/* ── reduced-motion：一切归静，直接终态 ── */
+@media (prefers-reduced-motion: reduce) {
+  .reveal, .swatch, .hero-kicker, .hero h2, .hero-sub, .hero-actions {
+    opacity: 1 !important;
+    transform: none !important;
+    animation: none !important;
+    transition: none !important;
+  }
+  #sparkline .spark-line { stroke-dashoffset: 0 !important; }
+  #sparkline .spark-area { opacity: 1 !important; }
+  #sparkline .spark-dot { transform: none !important; transition: none !important; }
+  .ambient span { animation: none !important; }
+}

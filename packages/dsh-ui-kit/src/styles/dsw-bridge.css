@@ -1,0 +1,55 @@
+/* ==========================================================================
+   --dsw-* → --spk-* 桥接段
+   插件自有 CSS 仍引用历史 --dsw-alias-* / --dsw-static-* 变量；
+   这里把它们重定向到 --spk-* 语义层，迁移期保持渲染一致。
+   插件迁移完成后本段可整体删除。
+   ========================================================================== */
+
+body {
+  /* 语义别名 */
+  --dsw-alias-bg-base: var(--spk-bg);
+  --dsw-alias-bg-layer-1: var(--spk-layer-1);
+  --dsw-alias-bg-layer-2: var(--spk-layer-2);
+  --dsw-alias-bg-layer-3: var(--spk-layer-2);
+  --dsw-alias-bg-module-platform: var(--spk-platform);
+  --dsw-alias-label-primary: var(--spk-label);
+  --dsw-alias-label-secondary: var(--spk-label-2);
+  --dsw-alias-label-tertiary: var(--spk-label-3);
+  --dsw-alias-label-dimmed: var(--spk-label-3);
+  --dsw-alias-label-primary-foreground: var(--spk-contrast-fill-label);
+  --dsw-alias-border-l1: var(--spk-border);
+  --dsw-alias-border-l2: var(--spk-border-2);
+  --dsw-alias-brand-primary: var(--spk-brand);
+  --dsw-alias-button-primary-fill: var(--spk-brand);
+  --dsw-alias-button-primary-hover: var(--spk-brand-hover);
+  --dsw-alias-interactive-bg-hover: var(--spk-hover);
+  --dsw-alias-interactive-bg-active: var(--spk-active);
+  --dsw-alias-state-success-primary: var(--spk-success);
+  --dsw-alias-state-warn-primary: var(--spk-warn);
+  --dsw-alias-state-error-primary: var(--spk-error);
+  --dsw-alias-state-info-tint: var(--spk-info-soft);
+  --dsw-alias-state-error-tint: var(--spk-error-soft);
+  --dsw-alias-font-family: var(--spk-font);
+
+  /* 静态色板（亮色取值；暗色覆盖见下） */
+  --dsw-static-green-500: #16a34a;
+  --dsw-static-violet-500: #8b5cf6;
+  --dsw-static-red-500: #dc2626;
+  --dsw-static-slate-500: #64748b;
+  --dsw-static-blue-500: #3b82f6;
+  --dsw-static-deepseek-450: #5b7cfa;
+  --dsw-static-white: #ffffff;
+  --dsw-shadow-lv2: var(--spk-shadow-2);
+  --dsw-shadow-lv3: var(--spk-shadow-float);
+  --dsw-font-family: var(--spk-font);
+}
+
+body[data-theme="dark"] {
+  --dsw-static-green-500: #34d399;
+  --dsw-static-violet-500: #a78bfa;
+  --dsw-static-red-500: #f87171;
+  --dsw-static-slate-500: #94a3b8;
+  --dsw-static-blue-500: #60a5fa;
+  --dsw-static-deepseek-450: #6d85fe;
+  --dsw-static-white: #ffffff;
+}

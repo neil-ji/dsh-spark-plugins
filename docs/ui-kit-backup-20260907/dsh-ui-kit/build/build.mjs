@@ -85,6 +85,52 @@ function emitCssModule(relPath) {
 }
 
 /** Build the KaTeX stylesheet inject module (data-URI fonts) or fall back to a physical copy. */
+function emitKatex() {
+  const katexCssPath = require.resolve('katex/dist/katex.min.css')
+  const fontsDir = path.join(path.dirname(katexCssPath), 'fonts')
+  let css = readFileSync(katexCssPath, 'utf8')
+
+  // Only woff2 is inlined; every browser that can render the current UI supports it.
+  const woff2 = walk(fontsDir).filter((f) => f.endsWith('.woff2'))
+  const totalWoff2 = woff2.reduce((sum, f) => sum + statSync(path.join(fontsDir, f)).size, 0)
+
+  if (totalWoff2 <= 800_000) {
+    for (const m of css.matchAll(/url\(([^)]+)\)/g)) {
+      const ref = m[1].trim().replace(/^['"]|['"]$/g, '')
+      if (!ref.includes('fonts/')) continue
+      const fontFile = path.join(fontsDir, path.basename(ref))
+      css = css.replace(m[0], `url(data:font/woff2;base64,${readFileSync(fontFile).toString('base64')})`)
+    }
+    copyFileSync(katexCssPath, path.join(katexOutDir, 'katex.min.css'))
+    writeFileSync(
+      path.join(katexOutDir, 'katex-inject.mjs'),
+      [
+        '/* generated KaTeX stylesheet with inlined woff2 fonts */',
+        `const id = 'dsh-ui-kit/${createHash('sha1').update(css).digest('hex').slice(0, 8)}/katex'`,
+        `if (typeof document !== 'undefined' && !document.querySelector('style[data-dsh-ui-kit="' + id + '"]')) {`,
+        `  const el = document.createElement('style')`,
+        `  el.setAttribute('data-dsh-ui-kit', id)`,
+        `  el.textContent = ${JSON.stringify(css)}`,
+        `  document.head.appendChild(el)`,
+        `}`,
+        'export default {}',
+      ].join('\n'),
+    )
+    console.log(`[build] katex css inlined (woff2 total ${(totalWoff2 / 1024).toFixed(0)}KB)`)
+    writeFileSync(path.join(katexOutDir, 'katex.min.css.d.ts'), 'declare const css: string\nexport default css\n')
+    return 'katex-inject.mjs'
+  }
+
+  // Fallback: ship the physical stylesheet + fonts; consumers import dsh-ui-kit/katex.css.
+  copyFileSync(katexCssPath, path.join(katexOutDir, 'katex.min.css'))
+  mkdirSync(path.join(katexOutDir, 'fonts'), { recursive: true })
+  for (const f of walk(fontsDir)) copyFileSync(path.join(fontsDir, f), path.join(katexOutDir, 'fonts', f))
+  writeFileSync(path.join(katexOutDir, 'katex-inject.mjs'), 'export default {}\n')
+  writeFileSync(path.join(katexOutDir, 'katex.min.css.d.ts'), 'declare const css: string\nexport default css\n')
+  console.log(`[build] katex css copied physically (woff2 total ${(totalWoff2 / 1024).toFixed(0)}KB)`)
+  return 'katex-inject.mjs'
+}
+
 // ---------------------------------------------------------------- pipeline
 
 mkdirSync(cssOutDir, { recursive: true })
@@ -96,9 +142,12 @@ const moduleCss = walk(srcDir).filter((f) => f.endsWith('.module.css'))
 for (const rel of moduleCss) emitCssModule(rel)
 console.log(`[build] compiled ${moduleCss.length} css modules`)
 
-// 3. tokens.css aggregate (cascade order: base -> spark-tokens)
+// 2. KaTeX
+emitKatex()
+
+// 3. tokens.css aggregate (cascade order: base -> design-platform -> gradients -> scrollbar -> shiki -> spark-tokens)
 // spark-tokens.css 最后加载：--spk-* 为设计语言源，bridge 段覆盖全部历史 --dsw-* 别名
-const tokenOrder = ['base.css', 'spark-tokens.css', 'dsw-bridge.css']
+const tokenOrder = ['base.css', 'design-platform.css', 'gradient-shadow-text.css', 'scrollbar.css', 'shiki.css', 'spark-tokens.css']
 const tokens = tokenOrder
   .map((f) => {
     const text = readFileSync(path.join(srcDir, 'styles', f), 'utf8')

@@ -1,0 +1,7 @@
+node_modules/
+dist/
+site/
+demo/.vite/
+*.log
+*.tgz
+.DS_Store

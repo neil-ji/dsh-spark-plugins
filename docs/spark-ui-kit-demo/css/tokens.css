@@ -1,0 +1,145 @@
+/* ==========================================================================
+   Spark Design Language — tokens v3（与 docs/spark-dock-preview 同源）
+   中性冷灰骨架 + DSH 品牌蓝 #4d6bfe，克制、原生、无撞色。
+   变量名保持 --spk-*，组件层零改动。
+   ========================================================================== */
+
+body {
+  /* primitives：中性冷灰阶（对齐 dsw-alias bg/label 灰阶） */
+  --spk-n-0: #ffffff;
+  --spk-n-50: #f6f7f9;
+  --spk-n-100: #edeff3;
+  --spk-n-150: #e4e7ec;
+  --spk-n-200: #d4d8df;
+  --spk-n-300: #b3b9c4;
+  --spk-n-400: #868ea0;
+  --spk-n-500: #667085;
+  --spk-n-600: #5b6270;
+  --spk-n-700: #40485a;
+  --spk-n-800: #2d3749;
+  --spk-n-850: #232b3a;
+  --spk-n-900: #171c27;
+  --spk-n-950: #0b0e14;
+
+  /* 品牌蓝阶（DSH #4d6bfe） */
+  --spk-spark-300: #93a8ff;
+  --spk-spark-400: #6d85fe;
+  --spk-spark-500: #4d6bfe;
+  --spk-spark-600: #3d5af0;
+  --spk-spark-700: #2f46c8;
+
+  /* 五模块 accent（与 dock 预览一致） */
+  --spk-acc-spark: #f59e0b;
+  --spk-acc-hippomemo: #3b82f6;
+  --spk-acc-finance: #22c55e;
+  --spk-acc-github: #8b5cf6;
+  --spk-acc-npm: #cb3837;
+
+  /* 字体 / 字号 / 圆角 / 动效（不变） */
+  --spk-font: "PingFang SC", -apple-system, "SF Pro Text", "Segoe UI",
+    "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  --spk-font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --spk-text-xs: 11px;
+  --spk-text-sm: 12px;
+  --spk-text-md: 13px;
+  --spk-text-lg: 15px;
+  --spk-text-xl: 17px;
+  --spk-text-2xl: 22px;
+  --spk-text-3xl: 30px;
+  --spk-radius-sm: 7px;
+  --spk-radius-md: 10px;
+  --spk-radius-lg: 14px;
+  --spk-radius-xl: 20px;
+  --spk-radius-full: 999px;
+  --spk-ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --spk-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --spk-dur-fast: 120ms;
+  --spk-dur-med: 220ms;
+  --spk-dur-slow: 320ms;
+  --spk-blur: 16px;
+}
+
+/* ── Dark（对齐 dock 预览暗色） ── */
+body[data-theme="dark"] {
+  color-scheme: dark;
+  /* dock 层次面（bg-layer-1/2、module-platform） */
+  --spk-layer-1: #10141d;
+  --spk-layer-2: #171c27;
+  --spk-platform: #161b26;
+  --spk-platform-solid: #161b26;
+  --spk-bg: var(--spk-n-950);
+  --spk-bg-glow-1: rgba(77, 107, 254, 0.1);
+  --spk-bg-glow-2: rgba(124, 196, 255, 0.05);
+  --spk-surface: rgba(16, 20, 29, 0.85);
+  --spk-surface-solid: var(--spk-n-900);
+  --spk-surface-2: var(--spk-n-900);
+  --spk-label: #e8eaf0;
+  --spk-label-2: #9aa1af;
+  --spk-label-3: #868ea0;
+  --spk-border: #232b3a;
+  --spk-border-2: #2d3749;
+  --spk-brand: var(--spk-spark-500);
+  --spk-brand-hover: var(--spk-spark-400);
+  --spk-on-brand: #ffffff;
+  --spk-brand-soft: rgba(77, 107, 254, 0.16);
+  --spk-contrast-fill: #e8eaf0;
+  --spk-contrast-fill-label: #171c27;
+  --spk-hover: rgba(255, 255, 255, 0.06);
+  --spk-active: rgba(255, 255, 255, 0.11);
+  --spk-focus: rgba(109, 133, 254, 0.55);
+  --spk-success: #4ade80;
+  --spk-success-soft: rgba(74, 222, 128, 0.13);
+  --spk-warn: #f59e0b;
+  --spk-warn-soft: rgba(245, 158, 11, 0.13);
+  --spk-error: #f87171;
+  --spk-error-soft: rgba(248, 113, 113, 0.13);
+  --spk-info: #7cc4ff;
+  --spk-info-soft: rgba(124, 196, 255, 0.13);
+  --spk-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --spk-shadow-2: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --spk-shadow-float: 0 16px 48px rgba(0, 0, 0, 0.62), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --spk-glow: 0 0 22px rgba(77, 107, 254, 0.3);
+  --spk-terminal-bg: #0d1117;
+}
+
+/* ── Light（对齐 dock 预览亮色；灰纸底 + 纯白卡保证轮廓） ── */
+body[data-theme="light"] {
+  color-scheme: light;
+  --spk-layer-1: #ffffff;
+  --spk-layer-2: #edeff3;
+  --spk-platform: #1c2230;
+  --spk-platform-solid: #ffffff;
+  --spk-bg: var(--spk-n-50);
+  --spk-bg-glow-1: rgba(77, 107, 254, 0.08);
+  --spk-bg-glow-2: rgba(124, 196, 255, 0.06);
+  --spk-surface: rgba(255, 255, 255, 0.9);
+  --spk-surface-solid: var(--spk-n-0);
+  --spk-surface-2: var(--spk-n-50);
+  --spk-label: #1a1d24;
+  --spk-label-2: #5b6270;
+  --spk-label-3: #667085;
+  --spk-border: #d9dee6;
+  --spk-border-2: #c6ccd8;
+  --spk-brand: var(--spk-spark-500);
+  --spk-brand-hover: var(--spk-spark-600);
+  --spk-on-brand: #ffffff;
+  --spk-brand-soft: rgba(77, 107, 254, 0.1);
+  --spk-contrast-fill: #1a1d24;
+  --spk-contrast-fill-label: #ffffff;
+  --spk-hover: rgba(16, 24, 40, 0.05);
+  --spk-active: rgba(16, 24, 40, 0.09);
+  --spk-focus: rgba(77, 107, 254, 0.4);
+  --spk-success: #16a34a;
+  --spk-success-soft: rgba(22, 163, 74, 0.1);
+  --spk-warn: #d97706;
+  --spk-warn-soft: rgba(217, 119, 6, 0.1);
+  --spk-error: #dc2626;
+  --spk-error-soft: rgba(220, 38, 38, 0.08);
+  --spk-info: #2b7fd4;
+  --spk-info-soft: rgba(43, 127, 212, 0.1);
+  --spk-shadow-1: 0 1px 3px rgba(10, 18, 38, 0.08), 0 1px 2px rgba(10, 18, 38, 0.04);
+  --spk-shadow-2: 0 8px 24px rgba(10, 18, 38, 0.12);
+  --spk-shadow-float: 0 16px 48px rgba(10, 18, 38, 0.16), 0 0 0 1px rgba(10, 18, 38, 0.05);
+  --spk-glow: 0 0 20px rgba(77, 107, 254, 0.2);
+  --spk-terminal-bg: #171c27;
+}

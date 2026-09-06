@@ -1,0 +1,77 @@
+/* ListRow: one selectable content row — grid of clickable main + pinned actions. */
+
+.row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 56px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-2);
+  transition: border-color 120ms ease;
+}
+
+.row:hover {
+  border-color: var(--dsw-alias-interactive-bg-hover-accent, var(--dsw-alias-border-l1));
+}
+
+.muted {
+  opacity: 0.6;
+  background: var(--dsw-alias-bg-layer-1, var(--dsw-alias-bg-layer-2));
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.main:disabled {
+  cursor: default;
+}
+
+.mainMuted .title {
+  text-decoration: line-through;
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+}
+
+.title {
+  min-width: 0;
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
