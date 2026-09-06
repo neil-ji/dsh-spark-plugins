@@ -66,7 +66,7 @@ function HippomemoSelect({ value, placeholder, options, onChange }: {
     <Menu
       open={open} portal side={side}
       anchor={(
-        <Button ref={triggerRef} variant='outline' size='sm'
+        <Button ref={triggerRef} variant='secondary' size='sm'
           className={open ? 'hippomemo-select hippomemo-select-open' : 'hippomemo-select'}
           onClick={openMenu}>
           <span className='hippomemo-select-label'>{label}</span>
@@ -158,14 +158,14 @@ function BrainStrip({ t, stats, usage, preferences, candidates, narrative, reloa
                 data-region={region.id}
                 onClick={() => { setPulseRegion(region.id); window.setTimeout(() => setPulseRegion(null), 900) }}
                 aria-label={t(region.nameKey) + ' · ' + region.val}>
-                <StateDot state='done' size={10} className={'hippomemo-brain-dot hippomemo-brain-dot-' + region.id} />
+                <StateDot status='live' size={10} className={'hippomemo-brain-dot hippomemo-brain-dot-' + region.id} />
                 <span className='hippomemo-brain-name'>{t(region.nameKey)}</span>
                 <span className='hippomemo-brain-val'>{region.val}</span>
               </Button>
             )
           })}
           <span className='hippomemo-brain-spacer' />
-          <Button size='sm' variant='outline' onClick={() => { setExpanded(!expanded) }}
+          <Button size='sm' variant='secondary' onClick={() => { setExpanded(!expanded) }}
             icon={<IconChevronDownOutline14 className={expanded ? 'hippomemo-chev hippomemo-chev-up' : 'hippomemo-chev'} />}>
             {expanded ? t('brainCollapse') : t('brainExpand')}
           </Button>
@@ -181,7 +181,7 @@ function BrainStrip({ t, stats, usage, preferences, candidates, narrative, reloa
             {regions.map(region => (
               <div className='hippomemo-brain-card' key={region.id}>
                 <h5 className='hippomemo-brain-card-title'>
-                  <StateDot state='done' size={10} className={'hippomemo-brain-dot hippomemo-brain-dot-' + region.id} />
+                  <StateDot status='live' size={10} className={'hippomemo-brain-dot hippomemo-brain-dot-' + region.id} />
                   {t(region.nameKey)}
                 </h5>
                 <p className='hippomemo-brain-card-desc'>{t(region.descKey)}</p>
@@ -240,7 +240,7 @@ function TodoQuadrantImpl({ t, items, now, onResolve }: {
           };
           return (
             <li className={'hippomemo-todo-item hippomemo-todo-item-' + kindClass} key={item.id}>
-              <StateDot state={kindClass === 'danger' ? 'error' : 'warning'} size={14} className={'hippomemo-todo-icon hippomemo-todo-icon-' + kindClass} />
+              <StateDot status={kindClass === 'danger' ? 'error' : 'idle'} size={14} className={'hippomemo-todo-icon hippomemo-todo-icon-' + kindClass} />
               <div className='hippomemo-todo-body'>
                 <div className='hippomemo-todo-title'>{item.title}</div>
                 <div className='hippomemo-todo-desc'>
@@ -254,7 +254,7 @@ function TodoQuadrantImpl({ t, items, now, onResolve }: {
                 // auto-cancel on citation. Read-only status row, nothing to resolve.
                 <Pill className='hippomemo-todo-kind hippomemo-todo-auto'>自动</Pill>
               ) : (
-                <Button size='sm' variant='outline' className='hippomemo-todo-act'
+                <Button size='sm' variant='secondary' className='hippomemo-todo-act'
                   onClick={() => { onResolve(item) }}>
                   {t(actionKeyMap[item.suggestedAction])}
                 </Button>
@@ -479,10 +479,11 @@ function MemoryListPanel({ t, api, detailId, onDetail }: {
         <span className='hippomemo-panel-count'>{total} 条</span>
       </div>
       <div className='hippomemo-toolbar'>
-        <SearchInput className='hippomemo-search hippomemo-search-grow' value={q} onChange={setQ}
+        <SearchInput label={t('searchPlaceholder')} className='hippomemo-search hippomemo-search-grow' value={q}
+          onChange={(event) => { setQ(event.currentTarget.value) }}
           placeholder={t('searchPlaceholder')}
           onClear={() => { setQ(''); }} clearLabel={t('clearSearch')} />
-        <Button variant='outline' size='sm'
+        <Button variant='secondary' size='sm'
           title={order === 'desc' ? t('orderDesc') : t('orderAsc')}
           aria-label={order === 'desc' ? t('orderDesc') : t('orderAsc')}
           onClick={toggleOrder}
@@ -553,7 +554,7 @@ function MemoryListPanel({ t, api, detailId, onDetail }: {
               <ListRow
                 key={record.id}
                 title={record.title}
-                muted={archived}
+                archived={archived}
                 onClick={() => { onDetail(record.id); }}
                 meta={(
                   <>
@@ -1068,7 +1069,7 @@ function EvolvePanel({ api, t }: { api: HippomemoApi; t: Translate }): ReactNode
     <div className='hippomemo-panel'>
       <p className='hippomemo-intro'>{t('evolveIntro')}</p>
       <div className='hippomemo-toolbar'>
-        <Button variant='outline' size='md' disabled={running} onClick={() => { void run(true); }}>
+        <Button variant='secondary' size='md' disabled={running} onClick={() => { void run(true); }}>
           {running ? t('evolveRunning') : t('evolveRunDry')}
         </Button>
         <Button variant='primary' size='md' disabled={running} onClick={() => { void run(false); }}>

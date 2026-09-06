@@ -12,6 +12,8 @@ export interface PillProps {
   onClick?: () => void
   /** 可点态高亮（配 onClick 使用） */
   active?: boolean
+  /** hover 提示（原生 title） */
+  title?: string
   className?: string
   children: ReactNode
 }
@@ -25,14 +27,14 @@ const toneClass: Record<PillTone, string> = {
 }
 
 /** Spark UI Kit 标识胶囊 — dock .pill / .pill.tint 形制 */
-export function Pill({ tone = 'neutral', accentColor, onClick, active = false, className, children }: PillProps) {
+export function Pill({ tone = 'neutral', accentColor, onClick, active = false, title, className, children }: PillProps) {
   const style = accentColor ? ({ '--pill-acc': accentColor } as CSSProperties) : undefined
   const cls = cx(css.pill, accentColor ? css.tint : toneClass[tone], onClick && css.clickable, active && css.active, className)
   if (!onClick) {
-    return <span className={cls} style={style}>{children}</span>
+    return <span className={cls} style={style} title={title}>{children}</span>
   }
   return (
-    <button type="button" className={cls} style={style} onClick={onClick} aria-pressed={active}>
+    <button type="button" className={cls} style={style} onClick={onClick} title={title} aria-pressed={active}>
       {children}
     </button>
   )

@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { cx } from '../cx.js'
+import { Button } from './Button.js'
 import css from './Modal.module.css'
 
 export interface ModalProps {
@@ -8,13 +9,18 @@ export interface ModalProps {
   onClose: () => void
   title: ReactNode
   children: ReactNode
-  /** 底部操作区（一般为 Button 组合） */
+  /** 底部操作区（一般为 Button 组合）；与 closeLabel 互斥优先 */
   footer?: ReactNode
+  /** 提供时在底部渲染一个 ghost 取消按钮（旧 API 兼容） */
+  closeLabel?: string
+  /** dialog 面板类名（限高/皮肤） */
   className?: string
+  /** 内容区类名（布局/内滚） */
+  contentClassName?: string
 }
 
 /** Spark UI Kit 模态 — dock .dock-panel 形制：platform 底 / 20px 圆角 / 弹簧缩放入场 / 焦点陷阱 */
-export function Modal({ open, onClose, title, children, footer, className }: ModalProps) {
+export function Modal({ open, onClose, title, children, footer, closeLabel, className, contentClassName }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null)
   const lastFocus = useRef<HTMLElement | null>(null)
 
@@ -47,9 +53,9 @@ export function Modal({ open, onClose, title, children, footer, className }: Mod
   if (!open) return null
 
   return createPortal(
-    <div className={cx(css.root, className)}>
+    <div className={css.root}>
       <div className={css.backdrop} onClick={onClose} aria-hidden="true" />
-      <div ref={dialogRef} role="dialog" aria-modal="true" className={css.modal}>
+      <div ref={dialogRef} role="dialog" aria-modal="true" className={cx(css.modal, className)}>
         <header className={css.head}>
           <h4 className={css.title}>{title}</h4>
           <button type="button" className={css.close} aria-label="关闭" onClick={onClose}>
@@ -58,8 +64,10 @@ export function Modal({ open, onClose, title, children, footer, className }: Mod
             </svg>
           </button>
         </header>
-        <div className={css.body}>{children}</div>
-        {footer && <footer className={css.foot}>{footer}</footer>}
+        <div className={cx(css.body, contentClassName)}>{children}</div>
+        {(footer ?? (closeLabel ? <Button variant="ghost" onClick={onClose}>{closeLabel}</Button> : null)) && (
+          <footer className={css.foot}>{footer ?? <Button variant="ghost" onClick={onClose}>{closeLabel}</Button>}</footer>
+        )}
       </div>
     </div>,
     document.body,

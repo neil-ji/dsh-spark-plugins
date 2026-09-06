@@ -9,7 +9,7 @@
  */
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button, DisclosureRow, IconThinkOutline16, Input, Pill, SettingsCardHeader } from 'dsh-ui-kit'
+import { Button, Disclosure, IconThinkOutline16, Input, Pill } from 'dsh-ui-kit'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { StagedSettingsCardState, StagedCardActions } from 'dsh-spark-plugin-kit/client'
 import type { HippomemoLocaleKey } from './locales.ts'
@@ -183,15 +183,16 @@ function HippomemoCardBody({ t, state, advancedOpen, onToggleAdvanced, onEdit, o
       />
 
       {/* 高级设置 —— 渐进披露（progressive disclosure）：默认折叠，避免 overwhelm */}
-      <DisclosureRow
-        icon={<IconThinkOutline16 />}
-        className={'hippomemo-card-advanced' + (advancedOpen ? ' hippomemo-card-advanced-open' : '')}
-        title={t('cardAdvancedLabel')}
+      <Disclosure
+        className="hippomemo-card-advanced"
+        name={(
+          <span className="hippomemo-card-advanced-name">
+            <IconThinkOutline16 size={14} />
+            <span>{t('cardAdvancedLabel')}</span>
+          </span>
+        )}
         open={advancedOpen}
-        expandable
         onToggle={onToggleAdvanced}
-        previewChevron
-        keepContentWhenOpen
       >
         <div className="hippomemo-card-advanced-body">
           <ChoiceField
@@ -232,11 +233,11 @@ function HippomemoCardBody({ t, state, advancedOpen, onToggleAdvanced, onEdit, o
             onReset={() => onReset('cognitiveRecallMultiplier')}
           />
         </div>
-      </DisclosureRow>
+      </Disclosure>
 
       <div className="hippomemo-card-footer">
         {shell.failed ? <p className="hippomemo-card-failed" role="status">{t('cardSaveFailed')}</p> : null}
-        <Button variant="outline" disabled={!shell.dirty || shell.saving} onClick={onDiscard}>{t('cardDiscard')}</Button>
+        <Button variant="secondary" disabled={!shell.dirty || shell.saving} onClick={onDiscard}>{t('cardDiscard')}</Button>
         <Button variant="primary" disabled={blocked} onClick={onSave}>{t(shell.saving ? 'cardSaving' : 'cardSave')}</Button>
       </div>
     </div>
@@ -254,27 +255,26 @@ export function HippomemoPluginCard(props: HippomemoPluginCardProps): ReactNode 
   return (
     <div data-plugin="dsh-hippomemo">
       <li className={open ? 'hippomemo-card hippomemo-card-open' : 'hippomemo-card'}>
-        <SettingsCardHeader
-          title={t('cardTitle')}
+        <Disclosure
+          name={t('cardTitle')}
           description={t('cardDescription')}
           open={open}
           onToggle={() => setOpen(!open)}
           trailing={state.shell.dirty ? <span className="hippomemo-card-pending">{t('cardUnsaved')}</span> : null}
-          expandLabel={t('cardExpand')}
-          collapseLabel={t('cardCollapse')}
-        />
-        {open ? (
-          <HippomemoCardBody
-            t={t}
-            state={state}
-            advancedOpen={advancedOpen}
-            onToggleAdvanced={() => setAdvancedOpen(!advancedOpen)}
-            onEdit={props.edit}
-            onReset={props.resetField}
-            onSave={props.save}
-            onDiscard={props.discard}
-          />
-        ) : null}
+        >
+          {open ? (
+            <HippomemoCardBody
+              t={t}
+              state={state}
+              advancedOpen={advancedOpen}
+              onToggleAdvanced={() => setAdvancedOpen(!advancedOpen)}
+              onEdit={props.edit}
+              onReset={props.resetField}
+              onSave={props.save}
+              onDiscard={props.discard}
+            />
+          ) : null}
+        </Disclosure>
       </li>
     </div>
   )

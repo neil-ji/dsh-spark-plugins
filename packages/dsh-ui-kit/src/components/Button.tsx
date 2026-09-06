@@ -1,4 +1,4 @@
-import { forwardRef, type ButtonHTMLAttributes } from 'react'
+import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react'
 import { cx } from '../cx.js'
 import css from './Button.module.css'
 
@@ -10,11 +10,13 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: ButtonSize
   /** true 时显示 spinner 并阻止点击 */
   loading?: boolean
+  /** 可选前导图标（渲染在 children 之前；图标按钮可只传 icon） */
+  icon?: ReactNode
 }
 
 /** Spark UI Kit 按钮 — 32px 胶囊实心，dock 形制 */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { variant = 'primary', size = 'md', loading = false, disabled, className, children, ...rest },
+  { variant = 'primary', size = 'md', loading = false, disabled, className, children, icon, ...rest },
   ref,
 ) {
   return (
@@ -27,6 +29,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       {...rest}
     >
       {loading && <span className={css.spinner} aria-hidden="true" />}
+      {icon}
       {children}
     </button>
   )

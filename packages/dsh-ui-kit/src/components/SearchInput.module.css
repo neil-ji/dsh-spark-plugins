@@ -19,3 +19,25 @@
   outline-offset: 1px;
   border-color: transparent;
 }
+
+/* 非空 + onClear 时：右侧让位给自绘清除按钮，并隐藏浏览器原生 search × */
+.hasClear .input { padding-right: 32px; }
+.hasClear .input::-webkit-search-cancel-button { -webkit-appearance: none; }
+
+.clear {
+  position: absolute;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--spk-label-3);
+  cursor: pointer;
+  transition: background var(--spk-dur-fast) var(--spk-ease-out), color var(--spk-dur-fast) var(--spk-ease-out);
+}
+.clear:hover { background: var(--spk-hover); color: var(--spk-label); }
+.clear:focus-visible { outline: 2px solid var(--spk-brand); outline-offset: 1px; }

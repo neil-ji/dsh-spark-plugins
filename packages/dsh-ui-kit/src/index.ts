@@ -41,4 +41,10 @@ export { Money, formatMicros, type MoneyProps, type MoneySize } from './componen
 export { TerminalBlock, type TerminalBlockProps, type TerminalLine, type TerminalTone } from './components/TerminalBlock.tsx'
 export { Sparkline, type SparklineProps } from './components/Sparkline.tsx'
 
+export {
+  IconChevronDownOutline14, IconChevronUpOutline14, IconChevronLeftOutline14, IconChevronRightOutline14,
+  IconPlusOutline16, IconTrashOutline16, IconEditOutline16, IconBranchOutline16,
+  IconThinkOutline16, IconWarningOutline16, type IconProps,
+} from './components/icons.tsx'
+
 export { cx } from './cx.js'

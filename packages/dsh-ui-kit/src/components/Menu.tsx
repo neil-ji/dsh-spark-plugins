@@ -16,8 +16,8 @@ export interface MenuProps {
   items: MenuItem[]
   selectedId?: string
   onSelect: (id: string) => void
-  /** 弹出方向，当前支持 bottom（默认） */
-  side?: 'bottom'
+  /** 弹出方向：bottom 向下展开（默认），top 向上展开 */
+  side?: 'bottom' | 'top'
   /** 通过 portal 渲染到 body（默认 true） */
   portal?: boolean
   className?: string
@@ -27,15 +27,19 @@ export interface MenuProps {
 export function Menu({ open, onClose, anchor, items, selectedId, onSelect, side = 'bottom', portal = true, className }: MenuProps) {
   const anchorRef = useRef<HTMLSpanElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
-  const [pos, setPos] = useState<{ top: number; left: number; minWidth: number } | null>(null)
+  const [pos, setPos] = useState<{ top: number; left: number; minWidth: number; flip: boolean } | null>(null)
 
   useLayoutEffect(() => {
     if (!open) { setPos(null); return }
     const el = anchorRef.current?.firstElementChild as HTMLElement | null
     if (!el) return
     const rect = el.getBoundingClientRect()
-    setPos({ top: rect.bottom + 6, left: rect.left, minWidth: rect.width })
-  }, [open])
+    const flip = side === 'top'
+    // top 侧通过 translateY(-100%) 以菜单自身高度向上展开（无需预测量高）
+    setPos(flip
+      ? { top: rect.top - 6, left: rect.left, minWidth: rect.width, flip }
+      : { top: rect.bottom + 6, left: rect.left, minWidth: rect.width, flip })
+  }, [open, side])
 
   useEffect(() => {
     if (!open) return
@@ -58,7 +62,7 @@ export function Menu({ open, onClose, anchor, items, selectedId, onSelect, side 
       ref={listRef}
       role="listbox"
       className={cx(css.menu, className)}
-      style={{ top: pos.top, left: pos.left, minWidth: pos.minWidth }}
+      style={{ top: pos.top, left: pos.left, minWidth: pos.minWidth, transform: pos.flip ? 'translateY(-100%)' : undefined }}
     >
       {items.map((item) => (
         <button
