@@ -151,6 +151,36 @@ export const DOCK_CSS = [
   '[data-plugin="dsh-spark-dock"] .dock-lab { display: block; font-size: 11px; font-weight: 600; color: var(--dsw-alias-label-secondary); margin: 0 2px 4px; }',
   '[data-plugin="dsh-spark-dock"] .dock-btn .btn-ico { width: 13px; height: 13px; flex: none; }',
 
+  /* ── 深度重做：spark 模块 ── */
+  /* 捕获卡：一条输入流 + 渐进披露 */
+  '[data-plugin="dsh-spark-dock"] .dock-capture { display: flex; flex-direction: column; }',
+  '[data-plugin="dsh-spark-dock"] .dock-capture .dock-field { margin-bottom: 0; }',
+  '[data-plugin="dsh-spark-dock"] .dock-capture-bar { display: flex; align-items: center; gap: 8px; margin-top: 8px; }',
+  '[data-plugin="dsh-spark-dock"] .dock-details { margin-top: 8px; }',
+  '[data-plugin="dsh-spark-dock"] .dock-details summary { cursor: pointer; font-size: 12px; color: var(--dsw-alias-label-tertiary); user-select: none; width: fit-content; padding: 3px 0; list-style: none; }',
+  '[data-plugin="dsh-spark-dock"] .dock-details summary::-webkit-details-marker { display: none; }',
+  '[data-plugin="dsh-spark-dock"] .dock-details summary::before { content: "＋ "; }',
+  '[data-plugin="dsh-spark-dock"] .dock-details[open] summary::before { content: "－ "; }',
+  '[data-plugin="dsh-spark-dock"] .dock-details summary:hover { color: var(--dsw-alias-label-secondary); }',
+  '[data-plugin="dsh-spark-dock"] .dock-details-body { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }',
+  '[data-plugin="dsh-spark-dock"] .dock-details-body .dock-field { margin-bottom: 0; }',
+  /* 计量条：宽度即数值，配文本说明 */
+  '[data-plugin="dsh-spark-dock"] .dock-meter { display: inline-block; width: 72px; height: 4px; border-radius: 2px; background: var(--dsw-alias-bg-layer-3, rgba(255,255,255,.09)); overflow: hidden; flex: none; }',
+  '[data-plugin="dsh-spark-dock"] .dock-meter-fill { display: block; height: 100%; border-radius: 2px; background: var(--accent, var(--dsw-alias-brand-primary)); transition: width 300ms cubic-bezier(.2,.8,.2,1); }',
+  '[data-plugin="dsh-spark-dock"] .dock-meter.tone-good .dock-meter-fill { background: var(--dsw-alias-state-success-primary); }',
+  '[data-plugin="dsh-spark-dock"] .dock-meter.tone-warn .dock-meter-fill { background: var(--dsw-alias-state-warn-primary); }',
+  '[data-plugin="dsh-spark-dock"] .dock-row-meter, [data-plugin="dsh-spark-dock"] .dock-prop-meter { display: flex; align-items: center; gap: 8px; margin-top: 5px; }',
+  /* 结晶行首圆点（除文字外再给一个颜色通道） */
+  '[data-plugin="dsh-spark-dock"] .dock-row-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }',
+  '[data-plugin="dsh-spark-dock"] .dock-row-dot.cryst { background: var(--dsw-alias-state-success-primary); }',
+  /* 提议卡：类型徽章 + 正文 + 置信条 + 决策操作 */
+  '[data-plugin="dsh-spark-dock"] .dock-prop { display: flex; flex-direction: column; gap: 7px; }',
+  '[data-plugin="dsh-spark-dock"] .dock-prop-head { display: flex; align-items: center; gap: 8px; }',
+  '[data-plugin="dsh-spark-dock"] .dock-prop-type { font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 2px 8px; border-radius: 6px; background: color-mix(in srgb, var(--accent, var(--dsw-alias-brand-primary)) 15%, transparent); color: var(--accent, var(--dsw-alias-brand-primary)); }',
+  '[data-plugin="dsh-spark-dock"] .dock-prop-text { font-size: 13px; line-height: 1.5; color: var(--dsw-alias-label-primary); }',
+  '[data-plugin="dsh-spark-dock"] .dock-prop-actions { display: flex; gap: 6px; margin-top: 2px; }',
+  '[data-plugin="dsh-spark-dock"] .dock-prop-actions .dock-btn { height: 28px; padding: 0 14px; font-size: 12px; }',
+
   /* ── 内嵌页 compat 层（2026-09 UIUX 收敛）────────────────────────────
    * 原则：dock 标题栏已给出模块名与描述，内嵌页自己的设置页级标题
    * （H2 大标题 + 一句简介）在 overlay 里是三层 chrome 冗余，压掉；

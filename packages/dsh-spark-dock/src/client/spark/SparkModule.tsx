@@ -2,10 +2,10 @@
  * Spark module panes: 火花流（捕获+列表）/ 涌现提议 / 脚本目录。Graph 子页
  * 留占位（后端暂无 graph 查询 API）。
  *
- * 2026-09 UX 深度重构：
- *  - 所有异步行内操作带 per-action busy 态（防双击 + loading 反馈）
- *  - 捕获表单可见标签 + 捕获成功反馈（消除 silent success）
- *  - 字符图标 ✦ → SVG 火花；空态加视觉锚点
+ * 2026-09 深度重做：
+ *  - 捕获 = 一条输入流（第一行即标题），标签/作用域收进渐进披露——先写，后整理
+ *  - 涌现提议 = 提议卡（类型徽章 + 置信度计量条 + 主/次操作），决策一眼可读
+ *  - 脚本目录 = 行内成功率/调用量计量可视化
  */
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import type { SparkView, ProposalView, ScriptView } from 'dsh-spark-wire'
@@ -67,13 +67,22 @@ function RowAction({ label, busyLabel, busy, onRun }: { label: string; busyLabel
   )
 }
 
-/* ─────────── 火花流：捕获表单 + 列表 ─────────── */
+/** 计量条：宽度即数值，配文本说明（不只靠颜色传义）。 */
+function Meter({ pct, tone }: { pct: number; tone?: 'good' | 'warn' | undefined }) {
+  const w = Math.max(0, Math.min(100, Math.round(pct * 100) / 1))
+  return (
+    <span className={'dock-meter' + (tone !== undefined ? ' tone-' + tone : '')} aria-hidden="true">
+      <span className="dock-meter-fill" style={{ width: w + '%' }} />
+    </span>
+  )
+}
+
+/* ─────────── 火花流：一条输入流 + 列表 ─────────── */
 
 export function SparksPane(): JSX.Element {
   const [status, setStatus] = useState<'active' | 'archived'>('active')
   const { data: sparks, error, reload } = useApiResource<SparkView[]>(() => api.list({ status, limit: 50 }), [status])
-  const [title, setTitle] = useState('')
-  const [content, setContent] = useState('')
+  const [draft, setDraft] = useState('')
   const [tags, setTags] = useState('')
   const [scope, setScope] = useState<'project' | 'global'>('project')
   const [busy, setBusy] = useState(false)
@@ -86,12 +95,16 @@ export function SparksPane(): JSX.Element {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
-    if (title.trim().length === 0 || content.trim().length === 0 || busy) return
+    const text = draft.trim()
+    if (text.length === 0 || busy) return
     setBusy(true); setFormError(null); setCaptured(false)
     try {
+      // 第一行即标题（≤60 字），全文作为内容——先写，后整理
+      const nl = text.indexOf('\n')
+      const title = (nl === -1 ? text : text.slice(0, nl)).trim().slice(0, 60) || text.slice(0, 60)
       const tagList = tags.split(',').map((t) => t.trim()).filter((t) => t.length > 0)
-      await api.capture({ title: title.trim(), content: content.trim(), scope, tags: tagList })
-      setTitle(''); setContent(''); setTags('')
+      await api.capture({ title, content: text, scope, tags: tagList })
+      setDraft(''); setTags('')
       setCaptured(true)
       window.clearTimeout(capturedTimer.current)
       capturedTimer.current = window.setTimeout(() => setCaptured(false), 2600)
@@ -105,21 +118,26 @@ export function SparksPane(): JSX.Element {
 
   return (
     <div className="dock-stack">
-      <form className="dock-card" onSubmit={submit}>
-        <label className="dock-lab" htmlFor="spark-cap-title">标题</label>
-        <input id="spark-cap-title" className="dock-field" placeholder="一句话（≤ 60 字）" value={title} maxLength={60}
-          onChange={(e) => setTitle(e.target.value)} />
-        <label className="dock-lab" htmlFor="spark-cap-content">灵感</label>
-        <textarea id="spark-cap-content" className="dock-field" rows={2} placeholder="把灵感写下来…（一句或两句）" value={content}
-          onChange={(e) => setContent(e.target.value)} />
-        <div className="dock-fieldrow">
-          <input className="dock-field grow" aria-label="标签（逗号分隔）" placeholder="标签（逗号分隔）" value={tags}
-            onChange={(e) => setTags(e.target.value)} />
-          <select className="dock-field sel" aria-label="作用域" value={scope} onChange={(e) => setScope(e.target.value as 'project' | 'global')}>
-            <option value="project">项目</option>
-            <option value="global">全局</option>
-          </select>
-          <button className="dock-btn" type="submit" disabled={busy} aria-busy={busy}>
+      <form className="dock-card dock-capture" onSubmit={submit}>
+        <label className="dock-lab" htmlFor="spark-draft">捕获火花</label>
+        <textarea id="spark-draft" className="dock-field" rows={3}
+          placeholder={'想到什么就写下来…\n第一行会作为标题。'}
+          value={draft} onChange={(e) => setDraft(e.target.value)} />
+        <details className="dock-details">
+          <summary>标签与作用域（可选）</summary>
+          <div className="dock-details-body">
+            <input className="dock-field" aria-label="标签（逗号分隔）" placeholder="标签（逗号分隔）" value={tags}
+              onChange={(e) => setTags(e.target.value)} />
+            <select className="dock-field" aria-label="作用域" value={scope} onChange={(e) => setScope(e.target.value as 'project' | 'global')}>
+              <option value="project">项目作用域</option>
+              <option value="global">全局作用域</option>
+            </select>
+          </div>
+        </details>
+        <div className="dock-capture-bar">
+          <span className="dock-hint" aria-live="polite">{busy ? '捕获中…' : captured ? '已捕获 ✦' : `${draft.length} 字`}</span>
+          <span className="grow-spacer" />
+          <button className="dock-btn" type="submit" disabled={busy || draft.trim().length === 0} aria-busy={busy}>
             <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="btn-ico">
               <path d="M12 2.6c.7 5.2 4.2 8.7 9.4 9.4-5.2.7-8.7 4.2-9.4 9.4-.7-5.2-4.2-8.7-9.4-9.4 5.2-.7 8.7-4.2 9.4-9.4z" />
             </svg>
@@ -127,18 +145,18 @@ export function SparksPane(): JSX.Element {
           </button>
         </div>
         <ErrorNote error={formError} />
-        {captured && <div className="dock-ok" role="status">已捕获 ✦ 可在下方列表找到它</div>}
       </form>
 
       <div className="dock-modbar" role="group" aria-label="火花筛选">
         <button className={status === 'active' ? 'dock-pill on' : 'dock-pill'} aria-pressed={status === 'active'} onClick={() => setStatus('active')} type="button">活跃</button>
         <button className={status === 'archived' ? 'dock-pill on' : 'dock-pill'} aria-pressed={status === 'archived'} onClick={() => setStatus('archived')} type="button">已归档</button>
+        {sparks !== null && <span className="dock-hint">{sparks.length} 条</span>}
       </div>
       <ErrorNote error={error} />
       {sparks === null
         ? <Empty text="加载中…" loading />
         : sparks.length === 0
-          ? <Empty text="还没有火花" hint="想到什么就记下来，灵感会在这里沉淀。" />
+          ? <Empty text={status === 'active' ? '还没有火花' : '没有已归档的火花'} hint="想到什么就记下来，灵感会在这里沉淀。" />
           : (
             <SparkList sparks={sparks} reload={reload} />
           )}
@@ -157,6 +175,7 @@ function SparkList({ sparks, reload }: { sparks: SparkView[]; reload: () => void
     <div className="dock-card list">
       {sparks.map((s) => (
         <div key={s.id} className={s.status === 'archived' ? 'dock-row off' : 'dock-row'}>
+          {s.crystallized !== null && <span className="dock-row-dot cryst" title="已结晶" aria-label="已结晶" />}
           <div className="grow">
             <div className="ttl">{s.title}</div>
             <div className="meta">
@@ -180,7 +199,7 @@ function SparkList({ sparks, reload }: { sparks: SparkView[]; reload: () => void
   )
 }
 
-/* ─────────── 涌现提议 ─────────── */
+/* ─────────── 涌现提议：提议卡 ─────────── */
 
 export function ProposalsPane(): JSX.Element {
   const { data: proposals, error, reload } = useApiResource<ProposalView[]>(() => api.listProposals({ status: 'pending', limit: 50 }), [])
@@ -214,24 +233,39 @@ export function ProposalsPane(): JSX.Element {
         : proposals.length === 0
           ? <Empty text="没有待决议的涌现提议" hint="点上方按钮跑一次 Reflect，AI 会主动提议可结晶的模式。" />
           : (
-            <div className="dock-card list">
-              {proposals.map((p) => (
-                <div key={p.id} className="dock-row">
-                  <div className="grow">
-                    <div className="ttl">{p.type} · {p.explanation}</div>
-                    <div className="meta">{p.leverage} 杠杆 · 置信 {Math.round(p.confidence * 100)}% · {timeAgo(p.createdAt)}</div>
+            <div className="dock-stack">
+              {proposals.map((p) => {
+                const conf = Math.round(p.confidence * 100)
+                return (
+                  <div key={p.id} className="dock-card dock-prop">
+                    <div className="dock-prop-head">
+                      <span className="dock-prop-type">{p.type}</span>
+                      <span className="grow-spacer" />
+                      <span className="dock-hint">{timeAgo(p.createdAt)}</span>
+                    </div>
+                    <div className="dock-prop-text">{p.explanation}</div>
+                    <div className="dock-prop-meter">
+                      <Meter pct={p.confidence} tone={conf >= 70 ? 'good' : conf >= 40 ? 'warn' : undefined} />
+                      <span className="dock-hint">置信 {conf}% · {p.leverage} 杠杆</span>
+                    </div>
+                    <div className="dock-prop-actions">
+                      <button className="dock-btn" type="button" disabled={busyId === p.id}
+                        onClick={() => { void resolve(p.id, 'accepted') }}>
+                        {busyId === p.id ? '…' : '接受'}
+                      </button>
+                      <button className="dock-btn ghost" type="button" disabled={busyId === p.id}
+                        onClick={() => { void resolve(p.id, 'dismissed') }}>驳回</button>
+                    </div>
                   </div>
-                  <RowAction label="接受" busyLabel="…" busy={busyId === p.id} onRun={() => resolve(p.id, 'accepted')} />
-                  <RowAction label="驳回" busyLabel="…" busy={busyId === p.id} onRun={() => resolve(p.id, 'dismissed')} />
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
     </div>
   )
 }
 
-/* ─────────── 脚本目录 ─────────── */
+/* ─────────── 脚本目录：计量可视化 ─────────── */
 
 export function ScriptsPane(): JSX.Element {
   const { data: scripts, error, reload } = useApiResource<ScriptView[]>(() => api.listScripts(), [])
@@ -267,15 +301,24 @@ export function ScriptsPane(): JSX.Element {
           ? <Empty text="还没有脚本" hint="常见多步操作会被自动沉淀为可复用脚本。" />
           : (
             <div className="dock-card list">
-              {scripts.map((sc) => (
-                <div key={sc.id} className="dock-row">
-                  <div className="grow">
-                    <div className="ttl">{sc.name}</div>
-                    <div className="meta">{sc.steps.length} 步 · 成功率 {sc.invocationCount > 0 ? Math.round((sc.successCount / sc.invocationCount) * 100) : 0}% · 调用 {sc.invocationCount}</div>
+              {scripts.map((sc) => {
+                const rate = sc.invocationCount > 0 ? sc.successCount / sc.invocationCount : null
+                return (
+                  <div key={sc.id} className="dock-row">
+                    <div className="grow">
+                      <div className="ttl">{sc.name}</div>
+                      <div className="meta">{sc.steps.length} 步 · 调用 {sc.invocationCount} 次</div>
+                      {rate !== null && (
+                        <div className="dock-row-meter">
+                          <Meter pct={rate} tone={rate >= 0.9 ? 'good' : rate >= 0.6 ? 'warn' : undefined} />
+                          <span className="dock-hint">成功率 {Math.round(rate * 100)}%</span>
+                        </div>
+                      )}
+                    </div>
+                    <RowAction label="调用" busyLabel="调用中…" busy={busyId === sc.id} onRun={() => invoke(sc)} />
                   </div>
-                  <RowAction label="调用" busyLabel="调用中…" busy={busyId === sc.id} onRun={() => invoke(sc)} />
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
     </div>
