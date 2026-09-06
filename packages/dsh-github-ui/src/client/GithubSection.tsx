@@ -72,7 +72,7 @@ function Loaded({ injected }: { injected: GithubSectionInjected }): ReactNode {
       <div className={styles.section}>
         <h2 className={styles.title}>{t('title')}</h2>
         <p className={styles.error}>{t('loadFailed') + ': ' + (state.error ?? '')}</p>
-        <Button variant="outline" onClick={() => { void controller.load() }}>{t('retry')}</Button>
+        <Button variant="secondary" onClick={() => { void controller.load() }}>{t('retry')}</Button>
       </div>
     )
   }
@@ -87,7 +87,7 @@ function Loaded({ injected }: { injected: GithubSectionInjected }): ReactNode {
       {/* Connection status */}
       <div className={styles.card}>
         <div className={styles.row}>
-          <StateDot state={state.whoami !== undefined ? 'done' : credentialConfigured ? 'warning' : 'error'} />
+          <StateDot status={state.whoami !== undefined ? 'live' : credentialConfigured ? 'idle' : 'error'} />
           <span className={styles.cardTitle}>
             {state.whoami !== undefined ? t('connectedAs') : t('notConnected')}
           </span>
@@ -132,7 +132,7 @@ function Loaded({ injected }: { injected: GithubSectionInjected }): ReactNode {
       {/* Token (write-only credential) */}
       <div className={styles.card}>
         <div className={styles.row}>
-          <StateDot state={credentialConfigured ? 'done' : 'error'} />
+          <StateDot status={credentialConfigured ? 'live' : 'error'} />
           <span className={styles.cardTitle}>
             {credentialConfigured ? t('tokenConfigured') : t('tokenMissing')}
           </span>
@@ -156,7 +156,7 @@ function Loaded({ injected }: { injected: GithubSectionInjected }): ReactNode {
             {t('saveToken')}
           </Button>
           {credentialConfigured
-            ? <Button variant="outline" disabled={busy} onClick={() => { void run(() => controller.removeToken()) }}>{t('removeToken')}</Button>
+            ? <Button variant="secondary" disabled={busy} onClick={() => { void run(() => controller.removeToken()) }}>{t('removeToken')}</Button>
             : null}
         </div>
       </div>
@@ -198,7 +198,7 @@ function Loaded({ injected }: { injected: GithubSectionInjected }): ReactNode {
                 anchor={(
                   <Button
                     ref={visibilityRef}
-                    variant="outline"
+                    variant="secondary"
                     size="sm"
                     aria-label={t('defaultVisibility')}
                     onClick={() => { setVisibilityOpen(v => !v) }}
@@ -225,7 +225,7 @@ function Loaded({ injected }: { injected: GithubSectionInjected }): ReactNode {
                   className={styles.grow}
                 />
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   disabled={busy || config.gitProxy === ''}
                   onClick={() => {
                     void (async () => {
@@ -253,7 +253,7 @@ function Loaded({ injected }: { injected: GithubSectionInjected }): ReactNode {
             {configDirty
               ? (
                 <div className={styles.saveFooter}>
-                  <Button variant="outline" disabled={busy} onClick={() => { setConfigDraft(undefined) }}>{t('discardChanges')}</Button>
+                  <Button variant="secondary" disabled={busy} onClick={() => { setConfigDraft(undefined) }}>{t('discardChanges')}</Button>
                   <Button
                     variant="primary"
                     disabled={busy}

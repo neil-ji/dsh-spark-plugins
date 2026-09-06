@@ -22,6 +22,8 @@ export { ListRow, type ListRowProps } from './components/ListRow.tsx'
 export { Disclosure, type DisclosureProps } from './components/Disclosure.tsx'
 export { SettingsCard, Stat, StatGrid, type SettingsCardProps, type StatProps } from './components/SettingsCard.tsx'
 
+export { Menu, type MenuProps, type MenuItem } from './components/Menu.tsx'
+
 // 浮层与反馈
 export { Modal, type ModalProps } from './components/Modal.tsx'
 export { toast, Toaster, type ToastItem, type ToastTone, type ToasterProps } from './components/Toast.tsx'

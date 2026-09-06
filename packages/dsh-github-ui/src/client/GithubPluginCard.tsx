@@ -12,7 +12,7 @@
  */
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button, Checkbox, Input, Pill, SegmentedControl, SettingsCardHeader } from 'dsh-ui-kit'
+import { Button, Checkbox, Disclosure, Input, Pill, SegmentedControl } from 'dsh-ui-kit'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { booleanCardField, choiceCardField, textCardField } from 'dsh-spark-plugin-kit/client'
 import type { CardFieldSpec, StagedSettingsCardState, StagedCardActions } from 'dsh-spark-plugin-kit/client'
@@ -230,7 +230,7 @@ function GithubCardBody({ t, state, onEdit, onReset, onSave, onDiscard }: {
 
       <div className={styles.footer}>
         {shell.failed ? <p className={styles.failed} role="alert">{t('cardSaveFailed')}</p> : null}
-        <Button variant="outline" disabled={!shell.dirty || shell.saving} onClick={onDiscard}>{t('cardDiscard')}</Button>
+        <Button variant="secondary" disabled={!shell.dirty || shell.saving} onClick={onDiscard}>{t('cardDiscard')}</Button>
         <Button variant="primary" disabled={blocked} onClick={onSave}>{t(shell.saving ? 'cardSaving' : 'cardSave')}</Button>
       </div>
     </div>
@@ -246,16 +246,14 @@ export function GithubPluginCard(props: GithubPluginCardProps): ReactNode {
 
   return (
     <li className={open ? styles.card + ' ' + styles.cardOpen : styles.card}>
-      <SettingsCardHeader
-        title={t('cardTitle')}
+      <Disclosure
+        name={t('cardTitle')}
         description={t('cardDescription')}
         open={open}
         onToggle={() => setOpen(!open)}
         trailing={state.shell.dirty ? <span className={styles.pending}>{t('cardUnsaved')}</span> : null}
-        expandLabel={t('cardExpand')}
-        collapseLabel={t('cardCollapse')}
-      />
-      {!open ? null : (
+      >
+        {open ? (
         <GithubCardBody
           t={t}
           state={state}
@@ -264,7 +262,8 @@ export function GithubPluginCard(props: GithubPluginCardProps): ReactNode {
           onSave={props.save}
           onDiscard={props.discard}
         />
-      )}
+        ) : null}
+      </Disclosure>
     </li>
   )
 }

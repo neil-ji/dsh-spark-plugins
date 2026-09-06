@@ -3,11 +3,11 @@ import { cx } from '../cx.js'
 import css from './Checkbox.module.css'
 
 export interface CheckboxProps {
-  checked?: boolean
-  defaultChecked?: boolean
-  onChange?: (checked: boolean) => void
+  checked?: boolean | undefined
+  defaultChecked?: boolean | undefined
+  onChange?: ((checked: boolean) => void) | undefined
   label: ReactNode
-  disabled?: boolean
+  disabled?: boolean | undefined
 }
 
 /** Spark UI Kit 复选框 — 原生 input + accent-color（dock .check 形制） */
