@@ -91,3 +91,7 @@
   font-size: 13px;
   line-height: 20px;
 }
+
+.growSpacer {
+  flex: 1;
+}

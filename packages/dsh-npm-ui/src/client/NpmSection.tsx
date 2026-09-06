@@ -104,7 +104,24 @@ function Loaded({ injected }: { injected: NpmSectionInjected }): ReactNode {
             className={styles.grow}
           />
           <Button
+            variant="primary"
+            disabled={busy || tokenDraft === ''}
+            onClick={() => { void run(() => controller.saveToken(tokenDraft).then((f) => { if (f === undefined) setTokenDraft(''); return f })) }}
+          >
+            {t('saveToken')}
+          </Button>
+        </div>
+        <div className={styles.row}>
+          <span className={styles.muted}>
+            {t('testConnectionHint')}
+            {state.credential?.source !== undefined
+              ? ' · ' + t('tokenSource') + ': ' + state.credential.source + (state.credential.writable ? '' : ' (' + t('readOnly') + ')')
+              : ''}
+          </span>
+          <span className={styles.growSpacer} />
+          <Button
             variant="outline"
+            size="sm"
             disabled={busy}
             onClick={() => {
               void (async () => {
@@ -120,20 +137,10 @@ function Loaded({ injected }: { injected: NpmSectionInjected }): ReactNode {
           >
             {busy ? t('testing') : t('testConnection')}
           </Button>
-          <Button
-            variant="primary"
-            disabled={busy || tokenDraft === ''}
-            onClick={() => { void run(() => controller.saveToken(tokenDraft).then((f) => { if (f === undefined) setTokenDraft(''); return f })) }}
-          >
-            {t('saveToken')}
-          </Button>
           {credentialConfigured
-            ? <Button variant="outline" disabled={busy} onClick={() => { void run(() => controller.removeToken()) }}>{t('removeToken')}</Button>
+            ? <Button variant="outline" size="sm" disabled={busy} onClick={() => { void run(() => controller.removeToken()) }}>{t('removeToken')}</Button>
             : null}
         </div>
-        {state.credential?.source !== undefined
-          ? <p className={styles.muted}>{t('tokenSource') + ': ' + state.credential.source + (state.credential.writable ? '' : ' (' + t('readOnly') + ')')}</p>
-          : null}
         {state.token !== undefined
           ? <p className={styles.muted}>{state.token.configured ? t('tokenHintOk') : t('tokenHintMissing')}</p>
           : null}
@@ -152,6 +159,8 @@ function Loaded({ injected }: { injected: NpmSectionInjected }): ReactNode {
           {statusView?.registry !== undefined
             ? <span className={styles.muted}>{statusView.registry}</span>
             : null}
+          <span className={styles.growSpacer} />
+          <Button variant="outline" size="sm" onClick={() => { void controller.load() }}>{t('retry')}</Button>
         </div>
         {statusView !== undefined && statusView.error !== null
           ? <p className={styles.error}>{statusView.error}</p>
@@ -173,12 +182,11 @@ function Loaded({ injected }: { injected: NpmSectionInjected }): ReactNode {
             </div>
           )
           : null}
-        {error !== undefined ? <p className={styles.error}>{error}</p> : null}
-        {notice !== undefined ? <p className={styles.notice} role="status">{notice}</p> : null}
-        <div className={styles.row}>
-          <Button variant="outline" onClick={() => { void controller.load() }}>{t('retry')}</Button>
-        </div>
       </div>
+
+      {/* Section-level feedback: token/credential 操作结果固定在页级，不再混入注册表卡 */}
+      {error !== undefined ? <p className={styles.error} role="alert">{error}</p> : null}
+      {notice !== undefined ? <p className={styles.notice} role="status">{notice}</p> : null}
     </div>
   )
 }
