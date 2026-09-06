@@ -1,146 +1,409 @@
-/* ─────────────── Sparkie · 默认角色数据 + 皮肤 ───────────────
-   把 sprite 抽成数据：pose × mood 矩阵，外加 4 套皮肤切换。
-   实际渲染由调用方/HTML 内联 SVG 完成；本文件提供角色元数据 + 工具。
-   ────────────────────────────────────────────────────────────── */
+/* ─────────────── Sparkie · 高密度 ASCII 桌宠 ───────────────
+   风格参考：Claude Code /buddy（5 行 × 12-14 列 ASCII art）
+   关键转变：
+   - 不再是 16×16 像素网格 → 直接用字符画高密度 sprite
+   - 不再漂浮漫步 → 常驻屏幕固定位置（输入框旁）
+   - 不再切多套皮肤 → 1 个核心角色 + 心情/姿态变体
+   - 不再自说自话 → 响应操作（idle / drag / think / alert / sleep）
+   ─────────────────────────────────────────────────────────── */
 (function (global) {
   'use strict';
 
-  // 皮肤清单（必须与 css/tokens.css 的 [data-skin] 同步）
-  const SKINS = [
-    { id: 'sparkle', label: 'Sparkle · 火花琥珀', accent: '#f59e0b', desc: '呆毛火花 · 灵感小精灵（默认）' },
-    { id: 'crystal', label: 'Crystal · 蓝晶', accent: '#4d6bfe', desc: '冷静分析 · 蓝色记忆守护者' },
-    { id: 'sprout', label: 'Sprout · 绿芽', accent: '#22c55e', desc: '萌芽提示 · 成本节流小园丁' },
-    { id: 'pixel', label: 'Pixel · 玫粉', accent: '#ec4899', desc: '赛博 Neko · 追光者' },
-  ];
-
-  // 姿态（与 CSS data-pose 对应）
-  const POSES = [
-    { id: 'stand', label: '站立', icon: '🚶' },     // 仅 demo 工具栏图标位占位（实际用 SVG）
-    { id: 'walking', label: '走路', icon: '🏃' },
-    { id: 'sit', label: '坐', icon: '🪑' },
-    { id: 'lie', label: '趴', icon: '😴' },
-  ];
-
-  // 心情列表（与 CSS data-mood 对应；color 仅用于演示面板 dot）
-  const MOODS = [
-    { id: 'idle', label: 'idle', accent: '#8a8172' },
-    { id: 'greet', label: 'greet', accent: '#f59e0b' },
-    { id: 'happy', label: 'happy', accent: '#22c55e' },
-    { id: 'cheer', label: 'cheer', accent: '#f59e0b' },
-    { id: 'think', label: 'think', accent: '#3b82f6' },
-    { id: 'alert', label: 'alert', accent: '#ef4444' },
-    { id: 'sad', label: 'sad', accent: '#3b82f6' },
-    { id: 'sleepy', label: 'sleepy', accent: '#8b5cf6' },
-    { id: 'poke', label: 'poke', accent: '#fbbf24' },
-  ];
-
-  // 角色出厂数据
-  const SPARKIE = {
-    id: 'sparkie',
-    name: 'Sparkie',
-    version: '0.1.0',
-    size: 72,
-    skin: 'sparkle',
-    pose: 'stand',
-    eyes: { blinkEveryMs: [2600, 6400] },     // 区间随机
-    bubble: { defaultHold: 4000 },
-    sleeping: { idleThresholdMs: 45000 },
-    wandering: { enabled: true, minIdleMs: 6000 },
-    following: { enabled: true, radius: 240, arriveDist: 60 },
+  // ── 调色板（纯色块：每个 sprite 用 ANSI / RGB 着色） ─────
+  const PALETTE = {
+    blue: { body: '#4d6bfe', bodyDark: '#1e2a5e', bodyLight: '#7a93ff', glow: '#c8d3ff', eye: '#0b0e14', cheek: '#ff8db8' },
+    amber: { body: '#f59e0b', bodyDark: '#7c2d12', bodyLight: '#fbbf24', glow: '#fef3c7', eye: '#0b0e14', cheek: '#fb7185' },
+    green: { body: '#22c55e', bodyDark: '#14532d', bodyLight: '#86efac', glow: '#d1fae5', eye: '#0b0e14', cheek: '#fb7185' },
   };
 
-  // 随机眨眼定时器
-  function bindBlink(ball, { blinkEveryMs }) {
-    let timer = 0;
-    const tick = () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        const mood = ball.dataset.mood || '';
-        const reduced = document.body.dataset.reduced === 'true' || matchMedia('(prefers-reduced-motion: reduce)').matches;
-        // sleepy / cheer / greet 自带眼型，跳过
-        if (!reduced && !['sleepy', 'cheer', 'greet'].includes(mood)) {
-          ball.classList.add('blink');
-          setTimeout(() => ball.classList.remove('blink'), 150);
-        }
-        tick();
-      }, blinkEveryMs[0] + Math.random() * (blinkEveryMs[1] - blinkEveryMs[0]));
-    };
-    tick();
-    return () => clearTimeout(timer);
-  }
+  // ── 核心 sprite 库（每帧都是真实字符画） ─────────────────
+  // 命名规则：SPR_<pose>_<frame>
+  //   pose: stand / walk / sit / sleep / drag
+  //   frame: a / b / c（3 帧循环）
+  // 字符图例：X=主色暗  M=主色  L=主色亮  G=高光  E=眼黑  C=腮红  .=透明
 
-  // SVG sprite 工厂（4 套皮肤的呆毛差异在这里决定；body 复用同套几何）
-  function buildSpriteHTML(skin) {
-    const accent = (SKINS.find(s => s.id === skin) ?? SKINS[0]).accent;
-    // 呆毛 4 芒尖角：amber / 蓝晶 / 绿芽 / 玫粉；通过 fill="var(--role-accent)" 走 token
-    return /* html */`
-<svg class="sparkie-sprite" viewBox="0 0 72 72" aria-hidden="true">
-  <!-- 呆毛（顶部 4 芒火花，可微动） -->
-  <path class="ahoge" d="M36 2c.6 4 3.2 6.6 7.2 7.2-4 .6-6.6 3.2-7.2 7.2-.6-4-3.2-6.6-7.2-7.2 4-.6 6.6-3.2 7.2-7.2z" fill="var(--role-accent)"/>
+  // ── sprite 设计原则：silhouette-readable ASCII art ────────
+  // 字符本身传递形状信息，不靠颜色伪装。
+  // 字符图例：
+  //   `(`, `)`, `/`, `\`, `_`, `-`, `|`  ← 真实轮廓（保持默认色 = 角色深色）
+  //   `·`, `°`  ← 眼睛/高光（黑）
+  //   `^`, `o`, `ω`  ← 嘴型
+  //   `*`  ← 呆毛尖（角色色）
+  //   `▓` `█` `░`  ← 身体填充（角色色/亮/暗）
+  //   ` ` `.`  ← 透明
+  // 这样眯眼看 sprite（去色）仍然能读出形状。
 
-  <!-- 影圈（落在地面） -->
-  <ellipse class="shadow" cx="36" cy="68" rx="20" ry="2.6" fill="rgba(0,0,0,.32)"/>
+  // —— 站立呼吸 3 帧 ——
+  // 5 行 × 14 列，呆毛 + 圆胖身体 + 大眼
+  // 关键：外轮廓用 `(` `)` `/` `\` `▓`，眼睛用 `·`，嘴用 `ω` 圆弧
+  const SPR_STAND_A = [
+    '      *        ',
+    '     ▓▓▓       ',
+    '    ▓▓▓▓▓      ',
+    '   ╭▓▓▓▓▓╮     ',
+    '  (▓ ·  ·▓)    ',
+    '  │▓▓▓▓▓▓│     ',
+    '  ╰▓▓▓▓▓╯      ',
+    '   ▓▓▓▓▓       ',
+    '   ▓▓ ▓▓       ',
+    '   │   │       ',
+  ];
+  const SPR_STAND_B = [
+    '      *        ',
+    '     ▓▓▓       ',
+    '    ▓▓▓▓▓      ',
+    '   ╭▓▓▓▓▓╮     ',
+    '  (▓ ·  ·▓)    ',
+    '  │▓▓▓▓▓▓│     ',
+    '   ▓▓▓▓▓▓      ',
+    '   ▓▓▓▓▓       ',
+    '   ▓▓ ▓▓       ',
+    '   │   │       ',
+  ];
+  const SPR_STAND_C = [
+    '      *        ',
+    '     ▓▓▓       ',
+    '    ▓▓▓▓▓      ',
+    '   ╭▓▓▓▓▓╮     ',
+    '  (▓ ·  ·▓)    ',
+    '  │▓▓▓▓▓▓│     ',
+    '   ▓▓▓▓▓▓      ',
+    '   ▓▓▓▓▓       ',
+    '   ▓▓ ▓▓       ',
+    '   │   │       ',
+  ];
 
-  <!-- 身体（球体）：pose 切换 stand/walking/sit/lie/dragging -->
-  <g class="pose stand">
-    <!-- 主体 -->
-    <circle cx="36" cy="42" r="22" fill="var(--spk-surface-2)" stroke="var(--role-accent)" stroke-width="2.2"/>
-    <circle cx="36" cy="42" r="22" fill="url(#bodyGloss)" opacity=".6"/>
-    <defs>
-      <radialGradient id="bodyGloss" cx="34%" cy="32%" r="65%">
-        <stop offset="0%" stop-color="rgba(255,255,255,.45)"/>
-        <stop offset="60%" stop-color="rgba(255,255,255,0)"/>
-      </radialGradient>
-    </defs>
+  // —— 走路 3 帧（左右脚交替） ——
+  const SPR_WALK_A = [
+    '      *        ',
+    '     ▓▓▓       ',
+    '    ▓▓▓▓▓      ',
+    '   ╭▓▓▓▓▓╮     ',
+    '  (▓ ·  ·▓)    ',
+    '  │▓▓▓▓▓▓│     ',
+    '   ▓▓▓▓▓▓      ',
+    '   ▓▓▓▓▓       ',
+    '   ▓▓   ▓      ',
+    '    │  /       ',
+  ];
+  const SPR_WALK_B = [
+    '      *        ',
+    '     ▓▓▓       ',
+    '    ▓▓▓▓▓      ',
+    '   ╭▓▓▓▓▓╮     ',
+    '  (▓ ·  ·▓)    ',
+    '  │▓▓▓▓▓▓│     ',
+    '   ▓▓▓▓▓▓      ',
+    '   ▓▓▓▓▓       ',
+    '    ▓▓         ',
+    '     │         ',
+  ];
+  const SPR_WALK_C = [
+    '      *        ',
+    '     ▓▓▓       ',
+    '    ▓▓▓▓▓      ',
+    '   ╭▓▓▓▓▓╮     ',
+    '  (▓ ·  ·▓)    ',
+    '  │▓▓▓▓▓▓│     ',
+    '   ▓▓▓▓▓▓      ',
+    '   ▓▓▓▓▓       ',
+    '   ▓   ▓▓      ',
+    '    \  │       ',
+  ];
 
-    <!-- 腮红 -->
-    <ellipse class="blush" cx="22" cy="48" rx="4.2" ry="2.2" fill="var(--role-cheek)" opacity="0"/>
-    <ellipse class="blush" cx="50" cy="48" rx="4.2" ry="2.2" fill="var(--role-cheek)" opacity="0"/>
+  // —— 坐姿（身体下压 + 短腿前伸） ——
+  const SPR_SIT_A = [
+    '               ',
+    '      *        ',
+    '     ▓▓▓       ',
+    '    ▓▓▓▓▓      ',
+    '   ╭▓▓▓▓▓╮     ',
+    '  (▓ ·  ·▓)    ',
+    '  │▓▓▓▓▓▓│     ',
+    '  ╰▓▓▓▓▓▓╯     ',
+    '  ▓▓▓▓▓▓▓▓     ',
+    '  ▓▓▓▓▓▓▓▓▓    ',
+    '   ─────       ',
+    '   │   │       ',
+    '   │   │       ',
+  ];
+  const SPR_SIT_B = [
+    '               ',
+    '      *        ',
+    '     ▓▓▓       ',
+    '    ▓▓▓▓▓      ',
+    '   ╭▓▓▓▓▓╮     ',
+    '  (▓ ·  ·▓)    ',
+    '  │▓▓▓▓▓▓│     ',
+    '  ╰▓▓▓▓▓▓╯     ',
+    '  ▓▓▓▓▓▓▓▓     ',
+    '  ▓▓▓▓▓▓▓▓▓    ',
+    '   ─────       ',
+    '  /     \\      ',
+    '  │     │      ',
+  ];
 
-    <!-- 眼睛 -->
-    <g class="eyes">
-      <g class="eye eye-l"><ellipse class="eyeball" cx="28" cy="40" rx="3" ry="4.4" fill="var(--role-eye)"/><circle class="pupil" cx="28" cy="38.4" r="1.05" fill="var(--spk-bg)"/></g>
-      <g class="eye eye-r"><ellipse class="eyeball" cx="44" cy="40" rx="3" ry="4.4" fill="var(--role-eye)"/><circle class="pupil" cx="44" cy="38.4" r="1.05" fill="var(--spk-bg)"/></g>
-      <g class="eyes-happy">
-        <path d="M23 42 Q28 36 33 42" fill="none" stroke="var(--role-eye)" stroke-width="2.2" stroke-linecap="round"/>
-        <path d="M39 42 Q44 36 49 42" fill="none" stroke="var(--role-eye)" stroke-width="2.2" stroke-linecap="round"/>
-      </g>
-    </g>
+  // —— 眨眼（闭上弧线 `─ ─`） ——
+  const SPR_BLINK_A = [
+    '      *        ',
+    '     ▓▓▓       ',
+    '    ▓▓▓▓▓      ',
+    '   ╭▓▓▓▓▓╮     ',
+    '  (▓ ─  ─▓)    ',
+    '  │▓▓▓▓▓▓│     ',
+    '   ▓▓▓▓▓▓      ',
+    '   ▓▓▓▓▓       ',
+    '   ▓▓ ▓▓       ',
+    '   │   │       ',
+  ];
 
-    <!-- 嘴型 -->
-    <path class="mouth m-smile" d="M30 50.6 Q36 55.4 42 50.6" fill="none" stroke="var(--role-mouth)" stroke-width="2" stroke-linecap="round"/>
-    <ellipse class="mouth m-open" cx="36" cy="51.8" rx="3" ry="3.6" fill="var(--role-mouth)"/>
-    <path class="mouth m-frown" d="M30.4 53.4 Q36 49.6 41.6 53.4" fill="none" stroke="var(--role-mouth)" stroke-width="2" stroke-linecap="round"/>
-  </g>
+  // —— 睡（眯眼 `~` + Zzz + 身体下沉） ——
+  const SPR_SLEEP_A = [
+    '               ',
+    '            zz ',
+    '      *      Z ',
+    '     ▓▓▓    ZZZ',
+    '    ▓▓▓▓▓      ',
+    '   ╭▓▓▓▓▓╮     ',
+    '  (▓ ~  ~▓)    ',
+    '  │▓▓▓▓▓▓│     ',
+    '   ▓▓▓▓▓▓      ',
+    '   ▓▓▓▓▓       ',
+    '   ▓▓ ▓▓       ',
+    '   │   │       ',
+  ];
+  const SPR_SLEEP_B = [
+    '               ',
+    '         ZZZ   ',
+    '      *   Z    ',
+    '     ▓▓▓    z  ',
+    '    ▓▓▓▓▓      ',
+    '   ╭▓▓▓▓▓╮     ',
+    '  (▓ ~  ~▓)    ',
+    '  │▓▓▓▓▓▓│     ',
+    '   ▓▓▓▓▓▓      ',
+    '   ▓▓▓▓▓       ',
+    '   ▓▓ ▓▓       ',
+    '   │   │       ',
+  ];
 
-  <!-- 配件层（应援棒） -->
-  <g class="acc acc-cheer">
-    <g class="stick sl"><rect x="11" y="46" width="2.4" height="16" rx="1.2" fill="var(--role-accent)"/>
-      <path d="M12.2 38.6c.3 2.2 1.7 3.6 3.9 3.9-2.2.3-3.6 1.7-3.9 3.9-.3-2.2-1.7-3.6-3.9-3.9 2.2-.3 3.6-1.7 3.9-3.9z" fill="var(--role-accent)"/></g>
-    <g class="stick sr"><rect x="58.6" y="46" width="2.4" height="16" rx="1.2" fill="var(--role-accent)"/>
-      <path d="M59.8 38.6c.3 2.2 1.7 3.6 3.9 3.9-2.2.3-3.6 1.7-3.9 3.9-.3-2.2-1.7-3.6-3.9-3.9 2.2-.3 3.6-1.7 3.9-3.9z" fill="var(--role-accent)"/></g>
-  </g>
+  // —— 思考（眼球上抬 `°` + 思考泡 `?`） ——
+  const SPR_THINK_A = [
+    '       ?       ',
+    '      ?        ',
+    '      *        ',
+    '     ▓▓▓       ',
+    '    ▓▓▓▓▓      ',
+    '   ╭▓▓▓▓▓╮     ',
+    '  (▓ °  °▓)    ',
+    '  │▓▓▓▓▓▓│     ',
+    '   ▓▓▓▓▓▓      ',
+    '   ▓▓▓▓▓       ',
+    '   ▓▓ ▓▓       ',
+    '   │   │       ',
+  ];
 
-  <!-- 配件层（思考泡） -->
-  <g class="acc acc-think" fill="var(--role-accent)">
-    <circle cx="54" cy="22" r="1.7"/><circle cx="58" cy="17" r="2.3"/><circle cx="62" cy="11" r="1.4"/>
-  </g>
+  // —— 拖拽（抱紧小 o 嘴） ——
+  const SPR_DRAG_A = [
+    '      *        ',
+    '     ▓▓▓       ',
+    '    ▓▓▓▓▓      ',
+    '   ╭▓▓▓▓▓╮     ',
+    '  (▓ o  o▓)    ',
+    '  │▓▓▓▓▓▓│     ',
+    '   ▓▓▓▓▓▓      ',
+    '   ▓▓▓▓▓       ',
+    '   ▓▓ ▓▓       ',
+    '   │   │       ',
+  ];
 
-  <!-- 配件层（Zzz） -->
-  <g class="acc acc-zzz" fill="var(--role-eye)" font-family="inherit" font-weight="700">
-    <text class="z1" x="54" y="20" font-size="10">Z</text>
-    <text class="z2" x="60" y="13" font-size="7">z</text>
-  </g>
+  // —— Cheer（笑眯眼 `^ ^` + 腮红 `o` + 举小手） ——
+  const SPR_CHEER_A = [
+    '  \\         /  ',
+    '   \\       /   ',
+    '      *        ',
+    '     ▓▓▓       ',
+    '    ▓▓▓▓▓      ',
+    '   ╭▓▓▓▓▓╮  o  ',
+    '  (▓ ^  ^▓)    ',
+    '  │▓▓▓▓▓▓│     ',
+    '   ▓▓▓▓▓▓      ',
+    '   ▓▓▓▓▓       ',
+    '   ▓▓ ▓▓       ',
+    '   │   │       ',
+  ];
+  const SPR_CHEER_B = [
+    '   /       \\   ',
+    '  /         \\  ',
+    '      *        ',
+    '     ▓▓▓       ',
+    '    ▓▓▓▓▓      ',
+    '   ╭▓▓▓▓▓╮  o  ',
+    '  (▓ ^  ^▓)    ',
+    '  │▓▓▓▓▓▓│     ',
+    '   ▓▓▓▓▓▓      ',
+    '   ▓▓▓▓▓       ',
+    '   ▓▓ ▓▓       ',
+    '   │   │       ',
+  ];
 
-  <!-- 配件层（汗滴） -->
-  <path class="acc acc-sweat" d="M58.5 19C61.5 23.4 61.5 26.6 58.5 27.8 55.5 26.6 55.5 23.4 58.5 19Z" fill="var(--state-info)"/>
+  // —— Work（tool-use：聚焦 + 忙碌指示） ——
+  const SPR_WORK_A = [
+    '      *        ',
+    '     ▓▓▓       ',
+    '    ▓▓▓▓▓  »   ',
+    '   ╭▓▓▓▓▓╮     ',
+    '  (▓ -  -▓)    ',
+    '  │▓▓▓▓▓▓│     ',
+    '   ▓▓▓▓▓▓      ',
+    '   ▓▓▓▓▓       ',
+    '   ▓▓ ▓▓       ',
+    '   │   │       ',
+  ];
+  const SPR_WORK_B = [
+    '      *        ',
+    '     ▓▓▓       ',
+    '    ▓▓▓▓▓  «   ',
+    '   ╭▓▓▓▓▓╮     ',
+    '  (▓ -  -▓)    ',
+    '  │▓▓▓▓▓▓│     ',
+    '   ▓▓▓▓▓▓      ',
+    '   ▓▓▓▓▓       ',
+    '   ▓▓ ▓▓       ',
+    '   │   │       ',
+  ];
 
-  <!-- 配件层（爱心） -->
-  <g class="acc acc-heart" fill="var(--role-cheek)">
-    <path d="M58 18c-1.4-2-4.4-1.4-4.4 1.4 0 2 2 3.6 4.4 5.6 2.4-2 4.4-3.6 4.4-5.6 0-2.8-3-3.4-4.4-1.4z"/>
-  </g>
+  // —— Alert（ask-user / permission：瞪大眼 + 惊叹号） ——
+  const SPR_ALERT_A = [
+    '      !        ',
+    '     ▓▓▓       ',
+    '    ▓▓▓▓▓      ',
+    '   ╭▓▓▓▓▓╮     ',
+    '  (▓ O  O▓)    ',
+    '  │▓▓▓▓▓▓│     ',
+    '   ▓▓▓▓▓▓      ',
+    '   ▓▓▓▓▓       ',
+    '   ▓▓ ▓▓       ',
+    '   │   │       ',
+  ];
+
+  // —— Error（出错：× 眼 + 下弯嘴） ——
+  const SPR_ERROR_A = [
+    '      *        ',
+    '     ▓▓▓       ',
+    '    ▓▓▓▓▓      ',
+    '   ╭▓▓▓▓▓╮     ',
+    '  (▓ ×  ×▓)    ',
+    '   ╰▓▓▓▓▓╯     ',
+    '   ▓▓▓▓▓▓      ',
+    '   ▓▓▓▓▓       ',
+    '   ▓▓ ▓▓       ',
+    '   │   │       ',
+  ];
+
+  // ── 字符 → 颜色映射 ─────────────────────────────────────
+  // 真实轮廓字符（`(` `)` `/` `\` `_` `-` `|` `╭` `╮` `╰` `╯`）
+  //   → 用角色 bodyDark（深色描边）
+  // 身体填充（`▓` `█` `░`）
+  //   → 用角色 body（中色填充）
+  // 眼/嘴（`·` `°` `^` `o` `~` `ω` `×` `O`）
+  //   → 用角色 eye（黑）
+  // 呆毛尖 / 装饰（`*` `?` `Z` `z` `!` `»` `«`）
+  //   → 用角色 body 或 glow
+  const CHAR_TO_KEY = {
+    // 轮廓字符（深色）
+    '(': 'bodyDark', ')': 'bodyDark',
+    '/': 'bodyDark', '\\': 'bodyDark',
+    '_': 'bodyDark', '-': 'bodyDark',
+    '|': 'bodyDark',
+    '╭': 'bodyDark', '╮': 'bodyDark', '╰': 'bodyDark', '╯': 'bodyDark',
+    // 身体填充（中色）
+    '▓': 'body', '█': 'body', '░': 'body',
+    // 眼/嘴/装饰（黑）
+    '·': 'eye', '°': 'eye', '^': 'eye', 'o': 'eye', '~': 'eye', 'ω': 'eye',
+    '×': 'eye', 'O': 'eye',
+    // 呆毛 / 思考泡 / Zzz / 警示 / 忙碌指示
+    '*': 'body',
+    '?': 'body',
+    'Z': 'glow', 'z': 'glow',
+    '!': 'body', '»': 'body', '«': 'body',
+    // 透明
+    '.': null, ' ': null,
+  };
+
+  // ── ASCII art → SVG (保留字符为 <text>，上色用 fill) ─────
+  // 这是真正的 ASCII pet 实现：字符是字符，但用着色让"贴纸感"出现
+  const PUPIL_CHARS = new Set(['·', '°']);   // 可跟随视线移动的瞳点
+  function artToSVG(art, palette, opts = {}) {
+    const fontSize = opts.fontSize ?? 14;
+    const fontFamily = opts.fontFamily ?? "'JetBrains Mono', 'SF Mono', 'Menlo', 'Consolas', monospace";
+    const charW = fontSize * 0.6;   // mono 字符宽 ≈ 0.6 × fontSize
+    const lineH = fontSize * 1.05;
+    const rows = art.length;
+    const cols = Math.max(...art.map(r => r.length));
+    const w = cols * charW + 8;
+    const h = rows * lineH + 8;
+
+    let tspans = '';
+    for (let y = 0; y < rows; y++) {
+      const row = art[y] || '';
+      for (let x = 0; x < row.length; x++) {
+        const ch = row[x];
+        const key = CHAR_TO_KEY[ch];
+        if (!key) continue;        // 透明
+        const color = palette[key];
+        const px = x * charW + 4;
+        const py = (y + 1) * lineH + 2;
+        const cls = PUPIL_CHARS.has(ch) ? ' class="pupil"' : '';
+        tspans += `<text${cls} x="${px.toFixed(2)}" y="${py.toFixed(2)}" font-size="${fontSize}" font-family="${fontFamily}" fill="${color}">${escapeXml(ch)}</text>`;
+      }
+    }
+    return `<svg class="sparkie-sprite" viewBox="0 0 ${w} ${h}" width="${w * 3}" height="${h * 3}">
+  <text x="0" y="0" font-size="${fontSize}" font-family="${fontFamily}" fill="transparent">.</text>
+  ${tspans}
 </svg>`;
   }
 
-  global.SparkieChars = { SKINS, POSES, MOODS, SPARKIE, buildSpriteHTML, bindBlink };
+  function escapeXml(ch) {
+    if (ch === '<') return '&lt;';
+    if (ch === '>') return '&gt;';
+    if (ch === '&') return '&amp;';
+    return ch;
+  }
+
+  // ── sprite 表：pose → 帧数组 ──────────────────────────────
+  const SPRITES = {
+    stand:  [SPR_STAND_A, SPR_STAND_B, SPR_STAND_C],
+    walk:   [SPR_WALK_A, SPR_WALK_B, SPR_WALK_C],
+    sit:    [SPR_SIT_A, SPR_SIT_B],
+    blink:  [SPR_BLINK_A, SPR_STAND_A],
+    sleep:  [SPR_SLEEP_A, SPR_SLEEP_B],
+    think:  [SPR_THINK_A, SPR_THINK_A],
+    work:   [SPR_WORK_A, SPR_WORK_B],
+    alert:  [SPR_ALERT_A, SPR_ALERT_A],
+    error:  [SPR_ERROR_A, SPR_ERROR_A],
+    drag:   [SPR_DRAG_A, SPR_DRAG_A],
+    cheer:  [SPR_CHEER_A, SPR_CHEER_B],
+  };
+
+  function buildSpriteSVG(skinId, pose, frame) {
+    const palette = PALETTE[skinId] || PALETTE.blue;
+    const frames = SPRITES[pose] || SPRITES.stand;
+    const art = frames[frame % frames.length];
+    return artToSVG(art, palette);
+  }
+
+  // ── 角色元数据 ──────────────────────────────────────────
+  const SPARKIE = {
+    id: 'sparkie',
+    version: '0.6.0',
+    skin: 'blue',
+    pose: 'stand',
+    frameIntervalMs: 480,    // 3 帧呼吸/走路：每帧 ~0.5s
+  };
+
+  global.SparkieChars = {
+    PALETTE, SPRITES, SPARKIE,
+    buildSpriteSVG, artToSVG,
+  };
 })(window);

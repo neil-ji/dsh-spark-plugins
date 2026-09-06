@@ -121,10 +121,14 @@
             snapToCorner(pet, cfg.anchor);
           } else {
             // 视为 click
-            if (Date.now() - downAt < 350) cfg.onClick?.(e);
+            if (Date.now() - downAt < 350) {
+              cfg.onClick?.(e);
+              // 同时向 pet 事件总线派发，供其他插件订阅
+              pet.emit('click-when-still', e);
+            }
           }
         };
-        const onDbl = () => cfg.onDouble?.();
+        const onDbl = () => { cfg.onDouble?.(); pet.emit('double-click'); };
         const onKey = (e) => {
           if (!pet.mount.contains(document.activeElement) && document.activeElement !== pet.mount) return;
           const map = { ArrowLeft: [-cfg.anchor, 0], ArrowRight: [cfg.anchor, 0], ArrowUp: [0, -cfg.anchor], ArrowDown: [0, cfg.anchor] };
@@ -133,7 +137,7 @@
           e.preventDefault();
           pet.path.x = Math.max(0, Math.min(innerWidth - pet.size, pet.path.x + v[0]));
           pet.path.y = Math.max(0, Math.min(innerHeight - pet.size, pet.path.y + v[1]));
-          pet.mount.style.transform = `translate(${pet.path.x}px, ${pet.path.y}px)`;
+          pet.applyPosition();
         };
         pet.mount.addEventListener('pointerdown', onDown);
         window.addEventListener('pointermove', onMove, { passive: true });
@@ -158,7 +162,7 @@
     const x = cx < midX ? pad : innerWidth - pet.size - pad;
     const y = cy < midY ? pad : innerHeight - pet.size - pad;
     pet.path.x = x; pet.path.y = y;
-    pet.mount.style.transform = `translate(${x}px, ${y}px)`;
+    pet.applyPosition();
     pet.emit('snap', { x, y });
   }
 
@@ -179,6 +183,7 @@
           if (document.hidden) return;
           if (Date.now() - pet.lastActive > 120000) return;
           if (pet._reading) return;
+          if (pet.agentState && pet.agentState !== 'idle') return;   // agent 驱动时不抢戏
           const ev = cfg.events[i === undefined ? Math.floor(Math.random() * cfg.events.length) : i];
           pet.setMood(ev.mood, ev.holdMs);
           if (pet.say) pet.say(ev.html, ev.src, 4200);
@@ -245,6 +250,7 @@
           opened = true;
           panelEl.setAttribute('aria-hidden', 'false');
           panelEl.classList.add('open');
+          pet.mount.setAttribute('aria-expanded', 'true');
           // 位置：球上方/下方/侧方
           const r = pet.mount.getBoundingClientRect();
           const pw = 320, ph = 380, M = 16;
@@ -265,6 +271,7 @@
           opened = false;
           panelEl.classList.remove('open');
           panelEl.setAttribute('aria-hidden', 'true');
+          pet.mount.setAttribute('aria-expanded', 'false');
           pet.emit('panel-close');
         }
         function toggle() { opened ? close() : open(); pet.emit('panel-toggle', opened); }
@@ -273,7 +280,7 @@
         if (cfg.defaultOpen) open();
       },
       events: {
-        'click-when-still'() { this.openDock?.(); },     // 由 PointerPlugin 在未拖动时回调
+        'double-click'() { this.toggleDock?.(); },     // 双击开/收 dock（单击是应援，不冲突）
       },
       teardown() { panelEl?.remove(); },
     };

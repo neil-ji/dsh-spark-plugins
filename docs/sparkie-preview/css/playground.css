@@ -1,0 +1,60 @@
+/* ─────────────── Sparkie · 演示页画布 ───────────────
+   极简：纯黑背景，让高密度 ASCII 角色自己说话。
+   ──────────────────────────────────────────────── */
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+body {
+  font: 16px/1.4 var(--spk-font);
+  background: var(--spk-bg);
+  color: var(--spk-label);
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: none;
+  cursor: default;
+  overflow: hidden;
+}
+
+/* 极轻的辐射渐变 — 给场景一点深度，但绝不抢戏 */
+.stage {
+  position: fixed; inset: 0;
+  background:
+    radial-gradient(ellipse 50% 40% at 50% 65%, var(--role-mid, #4d6bfe) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 50% 50%, rgba(255,255,255,.02) 0%, transparent 60%);
+  background-color: var(--spk-bg);
+  pointer-events: none;
+  opacity: 0.18;     /* 极轻，纯装饰 */
+}
+
+/* 像素星点（夜空） */
+.stage::before {
+  content: "";
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(1px 1px at 20% 30%, #f4f4f4, transparent),
+    radial-gradient(1px 1px at 80% 60%, #f4f4f4, transparent),
+    radial-gradient(1px 1px at 40% 80%, #f4f4f4, transparent),
+    radial-gradient(1px 1px at 90% 20%, #f4f4f4, transparent),
+    radial-gradient(1px 1px at 60% 10%, #f4f4f4, transparent);
+  background-size: 100% 100%;
+  opacity: 0.15;
+}
+
+/* 状态指示器（开发用，触摸右下角 3 秒显示） */
+.status {
+  position: fixed; bottom: 14px; right: 14px;
+  z-index: 99999;
+  display: flex; flex-direction: column; gap: 4px;
+  align-items: flex-end;
+  font: 8px/1 var(--spk-font-pixel);
+  color: var(--spk-label-2);
+  opacity: 0;
+  transition: opacity 200ms steps(4);
+  pointer-events: none;
+}
+body.show-status .status { opacity: 1; }
+.status span {
+  padding: 4px 6px;
+  background: var(--spk-surface);
+  border: 1px solid var(--spk-border);
+}
+.status span b { color: var(--role-mid); }

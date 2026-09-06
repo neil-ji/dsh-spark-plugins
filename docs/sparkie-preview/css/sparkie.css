@@ -1,0 +1,184 @@
+/* ─────────────── Sparkie · 高密度 ASCII 桌宠样式 ───────────────
+   关键约定：
+   - 位置由引擎通过 left/top（path 绝对坐标）控制；CSS 动画独占 transform 做 bob/scale/rotate。
+   - sprite 由 SVG <text> 字符组成（不是像素方块），缩放由 mount box 决定。
+   - pose 由引擎的 syncPose() 收敛后写到 data-pose，CSS 按 pose 播放不同节奏。
+   ─────────────────────────────────────────────────────────── */
+
+.sparkie-mount {
+  position: fixed;
+  left: 0; top: 0;              /* 引擎用 left/top 定位（path = 视口绝对坐标） */
+  z-index: var(--pet-z-ball);
+  background: transparent; border: 0; padding: 0; margin: 0;
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: filter 200ms ease;
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, .4));
+  touch-action: none;           /* 让 pointer 拖拽不被浏览器平移/缩放拦截 */
+}
+.sparkie-mount:focus-visible {
+  filter: drop-shadow(0 0 0 3px var(--role-mid)) drop-shadow(0 6px 12px rgba(0,0,0,.4));
+}
+
+.sparkie-mount .sparkie-sprite-host { display: block; width: 100%; height: 100%; }
+.sparkie-mount .sparkie-sprite {
+  display: block;
+  width: 100%; height: 100%;
+  image-rendering: pixelated;
+  shape-rendering: geometricPrecision;
+}
+
+/* 站姿：呼吸浮沉 */
+.sparkie-mount[data-pose="stand"] { animation: spk-idle-breath 1.44s steps(3) infinite; }
+@keyframes spk-idle-breath {
+  0%, 100% { transform: translateY(0) }
+  33%      { transform: translateY(-2px) }
+  66%      { transform: translateY(-1px) }
+}
+
+/* 走路：左右摇晃 */
+.sparkie-mount[data-pose="walk"] { animation: spk-walk-bob 0.48s steps(3) infinite; }
+@keyframes spk-walk-bob {
+  0%, 100% { transform: translateY(0) rotate(-1deg) }
+  50%      { transform: translateY(-3px) rotate(1deg) }
+}
+
+/* 坐姿：稳定 */
+.sparkie-mount[data-pose="sit"] { animation: spk-sit-breath 2.4s steps(2) infinite; }
+@keyframes spk-sit-breath {
+  0%, 100% { transform: translateY(0) }
+  50%      { transform: translateY(-1px) }
+}
+
+/* 眨眼：快速 scaleY */
+.sparkie-mount[data-pose="blink"] { animation: spk-blink 280ms steps(2) 1; }
+@keyframes spk-blink {
+  0%   { transform: scaleY(1) }
+  50%  { transform: scaleY(0.1) }
+  100% { transform: scaleY(1) }
+}
+
+/* 思考：微微左右晃 */
+.sparkie-mount[data-pose="think"] { animation: spk-think-sway 1.6s steps(2) infinite; }
+@keyframes spk-think-sway {
+  0%, 100% { transform: translateY(0) rotate(0) }
+  25%      { transform: translateY(-1px) rotate(-1deg) }
+  75%      { transform: translateY(-1px) rotate(1deg) }
+}
+
+/* 睡眠：下沉 + 慢呼吸 */
+.sparkie-mount[data-pose="sleep"] { animation: spk-sleep-breath 3.2s steps(2) infinite; }
+@keyframes spk-sleep-breath {
+  0%, 100% { transform: translateY(2px) scale(0.98); opacity: 0.9 }
+  50%      { transform: translateY(2px) scale(1.0); opacity: 1 }
+}
+
+/* 拖拽：抱紧 */
+.sparkie-mount[data-pose="drag"] { animation: spk-drag-shake 200ms steps(3) infinite; cursor: grabbing; }
+@keyframes spk-drag-shake {
+  0%, 100% { transform: scale(0.95) }
+  50%      { transform: scale(0.98) }
+}
+
+/* cheer：跳 + 摆 */
+.sparkie-mount[data-pose="cheer"] { animation: spk-cheer-jump 0.4s steps(4) infinite; }
+@keyframes spk-cheer-jump {
+  0%, 100% { transform: translateY(0) }
+  50%      { transform: translateY(-8px) scale(1.05) }
+}
+
+/* work（tool-use）：轻微忙摆 + 视线聚焦 */
+.sparkie-mount[data-pose="work"] { animation: spk-work-bounce 0.48s steps(3) infinite; }
+@keyframes spk-work-bounce {
+  0%, 100% { transform: translateY(0) rotate(0) }
+  50%      { transform: translateY(-2px) rotate(.6deg) }
+}
+
+/* alert（ask-user / permission）：注意力脉冲 */
+.sparkie-mount[data-pose="alert"] { animation: spk-alert-pulse 0.9s steps(4) infinite; }
+@keyframes spk-alert-pulse {
+  0%, 100% { transform: translateY(0) scale(1) }
+  50%      { transform: translateY(-3px) scale(1.06) }
+}
+
+/* error：难过地左右摆 */
+.sparkie-mount[data-pose="error"] { animation: spk-error-wobble 1.4s steps(4) infinite; }
+@keyframes spk-error-wobble {
+  0%, 100% { transform: rotate(0) }
+  25%      { transform: rotate(-2deg) }
+  75%      { transform: rotate(2deg) }
+}
+
+/* 鼠标 hover 时轻微抬起（暗示可交互） */
+.sparkie-mount:hover { filter: drop-shadow(0 10px 16px rgba(0, 0, 0, .5)) brightness(1.1); }
+
+/* ─────── 气泡（按需 pop） ─────── */
+.sparkie-bubble {
+  position: fixed; z-index: var(--pet-z-bubble);
+  padding: 10px 14px;
+  background: var(--spk-bg);
+  border: 2px solid var(--spk-border-2);
+  box-shadow: 4px 4px 0 0 rgba(0, 0, 0, .35);
+  color: var(--spk-label);
+  font: 12px/1.5 var(--spk-font);
+  max-width: 280px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(8px) scale(0.92);
+  transition: opacity 200ms steps(4), transform 200ms steps(4);
+}
+.sparkie-bubble.show { opacity: 1; transform: translateY(0) scale(1); }
+.sparkie-bubble b { color: var(--role-mid); }
+.sparkie-bubble .src { display: block; margin-top: 4px; color: var(--spk-label-3); font-size: 11px; }
+.sparkie-bubble::after {
+  content: ""; position: absolute;
+  left: 50%; bottom: -8px;
+  width: 8px; height: 8px;
+  background: var(--spk-bg);
+  border-right: 2px solid var(--spk-border-2);
+  border-bottom: 2px solid var(--spk-border-2);
+  transform: translateX(-50%) rotate(45deg);
+}
+
+/* ─────── 降级 ─────── */
+@media (prefers-reduced-motion: reduce) {
+  .sparkie-mount { animation: none !important; }
+}
+body[data-reduced="true"] .sparkie-mount { animation: none !important; }
+
+/* ─────── 侧抽屉（demo dock · 轻量） ─────── */
+.sparkie-panel {
+  position: fixed; z-index: var(--pet-z-panel);
+  width: 320px; max-width: calc(100vw - 24px);
+  background: var(--spk-surface);
+  border: 2px solid var(--spk-border-2);
+  box-shadow: 5px 5px 0 0 rgba(0, 0, 0, .35);
+  color: var(--spk-label);
+  opacity: 0; transform: translateY(8px);
+  pointer-events: none;
+  transition: opacity 200ms steps(4), transform 200ms steps(4);
+}
+.sparkie-panel.open { opacity: 1; transform: none; pointer-events: auto; }
+.sparkie-panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px; border-bottom: 2px solid var(--spk-border-2);
+}
+.sparkie-panel-head .title { font: 10px/1.3 var(--spk-font-pixel); color: var(--role-mid); }
+.sparkie-panel-close {
+  width: 28px; height: 28px; display: grid; place-items: center;
+  background: transparent; border: 0; color: var(--spk-label-2); cursor: pointer;
+}
+.sparkie-panel-nav { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 2px solid var(--spk-border-2); }
+.sparkie-panel-tab {
+  display: inline-flex; gap: 6px; align-items: center;
+  padding: 6px 8px; background: var(--spk-surface);
+  border: 1px solid var(--spk-border); color: var(--spk-label-2);
+  font: 12px/1 var(--spk-font); cursor: pointer;
+}
+.sparkie-panel-tab[aria-pressed="true"] { border-color: var(--role-mid); color: var(--spk-label); }
+.sparkie-panel-tab .dot { width: 8px; height: 8px; border-radius: 50%; }
+.sparkie-panel-body { padding: 14px 12px; }
+.sparkie-module { color: var(--spk-label-2); font: 14px/1.6 var(--spk-font); }

@@ -1,124 +1,65 @@
-/* ───────────────────── Sparkie · Design Tokens ─────────────────────
-   继承 Spark Dock tokens（暖炭骨架 + 火花琥珀 brand），扩展多角色皮肤。
-   主题：dark = 默认；[data-theme="light"] = 纸白。
-   ─────────────────────────────────────────────────────────────────── */
+/* ───────────────── Sparkie · Tokens ─────────────────
+   8-bit 像素风：Press Start 2P 字体 + 冷灰骨架 + 3 套皮肤 token
+   ──────────────────────────────────────────────────── */
+
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap');
 
 :root {
-  /* —— Spark Dock 继承 —— */
-  --spk-bg: #14120f;
-  --spk-surface: #1d1a16;
-  --spk-surface-2: #28241e;
-  --spk-surface-3: #343028;
-  --spk-label: #f5f1e8;
-  --spk-label-2: #c8c0ae;
-  --spk-label-3: #8a8172;
-  --spk-border: rgba(255, 255, 255, 0.09);
-  --spk-border-2: rgba(255, 255, 255, 0.16);
-  --spk-border-3: rgba(255, 255, 255, 0.26);
-  --spk-brand: #f59e0b;       /* 火花琥珀（默认皮肤 accent） */
-  --spk-brand-hover: #fbbf24;
-  --spk-on-brand: #201a0c;
-  --spk-shadow-lv2: 0 8px 24px rgba(43, 36, 22, .35);
-  --spk-shadow-lv3: 0 16px 48px rgba(43, 36, 22, .55);
-  --spk-glass-bg: rgba(29, 26, 22, .72);
-  --spk-blur: 16px;
-  --spk-focus: 0 0 0 2px rgba(245, 158, 11, .55);
-  --spk-font: 'PingFang SC', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Noto Sans SC', sans-serif;
-  --spk-font-mono: 'SF Mono', 'JetBrains Mono', ui-monospace, monospace;
-  --spk-text-2xs: 10px; --spk-text-xs: 11px; --spk-text-sm: 12px;
-  --spk-text-md: 13px; --spk-text-lg: 15px; --spk-text-xl: 17px; --spk-text-2xl: 22px;
-  --spk-radius-sm: 7px; --spk-radius-md: 10px; --spk-radius-lg: 14px;
-  --spk-radius-xl: 20px; --spk-radius-full: 9999px;
-  --spk-ease-out: cubic-bezier(.2, .8, .2, 1);
-  --spk-ease-spring: cubic-bezier(.34, 1.56, .64, 1);
-  --spk-dur-fast: 120ms; --spk-dur-med: 220ms; --spk-dur-slow: 320ms;
+  /* —— 背景（深色，让 ASCII 角色突出） —— */
+  --spk-bg: #0b0e14;
+  --spk-surface: #13171f;
+  --spk-border: #2a3140;
+  --spk-border-2: #3a4254;
+  --spk-label: #f4f4f4;
+  --spk-label-2: #a8b0bf;
+  --spk-label-3: #6b7587;
 
-  /* —— 角色皮肤 token（data-skin 切换 —— */
-  --role-accent: var(--spk-brand);          /* 主色 */
-  --role-accent-soft: rgba(245, 158, 11, .18);
-  --role-accent-glow: rgba(245, 158, 11, .55);
-  --role-eye: var(--spk-label);
-  --role-mouth: var(--spk-label);
-  --role-cheek: var(--role-accent);
+  /* —— 角色调色板（默认 blue） —— */
+  --role-mid: #4d6bfe;
+  --role-dark: #1e2a5e;
+  --role-light: #7a93ff;
+  --role-glow: #c8d3ff;
+  --role-cheek: #ff8db8;
+  --role-eye: #0b0e14;
 
-  /* —— 模块 accent（复用 Spark Dock 5 模块色板） —— */
-  --mod-spark: #f59e0b;
-  --mod-hippo: #3b82f6;
-  --mod-finance: #22c55e;
-  --mod-github: #8b5cf6;
-  --mod-npm: #e0533f;
-
-  /* —— 引擎专用 —— */
-  --pet-size: 72px;                /* 默认尺寸（含 4 芒呆毛） */
-  --pet-base-size: 56px;           /* 球体直径 */
-  --pet-anchor: 22px;              /* 吸附安全距 */
+  /* —— 引擎 —— */
   --pet-z-ball: 9000;
   --pet-z-bubble: 9300;
   --pet-z-panel: 9100;
 
-  --bubble-max-w: 260px;
-  --bubble-tail: 9px;
+  /* —— 字体 —— */
+  --spk-font: 'VT323', 'PingFang SC', 'Noto Sans SC', monospace;
+  --spk-font-pixel: 'Press Start 2P', monospace;
 }
 
 [data-theme="light"] {
-  --spk-bg: #faf9f6;
+  --spk-bg: #f4f4f4;
   --spk-surface: #ffffff;
-  --spk-surface-2: #f4f1ea;
-  --spk-surface-3: #ebe6db;
-  --spk-label: #1d1a16;
-  --spk-label-2: #5d564a;
-  --spk-label-3: #8a8172;
-  --spk-border: #e8e2d4;
-  --spk-border-2: #dbd3c1;
-  --spk-border-3: #c8c0ae;
-  --spk-brand: #f59e0b;
-  --spk-brand-hover: #d97706;
-  --spk-on-brand: #201a0c;
-  --spk-shadow-lv2: 0 8px 24px rgba(43, 36, 22, .12);
-  --spk-shadow-lv3: 0 16px 48px rgba(43, 36, 22, .22);
-  --spk-glass-bg: rgba(255, 255, 255, .78);
-  --spk-focus: 0 0 0 2px rgba(245, 158, 11, .5);
-  --role-eye: #1d1a16;
-  --role-mouth: #1d1a16;
+  --spk-border: #d0d4dc;
+  --spk-border-2: #a8aab8;
+  --spk-label: #0b0e14;
+  --spk-label-2: #4a4c5c;
+  --spk-label-3: #6e6e80;
 }
 
-/* ───── 皮肤：data-skin 切换 ───── */
-
-/* 琥珀 · Sparkle（默认，复用 Spark Dock） */
-[data-skin="sparkle"] {
-  --role-accent: #f59e0b;
-  --role-accent-soft: rgba(245, 158, 11, .18);
-  --role-accent-glow: rgba(245, 158, 11, .55);
+[data-skin="blue"] {
+  --role-mid: #4d6bfe;
+  --role-dark: #1e2a5e;
+  --role-light: #7a93ff;
+  --role-glow: #c8d3ff;
+  --role-cheek: #ff8db8;
 }
-
-/* 蓝晶 · Crystal（冷静分析者） */
-[data-skin="crystal"] {
-  --role-accent: #4d6bfe;
-  --role-accent-soft: rgba(77, 107, 254, .18);
-  --role-accent-glow: rgba(77, 107, 254, .55);
-  --role-cheek: #4d6bfe;
+[data-skin="amber"] {
+  --role-mid: #f59e0b;
+  --role-dark: #7c2d12;
+  --role-light: #fbbf24;
+  --role-glow: #fef3c7;
+  --role-cheek: #fb7185;
 }
-
-/* 绿芽 · Sprout（萌芽提示助手） */
-[data-skin="sprout"] {
-  --role-accent: #22c55e;
-  --role-accent-soft: rgba(34, 197, 94, .18);
-  --role-accent-glow: rgba(34, 197, 94, .55);
-  --role-cheek: #22c55e;
-}
-
-/* 玫粉 · Pixel（赛博 Neko 追光者） */
-[data-skin="pixel"] {
-  --role-accent: #ec4899;
-  --role-accent-soft: rgba(236, 72, 153, .18);
-  --role-accent-glow: rgba(236, 72, 153, .55);
-  --role-cheek: #ec4899;
-}
-
-/* ───── 状态态 token ───── */
-:root {
-  --state-success: #22c55e;
-  --state-warn: #f59e0b;
-  --state-error: #ef4444;
-  --state-info: #3b82f6;
+[data-skin="green"] {
+  --role-mid: #22c55e;
+  --role-dark: #14532d;
+  --role-light: #86efac;
+  --role-glow: #d1fae5;
+  --role-cheek: #fb7185;
 }
