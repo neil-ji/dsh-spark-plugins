@@ -463,6 +463,14 @@ function MemoryListPanel({ t, api, detailId, onDetail }: {
     if (page > 1 && total > 0 && page > totalPages) setPage(totalPages);
   }, [page, total, totalPages]);
   const hasFilters = q.length > 0 || kind.length > 0 || scope.length > 0 || status.length > 0 || tag.length > 0;
+  // 工具栏重做：筛选收进折叠面板 + 活跃筛选 chips（渐进披露，缓解 6 控件一行的过载）
+  const filterChips: { label: string; clear: () => void }[] = [];
+  if (q.length > 0) filterChips.push({ label: '“' + q + '”', clear: () => { setQ(''); } });
+  if (kind.length > 0) filterChips.push({ label: t(kind as HippomemoLocaleKey), clear: () => { setKind(''); } });
+  if (scope.length > 0) filterChips.push({ label: t(scope as HippomemoLocaleKey), clear: () => { setScope(''); } });
+  if (status.length > 0) filterChips.push({ label: t(status as HippomemoLocaleKey), clear: () => { setStatus(''); } });
+  if (tag.length > 0) filterChips.push({ label: '#' + tag, clear: () => { setTag(''); } });
+  const clearAllFilters = (): void => { setQ(''); setKind(''); setScope(''); setStatus(''); setTag(''); setPage(1); };
   return (
     <section className='hippomemo-memory-panel'>
       <div className='hippomemo-panel-head'>
@@ -471,26 +479,9 @@ function MemoryListPanel({ t, api, detailId, onDetail }: {
         <span className='hippomemo-panel-count'>{total} 条</span>
       </div>
       <div className='hippomemo-toolbar'>
-        <SearchInput className='hippomemo-search' value={q} onChange={setQ}
+        <SearchInput className='hippomemo-search hippomemo-search-grow' value={q} onChange={setQ}
           placeholder={t('searchPlaceholder')}
           onClear={() => { setQ(''); }} clearLabel={t('clearSearch')} />
-        <HippomemoSelect value={kind} placeholder={t('allKinds')}
-          options={[{ value: '', label: t('allKinds') }, ...KINDS.map(v => ({ value: v, label: t(v) }))]}
-          onChange={changeKind} />
-        <HippomemoSelect value={scope} placeholder={t('allScopes')}
-          options={[{ value: '', label: t('allScopes') }, ...SCOPES.map(v => ({ value: v, label: t(v) }))]}
-          onChange={changeScope} />
-        <HippomemoSelect value={status} placeholder={t('allStatuses')}
-          options={[{ value: '', label: t('allStatuses') }, ...STATUSES.map(v => ({ value: v, label: t(v) }))]}
-          onChange={changeStatus} />
-        {tags.length > 0 ? (
-          <HippomemoSelect value={tag} placeholder={t('allTags')}
-            options={[{ value: '', label: t('allTags') }, ...tags.map(item => ({ value: item.tag, label: item.tag + ' (' + String(item.count) + ')' }))]}
-            onChange={changeTag} />
-        ) : null}
-        <HippomemoSelect value={sort} placeholder={t('sortLabel')}
-          options={SORTS.map(option => ({ value: option.value, label: t(option.label) }))}
-          onChange={changeSort} />
         <Button variant='outline' size='sm'
           title={order === 'desc' ? t('orderDesc') : t('orderAsc')}
           aria-label={order === 'desc' ? t('orderDesc') : t('orderAsc')}
@@ -499,6 +490,47 @@ function MemoryListPanel({ t, api, detailId, onDetail }: {
         <Button variant='primary' size='md' icon={<IconPlusOutline16 />}
           onClick={() => { onDetail('new'); }}>{t('newMemory')}</Button>
       </div>
+      <details className='hippomemo-filters'>
+        <summary>
+          {filterChips.length > 0 ? t('filtersActive', { n: String(filterChips.length) }) : t('filters')}
+          {filterChips.length > 0 ? <span className='hippomemo-filters-badge'>{String(filterChips.length)}</span> : null}
+        </summary>
+        <div className='hippomemo-filters-body'>
+          <HippomemoSelect value={kind} placeholder={t('allKinds')}
+            options={[{ value: '', label: t('allKinds') }, ...KINDS.map(v => ({ value: v, label: t(v) }))]}
+            onChange={changeKind} />
+          <HippomemoSelect value={scope} placeholder={t('allScopes')}
+            options={[{ value: '', label: t('allScopes') }, ...SCOPES.map(v => ({ value: v, label: t(v) }))]}
+            onChange={changeScope} />
+          <HippomemoSelect value={status} placeholder={t('allStatuses')}
+            options={[{ value: '', label: t('allStatuses') }, ...STATUSES.map(v => ({ value: v, label: t(v) }))]}
+            onChange={changeStatus} />
+          {tags.length > 0 ? (
+            <HippomemoSelect value={tag} placeholder={t('allTags')}
+              options={[{ value: '', label: t('allTags') }, ...tags.map(item => ({ value: item.tag, label: item.tag + ' (' + String(item.count) + ')' }))]}
+              onChange={changeTag} />
+          ) : null}
+          <HippomemoSelect value={sort} placeholder={t('sortLabel')}
+            options={SORTS.map(option => ({ value: option.value, label: t(option.label) }))}
+            onChange={changeSort} />
+        </div>
+      </details>
+      {filterChips.length > 0 ? (
+        <div className='hippomemo-filter-chips' role='group' aria-label={t('filters')}>
+          {filterChips.map((chip, index) => (
+            <button key={index} type='button' className='hippomemo-chip' aria-label={chip.label}
+              onClick={chip.clear}>
+              {chip.label}
+              <span aria-hidden='true'>×</span>
+            </button>
+          ))}
+          {filterChips.length > 1 ? (
+            <button type='button' className='hippomemo-chip hippomemo-chip-clear' onClick={clearAllFilters}>
+              {t('filterClearAll')}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       {loading ? <p className='hippomemo-status hippomemo-status-loading' role='status'>{t('loading')}</p> : null}
       {error.length > 0 && loading === false ? (
         <p className='hippomemo-error' role='alert'>{t('loadFailed')}: {error}
