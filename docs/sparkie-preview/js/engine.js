@@ -249,17 +249,20 @@
     renderSprite() {
       if (this.renderer) {
         const html = this.renderer.render(this.pose, this.frame);
-        if (html) this.sprite = html;              // 记录供外部读取
+        if (html) { this.sprite = html; this._spriteHtml = html; }   // 记录供外部读取
       }
       if (this.sprite && this.mount) {
-        // 只替换 sprite 容器，保留 mount 自身的 pointer 事件
+        // 只替换 sprite 容器，保留 mount 自身的 pointer 事件；内容相同则跳过，避免帧循环抖动
         let host = this.mount.querySelector('.sparkie-sprite-host');
         if (!host) {
           host = document.createElement('div');
           host.className = 'sparkie-sprite-host';
           this.mount.appendChild(host);
         }
-        host.innerHTML = this.sprite;
+        if (this._spriteHtml !== host._rendered) {
+          host.innerHTML = this.sprite;
+          host._rendered = this._spriteHtml;
+        }
       }
     }
     _advanceFrame(dt) {

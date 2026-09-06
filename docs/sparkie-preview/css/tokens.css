@@ -1,22 +1,29 @@
 /* ───────────────── Sparkie · Tokens ─────────────────
-   8-bit 像素风：Press Start 2P 字体 + 冷灰骨架 + 3 套皮肤 token
+   MASTER.md 双层美学：承载页 = DSH 冷灰骨架 + 品牌蓝（不撞色）；
+   角色层 = Claymorphism 软陶玩偶（mood 染色只在角色本体说话）。
+   5 套皮肤由 data-skin 切换；--role-* 供气泡/面板/画布 accent。
    ──────────────────────────────────────────────────── */
 
-@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Varela+Round&family=Nunito+Sans:wght@400;600;700&display=swap');
 
 :root {
-  /* —— 背景（深色，让 ASCII 角色突出） —— */
+  /* —— DSH 冷灰骨架 —— */
   --spk-bg: #0b0e14;
   --spk-surface: #13171f;
-  --spk-border: #2a3140;
-  --spk-border-2: #3a4254;
-  --spk-label: #f4f4f4;
+  --spk-surface-2: #1a1f2a;
+  --spk-surface-3: #232a37;
+  --spk-label: #f5f7fa;
   --spk-label-2: #a8b0bf;
   --spk-label-3: #6b7587;
+  --spk-border: #2a3140;
+  --spk-border-2: #3a4254;
+  --spk-brand: #4d6bfe;
+  --spk-brand-soft: rgba(77, 107, 254, .14);
+  --spk-focus: 0 0 0 3px rgba(77, 107, 254, .55);
 
-  /* —— 角色调色板（默认 blue） —— */
+  /* —— 角色 token（默认 crystal） —— */
   --role-mid: #4d6bfe;
-  --role-dark: #1e2a5e;
+  --role-dark: #20306e;
   --role-light: #7a93ff;
   --role-glow: #c8d3ff;
   --role-cheek: #ff8db8;
@@ -28,38 +35,28 @@
   --pet-z-panel: 9100;
 
   /* —— 字体 —— */
-  --spk-font: 'VT323', 'PingFang SC', 'Noto Sans SC', monospace;
-  --spk-font-pixel: 'Press Start 2P', monospace;
+  --spk-font: 'Nunito Sans', 'PingFang SC', 'Noto Sans SC', sans-serif;
+  --spk-font-pixel: 'Varela Round', 'PingFang SC', 'Noto Sans SC', sans-serif;
 }
 
 [data-theme="light"] {
-  --spk-bg: #f4f4f4;
+  --spk-bg: #ffffff;
   --spk-surface: #ffffff;
-  --spk-border: #d0d4dc;
-  --spk-border-2: #a8aab8;
+  --spk-surface-2: #f4f5f8;
+  --spk-surface-3: #e9ecf2;
+  --spk-border: #e4e7ec;
+  --spk-border-2: #d0d4dc;
   --spk-label: #0b0e14;
-  --spk-label-2: #4a4c5c;
-  --spk-label-3: #6e6e80;
+  --spk-label-2: #4a5468;
+  --spk-label-3: #8a93a3;
+  --spk-brand: #3b56e0;
+  --spk-brand-soft: rgba(77, 107, 254, .10);
+  --role-eye: #0b0e14;
 }
 
-[data-skin="blue"] {
-  --role-mid: #4d6bfe;
-  --role-dark: #1e2a5e;
-  --role-light: #7a93ff;
-  --role-glow: #c8d3ff;
-  --role-cheek: #ff8db8;
-}
-[data-skin="amber"] {
-  --role-mid: #f59e0b;
-  --role-dark: #7c2d12;
-  --role-light: #fbbf24;
-  --role-glow: #fef3c7;
-  --role-cheek: #fb7185;
-}
-[data-skin="green"] {
-  --role-mid: #22c55e;
-  --role-dark: #14532d;
-  --role-light: #86efac;
-  --role-glow: #d1fae5;
-  --role-cheek: #fb7185;
-}
+/* ── 皮肤：data-skin 切换（与 sparkie.js PALETTE 保持一致） ── */
+[data-skin="crystal"] { --role-mid: #4d6bfe; --role-dark: #20306e; --role-light: #7a93ff; --role-glow: #c8d3ff; --role-cheek: #ff8db8; --role-eye: #0b0e14; }
+[data-skin="sparkle"] { --role-mid: #f59e0b; --role-dark: #8a3a10; --role-light: #fbbf24; --role-glow: #fef3c7; --role-cheek: #fb7185; --role-eye: #3b2010; }
+[data-skin="sprout"]  { --role-mid: #22c55e; --role-dark: #13592b; --role-light: #86efac; --role-glow: #d1fae5; --role-cheek: #fb7185; --role-eye: #0e2b17; }
+[data-skin="pixel"]   { --role-mid: #ec4899; --role-dark: #8a2358; --role-light: #f9a8d4; --role-glow: #fce7f3; --role-cheek: #ffb3c4; --role-eye: #3a0f24; }
+[data-skin="clay"]    { --role-mid: #e07a4a; --role-dark: #8a3f1c; --role-light: #ef9a6b; --role-glow: #fbe0d0; --role-cheek: #ffb59a; --role-eye: #3a1c0d; }

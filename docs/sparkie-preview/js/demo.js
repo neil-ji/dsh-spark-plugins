@@ -87,7 +87,9 @@
     rs.setProperty('--role-light', p.bodyLight);
     rs.setProperty('--role-glow', p.glow);
     rs.setProperty('--role-cheek', p.cheek);
+    rs.setProperty('--role-eye', p.eye);
     pet.renderSprite();
+    renderStatus && renderStatus();
   }
   function cycleSkin() {
     const skins = Object.keys(PALETTE);

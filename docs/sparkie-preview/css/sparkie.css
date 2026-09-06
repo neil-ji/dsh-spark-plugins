@@ -27,8 +27,6 @@
 .sparkie-mount .sparkie-sprite {
   display: block;
   width: 100%; height: 100%;
-  image-rendering: pixelated;
-  shape-rendering: geometricPrecision;
 }
 
 /* 站姿：呼吸浮沉 */
