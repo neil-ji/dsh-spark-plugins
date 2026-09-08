@@ -16,8 +16,14 @@ export default defineConfig({
     name: 'esbuild-ts-transform',
     enforce: 'pre',
     async transform(code, id) {
-      if (!/\.(ts|tsx|mts|cts)$/.test(id)) return null
-      const result = await esbuild.transform(code, {
+      // 测试会 import 仓库里的 .mjs 脚本（如 scripts/sync-finance-prices.mjs），
+      // 它们带 `#!/usr/bin/env node`。vite 的管线对非 TS 文件不剥 shebang，
+      // 直接当 JS 解析会报 "Invalid or unexpected token"，所以这里统一先剥掉。
+      const withoutShebang = code.startsWith('#!') ? code.replace(/^#![^\n]*\n/, '\n') : code
+      if (!/\.(ts|tsx|mts|cts)$/.test(id)) {
+        return withoutShebang === code ? null : { code: withoutShebang, map: null }
+      }
+      const result = await esbuild.transform(withoutShebang, {
         loader: id.endsWith('.tsx') ? 'tsx' : 'ts',
         target: 'node18',
         sourcefile: id,
@@ -26,7 +32,7 @@ export default defineConfig({
     },
   }],
   test: {
-    include: ['packages/*/tests/**/*.spec.ts'],
+    include: ['packages/*/tests/**/*.spec.ts', 'scripts/tests/**/*.spec.ts'],
     environment: 'node',
   },
 })

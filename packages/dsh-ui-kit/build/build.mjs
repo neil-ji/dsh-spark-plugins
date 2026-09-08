@@ -145,6 +145,8 @@ const esmOutDir = path.join(distDir, 'esm')
 // 仅转换可执行 .ts/.tsx；排除 .d.ts（我的 src/styles/tokens.mjs.d.ts 声明文件不该被当源码转译）。
 const jsFiles = walk(srcDir).filter((f) => /\.(ts|tsx)$/.test(f) && !f.endsWith('.d.ts'))
 for (const rel of jsFiles) {
+  // path.relative 在 Windows 下给反斜杠，而下面的深度/子目录推导与产物路径都用 '/'
+  const relPosix = rel.split(path.sep).join('/')
   const { code } = await transformJs(readFileSync(path.join(srcDir, rel), 'utf8'), {
     loader: rel.endsWith('.tsx') ? 'tsx' : 'ts',
     jsx: 'automatic',
@@ -153,9 +155,9 @@ for (const rel of jsFiles) {
   })
   let out = code
   // Directory depth of this file under esm/ decides how far up to reach dist/css|katex.
-  const depth = (rel.split('/').length - 1)
+  const depth = (relPosix.split('/').length - 1)
   const up = '../'.repeat(depth + 1)
-  const dirPart = rel.split('/').slice(0, -1).join('/')
+  const dirPart = relPosix.split('/').slice(0, -1).join('/')
   const cssDir = dirPart ? dirPart + '/' : ''
   // .module.css -> dist/css/<dirPart>/<local> (css mirrors src subpaths under css/)
   out = out.replace(/(from\s+['"])(\.?\/?)([^'"]+)\.module\.css(['"])/g, (_m, pre, _dot, p, q) => pre + up + 'css/' + cssDir + p + '.module.mjs' + q)
@@ -170,7 +172,7 @@ for (const rel of jsFiles) {
   // cx.js 在 dist/esm/ 下，向上一级到 dist/，再进 styles/。
   out = out.replace(/(from\s+['"])(\.\/styles\/tokens\.mjs)(['"])/g, (_m, pre, _p, q) => pre + '../styles/tokens.mjs' + q)
   out = out.replace(/(import\s+['"])(\.\/styles\/tokens\.mjs)(['"])/g, (_m, pre, _p, q) => pre + '../styles/tokens.mjs' + q)
-  const outRel = rel.replace(/\.tsx?$/, '.js')
+  const outRel = relPosix.replace(/\.tsx?$/, '.js')
   mkdirSync(path.dirname(path.join(esmOutDir, outRel)), { recursive: true })
   writeFileSync(path.join(esmOutDir, outRel), out)
 }

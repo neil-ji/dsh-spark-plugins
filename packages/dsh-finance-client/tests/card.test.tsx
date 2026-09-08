@@ -118,7 +118,7 @@ describe('FinanceCard', () => {
     expect(html).toContain('cardTitle')
     expect(html).toContain('cardDescription')
     expect(html).toContain('aria-expanded="false"')
-    expect(html).toContain('cardExpand') // header disclosure aria-label
+    expect(html).toContain('aria-controls') // 头部是可折叠 disclosure 按钮（dsh-ui-kit/Disclosure）
     // Body is collapsed by default.
     expect(html).not.toContain('cardDeepseekConnectionTitle')
     expect(html).not.toContain('cardViewsTitle')

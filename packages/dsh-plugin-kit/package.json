@@ -3,12 +3,12 @@
   "version": "0.2.0",
   "description": "DSH 第三方插件公共层：client 设置页样板（settings.section 注册 / locale / CSS 注入）",
   "type": "module",
-  "main": "./lib/index.js",
+  "main": "./lib/index.mjs",
   "types": "./lib/types/index.d.ts",
   "exports": {
     ".": {
       "types": "./lib/types/index.d.ts",
-      "default": "./lib/index.js"
+      "default": "./lib/index.mjs"
     },
     "./client": {
       "types": "./lib/types/client/index.d.ts",

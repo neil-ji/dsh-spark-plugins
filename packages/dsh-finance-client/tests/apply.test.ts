@@ -98,23 +98,15 @@ describe('dsh-spark-finance-client apply', () => {
     expect(getRegistrar('settings.section')).toBeUndefined()
   })
 
-  it('registers the finance plugin card into settings.plugin.item', async () => {
-    const { ctx, getRegistrar } = fakeCtx()
-    await apply(ctx)
-    expect(ctx.settingsScope.bind).toHaveBeenCalledWith({ namespace: 'finance' })
-    expect(ctx.slots.inject).toHaveBeenCalledWith('settings.plugin.item', expect.any(Function))
-    getRegistrar('settings.plugin.item')!()
-    expect(ctx.slots.register).toHaveBeenCalledTimes(1)
-    const [entry] = ctx.slots.register.mock.calls[0]
-    expect(entry.name).toBe('settings.plugin.item')
-    expect(entry.key).toBe('finance')
-    expect(entry.locale).toBe('settings.finance')
-  })
-
-  it('reads the mounted finance namespace via reflect (no inject deadlock)', async () => {
+  // 入口退位（2026-09）：设置页入口已完全由 dsh-spark-dock 悬浮球内嵌承担
+  // （dock import 本包 ./embed 的 FinanceCard，并自行 mount remote + bind settingsScope），
+  // 本入口不再注册 settings.plugin.item、不 bind settingsScope、也不 reflect.get。
+  it('does not register the retired settings.plugin.item entry', async () => {
     const { ctx } = fakeCtx()
     await apply(ctx)
-    expect(ctx.reflect.get).toHaveBeenCalledWith('remote.finance')
+    expect(ctx.slots.inject).not.toHaveBeenCalledWith('settings.plugin.item', expect.any(Function))
+    expect(ctx.settingsScope.bind).not.toHaveBeenCalled()
+    expect(ctx.reflect.get).not.toHaveBeenCalled()
   })
 
   it('registers locale dictionaries for settings.finance', async () => {
