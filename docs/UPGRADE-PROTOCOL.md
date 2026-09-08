@@ -3,7 +3,12 @@
 > 目的：dsh 开源更新时，**先体检、再升级**，避免插件与新版 dsh 不兼容导致 3080/3999 环境崩溃。
 > 适用：本 monorepo（dsh-spark-plugins）内的所有插件包。
 
-> **当前状态（2026-08-22）**：monorepo / 全局 dsh / profile 均已升至 **0.1.1-rc.2**，两处已知破坏已修复（finance projection、credentials 事件），typecheck/test/build 全绿，3999 狗粮通过，3080 仍跑旧进程（下次重启自动吃新状态）。
+> **兼容策略**：只保证与**最新发布版 dsh** 兼容（不做多版本矩阵）。发布清单里的 `dsh.tested`
+> 由打包环境（CI 装 `@latest`）实际版本决定，`compat` 推导为 `^<tested>`；`release.yml` 的 verify
+> job 会装回清单里记录的版本、用发布出去的资产跑验收矩阵。**dsh 一升级就要走完下面两道闸再打新 tag。**
+
+> **当前状态（2026-09-08）**：本仓与全局 dsh 均为 **0.1.2-rc.1**；typecheck / `pnpm test` / `pnpm -r build`
+> 全绿，发布资产端到端验收（`pnpm release:verify`）30/30 通过。
 
 ## 一、机制总览（两道闸）
 

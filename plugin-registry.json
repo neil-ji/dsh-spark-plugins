@@ -1,5 +1,8 @@
 {
   "profile": "web",
+  "dsh": {
+    "policy": "latest"
+  },
   "plugins": {
     "dsh-hippomemo": "packages/dsh-hippomemo",
     "dsh-spark-finance-bundle": "packages/dsh-finance-bundle",

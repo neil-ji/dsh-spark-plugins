@@ -1,0 +1,98 @@
+name: release
+
+# 打 tag（v0.2.0）即发布：CI 构建 → 打包成 Release 资产 → 用「刚发布的资产」做一次真实安装验收。
+# 用户侧只需 docs/install.sh / docs/install.ps1 下载这些资产，不 clone、不构建。
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号（含 v，如 v0.2.0）；填了就用它当 tag 名，否则用 ref_name'
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  VERSION: ${{ inputs.version || github.ref_name }}
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.11.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: 安装依赖
+        run: pnpm install --config.confirmModulesPurge=false
+      - name: 构建
+        run: pnpm -r build
+      - name: 类型检查
+        run: pnpm -r typecheck
+      - name: 安装 dsh（最新版）并记录到清单
+        run: |
+          npm install -g @deepseek-ai/dsh@latest
+          dsh --version
+      - name: 单元测试
+        run: pnpm test
+      - name: 打包发布资产
+        run: node scripts/pack-release.mjs --tag "$VERSION" --out dist-release --dsh "$(dsh --version)"
+      - name: 汇总产物
+        run: |
+          echo "### 发布资产" >> $GITHUB_STEP_SUMMARY
+          ls -la dist-release >> $GITHUB_STEP_SUMMARY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-release
+          path: dist-release/
+          retention-days: 30
+
+  publish:
+    needs: pack
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-release
+          path: dist-release
+      - name: 创建 / 更新 GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.VERSION }}
+          name: dsh-spark-plugins ${{ env.VERSION }}
+          generate_release_notes: true
+          files: dist-release/*
+          fail_on_unmatched_files: true
+
+  verify:
+    # 用刚发布的资产（而不是工作区源码）装一遍并跑验收矩阵——发布即自验。
+    # 装的 dsh 版本取自清单里记录的 dsh.tested，验证「兼容声明」本身是否成立。
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: 安装清单里记录的 dsh 版本
+        run: |
+          BASE="https://github.com/${{ github.repository }}/releases/download/$VERSION"
+          TESTED=$(curl -fsSL "$BASE/manifest.json" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const m=JSON.parse(s);if(!m.dsh||!m.dsh.tested){console.error('清单没有 dsh.tested');process.exit(1)}process.stdout.write(m.dsh.tested)})")
+          echo "dsh $TESTED"
+          npm install -g "@deepseek-ai/dsh@$TESTED"
+      - name: 从 GitHub Release 安装并验收
+        run: |
+          node scripts/remote-verify.mjs \
+            --base-url "https://github.com/${{ github.repository }}/releases/download/$VERSION" \
+            --fresh

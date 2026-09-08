@@ -224,7 +224,7 @@
     </a>
   </div>
   <div class="meta">
-    <span>当前适配 <b class="mono">dsh 0.1.1-rc.2</b></span>
+    <span>当前适配 <b class="mono">dsh 0.1.2-rc.1</b>（最新）</span>
     <span><b>12</b> 个包</span>
     <span><b>255+</b> 测试用例</span>
     <span><b>MIT</b> License</span>
@@ -333,8 +333,8 @@
 <section id="compat">
   <div class="wrap">
     <span class="kicker">VERSION COMPATIBILITY</span>
-    <h2>版本不匹配的插件，一个都别装</h2>
-    <p class="sub">dsh 迭代很快，接口与事件随时改名。本仓库每个插件线都钉死在经过验证的 dsh 版本上——装之前先对表，装完升级先过闸。</p>
+    <h2>只跟最新 dsh 对齐</h2>
+    <p class="sub">dsh 迭代很快，接口与事件随时改名。本插件线只承诺一件事：与<b>最新发布版 dsh</b>兼容——每次发版都由 CI 用最新 dsh 构建并跑完整验收。其他版本请先跑两道闸。</p>
 
     <div class="warn-strip">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
@@ -347,15 +347,14 @@
         输入你的 dsh 版本，即时判定
       </h3>
       <div class="row">
-        <input id="ver-in" class="mono" type="text" placeholder="如 0.1.1-rc.2" aria-label="输入你的 dsh 版本号" autocomplete="off" spellcheck="false">
+        <input id="ver-in" class="mono" type="text" placeholder="如 0.1.2-rc.1" aria-label="输入你的 dsh 版本号" autocomplete="off" spellcheck="false">
         <button class="btn primary" id="ver-go" type="button">检查兼容性</button>
       </div>
       <div class="verdict" id="verdict" role="status" aria-live="polite"></div>
       <div class="quick-try">
         <span>试试：</span>
-        <button class="chip" type="button" data-ver="0.1.1-rc.2">0.1.1-rc.2</button>
+        <button class="chip" type="button" data-ver="0.1.2-rc.1">0.1.2-rc.1</button>
         <button class="chip" type="button" data-ver="0.1.1-rc.5">0.1.1-rc.5</button>
-        <button class="chip" type="button" data-ver="0.1.0-rc.8">0.1.0-rc.8</button>
         <button class="chip" type="button" data-ver="0.2.0">0.2.0</button>
       </div>
     </div>
@@ -366,28 +365,16 @@
       </thead>
       <tbody>
         <tr>
-          <td class="mono">0.1.1-rc.2</td>
+          <td class="mono">0.1.2-rc.1（最新）</td>
           <td><span class="status ok"><i></i>完全兼容</span></td>
-          <td>当前主线。typecheck / 255+ 用例 / 3999 狗粮全部通过</td>
+          <td>发布流水线用该版本构建，并用发布出去的资产端到端验收通过</td>
           <td class="mono">直接安装</td>
         </tr>
         <tr>
-          <td class="mono">0.1.1-rc.3+</td>
+          <td class="mono">其他版本</td>
           <td><span class="status warn"><i></i>未验证</span></td>
-          <td>同 tuple 新 rc：符号与事件可能被上游改名</td>
-          <td class="mono">先跑两道闸</td>
-        </tr>
-        <tr>
-          <td class="mono">0.1.0-rc.8 及更早</td>
-          <td><span class="status err"><i></i>不兼容</span></td>
-          <td>插件已适配 0.1.1 的 projection / credentials 破坏性改动，回装旧宿主会缺符号</td>
-          <td class="mono">先升 dsh</td>
-        </tr>
-        <tr>
-          <td class="mono">其他 / 更新的大版本</td>
-          <td><span class="status warn"><i></i>未验证</span></td>
-          <td>接口面 diff 未知，不排除编译级破坏</td>
-          <td class="mono">先跑两道闸</td>
+          <td>本线只保证最新版兼容：更旧的可能缺符号，更新的接口面未知</td>
+          <td class="mono">先升 dsh / 跑两道闸</td>
         </tr>
       </tbody>
     </table>
@@ -417,20 +404,23 @@
       <div class="step">
         <span class="n">1</span>
         <h3>确认 dsh 版本</h3>
-        <p>当前插件线适配 dsh 0.1.1-rc.2，其他版本先看上方兼容矩阵。需 Node ≥ 18 与 git。</p>
+        <p>当前插件线只保证与最新 dsh 兼容（当前 0.1.2-rc.1），其他版本先看上方兼容矩阵。需 Node ≥ 18；不需要 git / pnpm。</p>
         <code>dsh --version</code>
       </div>
       <div class="step">
         <span class="n">2</span>
         <h3>一键安装</h3>
-        <p>克隆到 ~/.dsh/spark-plugins、构建并链入 profile。幂等，重复执行即更新：</p>
+        <p>从 GitHub Release 下载预构建产物、校验 sha256 后装进 profile。不 clone、不构建：</p>
         <code>curl -fsSL https://neil-ji.github.io/dsh-spark-plugins/install.sh | sh</code>
+        <p style="margin-top:8px">Windows（PowerShell 5.1+，等价脚本）：</p>
+        <code>irm https://neil-ji.github.io/dsh-spark-plugins/install.ps1 -OutFile install.ps1; .\install.ps1</code>
       </div>
       <div class="step">
         <span class="n">3</span>
         <h3>重启即生效</h3>
         <p>重启 dsh web，到设置页完成各插件连接配置。变体：</p>
-        <code>install.sh --profile main --ref v0.2.0</code>
+        <code>install.sh --version v0.2.0 --profile web</code>
+        <p style="margin-top:8px">Windows：<code>.\install.ps1 -Version v0.2.0</code>；只装部分插件 <code>--only dsh-spark</code>；装到沙箱 home（不碰 ~/.dsh）<code>--home .\.dev\home</code>；开发路径 <code>--from-source</code></p>
       </div>
     </div>
   </div>
@@ -456,7 +446,7 @@
     <span>·</span>
     <span>MIT License</span>
     <span>·</span>
-    <span>当前适配 <span class="mono">dsh 0.1.1-rc.2</span></span>
+    <span>当前适配 <span class="mono">dsh 0.1.2-rc.1</span>（最新）</span>
     <span class="spacer"></span>
     <a href="https://github.com/neil-ji/dsh-spark-plugins">GitHub</a>
     <a href="demo.html">Demo</a>
@@ -465,16 +455,30 @@
 </footer>
 
 <script>
-  // 版本兼容判定（数据与 docs/UPGRADE-PROTOCOL.md 一致）
+  // 兼容策略：只保证与最新 dsh 兼容。发版时把 DSH_LATEST 同步成清单里的 dsh.tested。
+  var DSH_LATEST = '0.1.2-rc.1';
+  function parseVer(v) {
+    var m = v.match(/^(\d+)\.(\d+)\.(\d+)(?:-rc\.(\d+))?$/);
+    return m ? { M: +m[1], mi: +m[2], pa: +m[3], rc: m[4] === undefined ? null : +m[4] } : null;
+  }
+  function cmpVer(a, b) {
+    if (a.M !== b.M) return a.M < b.M ? -1 : 1;
+    if (a.mi !== b.mi) return a.mi < b.mi ? -1 : 1;
+    if (a.pa !== b.pa) return a.pa < b.pa ? -1 : 1;
+    if (a.rc === b.rc) return 0;
+    if (a.rc === null) return 1;          // 正式版 > rc
+    if (b.rc === null) return -1;
+    return a.rc < b.rc ? -1 : 1;
+  }
+  // 与 scripts/release-install.mjs 的 satisfies() 同一口径
   function judge(v) {
     v = (v || '').trim().toLowerCase().replace(/^v/, '');
-    if (!/^\d+\.\d+\.\d+(-rc\.\d+)?$/.test(v)) return null;
-    const m = v.match(/^(\d+)\.(\d+)\.(\d+)(?:-rc\.(\d+))?$/);
-    const M = m[1], mi = m[2], pa = m[3], rc = m[4];
-    if (M === '0' && mi === '1' && rc === '2') return { s: 'ok', t: '完全兼容', d: 'v' + v + ' 正是当前插件线钉版并通过全部验证的版本，直接安装即可。' };
-    if (M === '0' && mi === '1' && pa === '0') return { s: 'err', t: '不兼容 · 先升级 dsh', d: '0.1.0 线（含 0.1.0-rc.x）早于插件适配的 projection / credentials 破坏性改动，安装会缺符号或静默失效。' };
-    if (M === '0' && mi === '1' && rc) return { s: 'warn', t: '未验证 · 建议先体检', d: '同 tuple 的新 rc 未逐一验证。克隆仓库后先跑 pnpm check:dsh-upgrade，有信号再跑 pnpm dryrun:dsh-upgrade，全绿后再钉版。' };
-    return { s: 'warn', t: '未验证 · 接口面未知', d: '该版本超出已验证范围（可能更新也可能过旧）。不要直接安装：先跑 pnpm check:dsh-upgrade 对比发布产物 API 面，再跑 pnpm dryrun:dsh-upgrade 真验。' };
+    var p = parseVer(v);
+    if (!p) return null;
+    var diff = cmpVer(p, parseVer(DSH_LATEST));
+    if (diff === 0) return { s: 'ok', t: '完全兼容', d: 'v' + v + ' 正是发布线验证过的 dsh 版本，直接安装即可。' };
+    if (diff < 0) return { s: 'err', t: '未验证 · 先升级 dsh', d: '本插件线只保证与最新版 ' + DSH_LATEST + ' 兼容；' + v + ' 更旧，可能缺符号或静默失效。升级 dsh 后再装。' };
+    return { s: 'warn', t: '未验证 · 比验证版本更新', d: v + ' 比发布线验证的 ' + DSH_LATEST + ' 更新，接口面可能已变。先跑 pnpm check:dsh-upgrade 与 pnpm dryrun:dsh-upgrade，全绿再装。' };
   }
   const input = document.getElementById('ver-in');
   const box = document.getElementById('verdict');
@@ -488,7 +492,7 @@
     box.classList.remove('ok', 'warn', 'err');
     if (!r) {
       box.classList.add('err'); box.classList.add('show');
-      box.innerHTML = icons('err') + '<span>看起来不是合法的 dsh 版本号。格式形如 <span class="mono">0.1.1-rc.2</span>，可在 <span class="mono">~/.dsh/profiles/web</span> 的依赖钉版或 dsh 启动日志里找到。</span>';
+      box.innerHTML = icons('err') + '<span>看起来不是合法的 dsh 版本号。格式形如 <span class="mono">' + DSH_LATEST + '</span>，用 <span class="mono">dsh --version</span> 查看。</span>';
       return;
     }
     box.classList.add(r.s); box.classList.add('show');
@@ -498,7 +502,7 @@
   input.addEventListener('keydown', e => { if (e.key === 'Enter') run(input.value); });
   document.querySelectorAll('.chip[data-ver]').forEach(c =>
     c.addEventListener('click', () => { input.value = c.dataset.ver; run(c.dataset.ver); }));
-  run('0.1.1-rc.2');
+  run(DSH_LATEST);
 </script>
 </body>
 </html>

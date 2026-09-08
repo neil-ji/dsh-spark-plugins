@@ -4,22 +4,46 @@ DSH 第三方插件 monorepo（pnpm workspace）：UI/UX 与 DSH Web 官方设�
 
 ## 安装
 
-前置：dsh `0.1.1-rc.2`（其他版本先看[版本兼容](https://neil-ji.github.io/dsh-spark-plugins/#compat)）、Node.js ≥ 18 与 git（pnpm 自动引导）。
+前置：dsh **最新版**（当前 `0.1.2-rc.1`）、Node.js ≥ 18。
+**不需要 git、不需要 pnpm、不克隆仓库、不本地构建** —— 脚本从 GitHub Release 下载 CI 预构建的 tarball，
+逐个校验 sha256 后装进 dsh profile。
+
+> 兼容策略：**只保证与最新 dsh 兼容**。发布清单里记录打包时刻的 `dsh.tested`（CI 装的是 `@latest`），
+> 安装器拿本机 `dsh --version` 与之比对：一致即通过；不一致只告警（`--strict-version` 改成硬失败）。
+> dsh 升级后重跑两道闸（`pnpm check:dsh-upgrade` / `pnpm dryrun:dsh-upgrade`）再重发版。
+
+**Linux / macOS / WSL**
 
 ```bash
 curl -fsSL https://neil-ji.github.io/dsh-spark-plugins/install.sh | sh
 ```
 
-脚本幂等：重复执行 = 更新到最新。源码会被固定克隆到 `~/.dsh/spark-plugins`。
+**Windows（PowerShell 5.1+）**
 
-```bash
-# 常用变体（先 curl -o install.sh 下载后执行）
-sh install.sh --profile main      # 指定目标 dsh profile（默认 web）
-sh install.sh --ref v0.2.0        # 锁定 tag / 分支
-sh install.sh --no-profile        # 只更新源码，不重链 profile
+```powershell
+irm https://neil-ji.github.io/dsh-spark-plugins/install.ps1 -OutFile install.ps1; .\install.ps1
 ```
 
-装完重启 dsh web，到设置页完成各插件的连接配置即可。卸载：`dsh plugin remove <插件名>` 并删除 `~/.dsh/spark-plugins`。发布 npm 版本视需求后续提供。
+两个脚本都幂等：重复执行 = 更新到最新。安装器会核对本机 `dsh --version` 是否落在发布包的兼容区间内
+（不满足只告警，`--strict-version` 可改成硬失败）。
+
+```bash
+# 常用变体
+sh install.sh --version v0.2.0       # 装指定 tag（默认 latest）
+sh install.sh --profile main         # 指定目标 dsh profile（默认 web）
+sh install.sh --only dsh-spark,dsh-connector-npm   # 只装部分插件
+sh install.sh --home /tmp/dev-home   # 目标 DSH_HOME（隔离安装/沙箱试用）
+sh install.sh --from-source          # 开发路径：clone + pnpm install + build
+
+# Windows 对应参数
+.\install.ps1 -Version v0.2.0
+.\install.ps1 -DshHome .\.dev\home -Profile devweb
+.\install.ps1 -FromSource -LocalDir F:\path\to\checkout
+```
+
+装完重启 dsh web，到设置页完成各插件的连接配置即可。
+卸载：`dsh plugin --profile web remove <插件名>`，并删除 `$DSH_HOME/spark-plugins`（安装器缓存）。
+发布流程见 [.github/workflows/release.yml](.github/workflows/release.yml)：打 tag → 构建/测试 → 打包资产 → 发布 → **用刚发布的资产自验**。
 
 ## 安装后 UI 速览
 
@@ -70,6 +94,30 @@ pnpm finance:sync-prices  # 从 models.dev 社区价格表同步非 DeepSeek 计
 
 ## 本地运行机制
 
+> 分两种用法：**沙箱三线开发**（不碰 `~/.dsh`，推荐日常）与 **dogfood 安装验证**（装进 web profile）。
+
+### 沙箱三线开发（数据隔离 + HMR）
+
+`$DSH_HOME` 指向仓库内 `.dev/home`，插件以 `link:` 依赖 + `dsh.profile.bundles` 形式加载，
+改码即热更；`~/.dsh`（3080 常驻服务）完全不受影响。设计与实测细节见
+[docs/LOCAL-DEV-HARNESS.md](docs/LOCAL-DEV-HARNESS.md)。
+
+```bash
+pnpm sandbox:init     # 幂等创建 .dev/home + dev profile（devweb，端口 3997）
+pnpm sandbox:link     # 通道 A（日常）：工作区插件 → link: 依赖 + bundle 行 + hmr 窄根监听
+pnpm sandbox:install  # 通道 B（保真）：pack→tarball 装进沙箱 profile，与用户安装同路径
+pnpm sandbox:up       # 启动沙箱实例（--detach 后台 / --cwd 换工作目录）
+pnpm sandbox:verify   # 自动起停 + 断言：隔离 / 行 ACTIVE / 客户端图 / 客户端+宿主 HMR
+```
+
+- 控制面板 <http://127.0.0.1:3997/__dev/>：场景按钮（触发 HMR、清存储、写 fixture…）+ 实时状态
+- 诊断探针 <http://127.0.0.1:3997/__dev/probe>：机器可读的条目状态与 HMR 事件
+- 通道 A 改 `packages/*/src` 后跑该包 `build`（或 `pnpm -r build`）：客户端自动热替换，宿主按 `hmr` 行热更
+- 通道 B 无热更（tarball 是拷贝）：改码需重跑 `pnpm sandbox:install` + 重启，`--strict` 可强制纳入缺产物的包以暴露打包问题
+- 其它：`pnpm sandbox:list`（产物就绪画像）、`pnpm sandbox:doctor`（补丁组合校验）、`pnpm sandbox:reset`
+
+### dogfood 安装验证（装进 web profile）
+
 1. `pnpm dev` 先构建所有包（DSH 加载的是 `lib/` 产物）。
 2. `scripts/install-profile.mjs` 按 `plugin-registry.json` 的映射走**与普通用户一致的
    pack→tarball 安装路径**：对插件及其 workspace 库依赖闭包逐个 `pnpm pack` 到
@@ -80,8 +128,9 @@ pnpm finance:sync-prices  # 从 models.dev 社区价格表同步非 DeepSeek 计
 
 > 版本纪律：dsh client-modules 按「插件版本」缓存产物字节——改码后必须 bump 该插件
 > `package.json` 的版本号，再跑安装脚本 + 重启宿主，否则宿主继续供旧字节。
+> （沙箱 link 通道不受此限：它走内容哈希热替换。）
 
-> 注意：`3080` 是常驻工作服务，验证一律走 `3999`，不要动 3080。
+> 注意：`3080` 是常驻工作服务，验证一律走 `3999`/沙箱 `3997`，不要动 3080。
 
 ## 应急逃生入口（纯官方 profile）
 

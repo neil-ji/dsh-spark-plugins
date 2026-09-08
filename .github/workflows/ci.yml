@@ -1,0 +1,76 @@
+name: ci
+
+on:
+  push:
+    branches: ['**']
+    tags-ignore: ['v*']
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.11.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: 安装依赖
+        run: pnpm install --config.confirmModulesPurge=false
+      - name: 构建
+        run: pnpm -r build
+      - name: 类型检查
+        run: pnpm -r typecheck
+      - name: 单元测试
+        run: pnpm test
+
+  pack-release-dry:
+    # 保证「能打出发布包」这件事在主分支上一直成立（不上传，只校验产物完整性）
+    needs: build-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.11.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --config.confirmModulesPurge=false
+      - name: 打发布包（不发布）
+        run: node scripts/pack-release.mjs --version 0.0.0-ci --out dist-release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-release-ci
+          path: dist-release/
+          retention-days: 7
+
+  install-verify:
+    # 用刚打的包做一次真实安装 + 验收（线 2 install 通道 + 线 3 的下载路径都走一遍）
+    needs: pack-release-dry
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.11.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-release-ci
+          path: dist-release
+      - name: 安装 dsh（最新版——兼容策略就是只保证最新版）
+        run: npm install -g @deepseek-ai/dsh@latest
+      - name: 从发布资产安装并验收
+        run: node scripts/remote-verify.mjs --base-url dist-release --fresh
