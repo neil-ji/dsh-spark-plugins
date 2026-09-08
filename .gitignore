@@ -1,5 +1,8 @@
 node_modules/
 lib/
+# 但 scripts/lib 是共享实现，必须进版本库
+!scripts/lib/
+!scripts/lib/**
 dist/
 *.tgz
 *.log
@@ -8,3 +11,5 @@ dist/
 .env.*
 !.env.example
 .pack-profile/
+.dev/
+dist-release/
