@@ -36,8 +36,8 @@ export const HIPPOMEMO_CSS = [
   '[data-plugin="dsh-hippomemo"] .hippomemo-chip-clear { border-style: dashed; color: var(--dsw-alias-label-tertiary); }',
   /* Surface 基规则（单一来源）—— 用抬起面 surface-l1，
      不再用 layer-2（layer-2 是凹陷/轨道色，亮色下与页面底色几乎同色）。 */
-  '[data-plugin="dsh-hippomemo"] :is(.hippomemo-section-card, .hippomemo-brain-panel, .hippomemo-brain-card, .hippomemo-todo-item, .hippomemo-pref-strip, .hippomemo-usage, .hippomemo-chart-card, .hippomemo-evolve-report, .hippomemo-detail-content) { border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; background: var(--dsw-alias-surface-l1); }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-section-card { display: flex; flex-direction: column; gap: 10px; padding: 10px 12px; min-width: 0; }',
+  '[data-plugin="dsh-hippomemo"] :is(.hippomemo-section-card, .hippomemo-brain-panel, .hippomemo-brain-card, .hippomemo-todo-item, .hippomemo-pref-strip, .hippomemo-pref-zone, .hippomemo-memory-panel, .hippomemo-usage, .hippomemo-chart-card, .hippomemo-evolve-review, .hippomemo-evolve-actions, .hippomemo-detail-content) { border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; background: var(--dsw-alias-surface-l1); }',
+  '[data-plugin="dsh-hippomemo"] .hippomemo-section-card, [data-plugin="dsh-hippomemo"] .hippomemo-pref-zone, [data-plugin="dsh-hippomemo"] .hippomemo-memory-panel { display: flex; flex-direction: column; gap: 10px; padding: 10px 12px; min-width: 0; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-quadrant { display: flex; flex-direction: column; gap: 8px; min-width: 0; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-panel-head { display: flex; align-items: center; gap: 8px; padding-bottom: 4px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-panel-title { margin: 0; font-size: 13px; line-height: 20px; font-weight: 600; }',
@@ -92,9 +92,6 @@ export const HIPPOMEMO_CSS = [
   '[data-plugin="dsh-hippomemo"] .hippomemo-recall-sub { color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary)); font-size: 12px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-pref-zone { display: flex; flex-direction: column; gap: 10px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-pref-strip { overflow: hidden; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-pref-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--dsw-alias-bg-layer-1, var(--dsw-alias-bg-layer-2)); border-bottom: 1px solid var(--dsw-alias-border-l1); }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-pref-head-title { font-size: 13px; line-height: 20px; font-weight: 600; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-pref-head-meta { margin-left: auto; font-size: 11px; color: var(--dsw-alias-label-tertiary); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-pref-list { list-style: none; padding: 0; margin: 0; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-pref-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--dsw-alias-border-l1); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-pref-row:last-child { border-bottom: none; }',
@@ -183,8 +180,9 @@ export const HIPPOMEMO_CSS = [
   '[data-plugin="dsh-hippomemo"] .hippomemo-chart-card { display: flex; flex-direction: column; gap: 10px; padding: 10px 12px; min-width: 0; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-chart-card-wide { grid-column: 1 / -1; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-chart-title { font-size: 13px; line-height: 20px; font-weight: 600; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-evolve-report { display: flex; flex-direction: column; gap: 12px; padding: 10px 12px; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-evolve-block-title { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); }',
+  /* 2026-09 重构：`.hippomemo-evolve-report` / `.hippomemo-evolve-block-title` /
+     `.hippomemo-pref-head*` 已随「卡内套卡」的形制一起废弃 —— 复核结论与动作各是一张
+     `section-card`，组名走卡头；偏好清单直接由卡头带出。CSS 一并删掉，免得留下第二套卡。 */
   '[data-plugin="dsh-hippomemo"] .hippomemo-evolve-review, [data-plugin="dsh-hippomemo"] .hippomemo-evolve-actions { display: flex; flex-direction: column; gap: 6px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-evolve-verdict, [data-plugin="dsh-hippomemo"] .hippomemo-evolve-action { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; line-height: 20px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-evolve-verdict-id, [data-plugin="dsh-hippomemo"] .hippomemo-evolve-action-id { flex: none; font-family: var(--dsw-alias-font-mono, ui-monospace, monospace); font-size: 12px; color: var(--dsw-alias-label-tertiary); }',

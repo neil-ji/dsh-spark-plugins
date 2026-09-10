@@ -27,7 +27,9 @@ export function HippoEmbedPane(): ReactNode {
   const t = hippoT ?? fallbackT
   return (
     <div data-plugin="dsh-hippomemo" className="dock-embed hippomemo-dock-scope">
-      <MemorySection api={api} t={t} />
+      {/* embedded：dock 模块头已给出「记忆 HippoMemo + 一句说明」，
+          页级 h2/intro 在这里是第二层同名 chrome —— 不渲染，而不是渲染后 CSS 压掉。 */}
+      <MemorySection api={api} t={t} embedded />
     </div>
   )
 }

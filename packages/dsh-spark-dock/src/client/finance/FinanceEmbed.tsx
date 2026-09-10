@@ -87,7 +87,9 @@ export function FinanceEmbedPane(): ReactNode {
   }
   return (
     <div className="dock-embed">
-      <FinanceCard {...injected.card} />
+      {/* embedded：dock 模块头已给出「财务 Finance + 一句话说明」，
+          总览仪表盘自己的大标题/副标题不再渲染（而不是渲染后 CSS 压掉）。 */}
+      <FinanceCard {...injected.card} embedded />
     </div>
   )
 }

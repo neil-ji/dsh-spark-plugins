@@ -32,7 +32,19 @@ import type {
 } from '../types.ts'
 
 type Translate = (key: HippomemoLocaleKey, vars?: Record<string, string | number>) => string
-export interface MemorySectionProps { api: HippomemoApi; t: Translate }
+export interface MemorySectionProps {
+  api: HippomemoApi
+  t: Translate
+  /**
+   * 嵌进别的宿主（dock 面板）时置 true：**不渲染页级 h2 + 简介**。
+   *
+   * dock 的模块头已经给出插件名与一句说明（`DOCK_MODULES[].name/sub`），设置页侧栏同理。
+   * 以前是靠 dock 的 compat CSS `display:none` 压掉这两个节点 —— 那是「渲染了再擦掉」：
+   * DOM 里留着两层同名标题（h2「记忆 HippoMemo」+ 脑区面板 h3），读屏与标题导航都会撞车。
+   * 现在改成根本不渲染，重复的标题在结构上就不存在。
+   */
+  embedded?: boolean
+}
 const KINDS: MemoryKind[] = ['insight', 'decision', 'fact', 'preference', 'constraint']
 const SCOPES: MemoryScope[] = ['global', 'workspace', 'project']
 const STATUSES: MemoryStatus[] = ['active', 'archived', 'superseded', 'candidate']
@@ -108,9 +120,9 @@ function pageItems(page: number, totalPages: number): PageItem[] {
   return items
 }
 // ========== BrainStrip ==========
-function BrainStrip({ t, stats, usage, preferences, candidates, narrative, reloadKey }: {
+function BrainStrip({ t, stats, usage, preferences, narrative, reloadKey }: {
   t: Translate; stats: MemoryStats | null; usage: MemoryUsageStats | null;
-  preferences: PreferenceListResult | null; candidates: PendingCandidateListResult | null;
+  preferences: PreferenceListResult | null;
   narrative: RecallNarrative | null; reloadKey: number;
 }): ReactNode {
   const [expanded, setExpanded] = useState(false);
@@ -129,7 +141,6 @@ function BrainStrip({ t, stats, usage, preferences, candidates, narrative, reloa
   const preferenceCount = preferences?.total ?? 0;
   const crystallised = stats?.byKind['fact'] ?? 0;
   const total = stats?.total ?? 0;
-  const todoCount = candidates?.total ?? 0;
   const regions: Array<{ id: BrainRegion; nameKey: HippomemoLocaleKey; val: string; descKey: HippomemoLocaleKey; roleKey: HippomemoLocaleKey }> = [
     { id: 'pfc', nameKey: 'brainRegionPfc', val: t('brainValPfc', { injected: String(injected), suppressed: String(suppressed) }), descKey: 'brainRegionPfcDesc', roleKey: 'brainRolePfc' },
     { id: 'amy', nameKey: 'brainRegionAmy', val: t('brainValAmy', { n: preferenceCount }), descKey: 'brainRegionAmyDesc', roleKey: 'brainRoleAmy' },
@@ -137,10 +148,11 @@ function BrainStrip({ t, stats, usage, preferences, candidates, narrative, reloa
     { id: 'cortex', nameKey: 'brainRegionCortex', val: t('brainValCortex', { n: total }), descKey: 'brainRegionCortexDesc', roleKey: 'brainRoleCortex' },
   ];
   return (
-    <section className='hippomemo-brain-panel' aria-label={t('title')}>
+    <section className='hippomemo-brain-panel' aria-label={t('brainPanelTitle')}>
       <div className='hippomemo-panel-head'>
-        <h3 className='hippomemo-panel-title'>{t('title')}</h3>
-        <span className='hippomemo-panel-count'>{t('todoTitle')} · {todoCount}</span>
+        <h3 className='hippomemo-panel-title'>{t('brainPanelTitle')}</h3>
+        {/* 「需要我处理 N」不放这里：它是进化页那一组的内容，总览页复述一遍就是同一个
+            数字挂两处；待办数由进化页的卡片头承担。 */}
       </div>
       <div className='hippomemo-brain-strip'>
         <div className='hippomemo-brain-row'>
@@ -259,20 +271,17 @@ function TodoQuadrantImpl({ t, items, now, onResolve }: {
   );
 }
 
-// ========== Recall Quadrant ==========
-function RecallQuadrant({ t, citations, narrative, now }: {
+// ========== Activity feed（「最近活动」卡的内容：召回事件流）==========
+/**
+ * 只出内容，不出卡头 —— 卡头由 `OverviewTab` 的卡片提供（形制同进化页）。
+ * 以前这里自带 `panel-head`，于是同一张卡里出现了「最近活动」与「AI 最近在用」两层，
+ * 后者还是前者的子节点，读起来像上下级关系。
+ */
+function ActivityFeed({ t, citations, narrative, now }: {
   t: Translate; citations: CitationRecord[]; narrative: RecallNarrative | null; now: number;
 }): ReactNode {
   if (citations.length === 0 && narrative === null) {
-    return (
-      <div className='hippomemo-quadrant'>
-        <div className='hippomemo-panel-head'>
-          <h3 className='hippomemo-panel-title'>{t('recallTitle')}</h3>
-          <span className='hippomemo-panel-count'>—</span>
-        </div>
-        <p className='hippomemo-quadrant-empty'>{t('recallEmpty')}</p>
-      </div>
-    );
+    return <p className='hippomemo-quadrant-empty'>{t('recallEmpty')}</p>;
   }
   const rows: Array<{ key: string; when: string; what: ReactNode; sub: string; kind: 'injected' | 'suppressed' | 'cited' }> = [];
   if (narrative !== null) {
@@ -294,24 +303,16 @@ function RecallQuadrant({ t, citations, narrative, now }: {
     });
   }
   return (
-    <div className='hippomemo-quadrant'>
-      <div className='hippomemo-panel-head'>
-        <h3 className='hippomemo-panel-title'>{t('recallTitle')}</h3>
-        <span className='hippomemo-panel-count'>
-          {formatRelative(narrative?.ts ?? citations[0]?.ts ?? now, now)}
-        </span>
-      </div>
-      <ul className='hippomemo-recall-list'>
-        {rows.map(row => (
-          <li className={'hippomemo-recall-item hippomemo-recall-item-' + row.kind} key={row.key}>
-            <span className='hippomemo-recall-when'>{row.when}</span>
-            <div className='hippomemo-recall-what'>
-              {row.what} <span className='hippomemo-recall-sub'>{row.sub}</span>
-            </div>
-          </li>
-        ))}
-      </ul>
-    </div>
+    <ul className='hippomemo-recall-list'>
+      {rows.map(row => (
+        <li className={'hippomemo-recall-item hippomemo-recall-item-' + row.kind} key={row.key}>
+          <span className='hippomemo-recall-when'>{row.when}</span>
+          <div className='hippomemo-recall-what'>
+            {row.what} <span className='hippomemo-recall-sub'>{row.sub}</span>
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -341,10 +342,6 @@ function PreferenceQuadrant({ t, items, totalRecall, onAction }: {
         </span>
       </div>
       <div className='hippomemo-pref-strip'>
-        <div className='hippomemo-pref-head'>
-          <span className='hippomemo-pref-head-title'>{t('prefTitle')}</span>
-          <span className='hippomemo-pref-head-meta'>{t('prefSourceAuto')} · {t('prefSourceManual')}</span>
-        </div>
         <ul className='hippomemo-pref-list'>
           {items.map(item => {
             const isAuto = item.source === 'auto';
@@ -386,9 +383,11 @@ function PreferenceQuadrant({ t, items, totalRecall, onAction }: {
 }
 
 // ========== Memory List Panel ==========
-function MemoryListPanel({ t, api, detailId, onDetail }: {
+function MemoryListPanel({ t, api, detailId, onDetail, embedded = false }: {
   t: Translate; api: HippomemoApi; detailId: string | null;
   onDetail: (id: string) => void;
+  /** 嵌在宿主（dock）里：不写面板自己的大标题（宿主模块头已写），只留计数。 */
+  embedded?: boolean;
 }): ReactNode {
   const [q, setQ] = useState('');
   const [debouncedQ, setDebouncedQ] = useState('');
@@ -462,7 +461,7 @@ function MemoryListPanel({ t, api, detailId, onDetail }: {
   return (
     <section className='hippomemo-memory-panel'>
       <div className='hippomemo-panel-head'>
-        <h3 className='hippomemo-panel-title'>{t('title')}</h3>
+        {embedded ? null : <h3 className='hippomemo-panel-title'>{t('title')}</h3>}
         <span className='hippomemo-panel-count'>{total} 条</span>
       </div>
       <div className='hippomemo-toolbar'>
@@ -1067,56 +1066,68 @@ function EvolvePanel({ api, t }: { api: HippomemoApi; t: Translate }): ReactNode
       {report === null && error.length === 0
         ? <p className='hippomemo-empty'>{t('evolveNoReport')}</p> : null}
       {report !== null ? (
-        <div className='hippomemo-evolve-report'>
-          <div className='hippomemo-meta'>
+        <>
+          {/* 本次运行的身份：时间 + 是不是预演。它不属于任何一组结果，所以留在组外面
+              （卡头放它会让「这张卡」读起来只有元信息）。 */}
+          <p className='hippomemo-meta'>
             <span>{t('evolveRunAt')} {formatDate(report.runAt)}</span>
             <span>{report.dryRun ? t('evolveDryRun') : t('evolveApplied')}</span>
-            <span>{t('evolveActionsLabel')} {report.actions.length}</span>
-            {report.review !== undefined
-              ? <span>{t('evolveReviewedLabel')} {report.review.length}</span> : null}
-          </div>
+          </p>
+          {/* 复核结论与动作各是一组 → 各一张卡，组名写在卡头上；数量作为卡头的状态位。
+              以前两者都先在 meta 里写一遍计数、再在卡内当分组标题写一遍 —— 同一段文本
+              在一张卡里出现两次。 */}
           {report.review !== undefined && report.review.length > 0 ? (
-            <div className='hippomemo-evolve-review'>
-              <div className='hippomemo-evolve-block-title'>{t('evolveReviewedLabel')}</div>
-              {report.review.map(verdict => {
-                const kind = kindMap.get(verdict.id);
-                return (
-                  <div className='hippomemo-evolve-verdict' key={verdict.id}>
-                    <Pill className={'hippomemo-tag hippomemo-verdict-' + verdict.verdict}>
-                      {verdict.verdict === 'keep' ? t('evolveKeep') : t('evolveNoise')}
-                    </Pill>
-                    <Pill className={'hippomemo-tag hippomemo-kind-' + (kind ?? 'unknown')}>
-                      {kind === undefined ? '—' : t(kind)}
-                    </Pill>
-                    <span className='hippomemo-evolve-verdict-id'>{verdict.id.slice(0, 8)}</span>
-                    {verdict.reason !== undefined
-                      ? <span className='hippomemo-evolve-verdict-reason'>{verdict.reason}</span> : null}
-                  </div>
-                );
-              })}
-            </div>
+            <section className='hippomemo-section-card'>
+              <div className='hippomemo-panel-head'>
+                <h3 className='hippomemo-panel-title'>{t('evolveReviewedLabel')}</h3>
+                <span className='hippomemo-panel-count'>{report.review.length} 项</span>
+              </div>
+              <div className='hippomemo-evolve-review'>
+                {report.review.map(verdict => {
+                  const kind = kindMap.get(verdict.id);
+                  return (
+                    <div className='hippomemo-evolve-verdict' key={verdict.id}>
+                      <Pill className={'hippomemo-tag hippomemo-verdict-' + verdict.verdict}>
+                        {verdict.verdict === 'keep' ? t('evolveKeep') : t('evolveNoise')}
+                      </Pill>
+                      <Pill className={'hippomemo-tag hippomemo-kind-' + (kind ?? 'unknown')}>
+                        {kind === undefined ? '—' : t(kind)}
+                      </Pill>
+                      <span className='hippomemo-evolve-verdict-id'>{verdict.id.slice(0, 8)}</span>
+                      {verdict.reason !== undefined
+                        ? <span className='hippomemo-evolve-verdict-reason'>{verdict.reason}</span> : null}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
           ) : null}
-          {report.actions.length > 0 ? (
-            <div className='hippomemo-evolve-actions'>
-              <div className='hippomemo-evolve-block-title'>{t('evolveActionsLabel')}</div>
-              {report.actions.map(action => {
-                const kind = kindMap.get(action.id);
-                return (
-                  <div className='hippomemo-evolve-action' key={action.id + action.action}>
-                    <Pill className={'hippomemo-tag hippomemo-tag-neutral hippomemo-action-' + action.action}>{t(ACTION_LABELS[action.action])}</Pill>
-                    <Pill className={'hippomemo-tag hippomemo-kind-' + (kind ?? 'unknown')}>
-                      {kind === undefined ? '—' : t(kind)}
-                    </Pill>
-                    <span className='hippomemo-evolve-action-id'>{action.id.slice(0, 8)}</span>
-                    <span className='hippomemo-evolve-action-reason'>{action.reason}</span>
-                  </div>
-                );
-              })}
+          <section className='hippomemo-section-card'>
+            <div className='hippomemo-panel-head'>
+              <h3 className='hippomemo-panel-title'>{t('evolveActionsLabel')}</h3>
+              <span className='hippomemo-panel-count'>{report.actions.length} 项</span>
             </div>
-          ) : (
-            <p className='hippomemo-empty'>—</p>
-          )}
-        </div>
+            {report.actions.length > 0 ? (
+              <div className='hippomemo-evolve-actions'>
+                {report.actions.map(action => {
+                  const kind = kindMap.get(action.id);
+                  return (
+                    <div className='hippomemo-evolve-action' key={action.id + action.action}>
+                      <Pill className={'hippomemo-tag hippomemo-tag-neutral hippomemo-action-' + action.action}>{t(ACTION_LABELS[action.action])}</Pill>
+                      <Pill className={'hippomemo-tag hippomemo-kind-' + (kind ?? 'unknown')}>
+                        {kind === undefined ? '—' : t(kind)}
+                      </Pill>
+                      <span className='hippomemo-evolve-action-id'>{action.id.slice(0, 8)}</span>
+                      <span className='hippomemo-evolve-action-reason'>{action.reason}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className='hippomemo-empty'>—</p>
+            )}
+          </section>
+        </>
       ) : null}
     </div>
   );
@@ -1125,21 +1136,30 @@ function EvolvePanel({ api, t }: { api: HippomemoApi; t: Translate }): ReactNode
 // ========== Main Entry ==========
 type SectionTab = 'overview' | 'memories' | 'preferences' | 'evolution';
 
-function OverviewTab({ t, stats, usage, preferences, candidates, narrative, citations, now }: {
+function OverviewTab({ t, stats, usage, preferences, narrative, citations, now }: {
   t: Translate; stats: MemoryStats | null; usage: MemoryUsageStats | null;
-  preferences: PreferenceListResult | null; candidates: PendingCandidateListResult | null;
+  preferences: PreferenceListResult | null;
   narrative: RecallNarrative | null; citations: CitationRecord[]; now: number;
 }): ReactNode {
   return (
     <div className='hippomemo-tab'>
       <BrainStrip t={t} stats={stats} usage={usage}
-        preferences={preferences} candidates={candidates}
+        preferences={preferences}
         narrative={narrative} reloadKey={0} />
+      {/* 两张卡各管一件事，卡头写各自的名字。
+          以前是「最近活动」一张无头卡套着两个 panel-head —— 「AI 最近在用」的头在卡内，
+          卡头「最近活动」却包着它，读起来像「最近活动」的下级；进化页那一页是三张卡三个头，
+          总览页按同一形制对齐。 */}
       <section className='hippomemo-section-card'>
         <div className='hippomemo-panel-head'>
           <h3 className='hippomemo-panel-title'>{t('overviewLiveActivity')}</h3>
+          <span className='hippomemo-panel-count'>
+            {citations.length > 0 || narrative !== null
+              ? formatRelative(narrative?.ts ?? citations[0]?.ts ?? now, now)
+              : '—'}
+          </span>
         </div>
-        <RecallQuadrant t={t} citations={citations} narrative={narrative} now={now} />
+        <ActivityFeed t={t} citations={citations} narrative={narrative} now={now} />
       </section>
     </div>
   )
@@ -1169,6 +1189,8 @@ function EvolutionTab({ t, stats, usage, candidates, now, onResolve, api, reload
       <section className='hippomemo-section-card'>
         <TodoQuadrantImpl t={t} items={candidates?.items ?? []} now={now} onResolve={onResolve} />
       </section>
+      {/* 存量（有多少条记忆）与用量（这些记忆被用得怎么样）是两组数，各一张卡。
+          以前挤在一张「使用统计」卡里，而卡内第一行又叫「用量」—— 卡头与首行两个名字。 */}
       <section className='hippomemo-section-card'>
         <div className='hippomemo-panel-head'>
           <h3 className='hippomemo-panel-title'>{t('evolutionStatsTitle')}</h3>
@@ -1180,9 +1202,13 @@ function EvolutionTab({ t, stats, usage, candidates, now, onResolve, api, reload
             <span>{t('archivedCount')} {stats.archived}</span>
           </div>
         ) : null}
+      </section>
+      <section className='hippomemo-section-card'>
+        <div className='hippomemo-panel-head'>
+          <h3 className='hippomemo-panel-title'>{t('usage')}</h3>
+        </div>
         {usage !== null ? (
           <div className='hippomemo-usage'>
-            <span className='hippomemo-usage-label'>{t('usage')}</span>
             <span title={t('usageRecalled')}>{t('usageRecalled')} {usage.recalled}/{usage.total}</span>
             <span>{t('usageCited')} {usage.cited}</span>
             <span>{t('usageNeverRecalled')} {usage.neverRecalled}</span>
@@ -1205,7 +1231,7 @@ function EvolutionTab({ t, stats, usage, candidates, now, onResolve, api, reload
   )
 }
 
-export function MemorySection({ api, t }: MemorySectionProps): ReactNode {
+export function MemorySection({ api, t, embedded = false }: MemorySectionProps): ReactNode {
   const [tab, setTab] = useState<SectionTab>('overview');
   const [stats, setStats] = useState<MemoryStats | null>(null);
   const [usage, setUsage] = useState<MemoryUsageStats | null>(null);
@@ -1255,8 +1281,12 @@ export function MemorySection({ api, t }: MemorySectionProps): ReactNode {
   const now = Date.now();
   return (
     <div className='hippomemo-section' data-plugin='dsh-hippomemo'>
-      <h2 className='hippomemo-title'>{t('title')}</h2>
-      <p className='hippomemo-intro'>{t('intro')}</p>
+      {embedded ? null : (
+        <>
+          <h2 className='hippomemo-title'>{t('title')}</h2>
+          <p className='hippomemo-intro'>{t('intro')}</p>
+        </>
+      )}
       <SegmentedControl<SectionTab>
         className='hippomemo-tabs'
         fullWidth
@@ -1271,11 +1301,11 @@ export function MemorySection({ api, t }: MemorySectionProps): ReactNode {
       />
       {tab === 'overview' ? (
         <OverviewTab t={t} stats={stats} usage={usage}
-          preferences={preferences} candidates={candidates}
+          preferences={preferences}
           narrative={narrative} citations={citations} now={now} />
       ) : tab === 'memories' ? (
         <div className='hippomemo-tab'>
-          <MemoryListPanel t={t} api={api} detailId={detailId}
+          <MemoryListPanel t={t} api={api} detailId={detailId} embedded={embedded}
             onDetail={(id) => { if (id === 'new') setEditorTarget('new'); else setDetailId(id); }} />
         </div>
       ) : tab === 'preferences' ? (

@@ -185,6 +185,30 @@ n-700 #40485a · n-800 #2d3749 · n-850 #232b3a · n-900 #171c27 · n-950 #0b0e1
 7. 颜色进 SVG 必须走**内联 style**（`style={{ fill / stroke / stopColor }}`），
    不写 presentation attribute —— 属性里的 `var()` 解析不受保证（W3C SVGWG #987 / #1031）
 8. 错误信息 `role=alert`，惰性状态 `role=status`；触控热区 ≥ 44px（视觉可小，`::before` 扩容）
+9. **分组一律 ui-kit `Card`**：一个功能分组 = 一张 Card，分组标题写在**该 Card 的 `title`** 上，
+   状态/动作走 `actions`。禁止「页级 `<h2>` + 若干无边框分组」的旧形制（三层 chrome）。
+10. **间距只引用语义令牌**：卡片之间 / 页头→内容 = `--spk-gap-page`（12），卡片内部行距 =
+    `--spk-pad-card`/`--spk-gap-card`（12 14 / 8），基础档 = `--spk-space-1..4`（4/8/12/16）。
+    面板 CSS 里不得再写 6/10/14 这类近似字面量 —— 这是「五插件边距一致」的唯一真相来源。
+11. **字段一律纵向堆叠**（标签在上、控件在下）。横排「标签 + 控件 + 单位」在 dock 的窄面板
+    （616px 面板 → 内容区 ~486px，窄窗口更小）里会把输入压成几十像素。
+12. **控件类名必须落到包装壳**：`ui-kit` 的 `Input`/`Textarea` 会把调用方 `className` 同时
+    作用在外层 `.field` 包装和控件本身。布局类（`flex`/`min-width`/`width`）只有落在包装上才
+    生效 —— 包装才是 flex 行的子项。只落在 `<input>` 上时 `flex: 1` 完全失效（输入被钉在固有
+    宽度 ~170px），窄容器里控件的 `min-width` 还会溢出包装、压到相邻按钮。
+13. **插件显示名规范**：认知层三件套 = 「中文名 + 英文产品名」（火花 Spark / 记忆 HippoMemo /
+    财务 Finance）；连接器 = 产品名的规范拼写本身（GitHub / npm）。`en` 字典只写产品名。
+14. **文本不许跨层重复**（2026-09 重构二轮，标准样板 = hippomemo「进化」页）：
+    - 模块头（`.dock-head .name/.sub`）已经说了这一页是什么 → **子页里不得再出现同名标题**；
+      内嵌页的页级 `h2 + intro` 由组件自己的 `embedded` 属性**不渲染**（`MemorySection` /
+      `FinanceAuditSection`），**不许**用 compat CSS `display:none` 擦掉（那只是把重复藏起来，
+      DOM 里仍是同名两层，读屏与标题导航照样撞车）；
+    - 同一段文本在同页只能占一个语义位：卡头（组的名字）/ 卡内小标题（组内的分段）/ 字段标签 /
+      行内元信息。**卡头与卡内小标题同名 = 违规**（如旧进化页的「LLM 复核 / 动作」既在 meta
+      计数又在卡内当分组标题）；
+    - 计数只在**一个**位置出现（卡头的 `actions` 或元信息，二选一）。
+    机器判据：`pnpm preview:titles`（V1 卡头撞模块名 / V2 卡头撞卡内小标题 / V3 两张卡同名，
+    退出码即结论）。
 
 ## 6. 验收（自动化，非目测）
 
@@ -194,9 +218,36 @@ pnpm check:contrast   # ① 142 项对比度配对（AA 正文 4.5 / 非文本 3
                       # ③ 本文不许自造颜色（色值必须来自 token 层）
                       # ④ 静态设计稿 docs/spark-dock-preview 的语义值必须与产品逐值一致
 pnpm test             # 含 scripts/tests/contrast.spec.ts 153 项断言
+node dev-harness/preview/dom-audit.mjs   # ⑤ 真渲染盒模型走查：重叠 / 横向溢出 / 折行必须为 0
+                                         #    （先起 pnpm preview；--width / --module / --rects 可定点排查）
+pnpm preview:titles                      # ⑥ 子页标题层级走查：V1/V2/V2b/V3 四类重复必须为 0
+                                         #    默认逐页走 5 模块 16 个目标（含内层页签）
+                                         #    --module 定点；--json 出机器可读报告；--html dump 真实 DOM
 ```
 
 ## 7. 变更记录
+
+- **v4.5（2026-09-10）财务保存行：从「跨页签常驻吸底」改成「各页签内容末尾」**：
+  旧形制是 `position: sticky; bottom: 0` 的共享底栏 —— 浮在滚动内容之上，且纯展示的总览页
+  也挂着它（读起来像"展示页也要保存"）。现在保存行是各页签内容列的末尾元素、在文档流里
+  （实测四页 `position: static`，行底 == 面板内容底）。draft 仍跨页签共享，按钮可用性仍由
+  `state.dirty` 驱动（只有配置字段会进 `plan()`；视图偏好是即时落 localStorage）。测试
+  `card.test.tsx`「puts the save row at the end of each tab panel…」守住这条不变量。
+
+- **v4.4（2026-09-10）进化页自己也按标准收敛（标准不能是例外）**：① 「使用统计」拆成
+  `记忆存量`（多少条）与 `用量`（被用得怎么样）两张卡 —— 原来一张卡头叫「使用统计」、卡内首行
+  又叫「用量」；② 进化报告的「LLM 复核 / 动作」从「meta 计数 + 卡内分组标题」改成**各一张卡**，
+  组名写卡头、数量进卡头状态位（同一段文本原来在一张卡里出现两次）；③ 记忆列表页与偏好页在
+  dock 下不再渲染「记忆 HippoMemo / 我的偏好」第二层标题，列表页与偏好区补上卡片 surface；
+  ④ 走查脚本补 V2b（同卡内卡头元信息撞卡内小标题）与内层页签遍历（`--tabs`）；
+  ⑤ 两个 CDP 走查脚本收尾加 profile 兜底清扫（`taskkill /T` 会漏子进程，实测一轮能堆上百个
+  headless Edge；匹配串经环境变量传入，否则 PowerShell 引号被 spawn 吃掉 → 静默漏杀）。
+
+- **v4.3（2026-09-10）dock 五个模块的子页按「进化页形制」重构**：① 卡片统一走 ui-kit `Card`
+  （删掉 dock 自绘的 `.dock-card`，卡片头承载组名，筛选项/计数进 `actions`）；② 重复标题从
+  「CSS 压掉」改成「不渲染」（hippomemo / finance 的 `embedded`）；③ 脑区面板不再复用页级
+  `title`（改 `brainPanelTitle`）；④ npm 的 registry 状态与套件包清单拆成两张卡；⑤ 新增
+  `pnpm preview:titles` 让「重复 Title/Label」有机器判据。详见 §5 规则 9 / 14。
 
 - **v4.2（2026-09-10）悬浮球拆出「发言」能力**：角色层一分为二 —— `BALL_FACE_ENABLED=false`
   （表情/染光/动画保持关闭）、`BALL_BUBBLE_ENABLED=true`（事件播报气泡保留：它是真实事件文本，

@@ -27,6 +27,8 @@
     "preview": "node dev-harness/preview/server.mjs --open",
     "preview:source": "node dev-harness/preview/server.mjs --source",
     "preview:verify": "node dev-harness/preview/verify.mjs",
+    "preview:layout": "node dev-harness/preview/dom-audit.mjs",
+    "preview:titles": "node dev-harness/preview/title-audit.mjs",
     "check:dsh-upgrade": "node scripts/check-dsh-upgrade.mjs --write-report",
     "check:contrast": "node scripts/audit-contrast.mjs",
     "dryrun:dsh-upgrade": "node scripts/dryrun-upgrade.mjs",

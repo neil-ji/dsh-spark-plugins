@@ -135,6 +135,22 @@ function bodyProps(tab: FinanceTab = 'overview') {
   }
 }
 
+/**
+ * 从 `openIndex` 处某个 `<div` 的开标签，返回其配对 `</div>` 的结束下标
+ * （按嵌套计数，不依赖缩进）。
+ */
+function endOfDiv(html: string, openIndex: number): number {
+  let i = html.indexOf('>', openIndex) + 1
+  let depth = 1
+  while (i > 0 && i < html.length && depth > 0) {
+    const nextOpen = html.indexOf('<div', i)
+    const nextClose = html.indexOf('</div>', i)
+    if (nextClose === -1) return -1
+    if (nextOpen !== -1 && nextOpen < nextClose) { depth += 1; i = nextOpen + 4 } else { depth -= 1; i = nextClose + 6 }
+  }
+  return i
+}
+
 describe('FinanceCard', () => {
   it('renders nothing while the finance namespace is not served', () => {
     const html = renderToStaticMarkup(createElement(FinanceCard, {
@@ -223,11 +239,21 @@ describe('FinanceCardBody', () => {
     expect(html).toContain('aria-pressed="false"') // byModel off
   })
 
-  it('keeps the save row visible (and disabled) on every tab', () => {
+  // 2026-09 形制变更：保存行从「跨页签常驻吸底」改成「配置页签内容列的末尾」。
+  // 断言的落点是两条产品不变量：① 行在页签面板**里面**（文档流内，不是浮层）；
+  // ② 它排在面板内容的最后（不再是一条挂在面板外壳上的共用底栏）。
+  it('puts the save row at the end of each tab panel, inside the pane (not a sticky shell bar)', () => {
     for (const tab of ['overview', 'connection', 'providers', 'advanced'] as const) {
       const html = renderToStaticMarkup(createElement(FinanceCardBody, bodyProps(tab)))
       expect(html).toContain('save')
       expect(html).toContain('discard')
+      // 保存行在面板内部：它的位置必须早于该面板 div 自己的闭合标签
+      const panelStart = html.indexOf('finance-tab-' + tab)
+      expect(panelStart).toBeGreaterThan(-1)
+      expect(html.indexOf('discard')).toBeGreaterThan(panelStart)
+      expect(html.indexOf('discard')).toBeLessThan(endOfDiv(html, panelStart))
+      // 行内不再出现浮动定位（旧的 sticky 吸底条）
+      expect(html).not.toContain('position:sticky')
     }
   })
 
@@ -457,14 +483,19 @@ describe('FinanceCard price sync section', () => {
 
   // 2026-09：三个价格 JSON 表单从 <details> 折叠区搬进「高级」页签 ——
   // 内容需要一次点击（页签），而不是两段折叠；默认页也不再露出它们。
+  // 2026-09 形制统一：分组标题写在**各分组自己的 Card 头**（ui-kit Card 的
+  // title → <h3>），页级 <div class=sectionTitle> 已移除。
   it('keeps the three price forms on the advanced tab, out of the default tab', () => {
     const advanced = renderToStaticMarkup(createElement(FinanceCardBody, bodyProps('advanced')))
-    expect(advanced).toContain('cardAdvancedTitle')
     expect(advanced).toContain('cardAdvancedHint')
     expect(advanced).toContain('cardDefaultPriceTitle')
     expect(advanced).toContain('cardProviderDefaultsTitle')
     expect(advanced).toContain('cardPricingTierTitle')
     expect(advanced).not.toContain('<details')
+    // 三个分组各自是一张 Card，标题在卡片头里（ui-kit Card 渲染成 section > h3）。
+    expect(advanced.match(/<section class="[^"]*_card"><div class="[^"]*_head"><h3/g) ?? []).toHaveLength(3)
+    // 页级标题（旧形制）不再出现。
+    expect(advanced).not.toContain('cardAdvancedTitle')
 
     const overview = renderToStaticMarkup(createElement(FinanceCardBody, bodyProps('overview')))
     expect(overview).not.toContain('cardDefaultPriceTitle')

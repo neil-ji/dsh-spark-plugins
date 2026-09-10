@@ -13,12 +13,13 @@
  *  - 高级：power user 的三份价格 JSON 表单（统一默认价 / 供应商默认值 / 价格表）。
  *
  * 页签只切换可见性，草稿状态全部在 FinanceCardController 的 store 里，所以
- * 跨页签编辑同一份 draft，底部保存行（未保存徽标 + 放弃/保存）在四页都可见。
+ * 跨页签编辑同一份 draft。保存行**在各页签自己的内容末尾**（见 `SaveRow`），
+ * 不吸底、不浮动 —— 它属于页面内容，不属于面板外壳。
  */
 
 import { useEffect, useRef, useState } from 'react'
 import type { SnapshotSelectorHook } from 'dsh-spark-plugin-kit/client'
-import { Button, Input, Pill, SegmentedControl, Textarea } from 'dsh-ui-kit'
+import { Button, Card, Input, Pill, SegmentedControl, Textarea } from 'dsh-ui-kit'
 import { ProviderDefaultsEditor, PriceTableEditor, RateFields } from './PriceEditors.tsx'
 import { ProviderListView } from './ProviderListView.tsx'
 import { FinanceAuditSection } from './FinanceAuditSection.tsx'
@@ -50,6 +51,11 @@ export interface FinanceCardInjected extends Omit<FinanceCardFace, 'hooks'> {
 
 export interface FinanceCardProps extends FinanceCardInjected {
   t: (key: FinanceKey) => string
+  /**
+   * 嵌进 dock 面板时置 true：透传给总览页的 `<FinanceAuditSection>`，压掉它自己的
+   * 大标题 + 副标题（dock 模块头已经写了同一句话）。设置页路径不传。
+   */
+  embedded?: boolean
 }
 
 /** One labelled control: input/textarea + override/invalid badges + reset. */
@@ -193,8 +199,36 @@ function PriceSyncSection({ t, state, disabled, onSyncNow, onSetAutoSync }: {
  * `tab`/`onTabChange` are controlled so the four panes are individually
  * renderable in tests and so embedders can deep-link a tab.
  */
+/**
+ * 保存行：**属于配置页签自己的底部**，不是跨页签的常驻吸底条。
+ *
+ * 为什么改（2026-09）：draft 虽然共享，但保存这个动作只对**被改过的那一页**有意义 ——
+ * 以前四条吸底常驻（`position: sticky; bottom: 0`），在纯展示的总览页也挂着一条保存/放弃，
+ * 读起来像"展示页也需要保存"，而且一条浮在内容之上的横条会盖住滚动中的卡片。现在：
+ *   · 放在各页签内容列的末尾（文档流内，无 sticky / fixed），滚到底即可见；
+ *   · 「连接 / 供应商 / 高级」是配置页签，各页底部都有；
+ *   · 「总览」是展示页（视图偏好是即时生效的 localStorage），也不至于让人找不到保存，
+ *     所以保留行但让 dirty 状态来驱动按钮可用性 —— 脏了就说明有待提交的配置改动。
+ */
+function SaveRow({ t, state, blocked, onDiscard, onSave }: {
+  t: (key: FinanceKey) => string
+  state: FinanceCardState
+  blocked: boolean
+  onDiscard: () => void
+  onSave: () => void
+}) {
+  return (
+    <div className={css.footer}>
+      {state.failed ? <p className={css.failed} role="status">{t('saveFailed')}</p> : <span className={css.footerSpacer} />}
+      {state.dirty ? <span className={css.pending}>{t('unsaved')}</span> : null}
+      <Button variant="secondary" disabled={!state.dirty || state.saving} onClick={onDiscard}>{t('discard')}</Button>
+      <Button variant="primary" disabled={blocked} onClick={onSave}>{t(state.saving ? 'saving' : 'save')}</Button>
+    </div>
+  )
+}
+
 export function FinanceCardBody({
-  t, state, tab, onTabChange,
+  t, state, tab, onTabChange, embedded,
   useSnapshot, dashboardRefresh, refreshProvider,
   onEdit, onReset, onSave, onDiscard,
   onSetDefaultPrice, onSetProviderDefaults, onSetPriceTable,
@@ -209,6 +243,8 @@ export function FinanceCardBody({
   tab: FinanceTab
   /** Tab switch request from the SegmentedControl. */
   onTabChange: (tab: FinanceTab) => void
+  /** Hosted inside dock: the overview dashboard drops its own page title + subtitle. */
+  embedded?: boolean
   /** Dashboard inject props — used to mount `<FinanceAuditSection>` in the overview tab. */
   useSnapshot: FinanceAuditInjected['useSnapshot']
   dashboardRefresh: FinanceAuditInjected['refresh']
@@ -294,6 +330,7 @@ export function FinanceCardBody({
             <FinanceAuditSection
               useSnapshot={useSnapshot}
               t={t}
+              embedded={embedded}
               refresh={dashboardRefresh}
               refreshProvider={refreshProvider}
               // No-op close: the dashboard is no longer a sibling section, so
@@ -303,8 +340,7 @@ export function FinanceCardBody({
             />
           </div>
 
-          <div className={css.section}>
-            <div className={css.sectionTitle}>{t('cardViewsTitle')}</div>
+          <Card title={t('cardViewsTitle')}>
             <p className={css.sectionHint}>{t('cardViewsHint')}</p>
             <div className={css.prefsRow}>
               <span className={css.prefsLabel}>{t('layout')}</span>
@@ -321,14 +357,14 @@ export function FinanceCardBody({
                 <Pill key={key} active={prefs.charts[key]} onClick={() => onToggleChart(key)}>{label}</Pill>
               ))}
             </div>
-          </div>
+          </Card>
+          <SaveRow t={t} state={state} blocked={blocked} onDiscard={onDiscard} onSave={onSave} />
         </div>
       ) : null}
 
       {tab === 'connection' ? (
         <div className={css.tabPanel} data-testid="finance-tab-connection">
-          <div className={css.section}>
-            <div className={css.sectionTitle}>{t('cardDeepseekConnectionTitle')}</div>
+          <Card title={t('cardDeepseekConnectionTitle')}>
             <p className={css.sectionHint}>{t('cardDeepseekConnectionHint')}</p>
             <Field
               id="plugin-config-finance-balance-url"
@@ -366,11 +402,10 @@ export function FinanceCardBody({
               onEdit={(text) => onEdit('balance.timeoutMs', text)}
               onReset={() => onReset('balance.timeoutMs')}
             />
-          </div>
+          </Card>
 
           {state.syncAvailable ? (
-            <div className={css.section}>
-              <div className={css.sectionTitle}>{t('cardPriceSyncTitle')}</div>
+            <Card title={t('cardPriceSyncTitle')}>
               <PriceSyncSection
                 t={t}
                 state={state}
@@ -378,15 +413,15 @@ export function FinanceCardBody({
                 onSyncNow={onSyncNow}
                 onSetAutoSync={onSetAutoSync}
               />
-            </div>
+            </Card>
           ) : null}
+          <SaveRow t={t} state={state} blocked={blocked} onDiscard={onDiscard} onSave={onSave} />
         </div>
       ) : null}
 
       {tab === 'providers' ? (
         <div className={css.tabPanel} data-testid="finance-tab-providers">
-          <div className={css.section}>
-            <div className={css.sectionTitle}>{t('cardProvidersTitle')}</div>
+          <Card title={t('cardProvidersTitle')}>
             <p className={css.sectionHint}>{t('cardProvidersHint')}</p>
             <ProviderListView
               rows={state.dshProviderRows}
@@ -397,80 +432,76 @@ export function FinanceCardBody({
               onClear={onClearDshProviderOverride}
               onRetry={onRetryListProviders}
             />
-          </div>
+          </Card>
+          <SaveRow t={t} state={state} blocked={blocked} onDiscard={onDiscard} onSave={onSave} />
         </div>
       ) : null}
 
+      {/*
+        高级页签：每个功能分组一张 Card，分组标题写在 Card 头上（而不是
+        页级 <h2> + 无边框分组的旧形制）—— 这正是「title 迁移到最外层 Card」
+        的落地，也让三组各自的 override 徽标/重置按钮有了明确归属。
+      */}
       {tab === 'advanced' ? (
         <div className={css.tabPanel} data-testid="finance-tab-advanced">
-          <div className={css.section}>
-            <div className={css.sectionTitle}>{t('cardAdvancedTitle')}</div>
-            <p className={css.sectionHint}>{t('cardAdvancedHint')}</p>
-            <div className={css.field}>
-              <div className={css.fieldHead}>
-                <label className={css.fieldLabel} htmlFor="plugin-config-finance-default-price">{t('cardDefaultPriceTitle')}</label>
-                <span className={css.fieldBadges}>{state.defaultPrice.overridden ? <Pill>{t('overridden')}</Pill> : null}</span>
-              </div>
-              <RateFields
-                rate={state.defaultPriceDraft}
-                idPrefix="plugin-config-finance-default-price"
-                t={t}
-                onChange={onSetDefaultPrice}
-              />
-              <div className={css.fieldFoot}>
-                <p className={css.hint}>{t('cardDefaultPriceHint')}</p>
-                {state.defaultPrice.overridden
-                  ? <button type="button" className={css.reset} disabled={disabled} onClick={() => onReset('defaultPrice')}>{t('reset')}</button>
-                  : null}
-              </div>
+          <p className={css.sectionHint}>{t('cardAdvancedHint')}</p>
+
+          <Card
+            title={t('cardDefaultPriceTitle')}
+            actions={state.defaultPrice.overridden ? <Pill>{t('overridden')}</Pill> : null}
+          >
+            <RateFields
+              rate={state.defaultPriceDraft}
+              idPrefix="plugin-config-finance-default-price"
+              t={t}
+              onChange={onSetDefaultPrice}
+            />
+            <div className={css.fieldFoot}>
+              <p className={css.hint}>{t('cardDefaultPriceHint')}</p>
+              {state.defaultPrice.overridden
+                ? <button type="button" className={css.reset} disabled={disabled} onClick={() => onReset('defaultPrice')}>{t('reset')}</button>
+                : null}
             </div>
-            <div className={css.field}>
-              <div className={css.fieldHead}>
-                <label className={css.fieldLabel} htmlFor="plugin-config-finance-provider-defaults">{t('cardProviderDefaultsTitle')}</label>
-                <span className={css.fieldBadges}>{state.providerDefaults.overridden ? <Pill>{t('overridden')}</Pill> : null}</span>
-              </div>
-              <ProviderDefaultsEditor
-                value={state.providerDefaultsDraft}
-                disabled={disabled}
-                t={t}
-                onChange={onSetProviderDefaults}
-              />
-              <div className={css.fieldFoot}>
-                <p className={css.hint}>{t('cardProviderDefaultsHint')}</p>
-                {state.providerDefaults.overridden
-                  ? <button type="button" className={css.reset} disabled={disabled} onClick={() => onReset('providerDefaults')}>{t('reset')}</button>
-                  : null}
-              </div>
+          </Card>
+
+          <Card
+            title={t('cardProviderDefaultsTitle')}
+            actions={state.providerDefaults.overridden ? <Pill>{t('overridden')}</Pill> : null}
+          >
+            <ProviderDefaultsEditor
+              value={state.providerDefaultsDraft}
+              disabled={disabled}
+              t={t}
+              onChange={onSetProviderDefaults}
+            />
+            <div className={css.fieldFoot}>
+              <p className={css.hint}>{t('cardProviderDefaultsHint')}</p>
+              {state.providerDefaults.overridden
+                ? <button type="button" className={css.reset} disabled={disabled} onClick={() => onReset('providerDefaults')}>{t('reset')}</button>
+                : null}
             </div>
-            <div className={css.field}>
-              <div className={css.fieldHead}>
-                <label className={css.fieldLabel} htmlFor="plugin-config-finance-prices">{t('cardPricingTierTitle')}</label>
-                <span className={css.fieldBadges}>{state.prices.overridden ? <Pill>{t('overridden')}</Pill> : null}</span>
-              </div>
-              <PriceTableEditor
-                value={state.priceTableDraft}
-                disabled={disabled}
-                t={t}
-                onChange={onSetPriceTable}
-              />
-              <div className={css.fieldFoot}>
-                <p className={css.hint}>{t('cardPricesHint')}</p>
-                {state.prices.overridden
-                  ? <button type="button" className={css.reset} disabled={disabled} onClick={() => onReset('prices')}>{t('reset')}</button>
-                  : null}
-              </div>
+          </Card>
+
+          <Card
+            title={t('cardPricingTierTitle')}
+            actions={state.prices.overridden ? <Pill>{t('overridden')}</Pill> : null}
+          >
+            <PriceTableEditor
+              value={state.priceTableDraft}
+              disabled={disabled}
+              t={t}
+              onChange={onSetPriceTable}
+            />
+            <div className={css.fieldFoot}>
+              <p className={css.hint}>{t('cardPricesHint')}</p>
+              {state.prices.overridden
+                ? <button type="button" className={css.reset} disabled={disabled} onClick={() => onReset('prices')}>{t('reset')}</button>
+                : null}
             </div>
-          </div>
+          </Card>
+          <SaveRow t={t} state={state} blocked={blocked} onDiscard={onDiscard} onSave={onSave} />
         </div>
       ) : null}
-
-      {/* 保存行：跨页签共享（draft 在 controller store 里），所以四页都在底部可见。 */}
-      <div className={css.footer}>
-        {state.failed ? <p className={css.failed} role="status">{t('saveFailed')}</p> : <span className={css.footerSpacer} />}
-        {state.dirty ? <span className={css.pending}>{t('unsaved')}</span> : null}
-        <Button variant="secondary" disabled={!state.dirty || state.saving} onClick={onDiscard}>{t('discard')}</Button>
-        <Button variant="primary" disabled={blocked} onClick={onSave}>{t(state.saving ? 'saving' : 'save')}</Button>
-      </div>
     </div>
   )
 }
@@ -505,6 +536,7 @@ export function FinanceCard(props: FinanceCardProps) {
         state={state}
         tab={tab}
         onTabChange={setTab}
+        embedded={props.embedded === true}
         useSnapshot={props.useSnapshot}
         dashboardRefresh={props.dashboardRefresh}
         refreshProvider={props.refreshProvider}

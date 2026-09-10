@@ -1,6 +1,7 @@
 export const zh = {
-  nav: '记忆',
-  title: '记忆',
+  // 显示名规范化（2026-09 五插件统一）：zh = 「中文 + 英文产品名」。
+  nav: '记忆 HippoMemo',
+  title: '记忆 HippoMemo',
   intro: '统一查看和管理跨会话、跨工作区沉淀下来的共识、决策、事实、偏好与约束。',
   searchPlaceholder: '搜索记忆...',
   search: '搜索',
@@ -158,7 +159,9 @@ export const zh = {
 
   // ---- v3 UI: 进化 tab 子标题 ----
   evolutionCandidatesTitle: '需要我处理',
-  evolutionStatsTitle: '使用统计',
+  // 这一张卡只放**存量**（多少条 / 活跃 / 归档）；用量是下一张卡，卡头直接用 `usage`。
+  // 名字不能叫「使用统计」—— 那会和卡内另一组「用量」抢同一个意思。
+  evolutionStatsTitle: '记忆存量',
   evolutionChartsTitle: '图表',
 
   // ---- v3 UI: 脑区状态条 ----
@@ -170,6 +173,9 @@ export const zh = {
   brainValAmy: '识别到 {n} 偏好',
   brainValHippo: '最近结晶 {n}',
   brainValCortex: '{n} 条记忆',
+  // 脑区面板自己的名字：**不能**复用 title（那是页级标题 = dock 模块头），
+  // 否则面板头与模块头同名，读起来像同一个东西写了两遍。
+  brainPanelTitle: '记忆库',
   brainExpand: '脑区图',
   brainCollapse: '收起脑区图',
   brainRegionPfcDesc: '对注入上下文的相关记忆做 relevance 过滤（阈值 + kind 加权 + 衰减）。',
@@ -237,8 +243,9 @@ export const zh = {
 } as const
 
 export const en: Record<keyof typeof zh, string> = {
-  nav: 'Memory',
-  title: 'Memory',
+  // 显示名规范化：en 只用产品名。
+  nav: 'HippoMemo',
+  title: 'HippoMemo',
   intro: 'Browse and manage durable consensus, decisions, facts, preferences, and constraints shared across sessions and workspaces.',
   searchPlaceholder: 'Search memories...',
   search: 'Search',
@@ -396,7 +403,7 @@ export const en: Record<keyof typeof zh, string> = {
 
   // ---- v3 UI: Evolution tab subsections ----
   evolutionCandidatesTitle: 'Needs my attention',
-  evolutionStatsTitle: 'Usage',
+  evolutionStatsTitle: 'Inventory',
   evolutionChartsTitle: 'Charts',
 
   // ---- v3 UI: brain strip ----
@@ -408,6 +415,8 @@ export const en: Record<keyof typeof zh, string> = {
   brainValAmy: '{n} preferences detected',
   brainValHippo: '{n} recently crystallised',
   brainValCortex: '{n} memories',
+  // The panel's own name — deliberately NOT `title` (that is the page title = dock module head).
+  brainPanelTitle: 'Memory bank',
   brainExpand: 'Brain map',
   brainCollapse: 'Collapse brain map',
   brainRegionPfcDesc: 'Filters relevant memories for the injected context (threshold + kind weighting + decay).',

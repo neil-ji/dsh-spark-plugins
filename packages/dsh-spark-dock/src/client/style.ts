@@ -61,34 +61,41 @@ export const DOCK_CSS = [
   '[data-plugin="dsh-spark-dock"] .dock-iconbtn svg { width: 15px; height: 15px; }',
 
   /* 模块内子页 tab 已统一为 ui-kit SegmentedControl（fullWidth），原 .subtabbar 样式移除 */
-  '[data-plugin="dsh-spark-dock"] .subtabbar { margin-bottom: 10px; }',
+  '[data-plugin="dsh-spark-dock"] .subtabbar { margin-bottom: var(--spk-gap-page, 12px); }',
 
-  /* 通用内容件（卡片/行/pill/按钮/表单） */
-  '[data-plugin="dsh-spark-dock"] .dock-stack { display: flex; flex-direction: column; gap: 10px; }',
-  /* 卡片 surface 火花基线：radius 12 / padding 12 14 / 抬起面（与 ui-kit Card 同规） */
-  '[data-plugin="dsh-spark-dock"] .dock-card { background: var(--dsw-alias-surface-l1); border: 1px solid var(--dsw-alias-border-l1); border-radius: 12px; padding: 12px 14px; }',
-  '[data-plugin="dsh-spark-dock"] .dock-card.list { padding: 4px; }',
-  '[data-plugin="dsh-spark-dock"] .dock-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; }',
+  /* 通用内容件（卡片/行/pill/按钮/表单）。
+     间距只引用 --spk-space-* / --spk-gap-page / --spk-gap-card 语义档，
+     与四个插件面板同一套标度（统一边距的唯一真相来源在 ui-kit 的 token 层）。 */
+  /* ── 面板内卡片的唯一形制：直接用 ui-kit 的 Card 组件 ──
+   * 卡片 = 一个逻辑组：容器 + 头部（标题 / 右侧状态槽），组内字段不再重复写组名。
+   * 形态与 hippomemo「记忆-进化」页同源（那页的 .hippomemo-section-card 与 ui-kit Card
+   * 本是同一套边界/圆角/内距），所以这里不再自绘一套 dock-card，避免两套卡长得像但不一样。 */
+  '[data-plugin="dsh-spark-dock"] .dock-stack { display: flex; flex-direction: column; gap: var(--spk-gap-page, 12px); }',
+  /* Card 里的列表：行自带内距，所以卡身收紧到 4px、把 card gap 归零（行间距由行内距给） */
+  '[data-plugin="dsh-spark-dock"] .dock-body .dock-list { display: flex; flex-direction: column; gap: 0; margin: calc(var(--spk-space-2, 8px) * -1) calc(var(--spk-space-1, 4px) * -1) calc(var(--spk-space-1, 4px) * -1); }',
+  /* Card 头里的胶囊按钮：与字段同一档视觉（Card 头的 actions 槽位默认是图标/胶囊尺度） */
+  '[data-plugin="dsh-spark-dock"] .dock-body button.dock-pill { font-size: 12px; padding: 4px 10px; }',
+  '[data-plugin="dsh-spark-dock"] .dock-row { display: flex; align-items: center; gap: var(--spk-gap-card, 8px); padding: 10px 12px; border-radius: 10px; }',
   '[data-plugin="dsh-spark-dock"] .dock-row:hover { background: var(--dsw-alias-interactive-bg-hover); }',
   '[data-plugin="dsh-spark-dock"] .dock-row .grow { flex: 1; min-width: 0; }',
   '[data-plugin="dsh-spark-dock"] .dock-row .ttl { font-size: 13px; font-weight: 600; color: var(--dsw-alias-label-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }',
   '[data-plugin="dsh-spark-dock"] .dock-row .meta { font-size: 11px; color: var(--dsw-alias-label-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }',
   '[data-plugin="dsh-spark-dock"] .dock-row.off .ttl { text-decoration: line-through; color: var(--dsw-alias-label-tertiary); }',
   '[data-plugin="dsh-spark-dock"] .cryst { color: var(--dsw-alias-state-success-primary); font-weight: 600; }',
-  '[data-plugin="dsh-spark-dock"] .dock-pill { position: relative; display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 3px 9px; border-radius: 999px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); cursor: pointer; }',
+  '[data-plugin="dsh-spark-dock"] .dock-pill { position: relative; display: inline-flex; align-items: center; gap: var(--spk-space-1, 4px); font-size: 11px; padding: 3px 9px; border-radius: 999px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); cursor: pointer; }',
   /* 热区扩容：pill 视觉小，命中区向外扩 4px（≥ 触控下限的兜底） */
   '[data-plugin="dsh-spark-dock"] .dock-pill::before { content: ""; position: absolute; inset: -4px; border-radius: 999px; }',
   '[data-plugin="dsh-spark-dock"] .dock-pill:disabled { opacity: .55; cursor: default; }',
   '[data-plugin="dsh-spark-dock"] .dock-pill.on { background: var(--accent-fg, var(--dsw-alias-brand-foreground)); border-color: transparent; color: var(--dsw-alias-label-primary-foreground, #fff); }',
-  '[data-plugin="dsh-spark-dock"] .dock-modbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }',
+  '[data-plugin="dsh-spark-dock"] .dock-modbar { display: flex; align-items: center; gap: var(--spk-space-1, 4px); flex-wrap: wrap; }',
   '[data-plugin="dsh-spark-dock"] .dock-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px; border-radius: 16px; border: none; background: var(--dsw-alias-button-primary-fill, var(--dsw-alias-brand-primary)); color: var(--dsw-alias-label-primary-foreground, #fff); font: 600 13px/1 var(--dsw-font-family, inherit); cursor: pointer; }',
   '[data-plugin="dsh-spark-dock"] .dock-btn:hover { filter: brightness(1.08); }',
   '[data-plugin="dsh-spark-dock"] .dock-btn:disabled { opacity: .55; cursor: default; }',
-  '[data-plugin="dsh-spark-dock"] .dock-field { width: 100%; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; color: var(--dsw-alias-label-primary); font: 400 13px/1.4 var(--dsw-font-family, inherit); padding: 8px 10px; margin-bottom: 8px; }',
+  '[data-plugin="dsh-spark-dock"] .dock-field { width: 100%; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; color: var(--dsw-alias-label-primary); font: 400 13px/1.4 var(--dsw-font-family, inherit); padding: 8px 10px; margin-bottom: var(--spk-gap-card, 8px); }',
   '[data-plugin="dsh-spark-dock"] .dock-field:focus-visible { outline: 2px solid var(--accent, var(--dsw-alias-brand-primary)); outline-offset: 1px; }',
   '[data-plugin="dsh-spark-dock"] .dock-field::placeholder { color: var(--dsw-alias-label-tertiary); }',
   '[data-plugin="dsh-spark-dock"] textarea.dock-field { resize: vertical; }',
-  '[data-plugin="dsh-spark-dock"] .dock-fieldrow { display: flex; align-items: center; gap: 6px; }',
+  '[data-plugin="dsh-spark-dock"] .dock-fieldrow { display: flex; align-items: center; gap: var(--spk-gap-card, 8px); min-width: 0; }',
   '[data-plugin="dsh-spark-dock"] .dock-fieldrow .grow { flex: 1; min-width: 0; }',
   '[data-plugin="dsh-spark-dock"] .dock-fieldrow .dock-field { margin-bottom: 0; }',
   '[data-plugin="dsh-spark-dock"] select.dock-field.sel { width: auto; }',
@@ -103,7 +110,7 @@ export const DOCK_CSS = [
   '[data-plugin="dsh-spark-dock"] .dock-btn.ghost { background: transparent; border: 1px solid var(--dsw-alias-border-l2); color: var(--dsw-alias-label-secondary); }',
   '[data-plugin="dsh-spark-dock"] .dock-btn.ghost:hover { color: var(--dsw-alias-label-primary); }',
   '[data-plugin="dsh-spark-dock"] .dock-scopes { font-size: 11px; color: var(--dsw-alias-label-tertiary); margin: 6px 0 8px; }',
-  '[data-plugin="dsh-spark-dock"] .dock-hline { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 6px 0 2px; }',
+  '[data-plugin="dsh-spark-dock"] .dock-hline { display: flex; align-items: center; justify-content: space-between; gap: var(--spk-gap-card, 8px); margin: 6px 0 2px; }',
   '[data-plugin="dsh-spark-dock"] .dock-hline b { font-size: 12px; font-weight: 700; color: var(--dsw-alias-label-primary); }',
 
   /* ── Fairy 表情层（docs/spark-dock-preview fairy.css 子集）──
@@ -179,14 +186,14 @@ export const DOCK_CSS = [
   /* 捕获卡：一条输入流 + 渐进披露 */
   '[data-plugin="dsh-spark-dock"] .dock-capture { display: flex; flex-direction: column; }',
   '[data-plugin="dsh-spark-dock"] .dock-capture .dock-field { margin-bottom: 0; }',
-  '[data-plugin="dsh-spark-dock"] .dock-capture-bar { display: flex; align-items: center; gap: 8px; margin-top: 8px; }',
-  '[data-plugin="dsh-spark-dock"] .dock-details { margin-top: 8px; }',
+  '[data-plugin="dsh-spark-dock"] .dock-capture-bar { display: flex; align-items: center; gap: var(--spk-gap-card, 8px); margin-top: var(--spk-gap-card, 8px); }',
+  '[data-plugin="dsh-spark-dock"] .dock-details { margin-top: var(--spk-gap-card, 8px); }',
   '[data-plugin="dsh-spark-dock"] .dock-details summary { cursor: pointer; font-size: 12px; color: var(--dsw-alias-label-tertiary); user-select: none; width: fit-content; padding: 3px 0; list-style: none; }',
   '[data-plugin="dsh-spark-dock"] .dock-details summary::-webkit-details-marker { display: none; }',
   '[data-plugin="dsh-spark-dock"] .dock-details summary::before { content: "＋ "; }',
   '[data-plugin="dsh-spark-dock"] .dock-details[open] summary::before { content: "－ "; }',
   '[data-plugin="dsh-spark-dock"] .dock-details summary:hover { color: var(--dsw-alias-label-secondary); }',
-  '[data-plugin="dsh-spark-dock"] .dock-details-body { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }',
+  '[data-plugin="dsh-spark-dock"] .dock-details-body { display: flex; flex-direction: column; gap: var(--spk-gap-card, 8px); margin-top: var(--spk-gap-card, 8px); }',
   '[data-plugin="dsh-spark-dock"] .dock-details-body .dock-field { margin-bottom: 0; }',
   /* 计量条：宽度即数值，配文本说明 */
   '[data-plugin="dsh-spark-dock"] .dock-meter { display: inline-block; width: 72px; height: 4px; border-radius: 2px; background: var(--dsw-alias-bg-layer-3, rgba(255,255,255,.09)); overflow: hidden; flex: none; }',
@@ -197,30 +204,33 @@ export const DOCK_CSS = [
   /* 结晶行首圆点（除文字外再给一个颜色通道） */
   '[data-plugin="dsh-spark-dock"] .dock-row-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }',
   '[data-plugin="dsh-spark-dock"] .dock-row-dot.cryst { background: var(--dsw-alias-state-success-primary); }',
-  /* 提议卡：类型徽章 + 正文 + 置信条 + 决策操作 */
-  '[data-plugin="dsh-spark-dock"] .dock-prop { display: flex; flex-direction: column; gap: 7px; }',
+  /* 提案行：Card 内部的**行**（一个提议一行），不是卡片 —— 卡片归组，
+   * 组内的条目靠 1px 分隔线分层，免得卡里再套一层卡。 */
+  '[data-plugin="dsh-spark-dock"] .dock-prop { display: flex; flex-direction: column; gap: 7px; padding: 10px 0; border-top: 1px solid var(--dsw-alias-border-l1); }',
+  '[data-plugin="dsh-spark-dock"] .dock-prop:first-child { padding-top: 0; border-top: 0; }',
+  '[data-plugin="dsh-spark-dock"] .dock-prop + .dock-prop { margin-top: 0; }',
   '[data-plugin="dsh-spark-dock"] .dock-prop-head { display: flex; align-items: center; gap: 8px; }',
   '[data-plugin="dsh-spark-dock"] .dock-prop-type { font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 2px 8px; border-radius: 6px; background: color-mix(in srgb, var(--accent-fg, var(--dsw-alias-brand-foreground)) 14%, transparent); color: var(--accent-fg, var(--dsw-alias-brand-foreground)); }',
   '[data-plugin="dsh-spark-dock"] .dock-prop-text { font-size: 13px; line-height: 1.5; color: var(--dsw-alias-label-primary); }',
   '[data-plugin="dsh-spark-dock"] .dock-prop-actions { display: flex; gap: 6px; margin-top: 2px; }',
   '[data-plugin="dsh-spark-dock"] .dock-prop-actions .dock-btn { height: 28px; padding: 0 14px; font-size: 12px; }',
 
-  /* ── 内嵌页 compat 层（2026-09 UIUX 收敛）────────────────────────────
-   * 原则：dock 标题栏已给出模块名与描述，内嵌页自己的设置页级标题
-   * （H2 大标题 + 一句简介）在 overlay 里是三层 chrome 冗余，压掉；
-   * 正文密度向 13px 靠拢；不碰组件内部的业务样式。 */
-  /* hippomemo：类名稳定，直接压标题与简介 */
-  '[data-plugin="dsh-spark-dock"] .hippomemo-title, [data-plugin="dsh-spark-dock"] .hippomemo-intro { display: none; }',
-  /* github / npm：css-modules hash 类不可寻址，用结构选择器
-   * （两包的 section 根部均为 h2.title + p.intro 相邻对） */
-  '.dock-embed-connector :is(h1, h2):first-of-type, .dock-embed-connector :is(h1, h2):first-of-type + p { display: none; }',
-  /* 内嵌正文密度：设置页 16px 基准 → overlay 13px；列表/表单间距收紧 */
+  /* ── 内嵌页 compat 层（2026-09 UIUX 收敛 / 2026-09 重构二轮）────────────
+   * 原则：**重复的标题在结构上不该存在**，不是渲染完再用 CSS 擦掉。
+   * 曾经这里压过 hippomemo 的 `.hippomemo-title/.hippomemo-intro` 与连接器 section 的
+   * `h2 + p` —— 那两处已由组件自己的 `embedded` 属性接管（MemorySection /
+   * FinanceAuditSection 直接不渲染；github/npm 的 section 早已无页级标题）。
+   * 这里只保留**密度**：设置页 16px 基准 → overlay 13px，不碰组件内部业务样式。 */
   '.dock-embed { font-size: 13px; line-height: 1.45; }',
   '.dock-embed :is(h1, h2) { font-size: 15px; line-height: 1.35; margin: 0 0 8px; }',
   '.dock-embed :is(h3) { font-size: 13px; margin: 0 0 6px; }',
   '.dock-embed p { font-size: 13px; }',
   /* hippomemo 分段控件通栏（与 dock subtabbar 同宽对齐） */
   '[data-plugin="dsh-spark-dock"] .hippomemo-tabs { align-self: stretch; }',
-  /* connector 按钮不被 flex column 拉伸成全宽白胶囊，回落紧凑尺寸 */
-  '.dock-embed-connector button { align-self: flex-start; }',
+  /* connector 按钮不被 flex column 拉伸成全宽白胶囊，回落紧凑尺寸。
+     用 width 而不是 align-self：align-self: flex-start 在**横排**里会覆盖
+     行自身的 align-items: center，把按钮顶到输入框上沿（36px 输入 vs 32px
+     按钮 → 4px 错位，看起来像压住）。width: fit-content 在纵排里同样阻止
+     拉伸，却不干扰横排的垂直居中。 */
+  '.dock-embed-connector button { width: fit-content; }',
 ].join('\n')

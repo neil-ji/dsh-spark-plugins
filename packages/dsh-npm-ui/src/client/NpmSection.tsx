@@ -5,10 +5,15 @@
  * query/action (package name check, trust status, publish, launch) is done
  * by the agent through its tools (npm_package_check / npm_trust_list /
  * npm_trust_status / npm_launch ...).
+ *
+ * 布局形制（2026-09 统一，与 GitHub 连接器同规）：
+ *  - 每个功能分组是一张 ui-kit Card，分组标题写在 Card 头；
+ *  - 页级 <h2>/intro 已移除（dock 头与设置页侧栏已给出插件名）；
+ *  - 令牌行 flex-wrap + min-width：窄面板换行，绝不让 input 溢出压住按钮。
  */
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button, Input, Pill, StateDot } from 'dsh-ui-kit'
+import { Button, Card, Input, Pill, StateDot } from 'dsh-ui-kit'
 import type { SnapshotSelectorHook } from 'dsh-spark-plugin-kit/client'
 import type { NpmUiState, NpmUiStore } from './store.ts'
 import type { NpmKey } from './locales.ts'
@@ -60,41 +65,36 @@ function Loaded({ injected }: { injected: NpmSectionInjected }): ReactNode {
   if (state.status === 'error') {
     return (
       <div className={styles.section}>
-        <h2 className={styles.title}>{t('title')}</h2>
-        <p className={styles.error}>{t('loadFailed') + ': ' + (state.error ?? '')}</p>
-        <Button variant="secondary" onClick={() => { void controller.load() }}>{t('retry')}</Button>
+        <Card title={t('registry')}>
+          <p className={styles.error}>{t('loadFailed') + ': ' + (state.error ?? '')}</p>
+          <div className={styles.actions}>
+            <Button variant="secondary" onClick={() => { void controller.load() }}>{t('retry')}</Button>
+          </div>
+        </Card>
       </div>
     )
   }
 
   return (
     <div className={styles.section}>
-      <h2 className={styles.title}>{t('title')}</h2>
-      <p className={styles.intro}>{t('intro')}</p>
-
-      {/* Connection status + token management */}
-      <div className={styles.card}>
-        <div className={styles.row}>
+      {/* npm token（granular）—— 凭据缝，只写不回显 */}
+      <Card
+        title={t('tokenTitle')}
+        actions={(
           <StateDot status={tokenLogin !== null && tokenLogin !== undefined ? 'live' : credentialConfigured ? 'idle' : 'error'} />
-          <span className={styles.cardTitle}>
+        )}
+      >
+        <div className={styles.row}>
+          <span className={styles.strong}>
             {tokenLogin !== null && tokenLogin !== undefined ? t('connectedAs') : t('notConnected')}
           </span>
-          {tokenLogin !== null && tokenLogin !== undefined
-            ? <Pill>{tokenLogin}</Pill>
-            : null}
+          {tokenLogin !== null && tokenLogin !== undefined ? <Pill>{tokenLogin}</Pill> : null}
           {state.token?.source !== undefined
-            ? <span className={styles.muted}>{state.token.source}</span>
+            ? <span className={styles.muted}>{t('tokenSource') + ': ' + state.token.source}</span>
             : null}
         </div>
-        {state.test !== undefined
-          ? (
-            <p className={state.test.ok ? styles.notice : styles.error} role={state.test.ok ? 'status' : 'alert'}>
-              {state.test.ok
-                ? t('testOk') + (state.test.login !== null ? ': ' + state.test.login : '')
-                : t('testFail') + ': ' + (state.test.detail ?? '')}
-            </p>
-          )
-          : null}
+
+        {/* 令牌：input 撑满剩余宽度，按钮换行兜底 —— 窄面板不会挤在一起。 */}
         <div className={styles.row}>
           <Input
             type="password"
@@ -110,15 +110,23 @@ function Loaded({ injected }: { injected: NpmSectionInjected }): ReactNode {
           >
             {t('saveToken')}
           </Button>
+          {credentialConfigured
+            ? <Button variant="secondary" disabled={busy} onClick={() => { void run(() => controller.removeToken()) }}>{t('removeToken')}</Button>
+            : null}
         </div>
-        <div className={styles.row}>
-          <span className={styles.muted}>
-            {t('testConnectionHint')}
-            {state.credential?.source !== undefined
-              ? ' · ' + t('tokenSource') + ': ' + state.credential.source + (state.credential.writable ? '' : ' (' + t('readOnly') + ')')
-              : ''}
-          </span>
-          <span className={styles.growSpacer} />
+
+        {state.test !== undefined
+          ? (
+            <p className={state.test.ok ? styles.notice : styles.error} role={state.test.ok ? 'status' : 'alert'}>
+              {state.test.ok
+                ? t('testOk') + (state.test.login !== null ? ': ' + state.test.login : '')
+                : t('testFail') + ': ' + (state.test.detail ?? '')}
+            </p>
+          )
+          : null}
+
+        <p className={styles.muted}>{t('testConnectionHint')}</p>
+        <div className={styles.actions}>
           <Button
             variant="secondary"
             size="sm"
@@ -137,36 +145,43 @@ function Loaded({ injected }: { injected: NpmSectionInjected }): ReactNode {
           >
             {busy ? t('testing') : t('testConnection')}
           </Button>
-          {credentialConfigured
-            ? <Button variant="secondary" size="sm" disabled={busy} onClick={() => { void run(() => controller.removeToken()) }}>{t('removeToken')}</Button>
-            : null}
         </div>
+
         {state.token !== undefined
           ? <p className={styles.muted}>{state.token.configured ? t('tokenHintOk') : t('tokenHintMissing')}</p>
           : null}
-      </div>
+      </Card>
 
-      {/* Registry + kit packages (read-only status) */}
-      <div className={styles.card}>
-        <div className={styles.row}>
-          <StateDot status={statusView?.ok === true ? 'live' : statusView === undefined ? 'idle' : 'error'} />
-          <span className={styles.cardTitle}>{t('registry')}</span>
-          {statusView !== undefined
-            ? (
-              <Pill>{statusView.ok ? t('registryOk') : t('registryFail')}</Pill>
-            )
-            : null}
-          {statusView?.registry !== undefined
-            ? <span className={styles.muted}>{statusView.registry}</span>
-            : null}
-          <span className={styles.growSpacer} />
-          <Button variant="secondary" size="sm" onClick={() => { void controller.load() }}>{t('retry')}</Button>
-        </div>
+      {/* Registry 状态：可达性就是这一张卡的全部内容（URL + 结果 + 重试）。
+          套件包清单是另一个逻辑组，拆成下一张卡 —— 一张 450px 的巨卡里塞两件事，
+          卡头的「npm 注册表」就盖不住下半屏的包列表了。 */}
+      <Card
+        title={t('registry')}
+        actions={(
+          <>
+            <StateDot status={statusView?.ok === true ? 'live' : statusView === undefined ? 'idle' : 'error'} />
+            {statusView !== undefined
+              ? <Pill>{statusView.ok ? t('registryOk') : t('registryFail')}</Pill>
+              : null}
+            <Button variant="secondary" size="sm" onClick={() => { void controller.load() }}>{t('retry')}</Button>
+          </>
+        )}
+      >
+        {statusView?.registry !== undefined
+          ? <p className={styles.muted}>{statusView.registry}</p>
+          : null}
         {statusView !== undefined && statusView.error !== null
           ? <p className={styles.error}>{statusView.error}</p>
           : null}
-        {statusView !== undefined
-          ? (
+      </Card>
+
+      {/* Kit 套件包状态（只读）*/}
+      {statusView !== undefined && statusView.packages.length > 0
+        ? (
+          <Card
+            title={t('packagesTitle')}
+            actions={<span className={styles.muted}>{statusView.packages.length}</span>}
+          >
             <div className={styles.packageList}>
               {statusView.packages.map((pkg) => (
                 <div key={pkg.name} className={styles.packageRow}>
@@ -180,9 +195,9 @@ function Loaded({ injected }: { injected: NpmSectionInjected }): ReactNode {
                 </div>
               ))}
             </div>
-          )
-          : null}
-      </div>
+          </Card>
+        )
+        : null}
 
       {/* Section-level feedback: token/credential 操作结果固定在页级，不再混入注册表卡 */}
       {error !== undefined ? <p className={styles.error} role="alert">{error}</p> : null}

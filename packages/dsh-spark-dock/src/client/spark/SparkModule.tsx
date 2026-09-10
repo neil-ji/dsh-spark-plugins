@@ -8,6 +8,7 @@
  *  - 脚本目录 = 行内成功率/调用量计量可视化
  */
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { Card, Pill } from 'dsh-ui-kit'
 import { useFrames } from 'dsh-spark-plugin-kit/client'
 import type { SparkView, ProposalView, ScriptView } from 'dsh-spark-wire'
 import { createDockSparksApi, type DockSparksApi } from './sparkApi.ts'
@@ -139,7 +140,27 @@ export function SparksPane({ channel }: SparkPaneDeps): JSX.Element {
 
   return (
     <div className="dock-stack">
-      <form className="dock-card dock-capture" onSubmit={submit}>
+      {/* Card 头 = 「这一组是什么」，容器里的字段不再重复写一遍组名。
+          筛选用 ui-kit Pill 的语义胶囊，计数作为头部的状态位。 */}
+      <Card
+        title="火花列表"
+        actions={(
+          <>
+            <Pill active={status === 'active'} onClick={() => setStatus('active')}>{'活跃'}</Pill>
+            <Pill active={status === 'archived'} onClick={() => setStatus('archived')}>{'已归档'}</Pill>
+            {sparks !== null ? <span className="dock-hint">{sparks.length} 条</span> : null}
+          </>
+        )}
+      >
+        <ErrorNote error={error} />
+        {sparks === null
+          ? <Empty text="加载中…" loading />
+          : sparks.length === 0
+            ? <Empty text={status === 'active' ? '还没有火花' : '没有已归档的火花'} hint="想到什么就记下来，灵感会在这里沉淀。" />
+            : <SparkList sparks={sparks} reload={reload} />}
+      </Card>
+
+      <form className="dock-capture" onSubmit={submit}>
         <label className="dock-lab" htmlFor="spark-draft">捕获火花</label>
         <textarea id="spark-draft" className="dock-field" rows={3}
           placeholder={'想到什么就写下来…\n第一行会作为标题。'}
@@ -167,20 +188,6 @@ export function SparksPane({ channel }: SparkPaneDeps): JSX.Element {
         </div>
         <ErrorNote error={formError} />
       </form>
-
-      <div className="dock-modbar" role="group" aria-label="火花筛选">
-        <button className={status === 'active' ? 'dock-pill on' : 'dock-pill'} aria-pressed={status === 'active'} onClick={() => setStatus('active')} type="button">活跃</button>
-        <button className={status === 'archived' ? 'dock-pill on' : 'dock-pill'} aria-pressed={status === 'archived'} onClick={() => setStatus('archived')} type="button">已归档</button>
-        {sparks !== null && <span className="dock-hint">{sparks.length} 条</span>}
-      </div>
-      <ErrorNote error={error} />
-      {sparks === null
-        ? <Empty text="加载中…" loading />
-        : sparks.length === 0
-          ? <Empty text={status === 'active' ? '还没有火花' : '没有已归档的火花'} hint="想到什么就记下来，灵感会在这里沉淀。" />
-          : (
-            <SparkList sparks={sparks} reload={reload} />
-          )}
     </div>
   )
 }
@@ -193,7 +200,7 @@ function SparkList({ sparks, reload }: { sparks: SparkView[]; reload: () => void
     try { await fn() } finally { setBusyId(null); reload() }
   }
   return (
-    <div className="dock-card list">
+    <div className="dock-list">
       {sparks.map((s) => (
         <div key={s.id} className={s.status === 'archived' ? 'dock-row off' : 'dock-row'}>
           {s.crystallized !== null && <span className="dock-row-dot cryst" title="已结晶" aria-label="已结晶" />}
@@ -241,47 +248,53 @@ export function ProposalsPane({ channel }: SparkPaneDeps): JSX.Element {
 
   return (
     <div className="dock-stack">
-      <div className="dock-modbar">
-        <button className="dock-btn" type="button" disabled={reflecting} aria-busy={reflecting}
-          onClick={() => { void reflect() }}>
-          {reflecting ? '涌现中…' : '跑一次涌现（Reflect）'}
-        </button>
-        <span className="dock-hint">从最近的火花里挖掘可沉淀的模式</span>
-      </div>
       <ErrorNote error={error} />
-      {proposals === null
-        ? <Empty text="加载中…" loading />
-        : proposals.length === 0
-          ? <Empty text="没有待决议的涌现提议" hint="点上方按钮跑一次 Reflect，AI 会主动提议可结晶的模式。" />
-          : (
-            <div className="dock-stack">
-              {proposals.map((p) => {
-                const conf = Math.round(p.confidence * 100)
-                return (
-                  <div key={p.id} className="dock-card dock-prop">
-                    <div className="dock-prop-head">
-                      <span className="dock-prop-type">{p.type}</span>
-                      <span className="grow-spacer" />
-                      <span className="dock-hint">{timeAgo(p.createdAt)}</span>
+      <Card
+        title="待决议提议"
+        actions={(
+          <>
+            <span className="dock-hint">从最近的火花里挖掘可沉淀的模式</span>
+            <button className="dock-pill" type="button" disabled={reflecting} aria-busy={reflecting}
+              onClick={() => { void reflect() }}>
+              {reflecting ? '涌现中…' : '跑一次涌现（Reflect）'}
+            </button>
+          </>
+        )}
+      >
+        {proposals === null
+          ? <Empty text="加载中…" loading />
+          : proposals.length === 0
+            ? <Empty text="没有待决议的涌现提议" hint="点上方按钮跑一次 Reflect，AI 会主动提议可结晶的模式。" />
+            : (
+              <div className="dock-stack">
+                {proposals.map((p) => {
+                  const conf = Math.round(p.confidence * 100)
+                  return (
+                    <div key={p.id} className="dock-prop">
+                      <div className="dock-prop-head">
+                        <span className="dock-prop-type">{p.type}</span>
+                        <span className="grow-spacer" />
+                        <span className="dock-hint">{timeAgo(p.createdAt)}</span>
+                      </div>
+                      <div className="dock-prop-text">{p.explanation}</div>
+                      <div className="dock-prop-meter">
+                        <Meter pct={p.confidence} tone={conf >= 70 ? 'good' : conf >= 40 ? 'warn' : undefined} />
+                        <span className="dock-hint">置信 {conf}% · {p.leverage} 杠杆</span>
+                      </div>
+                      <div className="dock-prop-actions">
+                        <button className="dock-btn" type="button" disabled={busyId === p.id}
+                          onClick={() => { void resolve(p.id, 'accepted') }}>
+                          {busyId === p.id ? '…' : '接受'}
+                        </button>
+                        <button className="dock-btn ghost" type="button" disabled={busyId === p.id}
+                          onClick={() => { void resolve(p.id, 'dismissed') }}>驳回</button>
+                      </div>
                     </div>
-                    <div className="dock-prop-text">{p.explanation}</div>
-                    <div className="dock-prop-meter">
-                      <Meter pct={p.confidence} tone={conf >= 70 ? 'good' : conf >= 40 ? 'warn' : undefined} />
-                      <span className="dock-hint">置信 {conf}% · {p.leverage} 杠杆</span>
-                    </div>
-                    <div className="dock-prop-actions">
-                      <button className="dock-btn" type="button" disabled={busyId === p.id}
-                        onClick={() => { void resolve(p.id, 'accepted') }}>
-                        {busyId === p.id ? '…' : '接受'}
-                      </button>
-                      <button className="dock-btn ghost" type="button" disabled={busyId === p.id}
-                        onClick={() => { void resolve(p.id, 'dismissed') }}>驳回</button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
+                  )
+                })}
+              </div>
+            )}
+      </Card>
     </div>
   )
 }
@@ -316,32 +329,37 @@ export function ScriptsPane({ channel }: SparkPaneDeps): JSX.Element {
     <div className="dock-stack">
       <ErrorNote error={error} />
       {message !== null && <div className={message.startsWith('调用失败') ? 'dock-error' : 'dock-ok'} role="status">{message}</div>}
-      {scripts === null
-        ? <Empty text="加载中…" loading />
-        : scripts.length === 0
-          ? <Empty text="还没有脚本" hint="常见多步操作会被自动沉淀为可复用脚本。" />
-          : (
-            <div className="dock-card list">
-              {scripts.map((sc) => {
-                const rate = sc.invocationCount > 0 ? sc.successCount / sc.invocationCount : null
-                return (
-                  <div key={sc.id} className="dock-row">
-                    <div className="grow">
-                      <div className="ttl">{sc.name}</div>
-                      <div className="meta">{sc.steps.length} 步 · 调用 {sc.invocationCount} 次</div>
-                      {rate !== null && (
-                        <div className="dock-row-meter">
-                          <Meter pct={rate} tone={rate >= 0.9 ? 'good' : rate >= 0.6 ? 'warn' : undefined} />
-                          <span className="dock-hint">成功率 {Math.round(rate * 100)}%</span>
-                        </div>
-                      )}
+      <Card
+        title="脚本目录"
+        actions={scripts !== null ? <span className="dock-hint">{scripts.length} 个</span> : null}
+      >
+        {scripts === null
+          ? <Empty text="加载中…" loading />
+          : scripts.length === 0
+            ? <Empty text="还没有脚本" hint="常见多步操作会被自动沉淀为可复用脚本。" />
+            : (
+              <div className="dock-list">
+                {scripts.map((sc) => {
+                  const rate = sc.invocationCount > 0 ? sc.successCount / sc.invocationCount : null
+                  return (
+                    <div key={sc.id} className="dock-row">
+                      <div className="grow">
+                        <div className="ttl">{sc.name}</div>
+                        <div className="meta">{sc.steps.length} 步 · 调用 {sc.invocationCount} 次</div>
+                        {rate !== null && (
+                          <div className="dock-row-meter">
+                            <Meter pct={rate} tone={rate >= 0.9 ? 'good' : rate >= 0.6 ? 'warn' : undefined} />
+                            <span className="dock-hint">成功率 {Math.round(rate * 100)}%</span>
+                          </div>
+                        )}
+                      </div>
+                      <RowAction label="调用" busyLabel="调用中…" busy={busyId === sc.id} onRun={() => invoke(sc)} />
                     </div>
-                    <RowAction label="调用" busyLabel="调用中…" busy={busyId === sc.id} onRun={() => invoke(sc)} />
-                  </div>
-                )
-              })}
-            </div>
-          )}
+                  )
+                })}
+              </div>
+            )}
+      </Card>
     </div>
   )
 }

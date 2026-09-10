@@ -37,7 +37,16 @@ export interface FinanceAuditInjected {
   refreshProvider: (provider: string) => Promise<void>
 }
 
-export interface FinanceAuditSectionProps extends SettingsSectionOwnerProps, FinanceAuditInjected {}
+export interface FinanceAuditSectionProps extends SettingsSectionOwnerProps, FinanceAuditInjected {
+  /**
+   * 嵌进别的宿主（dock 面板）时置 true：**不渲染面板自己的大标题 + 副标题**。
+   *
+   * dock 模块头已经给出「财务 Finance / 余额、Token 用量与成本总览」，这里再画一遍就是
+   * 同一个名字与同一句说明挂两层（实测两层只差 72px 高）。刷新按钮与「更新于」保留 ——
+   * 它们是这一页的操作与状态，不是壳。设置页（独立 settings.section）不传此属性，形制不变。
+   */
+  embedded?: boolean
+}
 
 /**
  * Format a micros value with its currency code, matching the
@@ -540,6 +549,7 @@ export function FinanceAuditSection(props: FinanceAuditSectionProps) {
       ledger={state.ledger}
       peaks={state.peaks}
       staleSync={staleSync}
+      embedded={props.embedded === true}
       t={t}
       refresh={refresh}
       refreshProvider={refreshProvider}
@@ -548,11 +558,13 @@ export function FinanceAuditSection(props: FinanceAuditSectionProps) {
   )
 }
 
-function FinanceReady({ providerList, ledger, peaks, staleSync, t, refresh, refreshProvider, generatedAt }: {
+function FinanceReady({ providerList, ledger, peaks, staleSync, embedded, t, refresh, refreshProvider, generatedAt }: {
   providerList: FinanceListProvidersResult
   ledger: FinanceLedger
   peaks: Readonly<Record<string, StoredBalancePeak>>
   staleSync: boolean
+  /** True when hosted inside the dock panel: the host chrome already names this page. */
+  embedded?: boolean
   t: (key: FinanceKey) => string
   refresh: () => void
   refreshProvider: (provider: string) => Promise<void>
@@ -669,8 +681,12 @@ function FinanceReady({ providerList, ledger, peaks, staleSync, t, refresh, refr
     <div className={`${css.root} ${layoutClass}`}>
       <div className={css.head}>
         <div>
-          <div className={css.title}>{t('title')}</div>
-          <div className={css.subtitle}>{t('subtitle')}</div>
+          {embedded === true ? null : (
+            <>
+              <div className={css.title}>{t('title')}</div>
+              <div className={css.subtitle}>{t('subtitle')}</div>
+            </>
+          )}
           <LastUpdatedAt generatedAt={generatedAt} t={t} />
         </div>
         <div className={css.actions}>

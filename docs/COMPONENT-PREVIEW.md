@@ -11,6 +11,8 @@
 pnpm preview          # http://127.0.0.1:5180/   默认画布 = Dock 悬浮球，改码自动重建 + 页面自动刷新
 pnpm preview:source   # 同一端口，插件改吃 packages/*/src/client/embed.ts（免构建，改源码最快）
 pnpm preview:verify   # 自检 52 项：Node 冒烟 + 服务器/fixture 断言；退出码即结论
+pnpm preview:layout   # 真渲染盒模型走查：重叠 / 横向溢出 / 折行必须为 0
+pnpm preview:titles   # 子页标题层级走查：重复的 Title/Label（V1/V2/V3）必须为 0
 ```
 
 前置：仓库已 `pnpm install`，且各包**已构建**（`pnpm build`，或至少 `packages/*/lib/embed.cjs`、
@@ -97,10 +99,29 @@ pnpm preview:verify   # 自检 52 项：Node 冒烟 + 服务器/fixture 断言�
 - 没有 React Fast Refresh：改码后 esbuild 重建 → 整页刷新（会话状态会丢）。
 - `dev-harness/preview/**` 不参与 `tsc`（esbuild 直接吃 TSX），它的门是 `preview:verify`。
 
+## 走查「重复的 Title/Label」（`pnpm preview:titles`）
+
+用于「以 hippomemo 进化页为标准重构插件 UI」这类工作的机器判据：CDP 驱动 headless Edge，
+把 dock 每个模块子页**真实渲染**出来的标题/标签/卡片铺平，按真实 DOM 位置判语义位
+（卡头 / 卡内小标题 / 字段标签 / 行内元信息），再报三类违规：
+
+| 规则 | 判据 |
+| --- | --- |
+| V1 | 子页内有卡头文本 == dock 模块头标题（模块头已说了这一页是什么） |
+| V2 | 同一文本既是某张卡的卡头、又是卡内小标题或字段标签 |
+| V2b | 同一张卡里，卡头的元信息（计数/时间）与该卡内的小标题同名 |
+| V3 | 同一子页里两张不同的卡，卡头文本完全相同 |
+
+退出码即结论。默认逐页走 **5 个模块 / 16 个目标**（`--tabs` 声明内层页签：
+`火花:火花流,涌现提议,脚本目录;记忆:总览,记忆,偏好,进化;财务:总览,连接,供应商,高级`），
+`--module 记忆` 定点，`--json` 出机器可读报告（`.dev/title-audit/report.json`），
+`--html` 直接 dump 目标页的真实 DOM 逐层结构（核对语义位判定用）。
+输出还含「卡片分割」清单（每张卡的 y/高/首行）与 `display:none` 的标题 —— 后者是
+「渲染了再用 CSS 擦掉」的遗留证据。标准形制与规则见 `design-system/spark-dock/MASTER.md` §5。
+
 ## 排障
 
 | 现象 | 原因 / 处理 |
-| --- | --- |
 | `/preview.js` 返回 503 | 构建失败。看 `/__preview/probe` 的 `errors`，或跑 `pnpm preview:verify` 看首条错误 |
 | 页面空白、控制台报 `Could not resolve …/embed` | 该包没构建：`pnpm build`（或 `pnpm --filter <pkg> build`） |
 | 悬浮球/面板没样式 | `packages/dsh-spark-dock` 的 `DOCK_CSS` 没进来：看 `pnpm preview:verify` 的 dock 组断言 |

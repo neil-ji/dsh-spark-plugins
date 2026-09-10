@@ -1,7 +1,8 @@
 /** Section copy (zh + en). */
 export const zh = {
+  // 显示名规范化（2026-09 五插件统一）：连接器用产品名的规范拼写本身（npm 官方全小写）。
   nav: 'npm',
-  title: 'npm 发布',
+  title: 'npm',
   intro: '填入 granular token（npmjs.com → Access Tokens：All packages + Read and write + bypass 2FA）→ 测试连接 → 保存。token 存本机凭据缝，只要不失效，agent 即可全权接管 npm 平台侧管理（发布 / dist-tag / 弃用 / OIDC trust）。',
   registry: 'npm 注册表',
   registryOk: '可达',
@@ -31,6 +32,7 @@ export const zh = {
   published: '已发布',
   unpublished: '未发布',
   latest: '最新',
+  packagesTitle: '套件包',
   saved: '已完成',
   error: '失败',
   cardTitle: 'npm 发布管线',
@@ -56,7 +58,7 @@ export const zh = {
 
 export const en: Record<NpmKey, string> = {
   nav: 'npm',
-  title: 'npm release',
+  title: 'npm',
   intro: 'Paste a granular token (npmjs.com → Access Tokens: All packages + Read and write + bypass 2FA) → test the connection → save. The token lives in the local credentials seam; while it stays valid, the agent can fully manage the npm platform side (publish / dist-tags / deprecate / OIDC trust).',
   registry: 'npm registry',
   registryOk: 'Reachable',
@@ -86,6 +88,7 @@ export const en: Record<NpmKey, string> = {
   published: 'Published',
   unpublished: 'Not published',
   latest: 'Latest',
+  packagesTitle: 'Kit packages',
   saved: 'Done',
   error: 'Error',
   cardTitle: 'npm release pipeline',

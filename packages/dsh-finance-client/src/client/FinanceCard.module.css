@@ -1,13 +1,16 @@
 /* Finance panel in the Spark Dock (and any other embedder). 2026-09 形制统一：
    内容按页签拆分（总览 / 连接 / 供应商 / 高级），页面本体不再自带卡框 ——
    dock 的 .dock-head 已经给出模块名与描述，多一层边框/标题就是三层 chrome。
-   页签栏走 ui-kit SegmentedControl(fullWidth)，与 dock 的模块子页 tab 同规。 */
+   页签栏走 ui-kit SegmentedControl(fullWidth)，与 dock 的模块子页 tab 同规。
+   分组一律 ui-kit Card，分组标题写在 Card 头上；间距只引用 --spk-gap-page /
+   --spk-gap-card 令牌，保证五插件面板边距一致。
+   保存行在各页签内容列的**末尾**（文档流内，不 sticky / 不 fixed）。 */
 
 .card {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding-bottom: 12px;
+  gap: var(--spk-gap-page, 12px);
+  padding-bottom: var(--spk-gap-page, 12px);
 }
 
 .pending {
@@ -25,7 +28,7 @@
 .body {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--spk-gap-page, 12px);
 }
 
 /* 页签栏：占满整行，各页等宽（与 dock 模块子页 tab 视觉一致）。 */
@@ -37,7 +40,7 @@
 .tabPanel {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--spk-gap-page, 12px);
 }
 
 /* Inline dashboard — the audit section lives at the top of the 总览 tab:
@@ -45,7 +48,7 @@
 .dashboard {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--spk-gap-page, 12px);
 }
 
 .readOnly {
@@ -57,7 +60,7 @@
 
 .section {
   flex-direction: column;
-  gap: 10px;
+  gap: var(--spk-gap-card, 8px);
   display: flex;
 }
 
@@ -70,14 +73,14 @@
 
 .sectionHint {
   color: var(--dsw-alias-label-tertiary);
-  margin: -4px 0 0;
+  margin: 0;
   font-size: 12px;
   line-height: 1.5;
 }
 
 .field {
   flex-direction: column;
-  gap: 6px;
+  gap: var(--spk-gap-card, 8px);
   display: flex;
 }
 
@@ -204,7 +207,7 @@
 
 .fieldFoot {
   align-items: center;
-  gap: 10px;
+  gap: var(--spk-gap-card, 8px);
   display: flex;
 }
 
@@ -254,20 +257,17 @@
 
 
 
-/* 保存行：四个页签共用同一条（draft 在 controller store 里）。
-   吸底 —— dock 面板自身是滚动容器，长页（高级）里也始终能一键保存。 */
+/* 保存行：**各配置页签内容列的末尾**，在文档流里（不 sticky / 不 fixed）。
+   一行 32px + 12px 上边距，挂在卡片下面 —— 它属于这一页的内容，不属于面板外壳。
+   以前是 `position: sticky; bottom: 0` 的跨页签常驻条：浮在滚动内容之上，且纯展示的
+   总览页也挂着它，读起来像"展示页也要保存"。draft 仍跨页签共享，所以任一页保存都提交
+   同一份改动；按钮可用性由 state.dirty（只有配置字段会进 plan）驱动。 */
 .footer {
-  position: sticky;
-  bottom: 0;
-  z-index: 1;
-  border-top: 1px solid var(--dsw-alias-border-l2);
-  background: var(--dsw-alias-bg-module-platform);
+  display: flex;
   justify-content: flex-end;
   align-items: center;
   gap: 8px;
   margin-top: 4px;
-  padding: 12px 0 4px;
-  display: flex;
 }
 
 .footerSpacer {
@@ -370,20 +370,21 @@
 .providerList {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-top: 8px;
+  gap: var(--spk-gap-card, 8px);
 }
 .providerCard {
   background: var(--dsw-alias-surface-l1);
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
-  padding: 12px 14px;
+  padding: var(--spk-space-3, 12px);
 }
 .providerCardHead {
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
+  gap: var(--spk-gap-card, 8px);
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: var(--spk-gap-card, 8px);
 }
 
 /* Host-owned meta line (billing mode + currency). One row of small chips so
@@ -421,13 +422,15 @@
 }
 .providerGrid {
   display: grid;
-  gap: 10px 14px;
-  grid-template-columns: 1fr 1fr;
+  gap: var(--spk-gap-card, 8px) var(--spk-space-3, 12px);
+  /* 自适应列宽：窄面板自动落成一列，日期/金额控件不会被压扁。 */
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
 }
 .providerField {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--spk-space-1, 4px);
+  min-width: 0;
 }
 .providerLabel {
   color: var(--dsw-alias-label-secondary);
