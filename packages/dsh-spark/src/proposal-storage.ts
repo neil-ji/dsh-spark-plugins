@@ -5,9 +5,9 @@
  * and the user can inspect/grep them independently.
  */
 import { promises as fs } from 'node:fs'
-import { dirname } from 'node:path'
 import type { ProposalView, ProposalStatus } from 'dsh-spark-wire'
 import type { SparkRecordId } from './types.ts'
+import { describeStorageError, ensureJsonlPath } from './jsonl-path.ts'
 
 function parseLines(text: string): ProposalView[] {
   const records: ProposalView[] = []
@@ -49,18 +49,21 @@ export class JsonlProposalStorage {
   async readAll(): Promise<ProposalView[]> {
     let text: string
     try {
+      // Guard first: heals the empty directory the old mkdir-the-file-path bug
+      // left behind, and refuses a non-empty one with an actionable message.
+      await ensureJsonlPath(this.filePath)
       text = await fs.readFile(this.filePath, 'utf8')
     } catch (error) {
       const err = error as NodeJS.ErrnoException
       if (err.code === 'ENOENT') return []
-      throw error
+      throw describeStorageError(error, this.filePath)
     }
     return parseLines(text)
   }
 
   async writeAll(records: ProposalView[]): Promise<void> {
     await this.serialize(async () => {
-      await fs.mkdir(dirname(this.filePath), { recursive: true })
+      await ensureJsonlPath(this.filePath)
       const tmp = this.filePath + '.tmp'
       const text = records.map(r => JSON.stringify(r)).join('\n') + (records.length > 0 ? '\n' : '')
       const handle = await fs.open(tmp, 'w')
@@ -84,7 +87,7 @@ export class JsonlProposalStorage {
       if (current.status !== 'pending') return current
       const next: ProposalView = { ...current, status, resolvedAt: now }
       all[idx] = next
-      await fs.mkdir(dirname(this.filePath), { recursive: true })
+      await ensureJsonlPath(this.filePath)
       const tmp = this.filePath + '.tmp'
       const text = all.map(r => JSON.stringify(r)).join('\n') + '\n'
       const handle = await fs.open(tmp, 'w')

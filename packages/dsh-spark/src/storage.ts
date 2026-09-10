@@ -9,9 +9,9 @@
  * one; cross-process safety is not a Phase 1 requirement).
  */
 import { promises as fs } from 'node:fs'
-import { dirname } from 'node:path'
 import type { SparkPatch, SparkView } from 'dsh-spark-wire'
 import type { SparkRecordId, SparkStorage } from './types.ts'
+import { describeStorageError, ensureJsonlPath } from './jsonl-path.ts'
 
 function parseLines(text: string): SparkView[] {
   const records: SparkView[] = []
@@ -52,7 +52,7 @@ export class JsonlSparkStorage implements SparkStorage {
 
   async append(record: SparkView): Promise<void> {
     await this.serialize(async () => {
-      await fs.mkdir(dirname(this.filePath), { recursive: true })
+      await ensureJsonlPath(this.filePath)
       const handle = await fs.open(this.filePath, 'a')
       try {
         await handle.write(JSON.stringify(record) + '\n')
@@ -66,11 +66,14 @@ export class JsonlSparkStorage implements SparkStorage {
   async readAll(): Promise<SparkView[]> {
     let text: string
     try {
+      // Guard first: heals the empty directory the old mkdir-the-file-path bug
+      // left behind, and refuses a non-empty one with an actionable message.
+      await ensureJsonlPath(this.filePath)
       text = await fs.readFile(this.filePath, 'utf8')
     } catch (error) {
       const err = error as NodeJS.ErrnoException
       if (err.code === 'ENOENT') return []
-      throw error
+      throw describeStorageError(error, this.filePath)
     }
     return parseLines(text)
   }
@@ -95,7 +98,7 @@ export class JsonlSparkStorage implements SparkStorage {
   }
 
   private async writeAllRaw(records: SparkView[]): Promise<void> {
-    await fs.mkdir(dirname(this.filePath), { recursive: true })
+    await ensureJsonlPath(this.filePath)
     const tmp = this.filePath + '.tmp'
     const text = records.map(r => JSON.stringify(r)).join('\n') + (records.length > 0 ? '\n' : '')
     const handle = await fs.open(tmp, 'w')

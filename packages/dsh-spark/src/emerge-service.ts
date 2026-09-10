@@ -10,7 +10,6 @@
  */
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { promises as fs } from 'node:fs'
 import { Context, Service } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import {
@@ -22,6 +21,7 @@ import {
 } from 'dsh-spark-wire'
 import type { SparkChangedEvent } from './types.ts'
 import { JsonlProposalStorage } from './proposal-storage.ts'
+import { ensureJsonlPath } from './jsonl-path.ts'
 import { generateProposals, dedupKey, newProposalId } from './proposals.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -72,8 +72,9 @@ export class EmergeService extends Service {
   }
 
   private async ensureDir(): Promise<void> {
-    const dir = this.filePath.replace(/[/][^/]+$/, '')
-    await fs.mkdir(dir, { recursive: true })
+    // Windows-safe: `path.dirname` (a `/`-anchored regex never matches the `\`
+    // separators `path.join` produces, so the old code mkdir'd the file path).
+    await ensureJsonlPath(this.filePath)
   }
 
   /** Read all proposals. */

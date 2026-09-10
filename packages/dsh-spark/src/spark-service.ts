@@ -17,7 +17,6 @@
 import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { promises as fs } from 'node:fs'
 import { Context, Service } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import {
@@ -35,6 +34,7 @@ import {
   type SparkId,
 } from 'dsh-spark-wire'
 import { JsonlSparkStorage } from './storage.ts'
+import { ensureJsonlPath } from './jsonl-path.ts'
 import type { ScriptService } from './script-service.ts'
 import { registerSparkHttpRoutes } from './http.ts'
 import type { SparkChangedEvent, SparkRecordId, SparkStorage, HippoPutInput } from './types.ts'
@@ -93,8 +93,10 @@ export class SparkService extends Service {
   }
 
   private async ensureDir(): Promise<void> {
-    const dir = this.filePath.replace(/[/][^/]+$/, '')
-    await fs.mkdir(dir, { recursive: true })
+    // `path.dirname`, never a `/`-anchored pattern: `path.join` yields `\` on
+    // Windows, and the old regex passed the whole file path to `mkdir`, which
+    // created a directory where the JSONL file belongs (EISDIR on every read).
+    await ensureJsonlPath(this.filePath)
   }
 
   private ensureRegistered(ctx: Context): void {

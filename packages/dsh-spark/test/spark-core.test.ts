@@ -6,10 +6,13 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, rm, readFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, rm, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { JsonlSparkStorage } from '../src/storage.ts'
+import { JsonlProposalStorage } from '../src/proposal-storage.ts'
+import { JsonlScriptStorage } from '../src/script-storage.ts'
+import { ensureJsonlPath } from '../src/jsonl-path.ts'
 import { buildHippoInputFromSpark, deriveTitle } from '../src/types.ts'
 import type { SparkView } from 'dsh-spark-wire'
 
@@ -74,6 +77,61 @@ test('writeAll replaces the entire store (used by crystallize)', async (t) => {
   for (const r of all) {
     assert.notEqual(r.crystallized, null, r.id + ' should be crystallized')
   }
+})
+
+// ----- EISDIR regression: the file path must never be created as a directory -----
+
+test('ensureJsonlPath uses path.dirname, not a forward-slash pattern (Windows EISDIR)', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-spark-eisdir-'))
+  t.after(async () => { await rm(dir, { recursive: true, force: true }) })
+  const file = join(dir, 'nested', 'deeper', 'sparks.jsonl')
+  await ensureJsonlPath(file)
+  // The parent chain exists; the file path itself must NOT exist as a directory.
+  const storage = new JsonlSparkStorage(file)
+  await storage.append(makeRecord({ id: 'a' }))
+  const all = await storage.readAll()
+  assert.equal(all.length, 1, 'append+read must work on a fresh nested path')
+})
+
+test('JSONL backends self-heal the empty directory the old mkdir bug created', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-spark-heal-'))
+  t.after(async () => { await rm(dir, { recursive: true, force: true }) })
+
+  // sparks: append must succeed and round-trip once the path is healed.
+  const sparkFile = join(dir, 'sparks.jsonl')
+  await mkdir(sparkFile, { recursive: true })
+  const sparks = new JsonlSparkStorage(sparkFile)
+  assert.deepEqual(await sparks.readAll(), [], 'damaged path reads as empty')
+  await sparks.append(makeRecord({ id: 'a' }))
+  assert.equal((await sparks.readAll()).length, 1, 'sparks path is a usable file location again')
+
+  // proposals + scripts: the write path heals the same way.
+  for (const [name, storage] of [
+    ['proposals.jsonl', new JsonlProposalStorage(join(dir, 'proposals.jsonl'))],
+    ['scripts.jsonl', new JsonlScriptStorage(join(dir, 'scripts.jsonl'))],
+  ] as const) {
+    const file = join(dir, name)
+    await mkdir(file, { recursive: true })
+    assert.deepEqual(await storage.readAll(), [], name + ': damaged path reads as empty')
+    await storage.writeAll([])
+    assert.deepEqual(await storage.readAll(), [], name + ': path is a usable file location again')
+  }
+})
+
+test('a NON-empty directory at the JSONL path is refused, never destroyed', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-spark-refuse-'))
+  t.after(async () => { await rm(dir, { recursive: true, force: true }) })
+  const file = join(dir, 'sparks.jsonl')
+  await mkdir(join(file, 'user-data'), { recursive: true })
+  const assertRefused = (error: Error): boolean => {
+    assert.match(error.message, /is a non-empty directory, not a JSONL file/)
+    assert.ok(error.message.includes(file), 'message must name the offending path')
+    return true
+  }
+  await assert.rejects(() => ensureJsonlPath(file), assertRefused)
+  // The read path goes through the same guard, so the UI gets the actionable
+  // message instead of Node's bare `EISDIR: illegal operation on a directory`.
+  await assert.rejects(() => new JsonlSparkStorage(file).readAll(), assertRefused)
 })
 
 // ----- buildHippoInputFromSpark (pure mapper) -----

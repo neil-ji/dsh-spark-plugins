@@ -6,7 +6,6 @@
  * sequence matches a script's triggers.
  */
 import { randomUUID } from 'node:crypto'
-import { promises as fs } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
@@ -21,6 +20,7 @@ import {
   type ScriptInvokeResult,
 } from 'dsh-spark-wire'
 import { JsonlScriptStorage, defaultScriptsFilePath } from './script-storage.ts'
+import { ensureJsonlPath } from './jsonl-path.ts'
 import { registerSparkHttpRoutes } from './http.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -62,9 +62,9 @@ export class ScriptService extends Service {
   }
 
   private async ensureDir(): Promise<void> {
-    const idx = this.filePath.lastIndexOf('/')
-    const dir = idx >= 0 ? this.filePath.slice(0, idx) : this.filePath
-    await fs.mkdir(dir, { recursive: true })
+    // Windows-safe: `path.dirname` (the old `lastIndexOf('/')` never matched
+    // the `\` separators `path.join` produces, so the file path was mkdir'd).
+    await ensureJsonlPath(this.filePath)
   }
 
   private ensureRegistered(ctx: Context): void {

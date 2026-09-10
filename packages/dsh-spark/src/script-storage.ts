@@ -2,8 +2,8 @@
  * JSONL backend for procedural scripts (Phase 5).
  */
 import { promises as fs } from 'node:fs'
-import { dirname } from 'node:path'
 import type { ScriptView } from 'dsh-spark-wire'
+import { describeStorageError, ensureJsonlPath } from './jsonl-path.ts'
 
 function parseLines(text: string): ScriptView[] {
   const records: ScriptView[] = []
@@ -45,18 +45,21 @@ export class JsonlScriptStorage {
   async readAll(): Promise<ScriptView[]> {
     let text: string
     try {
+      // Guard first: heals the empty directory the old mkdir-the-file-path bug
+      // left behind, and refuses a non-empty one with an actionable message.
+      await ensureJsonlPath(this.filePath)
       text = await fs.readFile(this.filePath, 'utf8')
     } catch (error) {
       const err = error as NodeJS.ErrnoException
       if (err.code === 'ENOENT') return []
-      throw error
+      throw describeStorageError(error, this.filePath)
     }
     return parseLines(text)
   }
 
   async append(record: ScriptView): Promise<void> {
     await this.serialize(async () => {
-      await fs.mkdir(dirname(this.filePath), { recursive: true })
+      await ensureJsonlPath(this.filePath)
       const handle = await fs.open(this.filePath, 'a')
       try {
         await handle.write(JSON.stringify(record) + '\n')
@@ -69,7 +72,7 @@ export class JsonlScriptStorage {
 
   async writeAll(records: ScriptView[]): Promise<void> {
     await this.serialize(async () => {
-      await fs.mkdir(dirname(this.filePath), { recursive: true })
+      await ensureJsonlPath(this.filePath)
       const tmp = this.filePath + '.tmp'
       const text = records.map(r => JSON.stringify(r)).join('\n') + (records.length > 0 ? '\n' : '')
       const handle = await fs.open(tmp, 'w')
@@ -102,7 +105,7 @@ export class JsonlScriptStorage {
   }
 
   private async writeAllRaw(records: ScriptView[]): Promise<void> {
-    await fs.mkdir(dirname(this.filePath), { recursive: true })
+    await ensureJsonlPath(this.filePath)
     const tmp = this.filePath + '.tmp'
     const text = records.map(r => JSON.stringify(r)).join('\n') + (records.length > 0 ? '\n' : '')
     const handle = await fs.open(tmp, 'w')
