@@ -58,6 +58,14 @@ export type * from './types.ts'
 export { financeUsageHourlyProjectionDefinition, financeUsageProjectionDefinition } from './projection.ts'
 export { fetchFinanceBalance, FinanceBalanceError, microsFromDecimal } from './balance.ts'
 export { backfillFinanceHourly } from './ledger.ts'
+// Cross-generation `ctx.sessionPersistence` access (DSH 0.1.2 flat surface /
+// 0.1.5 handle surface) — shared with embedders that fold session logs.
+export {
+  inspectPersistenceSession,
+  listPersistenceSnapshots,
+  type PersistenceInspectionLike,
+  type PersistenceSnapshotLike,
+} from './session-source.ts'
 // Commit 13: client uses these to seed Form List defaults + lock fields.
 // Client uses these to read host-known defaults (billing mode / currency /
 // balance-fetch capability).

@@ -31,6 +31,7 @@ import type {} from '@deepseek-ai/dsh-session-projection-cache'
 // Type-only: merges the `title` projection key into SessionProjectionMap.
 import type {} from '@deepseek-ai/dsh-session-title/types'
 import type {} from '@deepseek-ai/dsh-workspace'
+import { inspectPersistenceSession, listPersistenceSnapshots } from './session-source.ts'
 import {
   addFinanceBuckets,
   emptyFinanceBuckets,
@@ -129,7 +130,9 @@ function extractProjection(values: Partial<SessionProjectionMap>, title: string 
 async function readProjection(ctx: Context, header: SessionHeader, signal?: AbortSignal): Promise<SessionProjectionRead> {
   // 0.1.2: the cache identity needs the session's inherited-event count, which
   // only persistence metadata carries — inspect once, then cache-first fold.
-  const inspection = await ctx.sessionPersistence.inspect(header.id, signal)
+  // `inspectPersistenceSession` maps both persistence API generations (0.1.2
+  // `inspect` / 0.1.5 read handle) onto this one shape.
+  const inspection = await inspectPersistenceSession(ctx, String(header.id), signal)
   const cached = ctx.sessionProjectionCache.cachedSnapshot(inspection.meta, inspection.inheritedEventCount)
   if (cached !== undefined) {
     return extractProjection(cached.values, typeof cached.values.title === 'string' ? cached.values.title : null)
@@ -212,7 +215,7 @@ export async function buildFinanceLedger(
 ): Promise<FinanceLedger> {
   const nowMs = opts?.nowMs ?? Date.now()
   const hourWindowStartMs = nowMs - 24 * 3_600_000
-  const snapshots = await ctx.sessionPersistence.listSnapshots(signal)
+  const snapshots = await listPersistenceSnapshots(ctx, signal)
   const workspaces = ctx.workspaceRegistry.list()
   const workspaceBySession = new Map<string, { id: string; title: string }>()
   for (const workspace of workspaces) {
@@ -513,7 +516,7 @@ export async function backfillFinanceHourly(
   signal?: AbortSignal,
   progress?: FinanceBackfillSink,
 ): Promise<FinanceRescanResult> {
-  const snapshots = await ctx.sessionPersistence.listSnapshots(signal)
+  const snapshots = await listPersistenceSnapshots(ctx, signal)
   if (progress !== undefined) progress.total = snapshots.length
   let scanned = 0
   let rescanned = 0
@@ -523,7 +526,7 @@ export async function backfillFinanceHourly(
     if (progress !== undefined) progress.scanned = scanned
     const header = snapshot.header
     try {
-      const inspection = await ctx.sessionPersistence.inspect(header.id, signal)
+      const inspection = await inspectPersistenceSession(ctx, String(header.id), signal)
       const cached = ctx.sessionProjectionCache.cachedSnapshot(inspection.meta, inspection.inheritedEventCount)
       if (cached === undefined || cached.values.financeUsageHourly === undefined) {
         ctx.sessionProjectionCache.coldSnapshot(inspection.meta, inspection.inheritedEventCount, inspection.events)
