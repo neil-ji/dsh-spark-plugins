@@ -25,6 +25,7 @@ MODULES.forEach(mod => {
   const t = document.createElement('button');
   t.type = 'button'; t.className = 'dock-tab'; t.dataset.id = mod.id;
   t.style.setProperty('--accent', mod.accent);
+  t.style.setProperty('--accent-fg', mod.accentFg);
   t.innerHTML = `${ICONS[mod.icon]}<span>${mod.label}</span>`;
   t.setAttribute('role', 'tab'); t.setAttribute('aria-label', mod.label);
   t.onclick = () => setModule(mod.id);
@@ -32,6 +33,9 @@ MODULES.forEach(mod => {
 
   const s = document.createElement('section');
   s.className = 'module'; s.dataset.id = mod.id;
+  // 模块内容里的指示条 / 胶囊也要吃到本模块的 accent 两档
+  s.style.setProperty('--accent', mod.accent);
+  s.style.setProperty('--accent-fg', mod.accentFg);
   s.innerHTML = CONTENT[mod.id];
   body.appendChild(s);
 });

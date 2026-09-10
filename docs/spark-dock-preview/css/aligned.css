@@ -3,7 +3,7 @@
     background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; }
   .subtab { flex: 1; padding: 6px 4px; border: none; border-radius: 7px; background: transparent;
     color: var(--dsw-alias-label-secondary); font: 500 11px/1 var(--dsw-font-family); cursor: pointer; }
-  .subtab.on { background: var(--dsw-alias-bg-module-platform); color: var(--dsw-alias-label-primary-foreground); }
+  .subtab.on { background: var(--dsw-alias-surface-float); color: var(--dsw-alias-label-primary); font-weight: 600; }
   .subtab:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 1px; }
   .subpane { display: none; }
   .subpane.active { display: block; animation: modin var(--t-enter) var(--ease-out); }
@@ -14,7 +14,7 @@
     color: var(--dsw-alias-label-secondary); font: 500 11px/1 var(--dsw-font-family);
     padding: 5px 9px; border-radius: 8px; cursor: pointer; }
   .subpill::before { content: ""; position: absolute; inset: -4px; }
-  .subpill.on, .subpill:active { background: var(--dsw-alias-interactive-bg-active); color: var(--dsw-alias-label-primary-foreground); }
+  .subpill.on, .subpill:active { background: var(--dsw-alias-interactive-bg-active); color: var(--dsw-alias-label-primary); }
 
   .fieldrow { display: flex; align-items: center; gap: 6px; }
   .sel { height: 32px; border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-2);
@@ -30,14 +30,14 @@
   .sdot.warn { background: var(--dsw-alias-state-warn-primary); }
   .sdot.error { background: var(--dsw-alias-state-error-primary); }
   .cryst { color: var(--dsw-alias-state-success-primary); font-weight: 600; }
-  .row.off .ttl { text-decoration: line-through; opacity: .55; }
+  .row.off .ttl { text-decoration: line-through; color: var(--dsw-alias-label-tertiary); }
 
   .panelhead { display: flex; align-items: center; gap: 6px; }
   .panelhead b { font-size: 13px; }
   .bstrip { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 10px; }
   .bregion { display: flex; align-items: center; gap: 7px; padding: 9px 10px; border-radius: 10px;
     border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-2);
-    color: var(--dsw-alias-label-primary-foreground); font: 500 12px/1.2 var(--dsw-font-family);
+    color: var(--dsw-alias-label-primary); font: 500 12px/1.2 var(--dsw-font-family);
     cursor: pointer; text-align: left; }
   .bregion:hover { background: var(--dsw-alias-interactive-bg-hover); }
   .bregion span { display: block; font-size: 11px; color: var(--dsw-alias-label-tertiary); margin-top: 2px; }
@@ -50,7 +50,7 @@
   .pill.model { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); }
   .pillwrap { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0; }
 
-  .check { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 12px; color: var(--dsw-alias-label-primary-foreground); cursor: pointer; }
+  .check { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 12px; color: var(--dsw-alias-label-primary); cursor: pointer; }
   .check input { accent-color: var(--dsw-alias-brand-primary); width: 15px; height: 15px; }
 
   .table { width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -66,9 +66,9 @@
 
   .ringwrap { display: flex; align-items: center; gap: 16px; }
   .ring { position: relative; width: 88px; height: 88px; border-radius: 50%; display: grid; place-items: center; flex: none; }
-  .ring::after { content: ""; position: absolute; inset: 24%; background: var(--dsw-alias-bg-layer-1); border-radius: 50%; }
-  .ring span { position: relative; z-index: 1; font-weight: 700; font-size: 12px; color: var(--dsw-alias-label-primary-foreground); }
-  .split-leg { flex: 1; display: flex; flex-direction: column; gap: 7px; font-size: 12px; color: var(--dsw-alias-label-primary-foreground); }
+  .ring::after { content: ""; position: absolute; inset: 24%; background: var(--dsw-alias-surface-l1); border-radius: 50%; }
+  .ring span { position: relative; z-index: 1; font-weight: 700; font-size: 12px; color: var(--dsw-alias-label-primary); }
+  .split-leg { flex: 1; display: flex; flex-direction: column; gap: 7px; font-size: 12px; color: var(--dsw-alias-label-primary); }
   .sl { display: flex; align-items: center; gap: 7px; }
   .sq { width: 9px; height: 9px; border-radius: 3px; flex: none; }
 

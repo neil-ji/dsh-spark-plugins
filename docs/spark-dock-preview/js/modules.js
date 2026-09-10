@@ -7,16 +7,18 @@ const ICONS = {
   npm: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3 21 8.2v7.6L12 21 3 15.8V8.2 12 3zM3 8.2l9 5.2 9-5.2M12 13.4V21" stroke-linejoin="round" stroke-linecap="round"/></svg>',
 };
 
+/* 模块 accent 两档：accent = 实色（指示条 / 图表 / 圆点），accentFg = 文字态（图标 / 胶囊文字）。
+   与 packages/dsh-ui-kit/src/styles/spark-tokens.css v4 的 --spk-acc-* / --spk-acc-*-fg 同规。 */
 const MODULES = [
-  { id:'spark', order:10, icon:'spark', accent:'var(--acc-spark)', label:'火花',
+  { id:'spark', order:10, icon:'spark', accent:'var(--acc-spark)', accentFg:'var(--acc-spark-fg)', label:'火花',
     name:'火花流 Sparks', sub:'手动捕获 · 结晶 · 涌现提议 · 脚本目录 · Graph' },
-  { id:'hippomemo', order:20, icon:'hippomemo', accent:'var(--acc-hippomemo)', label:'记忆',
+  { id:'hippomemo', order:20, icon:'hippomemo', accent:'var(--acc-hippomemo)', accentFg:'var(--acc-hippomemo-fg)', label:'记忆',
     name:'记忆 HippoMemo', sub:'四脑区总览 · 搜索/筛选 · 我的偏好 · 进化引擎' },
-  { id:'finance', order:30, icon:'finance', accent:'var(--acc-finance)', label:'成本',
+  { id:'finance', order:30, icon:'finance', accent:'var(--acc-finance)', accentFg:'var(--acc-finance-fg)', label:'成本',
     name:'财务审计 Finance', sub:'余额 · Token 用量与成本总览' },
-  { id:'github', order:40, icon:'github', accent:'var(--acc-github)', label:'GitHub',
+  { id:'github', order:40, icon:'github', accent:'var(--acc-github)', accentFg:'var(--acc-github-fg)', label:'GitHub',
     name:'GitHub 连接', sub:'令牌 · 操作权限 · Git 身份与代理' },
-  { id:'npm', order:50, icon:'npm', accent:'var(--acc-npm)', label:'npm',
+  { id:'npm', order:50, icon:'npm', accent:'var(--acc-npm)', accentFg:'var(--acc-npm-fg)', label:'npm',
     name:'npm 发布', sub:'granular token · 注册表与套件包状态' },
 ];
 
@@ -95,12 +97,12 @@ const CONTENT = {
       </div>
       <div class="card list">
         <div class="row">
-          <div class="grow"><div class="ttl"><b style="color:var(--acc-spark)">关联</b> · 价格同步 ⟷ models.dev</div>
+          <div class="grow"><div class="ttl"><b style="color:var(--acc-spark-fg)">关联</b> · 价格同步 ⟷ models.dev</div>
             <div class="meta">高杠杆 · 82% · 3 spark(s)</div></div>
           <span class="pill">接受</span><span class="pill">驳回</span>
         </div>
         <div class="row">
-          <div class="grow"><div class="ttl"><b style="color:var(--acc-spark)">清理</b> · 30 天未引用候选</div>
+          <div class="grow"><div class="ttl"><b style="color:var(--acc-spark-fg)">清理</b> · 30 天未引用候选</div>
             <div class="meta">中杠杆 · 64% · 6 spark(s)</div></div>
           <span class="pill">接受</span><span class="pill">驳回</span>
         </div>
@@ -128,14 +130,14 @@ const CONTENT = {
     <div class="subpane" data-subtab-pane="spark" data-value="graph">
       <div class="card" style="text-align:center">
         <svg viewBox="0 0 360 210" width="100%" height="210" role="img" aria-label="火花关联图">
-          <line x1="180" y1="105" x2="180" y2="30" stroke="var(--acc-spark)" stroke-width="1.5" stroke-dasharray="6 4" opacity=".55"/>
-          <line x1="180" y1="105" x2="280" y2="72" stroke="var(--acc-spark)" stroke-width="1.5" stroke-dasharray="6 4" opacity=".55"/>
-          <line x1="110" y1="150" x2="320" y2="22" stroke="var(--dsw-alias-state-success-primary)" stroke-width="2" opacity=".85"/>
-          <circle cx="180" cy="105" r="14" fill="var(--dsw-alias-brand-primary)"/><text x="180" y="109" text-anchor="middle" font-size="10" fill="#fff" font-weight="600">四象</text>
-          <circle cx="180" cy="20" r="12" fill="var(--dsw-alias-brand-primary)"/><text x="180" y="24" text-anchor="middle" font-size="9" fill="#fff">价</text>
-          <circle cx="288" cy="62" r="12" fill="var(--dsw-alias-brand-primary)"/><text x="288" y="66" text-anchor="middle" font-size="9" fill="#fff">Gin</text>
-          <circle cx="110" cy="160" r="12" fill="var(--dsw-alias-state-success-primary, #16a34a)"/><text x="110" y="164" text-anchor="middle" font-size="9" fill="#fff">边</text>
-          <circle cx="320" cy="16" r="12" fill="none" stroke="var(--dsw-alias-state-success-primary)" stroke-width="1.5"/>
+          <line x1="180" y1="105" x2="180" y2="30" style="stroke:var(--acc-spark)" stroke-width="1.5" stroke-dasharray="6 4" opacity=".55"/>
+          <line x1="180" y1="105" x2="280" y2="72" style="stroke:var(--acc-spark)" stroke-width="1.5" stroke-dasharray="6 4" opacity=".55"/>
+          <line x1="110" y1="150" x2="320" y2="22" style="stroke:var(--dsw-alias-state-success-primary)" stroke-width="2" opacity=".85"/>
+          <circle cx="180" cy="105" r="14" style="fill:var(--dsw-alias-brand-primary)"/><text x="180" y="109" text-anchor="middle" font-size="10" style="fill:var(--dsw-alias-label-primary-foreground)" font-weight="600">四象</text>
+          <circle cx="180" cy="20" r="12" style="fill:var(--dsw-alias-brand-primary)"/><text x="180" y="24" text-anchor="middle" font-size="9" style="fill:var(--dsw-alias-label-primary-foreground)">价</text>
+          <circle cx="288" cy="62" r="12" style="fill:var(--dsw-alias-brand-primary)"/><text x="288" y="66" text-anchor="middle" font-size="9" style="fill:var(--dsw-alias-label-primary-foreground)">Gin</text>
+          <circle cx="110" cy="160" r="12" style="fill:var(--dsw-alias-state-success-primary, #166534)"/><text x="110" y="164" text-anchor="middle" font-size="9" style="fill:var(--dsw-alias-label-primary-foreground)">边</text>
+          <circle cx="320" cy="16" r="12" fill="none" style="stroke:var(--dsw-alias-state-success-primary)" stroke-width="1.5"/>
         </svg>
         <div class="legend" style="justify-content:center">
           <span><i style="border-color:var(--dsw-alias-state-success-primary)"></i>已结晶</span>

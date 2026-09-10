@@ -1,5 +1,5 @@
 /* ───────── Fairy 人格动效（纯 UI 模拟） ───────── */
-  #ballFace { width: 46px; height: 46px; color: var(--dsw-alias-label-primary-foreground);
+  #ballFace { width: 46px; height: 46px; color: var(--dsw-alias-label-primary);
     animation: bob 3.4s ease-in-out infinite; }
   #ballFace .eye ellipse, #ballFace .eye circle { transform-box: fill-box; transform-origin: center; }
   #ballFace .eyes-happy, #ballFace .m-open, #ballFace .m-frown, #ballFace .acc { display: none; }
@@ -86,11 +86,11 @@
   .dock-bubble { position: fixed; z-index: 9300; max-width: 250px; padding: 9px 12px;
     border-radius: 14px; background: var(--dsw-alias-bg-module-platform);
     border: 1px solid var(--dsw-alias-border-l1); box-shadow: var(--dsw-shadow-lv2);
-    color: var(--dsw-alias-label-primary-foreground); font: 500 12px/1.5 var(--dsw-font-family);
+    color: var(--dsw-alias-label-primary); font: 500 12px/1.5 var(--dsw-font-family);
     opacity: 0; transform: scale(.82) translateY(8px); transform-origin: bottom center;
     pointer-events: none; transition: transform var(--t-enter) var(--ease-spring), opacity var(--t-enter) ease; }
   .dock-bubble.show { opacity: 1; transform: none; }
-  .dock-bubble b { color: var(--dock-accent); }
+  .dock-bubble b { color: var(--dsw-alias-brand-foreground); }
   .dock-bubble .src { display: block; margin-top: 2px; font-size: 11px; color: var(--dsw-alias-label-tertiary); }
   .dock-bubble::after { content: ""; position: absolute; left: calc(50% - 5px); bottom: -5px; width: 9px; height: 9px;
     background: var(--dsw-alias-bg-module-platform); border-right: 1px solid var(--dsw-alias-border-l1);

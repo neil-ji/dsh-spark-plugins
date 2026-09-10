@@ -1,32 +1,56 @@
-/* ───────────────────────── 设计令牌（镜像 --dsw-* 命名） ───────────────────────── */
+/* ───────────────────────── 设计令牌（镜像 --dsw-* 命名） ─────────────────────────
+   与产品 token 层一一对应：`packages/dsh-ui-kit/src/styles/spark-tokens.css` +
+   `dsw-bridge.css`（v4：冷灰骨架 + DSH 品牌蓝）。
+   语义值必须与产品**完全一致** —— `pnpm check:contrast` 的 auditPreviewParity()
+   会逐个色值比对，预览不许自己发明取值。 */
   :root {
     --dsw-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
       "Noto Sans SC", "Helvetica Neue", Arial, sans-serif;
     --dsw-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
-    --dsw-alias-bg-base: #ffffff;
-    --dsw-alias-bg-layer-1: #f6f7f9;
-    --dsw-alias-bg-layer-2: #edeff3;
-    --dsw-alias-bg-module-platform: #1c2230;
+    /* 层次面：bg < platform < surface-card < surface-float */
+    --dsw-alias-bg-base: #f6f7f9;
+    --dsw-alias-bg-layer-0: #ffffff;
+    --dsw-alias-bg-layer-1: #ffffff;
+    --dsw-alias-bg-layer-2: #f4f6fa;
+    --dsw-alias-bg-module-platform: #eef0f4;
+    --dsw-alias-surface-l1: #ffffff;
+    --dsw-alias-surface-float: #ffffff;
+    --dsw-alias-tooltip-bg: #232b3a;
+
     --dsw-alias-label-primary: #1a1d24;
-    --dsw-alias-label-secondary: #5b6270;
-    --dsw-alias-label-tertiary: #667085;
+    --dsw-alias-label-secondary: #525b6b;
+    --dsw-alias-label-tertiary: #5f6a7d;
+    --dsw-alias-label-dimmed: #5f6a7d;
+    --dsw-alias-label-error: #c62828;
     --dsw-alias-label-primary-foreground: #ffffff;
-    --dsw-alias-border-l1: #e4e7ec;
-    --dsw-alias-border-l2: #d4d8df;
+
+    --dsw-alias-border-l1: #d9dee6;
+    --dsw-alias-border-l2: #c1c8d4;
+    --dsw-alias-border-l3: #c1c8d4;
+    --dsw-alias-border-l4: #d9dee6;
+
     --dsw-alias-interactive-bg-hover: rgba(16, 24, 40, 0.05);
+    --dsw-alias-interactive-bg-hover-accent: rgba(61, 90, 240, 0.1);
     --dsw-alias-interactive-bg-active: rgba(16, 24, 40, 0.09);
-    --dsw-alias-brand-primary: #4d6bfe;
-    --dsw-alias-button-primary-fill: #4d6bfe;
-    --dsw-alias-button-primary-hover: #3d5af0;
-    --dsw-alias-state-success-primary: #16a34a;
-    --dsw-alias-state-warn-primary: #d97706;
-    --dsw-alias-state-error-primary: #dc2626;
 
-    --dsw-shadow-lv2: 0 8px 24px rgba(10, 18, 38, 0.16);
-    --dsw-shadow-lv3: 0 16px 48px rgba(10, 18, 38, 0.28);
+    --dsw-alias-brand-primary: #3d5af0;
+    --dsw-alias-brand-foreground: #2f46c8;
+    --dsw-alias-button-primary-fill: #3d5af0;
+    --dsw-alias-button-primary-hover: #2f46c8;
 
-    --dock-accent: #4d6bfe;
+    --dsw-alias-state-success-primary: #166534;
+    --dsw-alias-state-warn-primary: #9a3412;
+    --dsw-alias-state-warn-label: #9a3412;
+    --dsw-alias-state-error-primary: #c62828;
+    --dsw-alias-state-error-content: #c62828;
+    --dsw-alias-state-info-tint: rgba(28, 100, 176, 0.1);
+    --dsw-alias-state-error-tint: rgba(198, 40, 40, 0.08);
+
+    --dsw-shadow-lv2: 0 8px 24px rgba(10, 18, 38, 0.12);
+    --dsw-shadow-lv3: 0 16px 48px rgba(10, 18, 38, 0.16), 0 0 0 1px rgba(10, 18, 38, 0.05);
+
+    --dock-accent: #3d5af0;
     --dock-ball: 48px;
     --dock-panel-w: 560px;
     --dock-panel-h: 680px;
@@ -36,27 +60,66 @@
 
   body[data-theme="dark"] {
     --dsw-alias-bg-base: #0b0e14;
+    --dsw-alias-bg-layer-0: #10141d;
     --dsw-alias-bg-layer-1: #10141d;
     --dsw-alias-bg-layer-2: #171c27;
     --dsw-alias-bg-module-platform: #161b26;
+    --dsw-alias-surface-l1: #1b212c;
+    --dsw-alias-surface-float: #222a37;
+
     --dsw-alias-label-primary: #e8eaf0;
     --dsw-alias-label-secondary: #9aa1af;
     --dsw-alias-label-tertiary: #868ea0;
+    --dsw-alias-label-dimmed: #868ea0;
+    --dsw-alias-label-error: #f87171;
+    --dsw-alias-label-primary-foreground: #171c27;
+
     --dsw-alias-border-l1: #232b3a;
     --dsw-alias-border-l2: #2d3749;
+    --dsw-alias-border-l3: #2d3749;
+    --dsw-alias-border-l4: #232b3a;
+
     --dsw-alias-interactive-bg-hover: rgba(255, 255, 255, 0.06);
+    --dsw-alias-interactive-bg-hover-accent: rgba(109, 133, 254, 0.14);
     --dsw-alias-interactive-bg-active: rgba(255, 255, 255, 0.11);
+
+    --dsw-alias-brand-primary: #6d85fe;
+    --dsw-alias-brand-foreground: #93a8ff;
+    --dsw-alias-button-primary-fill: #6d85fe;
+    --dsw-alias-button-primary-hover: #93a8ff;
+
+    --dsw-alias-state-success-primary: #4ade80;
+    --dsw-alias-state-warn-primary: #fbbf24;
+    --dsw-alias-state-warn-label: #fbbf24;
+    --dsw-alias-state-error-primary: #f87171;
+    --dsw-alias-state-error-content: #f87171;
+    --dsw-alias-state-info-tint: rgba(124, 196, 255, 0.13);
+    --dsw-alias-state-error-tint: rgba(248, 113, 113, 0.13);
+
     --dsw-shadow-lv2: 0 8px 24px rgba(0, 0, 0, 0.5);
-    --dsw-shadow-lv3: 0 16px 48px rgba(0, 0, 0, 0.62);
+    --dsw-shadow-lv3: 0 16px 48px rgba(0, 0, 0, 0.62), 0 0 0 1px rgba(255, 255, 255, 0.06);
   }
 
+  /* 模块 accent 两档（与 packages/dsh-ui-kit/src/styles/spark-tokens.css v4 对齐）：
+     实色档 = 图形对象（图表填充 / 指示条 / 圆点，≥3:1）；
+     文字态档 = 图标 / 胶囊文字 / 实底芯片底色（≥4.5:1）。两档不可互串。 */
   :root {
-    --acc-spark: #f59e0b;
-    --acc-cool: #7cc4ff;
-    --acc-hippomemo: #3b82f6;
-    --acc-finance: #22c55e;
-    --acc-github: #8b5cf6;
-    --acc-npm: #cb3837;
+    --acc-spark: #d97706;        --acc-spark-fg: #92400e;
+    --acc-cool: #1c64b0;         --acc-cool-fg: #1c64b0;
+    --acc-hippomemo: #3b82f6;    --acc-hippomemo-fg: #1d4ed8;
+    --acc-finance: #16a34a;      --acc-finance-fg: #166534;
+    --acc-github: #8b5cf6;       --acc-github-fg: #5b21b6;
+    --acc-npm: #cb3837;          --acc-npm-fg: #991b1b;
+    --on-accent: #ffffff;
+  }
+  body[data-theme="dark"] {
+    --acc-spark: #f59e0b;        --acc-spark-fg: #fbbf24;
+    --acc-cool: #7cc4ff;         --acc-cool-fg: #7cc4ff;
+    --acc-hippomemo: #60a5fa;    --acc-hippomemo-fg: #8ab8fd;
+    --acc-finance: #4ade80;      --acc-finance-fg: #6ee7a0;
+    --acc-github: #a78bfa;       --acc-github-fg: #bda6fb;
+    --acc-npm: #f87171;          --acc-npm-fg: #f8a1a1;
+    --on-accent: #171c27;
   }
 
   * { box-sizing: border-box; }
@@ -103,7 +166,7 @@
   }
   .preview-bar button {
     font: 500 12px/1 var(--dsw-font-family);
-    color: var(--dsw-alias-label-primary-foreground);
+    color: var(--dsw-alias-label-primary);
     background: transparent; border: none; border-radius: 999px;
     padding: 8px 14px; cursor: pointer;
   }
@@ -124,7 +187,7 @@
   .scene-thread { flex: 1; overflow: hidden; padding: 120px 24px 40px; }
   .scene-msg { max-width: 640px; margin: 0 auto 18px; padding: 14px 16px; border-radius: 16px;
     background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); }
-  .scene-msg.user { background: var(--dsw-alias-brand-primary); color: #fff; border: none; }
+  .scene-msg.user { background: var(--dsw-alias-brand-primary); color: var(--dsw-alias-label-primary-foreground); border: none; }
   .scene-composer {
     margin: 0 auto 24px; width: min(720px, calc(100% - 48px));
     min-height: 48px; border-radius: 24px; padding: 13px 18px;

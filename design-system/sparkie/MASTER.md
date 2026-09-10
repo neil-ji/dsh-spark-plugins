@@ -106,7 +106,9 @@
 - 阶段 1（已完成）：token 重写为 Claymorphism + 品牌蓝双层
 - 阶段 2：sparkie.css 按新 token 重写
 - 阶段 3：playground.css / demo.js 同步更新
-- 阶段 4：未来 spark-dock-preview 可复用 Sparkie 的角色数据 + 引擎，主体色板保留各自（业务页暖炭 / 通用页冷灰）
+- 阶段 4：未来 spark-dock-preview 可复用 Sparkie 的角色数据 + 引擎；
+  **承载页色板两边统一为 DSH 冷灰 + 品牌蓝**（2026-09-07 拍板，spark-dock 的「暖炭」方案已废弃，
+  见 [spark-dock/MASTER.md](../spark-dock/MASTER.md) §7），差异只在角色层（皮肤 / 情绪染色）。
 
 ## 9. 反模式（避免）
 
