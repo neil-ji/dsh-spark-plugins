@@ -1,23 +1,13 @@
-/* Finance plugin card in the Plugins settings section. Mirrors the card
-   chrome of the shell/agent-loop cards (same design tokens) so the finance
-   card reads as a sibling of them, with a field grid for the namespace edits
-   and chips for the dashboard view preferences. */
+/* Finance panel in the Spark Dock (and any other embedder). 2026-09 形制统一：
+   内容按页签拆分（总览 / 连接 / 供应商 / 高级），页面本体不再自带卡框 ——
+   dock 的 .dock-head 已经给出模块名与描述，多一层边框/标题就是三层 chrome。
+   页签栏走 ui-kit SegmentedControl(fullWidth)，与 dock 的模块子页 tab 同规。 */
 
 .card {
-  border: 1px solid var(--dsw-alias-border-l2);
-  background: var(--dsw-alias-bg-layer-3);
-  border-radius: 12px;
-  list-style: none;
-  transition: border-color .16s, background .16s;
-}
-
-.card:hover {
-  border-color: var(--dsw-alias-label-dimmed);
-}
-
-.cardOpen {
-  background: var(--dsw-alias-bg-layer-2);
-  border-color: var(--dsw-alias-label-dimmed);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-bottom: 12px;
 }
 
 .pending {
@@ -33,23 +23,34 @@
 }
 
 .body {
-  border-top: 1px solid var(--dsw-alias-border-l2);
-  margin: 0 16px;
-  padding-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
-/* Inline dashboard — the audit section lives at the top of the card body.
-   A subtle separator + tighter top padding keeps the visual hierarchy:
-   first you see numbers, then you edit. */
+/* 页签栏：占满整行，各页等宽（与 dock 模块子页 tab 视觉一致）。 */
+.tabs {
+  flex: none;
+}
+
+/* 单个页签的内容列：页与页之间用同一间距节奏。 */
+.tabPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Inline dashboard — the audit section lives at the top of the 总览 tab:
+   first you see numbers, then (below in the same tab) the view preferences. */
 .dashboard {
-  margin-top: 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px dashed var(--dsw-alias-border-l2);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .readOnly {
   color: var(--dsw-alias-label-tertiary);
-  margin: 12px 0 0;
+  margin: 0;
   font-size: 12px;
   line-height: 1.5;
 }
@@ -57,7 +58,6 @@
 .section {
   flex-direction: column;
   gap: 10px;
-  margin-top: 16px;
   display: flex;
 }
 
@@ -254,14 +254,24 @@
 
 
 
+/* 保存行：四个页签共用同一条（draft 在 controller store 里）。
+   吸底 —— dock 面板自身是滚动容器，长页（高级）里也始终能一键保存。 */
 .footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
   border-top: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-module-platform);
   justify-content: flex-end;
   align-items: center;
   gap: 8px;
-  margin-top: 16px;
+  margin-top: 4px;
   padding: 12px 0 4px;
   display: flex;
+}
+
+.footerSpacer {
+  flex: 1;
 }
 
 .failed {
@@ -354,31 +364,6 @@
   font-size: 12px;
   line-height: 1.5;
   margin: 4px 0 0;
-}
-
-/* "高级配置（JSON）" 折叠区（commit 8：默认折叠，需要进入高级模式才能看到手工表单） */
-.advancedDetails {
-  border-top: 1px solid var(--dsw-alias-border-l2);
-  margin-top: 16px;
-  padding-top: 12px;
-}
-.advancedDetails[open] {
-  margin-bottom: 12px;
-}
-.advancedSummary {
-  color: var(--dsw-alias-label-secondary);
-  cursor: pointer;
-  font-size: 12px;
-  list-style: none;
-  padding: 4px 0;
-}
-.advancedSummary::-webkit-details-marker { display: none; }
-.advancedSummary::marker { display: none; content: ''; }
-.advancedHint {
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
-  line-height: 1.5;
-  margin: 4px 0 12px;
 }
 
 /* Provider Form List (commit 13)：每张卡片一个 provider。 */

@@ -73,6 +73,8 @@ export const DOCK_MODULES: DockModule[] = [
     id: 'finance', label: '成本', name: '财务审计 Finance',
     sub: '余额 · Token 用量与成本总览',
     accent: 'var(--acc-finance, #22c55e)', icon: <FinanceIcon />,
+    // finance：全功能内嵌 FinanceCard，自带 4 页签（总览/连接/供应商/高级）
+    // + 吸底保存行，无需 dock 子页。
     panes: [{ id: 'main', label: '总览', render: () => <FinanceEmbedPane /> }],
   },
   {

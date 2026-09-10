@@ -1,9 +1,11 @@
 /**
- * Finance embed: renders the FULL dsh-spark-finance-client settings card
- * inside the dock panel（定位：dock 完全取代设置页入口）——dashboard + 配置
- * 编辑 + 价格同步 + Provider 管理一体。装配方式镜像原 client/index.ts 的
- * apply：mount remote.finance → FinanceAuditController + FinanceCardController
- * （settingsScope('finance')）→ 拼装 FinanceCard 的注入面。
+ * Finance embed: renders the FULL dsh-spark-finance-client panel inside the
+ * dock panel（定位：dock 完全取代设置页入口）——内嵌页自带 4 个页签
+ * （总览 dashboard / 连接与价格同步 / 供应商 / 高级定价 JSON）+ 吸底保存行，
+ * 因此这里只做装配与加载态，不再有「展开/收起」外壳。
+ * 装配方式镜像原 client/index.ts 的 apply：mount remote.finance →
+ * FinanceAuditController + FinanceCardController（settingsScope('finance')）
+ * → 拼装 FinanceCard 的注入面。
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import { bindSnapshotSelector, type SnapshotSelectorHook } from 'dsh-spark-plugin-kit/client'
@@ -83,5 +85,9 @@ export function FinanceEmbedPane(): ReactNode {
       ? <div className="dock-empty dock-embed-failed">财务审计模块装配失败：宿主未提供 remote.finance。重载插件或检查宿主后重试。</div>
       : <div className="dock-empty"><span className="dock-spin" aria-hidden="true" /> 财务审计模块加载中…</div>
   }
-  return <FinanceCard {...injected.card} defaultOpen />
+  return (
+    <div className="dock-embed">
+      <FinanceCard {...injected.card} />
+    </div>
+  )
 }

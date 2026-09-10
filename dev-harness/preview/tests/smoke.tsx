@@ -136,7 +136,7 @@ export async function run(): Promise<{ checks: Check[] }> {
   {
     const ctx = createMockCtx({ lang: () => lang, scenario: () => scenario })
     const injected = buildFinanceInjected(ctx, scenario, FINANCE_BASE_CONFIG)
-    const first = renderToString(<FinanceCard {...injected.card} defaultOpen /> as ReactElement)
+    const first = renderToString(<FinanceCard {...injected.card} /> as ReactElement)
     check('finance: 首屏渲染不抛错', typeof first === 'string' && first.length > 0, '')
     await injected.audit.load()
     await flush()
@@ -152,7 +152,12 @@ export async function run(): Promise<{ checks: Check[] }> {
     check('finance: scope.set 写入 user 层', JSON.stringify(scope.getSnapshot().user).includes('5000'), JSON.stringify(scope.getSnapshot().user))
     await scope.unset('balance.timeoutMs')
     check('finance: scope.unset 清掉 user 层', !JSON.stringify(scope.getSnapshot().user).includes('5000'), JSON.stringify(scope.getSnapshot().user))
-    const html = renderToString(<FinanceCard {...injected.card} defaultOpen /> as ReactElement)
+    const html = renderToString(<FinanceCard {...injected.card} /> as ReactElement)
+    expectContains('finance: 默认页签是总览（dashboard）', html, 'finance-card-dashboard')
+    expectContains('finance: 页签栏 role=tablist', html, 'role="tablist"')
+    // 单页渲染：只有当前页签的面板在 DOM 里（折叠交互已移除）
+    expectContains('finance: 当前页签面板存在', html, 'finance-tab-overview')
+    check('finance: 未选中的页签不渲染', !html.includes('finance-tab-advanced'), '')
     expectContains('finance: 渲染出 provider 行', html, 'deepseek')
     expectContains('finance: 渲染出成本数字', html, 'CNY')
   }

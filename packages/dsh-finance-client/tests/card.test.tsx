@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { createElement } from 'react'
 import { FinanceCard, FinanceCardBody } from '../src/client/FinanceCard.tsx'
+import type { FinanceTab } from '../src/client/FinanceCard.tsx'
 import type { FinanceCardState, FinanceCardFieldState } from '../src/client/FinanceCardController.ts'
 import type { FinanceDshProviderRow } from '../src/client/FinanceCardController.ts'
 import { DEFAULT_FINANCE_PREFS } from '../src/client/persist.ts'
@@ -79,16 +80,20 @@ function state(overrides: Partial<FinanceCardState> = {}): FinanceCardState {
   }
 }
 
-const baseProps = {
-  t,
-  useFinanceCard: (selector: (snapshot: FinanceCardState) => unknown) => selector(state()),
-  // B7: same dashboard stubs as bodyProps so the card-level tests cover the
-  // new inject surface. The card's render path doesn't depend on dashboard
-  // content (it always renders the body inside the disclosure), so a no-op
-  // selector + no-op refresh is enough.
+// B7: the overview tab hosts the dashboard inline. These stubs cover the whole
+// inject surface; the dashboard's own render paths are covered by
+// section.test.tsx (an idle snapshot here lands it in the loading slot).
+const dashboardProps = {
   useSnapshot: (selector: (snapshot: { status: 'idle' }) => unknown) => selector({ status: 'idle' as const }),
   dashboardRefresh: () => {},
   refreshProvider: () => Promise.resolve(),
+}
+
+/** Panel (`FinanceCard`) props — no tab control: the panel owns the active tab. */
+const baseProps = {
+  t,
+  useFinanceCard: (selector: (snapshot: FinanceCardState) => unknown) => selector(state()),
+  ...dashboardProps,
   edit: () => {},
   resetField: () => {},
   save: () => {},
@@ -102,47 +107,17 @@ const baseProps = {
   setAutoSync: () => {},
   setDshProviderOverride: () => {},
   clearDshProviderOverride: () => {},
+  retryListProviders: () => {},
 }
 
-describe('FinanceCard', () => {
-  it('renders nothing while the finance namespace is not served', () => {
-    const html = renderToStaticMarkup(createElement(FinanceCard, {
-      ...baseProps,
-      useFinanceCard: (selector) => selector(state({ available: false })),
-    }))
-    expect(html).toBe('')
-  })
-
-  it('renders the card header naming the plugin and its scope', () => {
-    const html = renderToStaticMarkup(createElement(FinanceCard, baseProps))
-    expect(html).toContain('cardTitle')
-    expect(html).toContain('cardDescription')
-    expect(html).toContain('aria-expanded="false"')
-    expect(html).toContain('aria-controls') // 头部是可折叠 disclosure 按钮（dsh-ui-kit/Disclosure）
-    // Body is collapsed by default.
-    expect(html).not.toContain('cardDeepseekConnectionTitle')
-    expect(html).not.toContain('cardViewsTitle')
-  })
-
-  it('marks a card holding unsaved edits', () => {
-    const html = renderToStaticMarkup(createElement(FinanceCard, {
-      ...baseProps,
-      useFinanceCard: (selector) => selector(state({ dirty: true })),
-    }))
-    expect(html).toContain('unsaved')
-  })
-})
-
-describe('FinanceCardBody', () => {
-  const bodyProps = {
+/** Body props — the active tab is a controlled prop so each pane is renderable. */
+function bodyProps(tab: FinanceTab = 'overview') {
+  return {
     t,
     state: state(),
-    // B7: the body now hosts the dashboard inline. The card test renders
-    // with an empty snapshot so the dashboard falls into the loading slot;
-    // section.test.tsx covers the dashboard's actual rendering paths.
-    useSnapshot: (selector: (snapshot: { status: 'idle' }) => unknown) => selector({ status: 'idle' as const }),
-    dashboardRefresh: () => {},
-    refreshProvider: () => Promise.resolve(),
+    tab,
+    onTabChange: () => {},
+    ...dashboardProps,
     onEdit: () => {},
     onReset: () => {},
     onSave: () => {},
@@ -156,29 +131,89 @@ describe('FinanceCardBody', () => {
     onSetAutoSync: () => {},
     onSetDshProviderOverride: () => {},
     onClearDshProviderOverride: () => {},
+    onRetryListProviders: () => {},
   }
+}
+
+describe('FinanceCard', () => {
+  it('renders nothing while the finance namespace is not served', () => {
+    const html = renderToStaticMarkup(createElement(FinanceCard, {
+      ...baseProps,
+      useFinanceCard: (selector) => selector(state({ available: false })),
+    }))
+    expect(html).toBe('')
+  })
+
+  // 2026-09 形制统一：面板不再有可折叠卡头 —— 顶部是一条四页签 tablist，
+  // 默认落在总览页，且同一时刻只渲染当前页的内容。
+  it('renders the four-tab bar and opens on the overview tab', () => {
+    const html = renderToStaticMarkup(createElement(FinanceCard, baseProps))
+    expect(html).toContain('role="tablist"')
+    expect(html).toContain('cardTabsLabel')
+    for (const label of ['tabOverview', 'tabConnection', 'tabProviders', 'tabAdvanced']) {
+      expect(html).toContain(label)
+    }
+    // 默认页 = 总览：dashboard 挂载，连接/供应商/高级页不渲染。
+    expect(html).toContain('finance-card-dashboard')
+    expect(html).not.toContain('cardDeepseekConnectionTitle')
+    expect(html).not.toContain('cardAdvancedTitle')
+  })
+
+  it('has no collapsible chrome (no disclosure button, no <details>)', () => {
+    const html = renderToStaticMarkup(createElement(FinanceCard, baseProps))
+    expect(html).not.toContain('aria-expanded')
+    expect(html).not.toContain('<details')
+  })
+
+  it('marks a panel holding unsaved edits in the save row', () => {
+    const html = renderToStaticMarkup(createElement(FinanceCard, {
+      ...baseProps,
+      useFinanceCard: (selector) => selector(state({ dirty: true })),
+    }))
+    expect(html).toContain('unsaved')
+  })
+})
+
+describe('FinanceCardBody', () => {
+  it('renders exactly one pane at a time, keyed by the controlled tab', () => {
+    const overview = renderToStaticMarkup(createElement(FinanceCardBody, bodyProps('overview')))
+    expect(overview).toContain('finance-tab-overview')
+    expect(overview).not.toContain('finance-tab-connection')
+    expect(overview).not.toContain('finance-tab-providers')
+    expect(overview).not.toContain('finance-tab-advanced')
+
+    const connection = renderToStaticMarkup(createElement(FinanceCardBody, bodyProps('connection')))
+    expect(connection).toContain('finance-tab-connection')
+    expect(connection).not.toContain('finance-tab-overview')
+
+    const providers = renderToStaticMarkup(createElement(FinanceCardBody, bodyProps('providers')))
+    expect(providers).toContain('finance-tab-providers')
+    expect(providers).not.toContain('finance-tab-connection')
+
+    const advanced = renderToStaticMarkup(createElement(FinanceCardBody, bodyProps('advanced')))
+    expect(advanced).toContain('finance-tab-advanced')
+    expect(advanced).not.toContain('finance-tab-providers')
+  })
 
   it('renders the connection fields seeded from the section', () => {
-    const html = renderToStaticMarkup(createElement(FinanceCardBody, bodyProps))
+    const html = renderToStaticMarkup(createElement(FinanceCardBody, bodyProps('connection')))
     expect(html).toContain('cardDeepseekConnectionTitle')
     expect(html).toContain('cardDeepseekConnectionHint')
     expect(html).toContain('cardBalanceURL')
     expect(html).toContain('cardBalanceApiKeyEnv')
     expect(html).toContain('cardBalanceTimeoutMs')
-    expect(html).toContain('cardDefaultPrice')
-    expect(html).toContain('cardPrices')
     expect(html).toContain('value="https://api.deepseek.com"')
     expect(html).toContain('value="DEEPSEEK_API_KEY"')
     expect(html).toContain('value="10000"')
   })
 
-  it('renders the dashboard view preferences with the persisted state', () => {
+  it('renders the dashboard view preferences inside the overview tab', () => {
     const prefs: FinancePrefs = {
       layout: 'standard',
       charts: { ...DEFAULT_FINANCE_PREFS.charts, byModel: false },
     }
     const html = renderToStaticMarkup(createElement(FinanceCardBody, {
-      ...bodyProps,
+      ...bodyProps('overview'),
       state: state({ prefs }),
     }))
     expect(html).toContain('cardViewsTitle')
@@ -188,21 +223,28 @@ describe('FinanceCardBody', () => {
     expect(html).toContain('aria-pressed="false"') // byModel off
   })
 
+  it('keeps the save row visible (and disabled) on every tab', () => {
+    for (const tab of ['overview', 'connection', 'providers', 'advanced'] as const) {
+      const html = renderToStaticMarkup(createElement(FinanceCardBody, bodyProps(tab)))
+      expect(html).toContain('save')
+      expect(html).toContain('discard')
+    }
+  })
+
   it('disables the save button while there is nothing staged', () => {
-    const html = renderToStaticMarkup(createElement(FinanceCardBody, bodyProps))
+    const html = renderToStaticMarkup(createElement(FinanceCardBody, bodyProps()))
     expect(html).toContain('disabled') // discard + save both disabled
-    expect(html).toContain('save')
-    expect(html).toContain('discard')
   })
 
   it('enables save when staged and disables it while a draft is invalid', () => {
     const dirty = renderToStaticMarkup(createElement(FinanceCardBody, {
-      ...bodyProps,
+      ...bodyProps(),
       state: state({ dirty: true }),
     }))
     expect(dirty).not.toContain('aria-disabled')
+    expect(dirty).toContain('unsaved')
     const invalid = renderToStaticMarkup(createElement(FinanceCardBody, {
-      ...bodyProps,
+      ...bodyProps(),
       state: state({ dirty: true, invalid: true }),
     }))
     expect(invalid).toContain('disabled')
@@ -210,7 +252,7 @@ describe('FinanceCardBody', () => {
 
   it('renders the read-only notice when the Host document is not writable', () => {
     const html = renderToStaticMarkup(createElement(FinanceCardBody, {
-      ...bodyProps,
+      ...bodyProps(),
       state: state({ writable: false }),
     }))
     expect(html).toContain('cardReadOnly')
@@ -219,7 +261,7 @@ describe('FinanceCardBody', () => {
 
   it('renders field override badges and invalid notices', () => {
     const html = renderToStaticMarkup(createElement(FinanceCardBody, {
-      ...bodyProps,
+      ...bodyProps('connection'),
       state: state({ balanceBaseURL: field('https://example.com', true, true) }),
     }))
     expect(html).toContain('overridden')    // balance URL override badge
@@ -231,7 +273,7 @@ describe('FinanceCardBody', () => {
 
   it('renders a failed-save status line', () => {
     const html = renderToStaticMarkup(createElement(FinanceCardBody, {
-      ...bodyProps,
+      ...bodyProps(),
       state: state({ failed: true, dirty: true }),
     }))
     expect(html).toContain('saveFailed')
@@ -239,18 +281,18 @@ describe('FinanceCardBody', () => {
   })
 
   // Provider configuration read-only view (replaces commit 13 Form List).
-  // The section pulls one row per entry from `state.providerList`, no editable
-  // controls — every visible row carries the host's `hostMeta` defaults plus
-  // any user-config overrides (price, autoFetch, validity).
+  // The 供应商 tab pulls one row per entry from `state.dshProviderRows`; every
+  // visible row carries the host's `hostMeta` defaults plus any user-config
+  // overrides (price, autoFetch, validity).
   it('renders the Provider configuration section title and hint', () => {
-    const html = renderToStaticMarkup(createElement(FinanceCardBody, bodyProps))
+    const html = renderToStaticMarkup(createElement(FinanceCardBody, bodyProps('providers')))
     expect(html).toContain('cardProvidersTitle')
     expect(html).toContain('cardProvidersHint')
   })
 
   it('renders a loading placeholder while dshProviderRows is undefined', () => {
     const html = renderToStaticMarkup(createElement(FinanceCardBody, {
-      ...bodyProps,
+      ...bodyProps('providers'),
       state: state({ dshProviderRows: undefined }),
     }))
     expect(html).toContain('finance-provider-list-empty')
@@ -259,7 +301,7 @@ describe('FinanceCardBody', () => {
 
   it('renders an empty placeholder when dshProviderRows has no entries', () => {
     const html = renderToStaticMarkup(createElement(FinanceCardBody, {
-      ...bodyProps,
+      ...bodyProps('providers'),
       state: state({ dshProviderRows: [] }),
     }))
     expect(html).toContain('finance-provider-list-empty')
@@ -272,7 +314,7 @@ describe('FinanceCardBody', () => {
 
   it('renders one card per dsh provider row', () => {
     const html = renderToStaticMarkup(createElement(FinanceCardBody, {
-      ...bodyProps,
+      ...bodyProps('providers'),
       state: state({ dshProviderRows: makeProviderRows() }),
     }))
     expect(html).toContain('data-provider="deepseek-official"')
@@ -281,7 +323,7 @@ describe('FinanceCardBody', () => {
 
   it('shows the host-known tag and the overlay price for host-known providers', () => {
     const html = renderToStaticMarkup(createElement(FinanceCardBody, {
-      ...bodyProps,
+      ...bodyProps('providers'),
       state: state({ dshProviderRows: makeProviderRows() }),
     }))
     expect(html).toContain('cardProviderHostKnown')
@@ -298,7 +340,7 @@ describe('FinanceCardBody', () => {
   // and leaves the body to only the editable business fields.
   it('renders host-owned meta (billing mode + currency) under the card head, not in the body', () => {
     const html = renderToStaticMarkup(createElement(FinanceCardBody, {
-      ...bodyProps,
+      ...bodyProps('providers'),
       state: state({ dshProviderRows: makeProviderRows() }),
     }))
     // The new meta strip carries the host-owned fields and the bilingual labels.
@@ -312,7 +354,7 @@ describe('FinanceCardBody', () => {
 
   it('hides the autoFetch field for providers that do not support balance fetch', () => {
     const html = renderToStaticMarkup(createElement(FinanceCardBody, {
-      ...bodyProps,
+      ...bodyProps('providers'),
       state: state({ dshProviderRows: makeProviderRows() }),
     }))
     // Only the deepseek row supports balance fetch — its autoFetch shows the
@@ -323,7 +365,7 @@ describe('FinanceCardBody', () => {
 
   it('renders an edit button per row, plus a reset only where an overlay exists', () => {
     const html = renderToStaticMarkup(createElement(FinanceCardBody, {
-      ...bodyProps,
+      ...bodyProps('providers'),
       state: state({ dshProviderRows: makeProviderRows() }),
     }))
     // Every row gets an edit affordance for the business fields.
@@ -338,7 +380,7 @@ describe('FinanceCardBody', () => {
 
   it('disables the edit affordance when the Host document is read-only', () => {
     const html = renderToStaticMarkup(createElement(FinanceCardBody, {
-      ...bodyProps,
+      ...bodyProps('providers'),
       state: state({ writable: false, dshProviderRows: makeProviderRows() }),
     }))
     expect(html).toContain('finance-provider-edit-deepseek-official')
@@ -346,13 +388,10 @@ describe('FinanceCardBody', () => {
   })
 })
 
-// 价格同步区块（commit 8）：原本默认面板三个表单隐藏 → 进 sync 区块 + 折叠 advanced
+// 价格同步区块在「连接」页；三份价格 JSON 表单在「高级」页。
 describe('FinanceCard price sync section', () => {
-  it('shows the sync section when the host exposes the sync Remote', () => {
-    const html = renderToStaticMarkup(createElement(FinanceCardBody, {
-      ...baseProps,
-      state: state({ syncAvailable: true }),
-    }))
+  it('shows the sync section on the connection tab when the host exposes the sync Remote', () => {
+    const html = renderToStaticMarkup(createElement(FinanceCardBody, bodyProps('connection')))
     expect(html).toContain('cardPriceSyncTitle')
     expect(html).toContain('cardSyncNow')
     expect(html).toContain('cardAutoSync')
@@ -362,7 +401,7 @@ describe('FinanceCard price sync section', () => {
 
   it('hides the sync section when syncAvailable is false (legacy host)', () => {
     const html = renderToStaticMarkup(createElement(FinanceCardBody, {
-      ...baseProps,
+      ...bodyProps('connection'),
       state: state({ syncAvailable: false }),
     }))
     expect(html).not.toContain('cardPriceSyncTitle')
@@ -371,7 +410,7 @@ describe('FinanceCard price sync section', () => {
 
   it('renders a never-synced badge when the sync layer is empty', () => {
     const html = renderToStaticMarkup(createElement(FinanceCardBody, {
-      ...baseProps,
+      ...bodyProps('connection'),
       state: state({ syncAvailable: true, syncState: { syncing: false, lastSync: null, lastError: null } }),
     }))
     expect(html).toContain('cardSyncNever')
@@ -379,7 +418,7 @@ describe('FinanceCard price sync section', () => {
 
   it('renders last-sync metadata when present', () => {
     const html = renderToStaticMarkup(createElement(FinanceCardBody, {
-      ...baseProps,
+      ...bodyProps('connection'),
       state: state({
         syncAvailable: true,
         syncState: {
@@ -402,7 +441,7 @@ describe('FinanceCard price sync section', () => {
 
   it('renders a failed badge with the error message', () => {
     const html = renderToStaticMarkup(createElement(FinanceCardBody, {
-      ...baseProps,
+      ...bodyProps('connection'),
       state: state({
         syncAvailable: true,
         syncState: {
@@ -416,46 +455,39 @@ describe('FinanceCard price sync section', () => {
     expect(html).toContain('HTTP 503 from models.dev')
   })
 
-  it('keeps the three price forms out of the main panel and inside an advanced <details>', () => {
-    const html = renderToStaticMarkup(createElement(FinanceCardBody, {
-      ...baseProps,
-      state: state({}),
-    }))
-    // The cards' defaultPrice / providerDefaults / prices form labels must NOT
-    // appear in the open main flow when advanced disclosure is closed.
-    expect(html).toContain('cardAdvancedTitle')
-    expect(html).toMatch(/<details[^>]*class="[^"]*advancedDetails/)
-    // Three forms inside details: a baseline assert that their inner labels render
-    expect(html).toContain('cardDefaultPriceTitle')
-    expect(html).toContain('cardProviderDefaultsTitle')
-    expect(html).toContain('cardPricingTierTitle')
+  // 2026-09：三个价格 JSON 表单从 <details> 折叠区搬进「高级」页签 ——
+  // 内容需要一次点击（页签），而不是两段折叠；默认页也不再露出它们。
+  it('keeps the three price forms on the advanced tab, out of the default tab', () => {
+    const advanced = renderToStaticMarkup(createElement(FinanceCardBody, bodyProps('advanced')))
+    expect(advanced).toContain('cardAdvancedTitle')
+    expect(advanced).toContain('cardAdvancedHint')
+    expect(advanced).toContain('cardDefaultPriceTitle')
+    expect(advanced).toContain('cardProviderDefaultsTitle')
+    expect(advanced).toContain('cardPricingTierTitle')
+    expect(advanced).not.toContain('<details')
+
+    const overview = renderToStaticMarkup(createElement(FinanceCardBody, bodyProps('overview')))
+    expect(overview).not.toContain('cardDefaultPriceTitle')
+    expect(overview).not.toContain('cardPricesHint')
   })
 
-  it('checkbox reflects prefs.autoSync and triggers setAutoSync when toggled', () => {
-    let seen: boolean | null = null
-    const setAutoSync = (next: boolean) => { seen = next }
+  it('checkbox reflects prefs.autoSync when the sync block is on the connection tab', () => {
     const html = renderToStaticMarkup(createElement(FinanceCardBody, {
-      ...baseProps,
+      ...bodyProps('connection'),
       state: state({ prefs: { ...DEFAULT_FINANCE_PREFS, autoSync: false } }),
-      setAutoSync,
     }))
     // The autoSync checkbox is identifiable by its aria-label; `checked`
     // reflects the persisted `prefs.autoSync = false` so the input is
     // unchecked in the rendered markup.
     expect(html).toMatch(/<input[^>]*aria-label="cardAutoSync"[^>]*>/)
     expect(html).not.toMatch(/<input[^>]*aria-label="cardAutoSync"[^>]*checked/)
-    expect(seen).toBeNull() // synthetic markup, no click fired
   })
 
-  it('Sync now button wires through to the onSyncNow handler', () => {
-    let called = false
-    const syncNow = async () => { called = true; return null }
+  it('exposes the sync-now testid for the connection tab', () => {
     const html = renderToStaticMarkup(createElement(FinanceCardBody, {
-      ...baseProps,
+      ...bodyProps('connection'),
       state: state({ syncAvailable: true }),
-      syncNow,
     }))
     expect(html).toContain('finance-sync-now')
-    void called
   })
 })

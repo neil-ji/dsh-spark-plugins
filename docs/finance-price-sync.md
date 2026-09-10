@@ -9,7 +9,7 @@
 价格表的解析顺序（高优先级赢）：
 
 ```
-user.prices          (settings 文档)        ← 用户在 advanced 折叠区手填
+user.prices          (settings 文档)        ← 用户在「高级」页签手填
 communityPrices     (in-memory)           ← 由 syncCommunityPrices 从 models.dev 拉来
 composition.prices  (cordis.patch.yml)   ← bundle 的 hand-maintained 兜底（deepseek 峰谷表 + 61 个模型）
 defaultPrice                                ← 都没有时的 fallback
@@ -21,16 +21,21 @@ defaultPrice                                ← 都没有时的 fallback
 图示：
 
 ```
-┌─ FinanceCard 主面板 ────────────────────────────────────────┐
-│   连接（currency / balance.*）                              │
-│   价格同步（autoSync ✓ · Sync now · last-sync 徽标 · ↗源） │
-│   计费方式（plan/metered 路线打标）                          │
-│   仪表盘偏好（layout / chart toggles）                       │
-│   ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─  │
-│   ▼ 高级配置（JSON）[默认收起]                              │
-│     · 默认单价 / · 供应商默认值 / · 价格表                  │
-└────────────────────────────────────────────────────────────┘
+┌─ FinanceCard（dock 财务审计面板）───────────────────────────┐
+│   [ 总览 | 连接 | 供应商 | 高级 ]  ← 全宽页签栏，无折叠交互  │
+│                                                             │
+│   总览 tab     ：dashboard（余额/KPI/图表）+ 仪表盘视图偏好  │
+│   连接 tab     ：DeepSeek 余额接口 + 价格同步                │
+│                  （autoSync ✓ · Sync now · last-sync · ↗源） │
+│   供应商 tab   ：每 provider 的价格 / 自动获取余额           │
+│   高级 tab     ：默认单价 / 供应商默认值 / 价格表（JSON）    │
+│   ───────────────────────────────────────────────────────  │
+│   保存行（未保存徽标 + 放弃 / 保存，吸底，四页共用）         │
+└─────────────────────────────────────────────────────────────┘
 ```
+
+页签划分与形制见 `FinanceCard.tsx` 顶部注释；页签栏用 ui-kit
+`SegmentedControl(fullWidth)`，与 hippomemo MemorySection 和 dock 模块子页同规。
 
 ## host 端
 
@@ -124,9 +129,9 @@ packages/dsh-finance/
 packages/dsh-finance-client/
   src/client/persist.ts               ← FinancePrefs.autoSync / lastSync / 持久化
   src/client/FinanceCardController.ts ← syncNow / setAutoSync / ensureAutoSync / refreshSyncStatus
-  src/client/FinanceCard.tsx          ← PriceSyncSection + advancedDetails 折叠
+  src/client/FinanceCard.tsx          ← PriceSyncSection（连接页）+ 四页签面板
   src/client/locales.ts               ← zh/en 文案
-  src/client/FinanceCard.module.css   ← syncBlock / advancedDetails 样式
+  src/client/FinanceCard.module.css   ← syncBlock / tabs / tabPanel / 吸底 footer
 
 scripts/
   sync-finance-prices.mjs             ← CLI 落 cordis.patch.yml（与 host 共享 src/sync/*.ts 的转换）

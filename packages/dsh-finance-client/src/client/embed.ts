@@ -7,7 +7,7 @@
  * mount remote、bind settingsScope 并注入 t。
  */
 export { FinanceCard } from './FinanceCard.tsx'
-export type { FinanceCardInjected } from './FinanceCard.tsx'
+export type { FinanceCardInjected, FinanceTab } from './FinanceCard.tsx'
 export { FinanceCardController, type FinanceRemote } from './FinanceCardController.ts'
 export { FinanceAuditController } from './controller.ts'
 export type { FinanceAuditState } from './controller.ts'
