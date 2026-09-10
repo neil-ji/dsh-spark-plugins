@@ -1,0 +1,264 @@
+/* 预览壳样式（不参与插件打包；只给 harness 的侧栏/顶栏/画布用）。 */
+:root {
+  --pv-rail-w: 232px;
+  --pv-gap: 16px;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--spk-font, system-ui);
+  font-size: var(--spk-text-md, 13px);
+  color: var(--spk-label, #1a1d24);
+  background: var(--spk-bg, #ffffff);
+}
+
+.pv-shell { display: flex; height: 100%; min-height: 0; }
+
+/* ── 左栏：插件选择 ── */
+.pv-rail {
+  width: var(--pv-rail-w);
+  flex: 0 0 var(--pv-rail-w);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px 12px;
+  background: var(--spk-layer-1, #f6f7f9);
+  border-right: 1px solid var(--spk-border, #e4e7ec);
+}
+.pv-brand { font-weight: 700; font-size: var(--spk-text-lg, 15px); }
+.pv-brand small {
+  display: block;
+  margin-top: 4px;
+  font-weight: 400;
+  font-size: var(--spk-text-xs, 11px);
+  color: var(--spk-label-3, #667085);
+}
+.pv-tab {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 11px;
+  border: 1px solid transparent;
+  border-radius: var(--spk-radius-md, 10px);
+  background: transparent;
+  color: var(--spk-label-2, #5b6270);
+  font: 500 var(--spk-text-md, 13px)/1.3 var(--spk-font, system-ui);
+  text-align: left;
+  cursor: pointer;
+}
+.pv-tab:hover { background: var(--spk-hover, rgba(16, 24, 40, .05)); color: var(--spk-label, #1a1d24); }
+.pv-tab[aria-current="true"] {
+  background: var(--spk-platform, #edeff3);
+  border-color: var(--spk-border, #e4e7ec);
+  color: var(--spk-label, #1a1d24);
+}
+.pv-tab .pv-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--pv-acc, var(--spk-brand, #4d6bfe)); }
+.pv-rail-foot { margin-top: auto; font-size: var(--spk-text-xs, 11px); color: var(--spk-label-3, #667085); line-height: 1.6; }
+
+/* ── 右栏：顶栏 + 画布 ── */
+.pv-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.pv-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--spk-border, #e4e7ec);
+  background: var(--spk-layer-1, #f6f7f9);
+}
+.pv-bar-title { font-weight: 600; }
+.pv-bar-meta { font-size: var(--spk-text-xs, 11px); color: var(--spk-label-3, #667085); }
+.pv-bar-spacer { flex: 1; }
+.pv-field { display: inline-flex; align-items: center; gap: 6px; font-size: var(--spk-text-xs, 11px); color: var(--spk-label-3, #667085); }
+.pv-field select {
+  font: 400 var(--spk-text-sm, 12px)/1 var(--spk-font, system-ui);
+  color: var(--spk-label, #1a1d24);
+  background: var(--spk-platform, #edeff3);
+  border: 1px solid var(--spk-border, #e4e7ec);
+  border-radius: var(--spk-radius-sm, 7px);
+  padding: 5px 8px;
+}
+
+.pv-canvas { flex: 1; overflow: auto; padding: 24px; }
+.pv-pane-body { max-width: 880px; margin: 0 auto; }
+.pv-pane-body.pv-wide { max-width: 1040px; }
+
+/* 插件 UI 的宿主容器：给一点层次面，避免整页同色看不出边界。 */
+.pv-frame {
+  padding: 20px;
+  border: 1px solid var(--spk-border, #e4e7ec);
+  border-radius: var(--spk-radius-lg, 14px);
+  background: var(--spk-layer-1, #f6f7f9);
+}
+
+.pv-hint {
+  margin: 0 0 14px;
+  padding: 9px 12px;
+  border-radius: var(--spk-radius-md, 10px);
+  background: var(--spk-platform, #edeff3);
+  color: var(--spk-label-2, #5b6270);
+  font-size: var(--spk-text-xs, 11px);
+  line-height: 1.6;
+}
+.pv-hint code { font-family: var(--spk-font-mono, monospace); }
+
+.pv-loading, .pv-error {
+  padding: 40px;
+  text-align: center;
+  color: var(--spk-label-3, #667085);
+}
+.pv-error { color: var(--spk-error, #dc2626); }
+
+.pv-reload {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  padding: 8px 14px;
+  border-radius: var(--spk-radius-full, 999px);
+  background: var(--spk-brand, #4d6bfe);
+  color: #fff;
+  font: 500 var(--spk-text-sm, 12px)/1 var(--spk-font, system-ui);
+  box-shadow: var(--spk-shadow-2, 0 8px 24px rgba(10, 18, 38, .16));
+  cursor: pointer;
+  border: none;
+}
+
+.pv-action {
+  padding: 6px 12px;
+  border-radius: var(--spk-radius-full, 999px);
+  border: 1px solid var(--spk-border-2, #d4d8df);
+  background: var(--spk-platform, #edeff3);
+  color: var(--spk-label-2, #5b6270);
+  font: 500 var(--spk-text-sm, 12px)/1 var(--spk-font, system-ui);
+  cursor: pointer;
+}
+.pv-action:hover { color: var(--spk-label, #1a1d24); }
+
+/* ── ui-kit 陈列 ── */
+.pv-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.pv-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pv-stack { display: flex; flex-direction: column; gap: 10px; }
+
+/* ══════════════ 仿真的 dsh web 外壳（给悬浮球一个真实背景） ══════════════ */
+.pv-canvas-full { padding: 0; overflow: hidden; }
+
+.shell { display: flex; height: 100%; min-height: 0; background: var(--spk-bg, #fff); }
+
+.shell-side {
+  width: 248px;
+  flex: 0 0 248px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 12px;
+  background: var(--spk-layer-1, #f6f7f9);
+  border-right: 1px solid var(--spk-border, #e4e7ec);
+}
+.shell-brand { font-weight: 700; font-size: var(--spk-text-md, 13px); padding: 4px 8px 8px; }
+.shell-new {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--spk-border-2, #d4d8df);
+  border-radius: var(--spk-radius-md, 10px);
+  background: var(--spk-platform, #edeff3);
+  color: var(--spk-label, #1a1d24);
+  font: 500 var(--spk-text-sm, 12px)/1.2 var(--spk-font, system-ui);
+  text-align: left;
+  cursor: pointer;
+}
+.shell-list { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; overflow: auto; }
+.shell-item {
+  padding: 8px 10px;
+  border-radius: var(--spk-radius-sm, 7px);
+  color: var(--spk-label-2, #5b6270);
+  font-size: var(--spk-text-sm, 12px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.shell-item.active { background: var(--spk-hover, rgba(16, 24, 40, .05)); color: var(--spk-label, #1a1d24); font-weight: 500; }
+.shell-user {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-top: 1px solid var(--spk-border, #e4e7ec);
+  font-size: var(--spk-text-sm, 12px);
+  color: var(--spk-label-2, #5b6270);
+}
+.shell-avatar {
+  width: 24px; height: 24px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--spk-brand, #4d6bfe); color: #fff;
+  font-size: 11px; font-weight: 700;
+}
+
+.shell-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.shell-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--spk-border, #e4e7ec);
+}
+.shell-title { font-weight: 600; }
+.shell-badge {
+  font-family: var(--spk-font-mono, monospace);
+  font-size: var(--spk-text-xs, 11px);
+  color: var(--spk-label-3, #667085);
+  padding: 3px 8px;
+  border-radius: var(--spk-radius-full, 999px);
+  background: var(--spk-layer-2, #edeff3);
+}
+.shell-thread { flex: 1; overflow: auto; padding: 28px 24px 12px; display: flex; flex-direction: column; gap: 16px; }
+.shell-msg {
+  max-width: 680px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 12px 16px;
+  border: 1px solid var(--spk-border, #e4e7ec);
+  border-radius: var(--spk-radius-lg, 14px);
+  background: var(--spk-layer-1, #f6f7f9);
+  line-height: 1.7;
+}
+.shell-msg.user {
+  background: var(--spk-brand, #4d6bfe);
+  border-color: transparent;
+  color: #fff;
+}
+.shell-who { font-size: var(--spk-text-xs, 11px); color: var(--spk-label-3, #667085); margin-bottom: 6px; }
+.shell-tool {
+  max-width: 680px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 10px 14px;
+  border: 1px solid var(--spk-border, #e4e7ec);
+  border-radius: var(--spk-radius-md, 10px);
+  background: var(--spk-layer-2, #edeff3);
+  font-family: var(--spk-font-mono, monospace);
+  font-size: var(--spk-text-xs, 11px);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.shell-tool-name { color: var(--spk-brand, #4d6bfe); font-weight: 600; }
+.shell-tool-line { color: var(--spk-label-3, #667085); }
+.shell-composer { padding: 12px 24px 22px; }
+.shell-composer-inner {
+  max-width: 680px;
+  margin: 0 auto;
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  padding: 0 18px;
+  border: 1px solid var(--spk-border, #e4e7ec);
+  border-radius: var(--spk-radius-xl, 20px);
+  background: var(--spk-layer-1, #f6f7f9);
+  color: var(--spk-label-3, #667085);
+}

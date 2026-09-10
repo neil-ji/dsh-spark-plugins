@@ -1,0 +1,185 @@
+/**
+ * spark 预览 fixture：dock 的「火花流 / 涌现提议 / 脚本目录」三个子页的数据源。
+ *
+ * 与 hippomemo 同理——dock 的 sparkApi 本来就是 `fetch('/sparks...')`，
+ * 所以服务端换数据即可，插件代码一行不改。
+ *
+ * scenario：ok（默认）· empty（空库）· error（每次调用都失败）。
+ */
+
+const WORKSPACE = 'F:\\AgentStudio\\dsh-spark-plugins'
+const HOUR = 3600_000
+const DAY = 24 * HOUR
+const now = Date.now()
+
+const SPARKS = [
+  {
+    id: 'spk-preview-harness', title: '零 dsh 组件预览可以只靠 embed 产物跑起来',
+    content: '四个包的 lib/embed.cjs 都是自包含的，唯一外部依赖是 react；宿主那一半用假 ctx 补上就够了。',
+    scope: 'project', workspacePath: WORKSPACE, status: 'active', tags: ['preview', 'embed', 'architecture'],
+    sourceSessionId: 'sess-preview-001', sourceAgentId: 'agent-main', sourceTurn: 6,
+    createdAt: now - 3 * HOUR, updatedAt: now - 40 * 60_000, resolvedAt: null, crystallized: null,
+  },
+  {
+    id: 'spk-dock-overlay', title: 'dock 的悬浮球位置与开合状态都落在 localStorage',
+    content: 'POS_KEY/OPEN_KEY/ACTIVE_KEY 三个键；拖拽阈值 4px，松手吸附最近角，双击复位。',
+    scope: 'project', workspacePath: WORKSPACE, status: 'active', tags: ['dock', 'ui'],
+    sourceSessionId: 'sess-preview-002', sourceAgentId: null, sourceTurn: 3,
+    createdAt: now - 8 * HOUR, updatedAt: now - 8 * HOUR, resolvedAt: null, crystallized: null,
+  },
+  {
+    id: 'spk-fake-transport', title: '预览的假 transport 走页面内对象，只有两处是真 HTTP',
+    content: 'hippomemo 与 spark 的 client 本来就是 fetch 封装，所以数据源放在预览服务器上更保真。',
+    scope: 'global', workspacePath: null, status: 'active', tags: ['preview', 'fixture'],
+    sourceSessionId: 'sess-preview-001', sourceAgentId: 'agent-main', sourceTurn: 9,
+    createdAt: now - 2 * DAY, updatedAt: now - DAY, resolvedAt: null, crystallized: null,
+  },
+  {
+    id: 'spk-archived-probe', title: '（已归档）用探针插件验证宿主端 HMR',
+    content: 'root: ["packages/dsh-spark/lib"] 窄根约 18s ready；整棵仓库要 75s。',
+    scope: 'project', workspacePath: WORKSPACE, status: 'archived', tags: ['dev-harness'],
+    sourceSessionId: 'sess-preview-003', sourceAgentId: null, sourceTurn: 1,
+    createdAt: now - 5 * DAY, updatedAt: now - 4 * DAY, resolvedAt: now - 4 * DAY,
+    crystallized: { hippoId: 'mem-dsh-home-isolation', kind: 'decision', at: now - 4 * DAY },
+  },
+]
+
+const PROPOSALS = [
+  {
+    id: 'prp-cluster-preview', type: 'cluster', sparkIds: ['spk-preview-harness', 'spk-fake-transport'],
+    explanation: '两条都在讲"预览的数据从哪来"，可聚成一条「预览数据源分层」结论。',
+    confidence: 0.72, leverage: 'high', status: 'pending', createdAt: now - 90 * 60_000, resolvedAt: null,
+  },
+  {
+    id: 'prp-link-dock', type: 'link', sparkIds: ['spk-dock-overlay', 'spk-preview-harness'],
+    explanation: 'dock 悬浮球是预览的默认画布，两条互相引用。',
+    confidence: 0.48, leverage: 'medium', status: 'pending', createdAt: now - 5 * HOUR, resolvedAt: null,
+  },
+  {
+    id: 'prp-prune-old', type: 'prune', sparkIds: ['spk-archived-probe'],
+    explanation: '已归档且 4 天未被引用，建议剪枝。',
+    confidence: 0.61, leverage: 'low', status: 'dismissed', createdAt: now - 2 * DAY, resolvedAt: now - DAY,
+  },
+]
+
+const SCRIPTS = [
+  {
+    id: 'scr-preview-verify', name: '预览自检', description: '跑 Node 冒烟 + 服务器断言，退出码即结论。',
+    steps: [
+      { kind: 'instruction', payload: 'pnpm preview:verify' },
+      { kind: 'tool-call', payload: 'bash: node dev-harness/preview/verify.mjs', note: '失败时看首条 FAIL' },
+    ],
+    triggers: ['改完 dev-harness/preview', '发版前'], scope: 'project', workspacePath: WORKSPACE,
+    invocationCount: 12, successCount: 11, failureCount: 1,
+    createdAt: now - 6 * DAY, updatedAt: now - 2 * HOUR, lastInvokedAt: now - 2 * HOUR, sourceSparkId: null,
+  },
+  {
+    id: 'scr-sandbox-up', name: '起沙箱联调', description: '真宿主联调（需要本机 dsh）：初始化 + link + 启动 3997。',
+    steps: [
+      { kind: 'instruction', payload: 'pnpm sandbox:init' },
+      { kind: 'instruction', payload: 'pnpm sandbox:link' },
+      { kind: 'tool-call', payload: 'bash: pnpm sandbox:up --detach' },
+    ],
+    triggers: ['要验证真槽位/真 RPC'], scope: 'project', workspacePath: WORKSPACE,
+    invocationCount: 5, successCount: 5, failureCount: 0,
+    createdAt: now - 10 * DAY, updatedAt: now - 3 * DAY, lastInvokedAt: now - 3 * DAY, sourceSparkId: null,
+  },
+]
+
+export function createSparkStore() {
+  let scenario = 'ok'
+  let sparks = SPARKS.map((item) => ({ ...item, tags: [...item.tags] }))
+
+  const fail = () => scenario === 'error'
+  const error = { code: 'preview-scenario', message: '预览故障注入：spark 数据源被切到 error 场景' }
+
+  return {
+    get scenario() { return scenario },
+    setScenario(next) {
+      scenario = ['ok', 'empty', 'error'].includes(next) ? next : 'ok'
+      if (scenario === 'ok' && sparks.length === 0) sparks = SPARKS.map((item) => ({ ...item, tags: [...item.tags] }))
+    },
+
+    list(params) {
+      if (fail()) return { ok: false, error }
+      const status = params.get('status')
+      const limit = Number(params.get('limit') ?? 100)
+      let items = scenario === 'empty' ? [] : sparks
+      if (status !== null) items = items.filter((item) => item.status === status)
+      return { ok: true, value: items.slice(0, limit) }
+    },
+
+    capture(input) {
+      if (fail()) return { ok: false, error }
+      const created = {
+        id: 'spk-' + Math.random().toString(36).slice(2, 8),
+        title: String(input.title ?? '（无标题）').slice(0, 200),
+        content: String(input.content ?? ''),
+        scope: input.scope ?? 'project',
+        workspacePath: input.workspacePath ?? null,
+        status: 'active',
+        tags: Array.isArray(input.tags) ? input.tags : [],
+        sourceSessionId: input.sourceSessionId ?? 'spark-dock',
+        sourceAgentId: input.sourceAgentId ?? null,
+        sourceTurn: input.sourceTurn ?? null,
+        createdAt: Date.now(), updatedAt: Date.now(), resolvedAt: null, crystallized: null,
+      }
+      sparks = [created, ...sparks]
+      return { ok: true, value: created }
+    },
+
+    patch(id, patch) {
+      if (fail()) return { ok: false, error }
+      let updated = null
+      sparks = sparks.map((item) => {
+        if (item.id !== id) return item
+        updated = { ...item, ...patch, updatedAt: Date.now() }
+        if (updated.status === 'archived' && updated.resolvedAt === null) updated.resolvedAt = Date.now()
+        return updated
+      })
+      return updated === null ? { ok: false, error: { code: 'not-found', message: id } } : { ok: true, value: updated }
+    },
+
+    crystallize(id) {
+      if (fail()) return { ok: false, error }
+      const target = sparks.find((item) => item.id === id)
+      if (target === undefined) return { ok: false, error: { code: 'not-found', message: id } }
+      return { ok: true, value: { memoryId: 'mem-' + id, kind: 'insight' } }
+    },
+
+    proposals(params) {
+      if (fail()) return { ok: false, error }
+      const status = params.get('status')
+      const limit = Number(params.get('limit') ?? 100)
+      let items = scenario === 'empty' ? [] : PROPOSALS
+      if (status !== null) items = items.filter((item) => item.status === status)
+      return { ok: true, value: items.slice(0, limit) }
+    },
+
+    resolveProposal(id, status) {
+      if (fail()) return { ok: false, error }
+      const target = PROPOSALS.find((item) => item.id === id)
+      if (target === undefined) return { ok: false, error: { code: 'not-found', message: id } }
+      return { ok: true, value: { ...target, status, resolvedAt: Date.now() } }
+    },
+
+    reflect() {
+      if (fail()) return { ok: false, error }
+      return { ok: true, value: { created: 2, skipped: 1 } }
+    },
+
+    scripts(params) {
+      if (fail()) return { ok: false, error }
+      const limit = Number(params.get('limit') ?? 50)
+      const items = scenario === 'empty' ? [] : SCRIPTS
+      return { ok: true, value: items.slice(0, limit) }
+    },
+
+    invokeScript(id) {
+      if (fail()) return { ok: false, error }
+      const target = SCRIPTS.find((item) => item.id === id)
+      if (target === undefined) return { ok: false, error: { code: 'not-found', message: id } }
+      return { ok: true, value: { invoked: id, steps: target.steps.length } }
+    },
+  }
+}
