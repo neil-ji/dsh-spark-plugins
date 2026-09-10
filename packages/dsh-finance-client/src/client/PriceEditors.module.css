@@ -1,64 +1,44 @@
+/* 价格编辑器布局（高级页签）。
+   2026-09 重排：字段一律「标签在上、控件在下」的纵向堆叠，费率网格用
+   auto-fit 自适应列宽 —— 旧的「标签 56px + 输入 + 单位 44px」横排在嵌套两列
+   网格里把输入挤到 36px，正是「label、input 等挤成一团」的成因。
+   间距全部走 --spk-gap-card / --spk-space-* 令牌（全局统一边距）。 */
+
 .editor {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin: 4px 0;
+  gap: var(--spk-gap-card, 8px);
 }
 
-.headerRow {
-  align-items: center;
-  color: var(--dsw-alias-label-tertiary);
-  display: flex;
-  font-size: 11px;
-  gap: 8px;
-  padding: 0 2px;
-}
-
-.colHead {
-  text-transform: uppercase;
-}
-
-.colProvider {
-  width: 150px;
-  min-width: 150px;
-}
-
-.colRate {
-  flex: 1;
-  min-width: 0;
-}
-
-.row {
-  align-items: flex-start;
-  display: flex;
-  gap: 8px;
-  padding: 6px 2px;
-}
-
+/* 费率网格：容器够宽时并排两列，变窄自动落成一列，永不挤压输入。 */
 .rateGrid {
   display: grid;
-  gap: 4px 10px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spk-gap-card, 8px) var(--spk-space-3, 12px);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
 .rateField {
-  align-items: center;
   display: flex;
-  gap: 6px;
+  flex-direction: column;
+  gap: var(--spk-space-1, 4px);
   min-width: 0;
 }
 
-.rateField.invalid .rateInput {
-  border-color: var(--dsw-alias-state-error-primary);
+.rateControl {
+  display: flex;
+  align-items: center;
+  gap: var(--spk-space-2, 8px);
+  min-width: 0;
 }
 
 .rateLabel {
-  color: var(--dsw-alias-label-secondary);
-  flex: 0 0 auto;
-  font-size: 11px;
-  width: 56px;
+  color: var(--spk-label-2);
+  font-size: var(--spk-text-xs, 11px);
+  line-height: 1.4;
 }
 
+/* 数值右对齐便于逐位比对；ui-kit Input 会把类名同时放到包装壳上，
+   所以这里的 flex 才会真正作用到行内的那个盒子上。 */
 .rateInput {
   flex: 1;
   min-width: 0;
@@ -66,17 +46,22 @@
 }
 
 .rateUnit {
-  color: var(--dsw-alias-label-tertiary);
+  color: var(--spk-label-3);
   flex: 0 0 auto;
-  font-size: 11px;
-  width: 44px;
+  font-size: var(--spk-text-xs, 11px);
+  white-space: nowrap;
+}
+
+.rateField.invalid .rateInput {
+  border-color: var(--spk-error);
 }
 
 .remove {
   background: none;
   border: none;
-  color: var(--dsw-alias-label-tertiary);
+  color: var(--spk-label-3);
   cursor: pointer;
+  flex: none;
   font-size: 16px;
   line-height: 1;
   padding: 4px 6px;
@@ -93,27 +78,39 @@
 .addEntry {
   align-self: flex-start;
   background: none;
-  border: 1px dashed var(--dsw-alias-border-l2);
+  border: 1px dashed var(--spk-border-2);
   border-radius: 6px;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--spk-label-2);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--spk-text-sm, 12px);
   padding: 4px 10px;
 }
 
+/* 一个模型 = 一块功能分组（分组标题由外层 Card 承担）。 */
 .modelBlock {
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 1px solid var(--spk-border);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spk-gap-card, 8px);
+  padding: var(--spk-space-3, 12px);
+}
+
+.modelHead,
+.entryHead {
+  align-items: center;
+  display: flex;
+  gap: var(--spk-space-2, 8px);
+}
+
+/* 一行费率条目：列表项自己的框，内部同样是纵向堆叠。 */
+.entryCard {
+  border: 1px solid var(--spk-border);
   border-radius: 8px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 8px;
-}
-
-.modelHead {
-  align-items: center;
-  display: flex;
-  gap: 8px;
+  gap: var(--spk-gap-card, 8px);
+  padding: var(--spk-space-3, 12px);
 }
 
 .modelKeyInput {
@@ -121,80 +118,65 @@
   min-width: 0;
 }
 
-.entryCard {
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 6px 8px;
-}
-
-.entryHead {
-  align-items: center;
-  display: flex;
-  gap: 8px;
-}
-
-.effectiveFrom {
-  align-items: center;
-  color: var(--dsw-alias-label-secondary);
-  display: flex;
+.providerInput {
   flex: 1;
-  font-size: 11px;
-  gap: 6px;
   min-width: 0;
 }
 
-.effectiveFrom input {
-  flex: 1;
+/* 生效时间：与费率字段同形（标签在上）。 */
+.effectiveFrom {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spk-space-1, 4px);
+  min-width: 0;
+}
+
+.effectiveFromInput {
   min-width: 0;
 }
 
 .windowedBlock {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--spk-space-3, 12px);
 }
 
 .rateBlock {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--spk-space-1, 4px);
 }
 
 .rateBlockTitle {
-  color: var(--dsw-alias-label-secondary);
-  font-size: 11px;
+  color: var(--spk-label-2);
+  font-size: var(--spk-text-xs, 11px);
   font-weight: 600;
 }
 
+/* 峰谷时段：两个字段同样 auto-fit，窄容器落成单列。 */
 .scheduleRow {
-  display: flex;
-  gap: 12px;
-}
-
-.scheduleRow.invalid input {
-  border-color: var(--dsw-alias-state-error-primary);
+  display: grid;
+  gap: var(--spk-space-3, 12px);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
 .scheduleField {
-  align-items: center;
-  color: var(--dsw-alias-label-secondary);
   display: flex;
-  flex: 1;
-  font-size: 11px;
-  gap: 6px;
+  flex-direction: column;
+  gap: var(--spk-space-1, 4px);
   min-width: 0;
 }
 
-.scheduleField input {
-  flex: 1;
+.scheduleInput {
   min-width: 0;
 }
+
+.scheduleRow.invalid .scheduleInput {
+  border-color: var(--spk-error);
+}
+
 .presetRow {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  margin-bottom: 4px;
+  gap: var(--spk-space-1, 4px);
 }

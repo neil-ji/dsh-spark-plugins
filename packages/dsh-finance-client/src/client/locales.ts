@@ -1,8 +1,9 @@
 /** Finance audit settings copy. */
 
 export const zh = {
-  nav: '财务审计',
-  title: '财务审计',
+  // 显示名规范化（2026-09 五插件统一）：zh = 「中文 + 英文产品名」。
+  nav: '财务 Finance',
+  title: '财务 Finance',
   subtitle: '余额、Token 用量与成本总览',
   peakValleyHint: '成本按官方峰谷价估算：高峰时段为北京时间周一至周五 9:00–12:00、14:00–18:00，周末按空闲价计费；价格表可自行维护',
   peakValleySince: '峰谷计价自',
@@ -226,8 +227,9 @@ export const zh = {
 } as const
 
 export const en = {
-  nav: 'Finance Audit',
-  title: 'Finance Audit',
+  // 显示名规范化：en 只用产品名。
+  nav: 'Finance',
+  title: 'Finance',
   subtitle: 'Balance, token usage, and cost overview',
   peakValleyHint: 'Costs estimated at official peak/off-peak rates: peak hours are weekdays (Mon–Fri) 9:00–12:00 / 14:00–18:00 Beijing time; weekends bill at the off-peak rate; the price table is user-maintained',
   peakValleySince: 'Peak/off-peak billing applies from',

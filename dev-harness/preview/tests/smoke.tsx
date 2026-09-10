@@ -75,11 +75,11 @@ export async function run(): Promise<{ checks: Check[] }> {
     check('dock: 渲染出悬浮球', hasBall, hasBall ? '' : '未找到 .dock-ball')
     const hasPanel = html.includes('dock-panel') && html.includes('dock-rail')
     check('dock: 渲染出面板骨架', hasPanel, hasPanel ? '' : '未找到面板/模块栏')
-    const railLabels = ['火花', '记忆', '成本', 'GitHub', 'npm']
+    const railLabels = ['火花', '记忆', '财务', 'GitHub', 'npm']
     const missing = railLabels.filter((label) => !html.includes('aria-label="' + label + '"'))
     check('dock: 五个模块 tab 都在', missing.length === 0, missing.length === 0 ? '' : '缺少 ' + missing.join('、'))
-    const activeName = html.includes('火花流 Sparks')
-    check('dock: 默认模块是火花流', activeName, activeName ? '' : '未找到默认模块标题')
+    const activeName = html.includes('火花 Spark')
+    check('dock: 默认模块是火花 Spark', activeName, activeName ? '' : '未找到默认模块标题')
     const hasCss = typeof DOCK_CSS === 'string' && DOCK_CSS.includes('.dock-ball')
     check('dock: DOCK_CSS 非空', hasCss, hasCss ? '' : 'DOCK_CSS 异常')
   }

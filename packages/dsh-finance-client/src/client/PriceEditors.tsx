@@ -2,6 +2,14 @@
  * Form editors for the finance price facts — no raw JSON anywhere. Every
  * editor is controlled (`value`/`onChange` over a draft model) and relies on
  * price-forms.ts for (de)serialization on the save boundary.
+ *
+ * Layout rule (统一间距/分组): one field = one stacked label + control row, and
+ * every row lives in a `ui-kit Card`. The old inline
+ * «标签 56px · 输入 · 单位 44px» triple was laid out inside a two-column grid
+ * nested in a 150px provider column, which squeezed the input down to ~36px and
+ * read as "label 和 input 挤成一团". Rate fields now use an auto-fitting grid
+ * (`minmax(220px, 1fr)`) so the panel degrades to a single column instead of
+ * crushing the input.
  */
 
 import { Input, Pill, SegmentedControl } from 'dsh-ui-kit'
@@ -26,7 +34,8 @@ import css from './PriceEditors.module.css'
 /**
  * Four numeric rate fields grid. Blank fields = omit the line; non-numeric
  * input instantly shows an invalid hint and blocks the save (draft serializes
- * to null).
+ * to null). Each field is a stacked label + control so it survives narrow
+ * containers without crushing the input.
  */
 export function RateFields({ rate, onChange, t, idPrefix }: {
   rate: RateDraft
@@ -56,17 +65,19 @@ export function RateFields({ rate, onChange, t, idPrefix }: {
         return (
           <label key={key} className={`${css.rateField} ${bad ? css.invalid : ''}`} htmlFor={`${idPrefix}-${key}`}>
             <span className={css.rateLabel}>{label}</span>
-            <Input
-              id={`${idPrefix}-${key}`}
-              className={css.rateInput}
-              type="text"
-              inputMode="numeric"
-              value={rate[key]}
-              spellCheck={false}
-              aria-invalid={bad}
-              onChange={(event) => set(key, event.currentTarget.value)}
-            />
-            <span className={css.rateUnit}>{t('rateUnit')}</span>
+            <span className={css.rateControl}>
+              <Input
+                id={`${idPrefix}-${key}`}
+                className={css.rateInput}
+                type="text"
+                inputMode="numeric"
+                value={rate[key]}
+                spellCheck={false}
+                aria-invalid={bad}
+                onChange={(event) => set(key, event.currentTarget.value)}
+              />
+              <span className={css.rateUnit}>{t('rateUnit')}</span>
+            </span>
           </label>
         )
       })}
@@ -74,7 +85,7 @@ export function RateFields({ rate, onChange, t, idPrefix }: {
   )
 }
 
-/** Provider default rows: provider name + inline rate fields, add/remove. */
+/** Provider default rows: provider name + a full-width rate grid, add/remove. */
 export function ProviderDefaultsEditor({ value, onChange, disabled, t }: {
   value: ProviderDefaultsDraft
   onChange: (next: ProviderDefaultsDraft) => void
@@ -86,40 +97,36 @@ export function ProviderDefaultsEditor({ value, onChange, disabled, t }: {
   }
   return (
     <div className={css.editor}>
-      <div className={css.headerRow}>
-        <span className={`${css.colProvider} ${css.colHead}`}>{t('providerColumn')}</span>
-        <span className={`${css.colRate} ${css.colHead}`}>{t('rateColumn')}</span>
-        <span className={css.colHead} />
-      </div>
       {value.rows.map((row, index) => (
-        <div key={`${row.provider}-${index}`} className={css.row}>
-          <Input
-            className={css.colProvider}
-            type="text"
-            value={row.provider}
-            placeholder="openai"
-            spellCheck={false}
-            disabled={disabled}
-            aria-label={t('providerColumn')}
-            onChange={(event) => update(index, { provider: event.currentTarget.value })}
-          />
-          <div className={css.colRate}>
-            <RateFields
-              rate={row.rate}
-              idPrefix={`finance-provider-${index}`}
-              t={t}
-              onChange={(rate) => update(index, { rate })}
+        <div key={`${row.provider}-${index}`} className={css.entryCard}>
+          {/* 供应商名独占一行：它下面挂的是一整组费率，不再和费率挤同一个横排。 */}
+          <div className={css.entryHead}>
+            <Input
+              className={css.providerInput}
+              type="text"
+              value={row.provider}
+              placeholder="openai"
+              spellCheck={false}
+              disabled={disabled}
+              aria-label={t('providerColumn')}
+              onChange={(event) => update(index, { provider: event.currentTarget.value })}
             />
+            <button
+              type="button"
+              className={css.remove}
+              disabled={disabled}
+              aria-label={`${t('removeProvider')}: ${row.provider}`}
+              onClick={() => onChange({ rows: value.rows.filter((_, i) => i !== index) })}
+            >
+              ×
+            </button>
           </div>
-          <button
-            type="button"
-            className={css.remove}
-            disabled={disabled}
-            aria-label={`${t('removeProvider')}: ${row.provider}`}
-            onClick={() => onChange({ rows: value.rows.filter((_, i) => i !== index) })}
-          >
-            ×
-          </button>
+          <RateFields
+            rate={row.rate}
+            idPrefix={`finance-provider-${index}`}
+            t={t}
+            onChange={(rate) => update(index, { rate })}
+          />
         </div>
       ))}
       <button type="button" className={css.add} disabled={disabled} onClick={() => onChange({ rows: [...value.rows, { provider: '', rate: { input: '', cacheRead: '', cacheWrite: '', output: '' } }] })}>
@@ -156,20 +163,22 @@ function PriceEntryEditor({ entry, index, t, disabled, onChange, onRemove }: {
           // only changes which rate block is live.
           onChange={(kind) => onChange({ ...entry, kind })}
         />
-        <label className={css.effectiveFrom} htmlFor={`price-entry-${index}-from`}>
-          <span>{t('effectiveFrom')}</span>
-          <Input
-            id={`price-entry-${index}-from`}
-            type="text"
-            value={entry.effectiveFrom}
-            placeholder={t('effectiveFromHint')}
-            spellCheck={false}
-            disabled={disabled}
-            onChange={(event) => onChange({ ...entry, effectiveFrom: event.currentTarget.value })}
-          />
-        </label>
         <button type="button" className={css.remove} disabled={disabled} aria-label={`${t('removePriceEntry')} #${index + 1}`} onClick={onRemove}>×</button>
       </div>
+      {/* 生效时间与费率字段同形：标签在上、控件在下，不再依赖后代选择器去撑宽度。 */}
+      <label className={css.effectiveFrom} htmlFor={`price-entry-${index}-from`}>
+        <span className={css.rateLabel}>{t('effectiveFrom')}</span>
+        <Input
+          id={`price-entry-${index}-from`}
+          className={css.effectiveFromInput}
+          type="text"
+          value={entry.effectiveFrom}
+          placeholder={t('effectiveFromHint')}
+          spellCheck={false}
+          disabled={disabled}
+          onChange={(event) => onChange({ ...entry, effectiveFrom: event.currentTarget.value })}
+        />
+      </label>
       {entry.kind === 'flat' ? (
         <RateFields rate={entry.flat} idPrefix={`price-entry-${index}-flat`} t={t} onChange={(flat) => onChange({ ...entry, flat })} />
       ) : (
@@ -178,22 +187,22 @@ function PriceEntryEditor({ entry, index, t, disabled, onChange, onRemove }: {
           <div className={css.rateBlock}><span className={css.rateBlockTitle}>{t('peakRate')}</span><RateFields rate={entry.peak} idPrefix={`price-entry-${index}-peak`} t={t} onChange={(peak) => onChange({ ...entry, peak })} /></div>
           <div className={`${css.scheduleRow} ${scheduleInvalid ? css.invalid : ''}`}>
             <div className={css.scheduleField}>
-              <span>{t('peakHours')}</span>
+              <span className={css.rateLabel}>{t('peakHours')}</span>
               <div className={css.presetRow}>
                 {HOUR_PRESETS.map((preset) => (
                   <PresetPill key={preset.label} value={preset.value} current={entry.peakHours} label={preset.label} onSet={(next) => onChange({ ...entry, peakHours: next })} />
                 ))}
               </div>
-              <Input id={`price-entry-${index}-hours`} type="text" value={entry.peakHours} placeholder="9-12, 14-18" spellCheck={false} disabled={disabled} onChange={(event) => onChange({ ...entry, peakHours: event.currentTarget.value })} />
+              <Input id={`price-entry-${index}-hours`} className={css.scheduleInput} type="text" value={entry.peakHours} placeholder="9-12, 14-18" spellCheck={false} disabled={disabled} onChange={(event) => onChange({ ...entry, peakHours: event.currentTarget.value })} />
             </div>
             <div className={css.scheduleField}>
-              <span>{t('peakDays')}</span>
+              <span className={css.rateLabel}>{t('peakDays')}</span>
               <div className={css.presetRow}>
                 {DAY_PRESETS.map((preset) => (
                   <PresetPill key={preset.label} value={preset.value} current={entry.peakDays} label={preset.label} onSet={(next) => onChange({ ...entry, peakDays: next })} />
                 ))}
               </div>
-              <Input id={`price-entry-${index}-days`} type="text" value={entry.peakDays} placeholder="1,2,3,4,5" spellCheck={false} disabled={disabled} onChange={(event) => onChange({ ...entry, peakDays: event.currentTarget.value })} />
+              <Input id={`price-entry-${index}-days`} className={css.scheduleInput} type="text" value={entry.peakDays} placeholder="1,2,3,4,5" spellCheck={false} disabled={disabled} onChange={(event) => onChange({ ...entry, peakDays: event.currentTarget.value })} />
             </div>
           </div>
         </div>

@@ -1,102 +1,78 @@
+/* npm 发布管线设置面板。2026-09 形制统一（与 GitHub 连接器同规）：
+   分组 = ui-kit Card（标题在 Card 头、状态/动作在 actions 槽）；
+   字段纵向堆叠；间距一律 --spk-gap-page / --spk-gap-card / --spk-space-* 令牌。 */
+
 .section {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--spk-gap-page, 12px);
 }
 
-.title {
-  margin: 0;
-  font-size: 18px;
-  line-height: 26px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-.intro {
-  margin: 0;
-  color: var(--dsw-alias-label-secondary, inherit);
-}
-
-.card {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px 14px;
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 12px;
-  background: var(--dsw-alias-surface-l1);
-}
-
-.cardTitle {
-  margin: 0;
-}
-
+/* 行：允许换行 —— 窄面板里按钮落到下一行，而不是让 input 溢出压住按钮。 */
 .row {
   display: flex;
   align-items: center;
-  gap: 8px;
   flex-wrap: wrap;
+  gap: var(--spk-gap-card, 8px);
+  min-width: 0;
 }
 
+/* 撑满剩余宽度；窄面板配合 .row 的换行兜底，绝不被压缩成几十像素。 */
 .grow {
-  flex: 1;
-  min-width: 180px;
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.strong {
+  font-weight: 600;
+  color: var(--spk-label);
 }
 
 .packageList {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--spk-space-1, 4px);
 }
 
 .packageRow {
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: var(--spk-gap-card, 8px);
+  min-width: 0;
 }
 
 .packageName {
-  font-family: var(--dsw-alias-font-mono, monospace);
-  font-size: 13px;
-}
-
-.nextSteps {
-  margin: 0;
-  padding-left: 18px;
-  color: var(--dsw-alias-label-secondary, inherit);
-  font-size: 13px;
-}
-
-.script {
-  margin: 0;
-  padding: 10px 12px;
-  background: var(--dsw-alias-bg-layer-1, rgba(0, 0, 0, 0.04));
-  border: 1px solid var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.1));
-  border-radius: 8px;
-  overflow-x: auto;
-  font-size: 12px;
-  white-space: pre-wrap;
+  font-family: var(--spk-font-mono, monospace);
+  font-size: var(--spk-text-md, 13px);
+  min-width: 0;
   word-break: break-all;
 }
 
 .muted {
-  color: var(--dsw-alias-label-secondary, inherit);
+  margin: 0;
+  color: var(--spk-label-3);
+  font-size: var(--spk-text-sm, 12px);
+  line-height: 1.5;
 }
 
 .error {
   margin: 0;
-  color: var(--dsw-alias-state-error-primary, #c00);
-  font-size: 13px;
-  line-height: 20px;
+  color: var(--spk-error);
+  font-size: var(--spk-text-sm, 12px);
+  line-height: 1.5;
 }
 
 .notice {
   margin: 0;
-  color: var(--dsw-alias-state-success-primary, #0a0);
-  font-size: 13px;
-  line-height: 20px;
+  color: var(--spk-success);
+  font-size: var(--spk-text-sm, 12px);
+  line-height: 1.5;
 }
 
-.growSpacer {
-  flex: 1;
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spk-gap-card, 8px);
 }

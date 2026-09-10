@@ -1,7 +1,7 @@
 /** Section copy (zh + en). */
 export const zh = {
-  nav: '火花',
-  title: '火花流（Sparks）',
+  nav: '火花 Spark',
+  title: '火花 Spark',
   intro: '火花是 AI 协作中突发的灵感、关联、直觉。手动捕获、按主题浏览、归档已完成的想法。Phase 5 加脚本目录：把多步过程沉淀为可复用脚本跨会话调用。',
   capture: '捕获新火花',
   captureTitle: '标题',
@@ -84,8 +84,9 @@ export const zh = {
 } as const
 
 export const en: Record<SparkKey, string> = {
-  nav: 'Sparks',
-  title: 'Spark stream',
+  // 显示名规范化：zh 用「中文 + 英文产品名」，en 只用产品名。
+  nav: 'Spark',
+  title: 'Spark',
   intro: 'Sparks are inspirations, associations, and hunches that surface mid-conversation. Phase 5 adds a procedural script catalog: crystallize multi-step procedures into reusable scripts that survive across sessions.',
   capture: 'Capture a spark',
   captureTitle: 'Title',

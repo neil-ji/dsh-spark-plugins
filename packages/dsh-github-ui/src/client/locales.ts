@@ -1,8 +1,11 @@
 /** Section copy (zh + en). */
 export const zh = {
+  // 显示名规范化（2026-09 五插件统一）：连接器用产品名的规范拼写本身。
   nav: 'GitHub',
-  title: 'GitHub 连接',
+  title: 'GitHub',
   intro: '配置 GitHub 访问令牌与操作权限。令牌只写入本机凭据存储，永不会回显。',
+  /** 分组卡标题（2026-09：分组标题写在 ui-kit Card 头上）。 */
+  tokenTitle: '访问令牌',
   tokenConfigured: '已配置',
   tokenMissing: '未配置',
   tokenSource: '来源',
@@ -72,8 +75,9 @@ export const zh = {
 
 export const en: Record<GithubKey, string> = {
   nav: 'GitHub',
-  title: 'GitHub connection',
+  title: 'GitHub',
   intro: 'Configure your GitHub access token and operation permissions. The token is written only to the local credential store and never read back.',
+  tokenTitle: 'Access token',
   tokenConfigured: 'Configured',
   tokenMissing: 'Missing',
   tokenSource: 'Source',

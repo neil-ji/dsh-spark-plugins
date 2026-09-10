@@ -8,18 +8,21 @@ const ICONS = {
 };
 
 /* 模块 accent 两档：accent = 实色（指示条 / 图表 / 圆点），accentFg = 文字态（图标 / 胶囊文字）。
-   与 packages/dsh-ui-kit/src/styles/spark-tokens.css v4 的 --spk-acc-* / --spk-acc-*-fg 同规。 */
+   与 packages/dsh-ui-kit/src/styles/spark-tokens.css v4 的 --spk-acc-* / --spk-acc-*-fg 同规。
+
+   显示名规范（2026-09 五插件统一，与 packages/dsh-spark-dock/src/client/modules.tsx 逐字一致）：
+   认知层 = 「中文名 + 英文产品名」，连接器 = 产品名的规范拼写本身。 */
 const MODULES = [
   { id:'spark', order:10, icon:'spark', accent:'var(--acc-spark)', accentFg:'var(--acc-spark-fg)', label:'火花',
-    name:'火花流 Sparks', sub:'手动捕获 · 结晶 · 涌现提议 · 脚本目录 · Graph' },
+    name:'火花 Spark', sub:'手动捕获 · 结晶 · 涌现提议 · 脚本目录 · Graph' },
   { id:'hippomemo', order:20, icon:'hippomemo', accent:'var(--acc-hippomemo)', accentFg:'var(--acc-hippomemo-fg)', label:'记忆',
     name:'记忆 HippoMemo', sub:'四脑区总览 · 搜索/筛选 · 我的偏好 · 进化引擎' },
-  { id:'finance', order:30, icon:'finance', accent:'var(--acc-finance)', accentFg:'var(--acc-finance-fg)', label:'成本',
-    name:'财务审计 Finance', sub:'余额 · Token 用量与成本总览' },
+  { id:'finance', order:30, icon:'finance', accent:'var(--acc-finance)', accentFg:'var(--acc-finance-fg)', label:'财务',
+    name:'财务 Finance', sub:'余额 · Token 用量与成本总览' },
   { id:'github', order:40, icon:'github', accent:'var(--acc-github)', accentFg:'var(--acc-github-fg)', label:'GitHub',
-    name:'GitHub 连接', sub:'令牌 · 操作权限 · Git 身份与代理' },
+    name:'GitHub', sub:'令牌 · 操作权限 · Git 身份与代理' },
   { id:'npm', order:50, icon:'npm', accent:'var(--acc-npm)', accentFg:'var(--acc-npm-fg)', label:'npm',
-    name:'npm 发布', sub:'granular token · 注册表与套件包状态' },
+    name:'npm', sub:'granular token · 注册表与套件包状态' },
 ];
 
 /* 内容里复用的迷你图表 helper（纯静态，只为对齐视觉） */

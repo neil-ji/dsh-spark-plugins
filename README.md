@@ -49,7 +49,7 @@ sh install.sh --from-source          # 开发路径：clone + pnpm install + bui
 
 ![插件 UI 预览](docs/screenshots/plugins-ui.png)
 
-<p align="center">GitHub 连接器 · 财务审计 · npm 发布管线 · 记忆（HippoMemo）——按 DSH 设计系统 1:1 复刻的静态预览，演示数据见 <a href="docs/demo.html">docs/demo.html</a></p>
+<p align="center">GitHub 连接器 · 财务 Finance · npm 发布管线 · 记忆 HippoMemo · 火花 Spark ——按 DSH 设计系统 1:1 复刻的静态预览，演示数据见 <a href="docs/demo.html">docs/demo.html</a></p>
 
 ## 包一览（12 个包）
 
@@ -103,8 +103,8 @@ pnpm finance:sync-prices  # 从 models.dev 社区价格表同步非 DeepSeek 计
 ### 零 dsh 预览（模拟 dsh web + 真 spark-dock 悬浮球）
 
 机器上**不需要任何 dsh 安装、不写任何 profile、不起 dsh 进程**：画布是仿真的 dsh web 会话界面，
-右下角是**真的** `dsh-spark-dock` 悬浮球——点开就是真面板（火花 / 记忆 / 成本 / GitHub / npm
-五个模块，各插件的完整设置 UI），拖动吸附四角、位置记 localStorage。
+右下角是**真的** `dsh-spark-dock` 悬浮球——点开就是真面板（火花 Spark / 记忆 HippoMemo /
+财务 Finance / GitHub / npm 五个模块，各插件的完整设置 UI），拖动吸附四角、位置记 localStorage。
 
 ```bash
 pnpm preview         # http://127.0.0.1:5180/  真产物口径，改码自动重建 + 页面自动刷新
@@ -112,7 +112,7 @@ pnpm preview:source  # 源码口径（packages/*/src/client/embed.ts），免构
 pnpm preview:verify  # 自检 52 项（Node 冒烟 + 服务器/fixture 断言）
 ```
 
-左栏其余画布是组件级单渲染（GitHub / npm / 财务审计 / HippoMemo / UI Kit），便于逐个走查；
+左栏其余画布是组件级单渲染（GitHub / npm / 财务 Finance / HippoMemo / UI Kit），便于逐个走查；
 顶栏可切语言、明暗主题与 `ok|empty|error` 三档 fixture。财务卡的配置编辑走内存版
 `settingsScope`（真的能改能还原），记忆与火花的假数据来自预览服务器 `/hippomemo/*`、`/sparks/*` fixture。
 细节、一致性边界与排障见 [docs/COMPONENT-PREVIEW.md](docs/COMPONENT-PREVIEW.md)。

@@ -68,9 +68,16 @@ const hippoPanes = [
   { id: 'memories', label: '记忆', render: () => <HippoEmbedPane /> },
 ]
 
+/**
+ * 插件显示名规范化（2026-09 统一）：
+ *   认知层三件套 = 「中文名 + 英文产品名」——火花 Spark / 记忆 HippoMemo / 财务 Finance；
+ *   连接器 = 产品名的规范拼写本身——GitHub（大写 H）、npm（官方全小写）。
+ * `label` 是左侧活动栏的 aria-label/title（窄，只放中文名或产品名），
+ * `name` 是面板标题（完整显示名），`sub` 才是功能说明 —— 三者不要互相重复。
+ */
 export const DOCK_MODULES: DockModule[] = [
   {
-    id: 'spark', label: '火花', name: '火花流 Sparks',
+    id: 'spark', label: '火花', name: '火花 Spark',
     sub: '手动捕获 · 结晶 · 涌现提议 · 脚本目录 · Graph',
     accent: 'var(--spk-acc-spark, #d97706)', accentFg: 'var(--spk-acc-spark-fg, #92400e)', icon: <SparkIcon />,
     panes: sparkPanes,
@@ -82,7 +89,7 @@ export const DOCK_MODULES: DockModule[] = [
     panes: hippoPanes,
   },
   {
-    id: 'finance', label: '成本', name: '财务审计 Finance',
+    id: 'finance', label: '财务', name: '财务 Finance',
     sub: '余额 · Token 用量与成本总览',
     accent: 'var(--spk-acc-finance, #16a34a)', accentFg: 'var(--spk-acc-finance-fg, #166534)', icon: <FinanceIcon />,
     // finance：全功能内嵌 FinanceCard，自带 4 页签（总览/连接/供应商/高级）
@@ -90,13 +97,13 @@ export const DOCK_MODULES: DockModule[] = [
     panes: [{ id: 'main', label: '总览', render: () => <FinanceEmbedPane /> }],
   },
   {
-    id: 'github', label: 'GitHub', name: 'GitHub 连接',
+    id: 'github', label: 'GitHub', name: 'GitHub',
     sub: '令牌 · 操作权限 · Git 身份与代理',
     accent: 'var(--spk-acc-github, #8b5cf6)', accentFg: 'var(--spk-acc-github-fg, #5b21b6)', icon: <GithubIcon />,
     panes: [{ id: 'main', label: '连接', render: () => <GithubEmbedPane /> }],
   },
   {
-    id: 'npm', label: 'npm', name: 'npm 发布',
+    id: 'npm', label: 'npm', name: 'npm',
     sub: '细粒度 Token · 注册表与套件包状态',
     accent: 'var(--spk-acc-npm, #cb3837)', accentFg: 'var(--spk-acc-npm-fg, #991b1b)', icon: <NpmIcon />,
     panes: [{ id: 'main', label: '发布', render: () => <NpmEmbedPane /> }],
