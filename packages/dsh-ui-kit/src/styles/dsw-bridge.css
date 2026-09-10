@@ -2,43 +2,90 @@
    --dsw-* → --spk-* 桥接段
    插件自有 CSS 仍引用历史 --dsw-alias-* / --dsw-static-* 变量；
    这里把它们重定向到 --spk-* 语义层，迁移期保持渲染一致。
-   插件迁移完成后本段可整体删除。
+
+   v4：桥接必须**完整**。v3 只映射了插件当时用到的子集，剩下的一批
+   （--dsw-alias-border-l3 / --dsw-alias-surface-l1 / --dsw-static-deepseek-* /
+   --dsw-alias-feedback-* / --dsw-alias-tooltip-bg …）在真实宿主里由 DSH
+   design-platform.css 提供、在零 dsh 预览里为空 —— 同一个组件两套渲染，
+   且 `var(--x)` 无 fallback 时属性直接失效（背景变透明、整条渐变归零）。
+   现在一律由本段兜底，`scripts/audit-contrast.mjs` 会扫描并守住这条不变量：
+   插件源码里出现的每个 --dsw-* 名都必须在本文件里有定义。
+   插件迁移到 --spk-* 直连后本段可整体删除。
    ========================================================================== */
 
 body {
   /* 语义别名 */
   --dsw-alias-bg-base: var(--spk-bg);
+  --dsw-alias-bg-layer-0: var(--spk-layer-1);
   --dsw-alias-bg-layer-1: var(--spk-layer-1);
   --dsw-alias-bg-layer-2: var(--spk-layer-2);
   --dsw-alias-bg-layer-3: var(--spk-layer-2);
+  --dsw-alias-bg-layer-4: var(--spk-layer-2);
   --dsw-alias-bg-module-platform: var(--spk-platform);
+  --dsw-alias-surface-l1: var(--spk-surface-card);
+  --dsw-alias-surface-l2: var(--spk-surface-card);
+  --dsw-alias-surface-float: var(--spk-surface-float);
+  --dsw-alias-tooltip-bg: var(--spk-tooltip-bg);
+  --dsw-alias-tooltip-fg: var(--spk-tooltip-fg);
   --dsw-alias-label-primary: var(--spk-label);
   --dsw-alias-label-secondary: var(--spk-label-2);
   --dsw-alias-label-tertiary: var(--spk-label-3);
+  --dsw-alias-label-caption: var(--spk-label-3);
   --dsw-alias-label-dimmed: var(--spk-label-3);
+  --dsw-alias-label-error: var(--spk-error);
   --dsw-alias-label-primary-foreground: var(--spk-contrast-fill-label);
   --dsw-alias-border-l1: var(--spk-border);
   --dsw-alias-border-l2: var(--spk-border-2);
+  --dsw-alias-border-l3: var(--spk-border-2);
+  --dsw-alias-border-l4: var(--spk-border);
   --dsw-alias-brand-primary: var(--spk-brand);
+  --dsw-alias-brand-foreground: var(--spk-brand-fg);
   --dsw-alias-button-primary-fill: var(--spk-brand);
   --dsw-alias-button-primary-hover: var(--spk-brand-hover);
   --dsw-alias-interactive-bg-hover: var(--spk-hover);
+  --dsw-alias-interactive-bg-hover-accent: var(--spk-hover-accent);
   --dsw-alias-interactive-bg-active: var(--spk-active);
   --dsw-alias-state-success-primary: var(--spk-success);
   --dsw-alias-state-warn-primary: var(--spk-warn);
+  --dsw-alias-state-warn-label: var(--spk-warn);
   --dsw-alias-state-error-primary: var(--spk-error);
+  --dsw-alias-state-error-content: var(--spk-error);
   --dsw-alias-state-info-tint: var(--spk-info-soft);
   --dsw-alias-state-error-tint: var(--spk-error-soft);
+  --dsw-alias-feedback-info-bg: var(--spk-info-soft);
+  --dsw-alias-feedback-info-fg: var(--spk-info);
+  --dsw-alias-feedback-warning-bg: var(--spk-warn-soft);
+  --dsw-alias-feedback-warning-fg: var(--spk-warn);
+  --dsw-alias-feedback-danger-bg: var(--spk-error-soft);
+  --dsw-alias-feedback-danger-fg: var(--spk-error);
+  --dsw-alias-feedback-focus: var(--spk-focus);
   --dsw-alias-font-family: var(--spk-font);
+  --dsw-alias-font-mono: var(--spk-font-mono);
 
-  /* 静态色板（亮色取值；暗色覆盖见下） */
-  --dsw-static-green-500: #16a34a;
-  --dsw-static-violet-500: #8b5cf6;
-  --dsw-static-red-500: #dc2626;
-  --dsw-static-slate-500: #64748b;
-  --dsw-static-blue-500: #3b82f6;
-  --dsw-static-deepseek-450: #5b7cfa;
+  /* 静态色板（亮色取值；暗色覆盖见下）—— 只保留插件真正消费的槽位，
+     取值一律走 --spk-* 语义 token，避免「静态色不跟主题」的旧问题。 */
   --dsw-static-white: #ffffff;
+  --dsw-static-neutral-50: var(--spk-n-50);
+  --dsw-static-neutral-100: var(--spk-n-100);
+  --dsw-static-neutral-800: var(--spk-n-800);
+  --dsw-static-neutral-850: var(--spk-n-850);
+  --dsw-static-neutral-bluish-00: #ffffff;
+  --dsw-static-neutral-bluish-300: #cfd3d6;
+  --dsw-static-neutral-bluish-400: #adb2b8;
+  --dsw-static-deepseek-300: var(--spk-spark-300);
+  --dsw-static-deepseek-400: var(--spk-brand-hover);
+  --dsw-static-deepseek-450: var(--spk-brand);
+  --dsw-static-deepseek-500: var(--spk-brand);
+  --dsw-static-deepseek-700: var(--spk-brand-fg);
+  --dsw-static-amber-500: var(--spk-acc-spark);
+  --dsw-static-green-500: var(--spk-success);
+  --dsw-static-violet-500: var(--spk-acc-github);
+  --dsw-static-red-500: var(--spk-error);
+  --dsw-static-slate-500: var(--spk-label-3);
+  --dsw-static-blue-500: var(--spk-acc-hippomemo);
+  --dsw-static-warning-500: var(--spk-warn);
+  --dsw-static-warning-700: var(--spk-warn);
+
   --dsw-shadow-lv2: var(--spk-shadow-2);
   --dsw-shadow-lv3: var(--spk-shadow-float);
   --dsw-font-family: var(--spk-font);
@@ -46,11 +93,8 @@ body {
 
 body[data-ds-dark-theme],
 body[data-theme="dark"] {
-  --dsw-static-green-500: #34d399;
-  --dsw-static-violet-500: #a78bfa;
-  --dsw-static-red-500: #f87171;
-  --dsw-static-slate-500: #94a3b8;
-  --dsw-static-blue-500: #60a5fa;
-  --dsw-static-deepseek-450: #6d85fe;
   --dsw-static-white: #ffffff;
+  --dsw-static-neutral-bluish-00: #ffffff;
+  --dsw-static-neutral-bluish-300: #cfd3d6;
+  --dsw-static-neutral-bluish-400: #adb2b8;
 }

@@ -7,7 +7,7 @@ export interface ListRowProps {
   meta?: ReactNode
   /** 右侧独立区（button 外渲染，避免 button-in-button） */
   trailing?: ReactNode
-  /** 模块 accent 色（如 var(--spk-acc-finance)） */
+  /** 模块 accent 色（装饰用，如 var(--spk-acc-finance)） */
   accentColor?: string
   archived?: boolean
   onClick?: () => void

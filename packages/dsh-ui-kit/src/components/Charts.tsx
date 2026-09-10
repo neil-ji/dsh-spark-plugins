@@ -2,16 +2,16 @@ import type { ReactNode } from 'react'
 import { cx } from '../cx.js'
 import css from './Charts.module.css'
 
-/** 图表调色板 — 五模块 accent + 补充色相，索引循环取色 */
+/** 图表调色板 — 五模块 accent + 补充色相（全部 ≥3:1 图形对比度），索引循环取色 */
 export const CHART_PALETTE = [
   'var(--spk-acc-hippomemo)',
   'var(--spk-acc-finance)',
   'var(--spk-acc-spark)',
   'var(--spk-acc-github)',
   'var(--spk-acc-npm)',
-  '#14b8a6',
-  '#e879f9',
-  '#64748b',
+  'var(--spk-chart-alt-1)',
+  'var(--spk-chart-alt-2)',
+  'var(--spk-chart-alt-3)',
 ] as const
 
 /** 「其他」聚合切片的弱化色 */
@@ -78,7 +78,10 @@ export function DonutChart({ rows, centerValue, centerLabel, ariaLabel, formatVa
               key={row.key}
               className={css.donutSlice}
               cx="21" cy="21" r={R} fill="none"
-              stroke={sliceColor(rows, i)}
+              /* 色值走 style 而不是 presentation attribute：SVG 属性里的 var()
+                 解析在规范与实现上都不受保证（W3C SVGWG #987/#1031），
+                 写 style 才一定能拿到 --spk-* 的解析结果。 */
+              style={{ stroke: sliceColor(rows, i) }}
               strokeWidth="5.5"
               strokeDasharray={dash}
               strokeDashoffset={offset}
@@ -168,8 +171,8 @@ export function TrendChart({ points, ariaLabel, formatValue, gradientId, classNa
       <svg viewBox={`0 0 ${TW} ${TH + 16}`} role="img" aria-label={ariaLabel} className={css.trendSvg} preserveAspectRatio="none">
         <defs>
           <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--spk-brand)" stopOpacity="0.22" />
-            <stop offset="100%" stopColor="var(--spk-brand)" stopOpacity="0" />
+            <stop offset="0%" style={{ stopColor: 'var(--spk-brand)', stopOpacity: 0.22 }} />
+            <stop offset="100%" style={{ stopColor: 'var(--spk-brand)', stopOpacity: 0 }} />
           </linearGradient>
         </defs>
         <line className={css.trendAxis} x1={TP} y1={TH - TP} x2={TW - TP} y2={TH - TP} />

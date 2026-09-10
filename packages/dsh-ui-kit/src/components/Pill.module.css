@@ -1,3 +1,6 @@
+/* 胶囊：中性 = layer-2 底；语义/模块 = 淡底 + 同色文字。
+   `--pill-acc` 必须传「文字态」色（--spk-brand-fg / --spk-acc-<m>-fg / --spk-success…），
+   不能传实色 accent：实色档在白底上只有 1.9-4.4:1（见 scripts/audit-contrast.mjs）。 */
 .pill {
   display: inline-flex;
   align-items: center;
@@ -18,12 +21,12 @@
 .warn,
 .error,
 .tint {
-  --pill-acc: var(--spk-brand);
+  --pill-acc: var(--spk-brand-fg);
   border-color: transparent;
   background: color-mix(in srgb, var(--pill-acc) 14%, transparent);
   color: var(--pill-acc);
 }
-.brand { --pill-acc: var(--spk-brand); }
+.brand { --pill-acc: var(--spk-brand-fg); }
 .success { --pill-acc: var(--spk-success); }
 .warn { --pill-acc: var(--spk-warn); }
 .error { --pill-acc: var(--spk-error); }
@@ -35,9 +38,9 @@
   transition: background var(--spk-dur-fast) var(--spk-ease-out), color var(--spk-dur-fast) var(--spk-ease-out);
 }
 .clickable:hover { background: var(--spk-hover); color: var(--spk-label); }
-.clickable:focus-visible { outline: 2px solid var(--spk-brand); outline-offset: 2px; }
+.clickable:focus-visible { outline: 2px solid var(--spk-focus-ring); outline-offset: 2px; }
 .active {
-  --pill-acc: var(--spk-brand);
+  --pill-acc: var(--spk-brand-fg);
   background: color-mix(in srgb, var(--pill-acc) 14%, transparent);
   border-color: transparent;
   color: var(--pill-acc);

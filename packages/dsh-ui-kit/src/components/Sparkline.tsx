@@ -19,7 +19,7 @@ export interface SparklineProps {
 
 const PAD = 8
 
-/** Spark UI Kit 迷你趋势线 — 琥珀…品牌蓝渐变填充 + 描线生长 + hover 十字线 */
+/** Spark UI Kit 迷你趋势线 — 品牌蓝渐变填充 + 描线生长 + hover 十字线 */
 export function Sparkline({
   data,
   width = 560,
@@ -93,13 +93,14 @@ export function Sparkline({
     >
       <defs>
         <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.22" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
+          {/* 色值走 style：SVG presentation attribute 里的 var() 不可靠 */}
+          <stop offset="0%" style={{ stopColor: color, stopOpacity: 0.22 }} />
+          <stop offset="100%" style={{ stopColor: color, stopOpacity: 0 }} />
         </linearGradient>
       </defs>
       <path className={css.area} d={`${d} L${width - PAD} ${height - PAD} L${PAD} ${height - PAD} Z`} fill={`url(#${gid})`} />
-      <path ref={lineRef} className={css.line} d={d} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" pathLength={1} />
-      <circle className={css.dot} cx={lastX} cy={lastY} r="3.5" fill={color} stroke="var(--spk-bg)" strokeWidth="2" />
+      <path ref={lineRef} className={css.line} d={d} fill="none" style={{ stroke: color }} strokeWidth="2" strokeLinecap="round" pathLength={1} />
+      <circle className={css.dot} cx={lastX} cy={lastY} r="3.5" style={{ fill: color, stroke: 'var(--spk-bg)' }} strokeWidth="2" />
     </svg>
   )
 }

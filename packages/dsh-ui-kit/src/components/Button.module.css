@@ -17,7 +17,7 @@
     transform var(--spk-dur-fast) var(--spk-ease-out);
 }
 .btn:active:not(:disabled) { transform: scale(0.97); }
-.btn:focus-visible { outline: 2px solid var(--spk-brand); outline-offset: 2px; }
+.btn:focus-visible { outline: 2px solid var(--spk-focus-ring); outline-offset: 2px; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .primary { background: var(--spk-brand); color: var(--spk-on-brand); }
@@ -34,7 +34,7 @@
 .ghost { background: transparent; color: var(--spk-label-2); font-weight: 500; }
 .ghost:hover:not(:disabled) { background: var(--spk-hover); color: var(--spk-label); }
 
-.danger { background: var(--spk-error); color: #fff; }
+.danger { background: var(--spk-error); color: var(--spk-on-error); }
 .danger:hover:not(:disabled) { background: color-mix(in srgb, var(--spk-error) 85%, #000); }
 
 .sm { height: 26px; padding: 0 11px; font-size: var(--spk-text-sm, 12px); border-radius: 13px; }

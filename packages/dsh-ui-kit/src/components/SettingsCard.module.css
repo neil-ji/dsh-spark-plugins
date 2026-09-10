@@ -1,6 +1,6 @@
 .card {
-  --acc: var(--spk-brand);
-  background: var(--spk-layer-1);
+  --acc: var(--spk-brand-fg);
+  background: var(--spk-surface-card);
   border: 1px solid var(--spk-border);
   border-radius: 14px;
   overflow: hidden;

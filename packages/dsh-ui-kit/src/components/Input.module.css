@@ -12,16 +12,17 @@
   width: 100%;
   padding: 8px 10px;
   background: var(--spk-layer-2);
-  border: 1px solid var(--spk-border);
+  /* 默认就用 border-2：layer-2 底与卡片面只差 1.06:1，控件的可辨轮廓几乎全落在描边上 */
+  border: 1px solid var(--spk-border-2);
   border-radius: 10px;
   color: var(--spk-label);
   font: 400 var(--spk-text-md, 13px) / 1.4 var(--spk-font);
   transition: border-color var(--spk-dur-fast) var(--spk-ease-out);
 }
 .input::placeholder { color: var(--spk-label-3); }
-.input:hover { border-color: var(--spk-border-2); }
+.input:hover { border-color: var(--spk-label-3); }
 .input:focus {
-  outline: 2px solid var(--spk-brand);
+  outline: 2px solid var(--spk-focus-ring);
   outline-offset: 1px;
   border-color: transparent;
 }

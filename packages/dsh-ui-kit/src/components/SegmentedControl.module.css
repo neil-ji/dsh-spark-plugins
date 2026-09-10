@@ -7,12 +7,18 @@
   border: 1px solid var(--spk-border);
   border-radius: 10px;
 }
+/* 滑块 = 抬起面。
+   旧值用 --spk-platform：亮色下 platform(#eef0f4) 与槽底 layer-2(#edeff3) 只差 1.00:1，
+   而选中字是 #ffffff → 亮色主题里选中项 1.14:1，等于不可见。
+   现在槽底(layer-2) → 滑块(seg-thumb) → 选中字(label) 三者两两可辨。 */
 .thumb {
   position: absolute;
   top: 3px;
   bottom: 3px;
   border-radius: 8px;
-  background: var(--spk-platform);
+  background: var(--spk-seg-thumb);
+  border: 1px solid var(--spk-border);
+  box-shadow: var(--spk-shadow-1);
   transition:
     left 180ms var(--spk-ease-spring),
     width 180ms var(--spk-ease-spring);
@@ -32,8 +38,9 @@
   transition: color var(--spk-dur-fast) var(--spk-ease-out);
 }
 .tab:hover { color: var(--spk-label); }
-.tab:focus-visible { outline: 2px solid var(--spk-brand); outline-offset: 1px; }
-.tab[aria-selected="true"] { color: #ffffff; }
+.tab:focus-visible { outline: 2px solid var(--spk-focus-ring); outline-offset: 1px; }
+/* 选中字不能写死 #fff：它要压在主题相关的滑块面上（亮色白滑块 / 暗色深滑块）。 */
+.tab[aria-selected="true"] { color: var(--spk-label); font-weight: 600; }
 
 .segFull {
   display: flex;

@@ -7,7 +7,7 @@
   min-width: 180px;
   padding: 0 10px 0 30px;
   background: var(--spk-layer-2);
-  border: 1px solid var(--spk-border);
+  border: 1px solid var(--spk-border-2);
   border-radius: 10px;
   color: var(--spk-label);
   font: 400 var(--spk-text-md, 13px) / 1 var(--spk-font);
@@ -15,7 +15,7 @@
 }
 .input::placeholder { color: var(--spk-label-3); }
 .input:focus {
-  outline: 2px solid var(--spk-brand);
+  outline: 2px solid var(--spk-focus-ring);
   outline-offset: 1px;
   border-color: transparent;
 }
@@ -40,4 +40,4 @@
   transition: background var(--spk-dur-fast) var(--spk-ease-out), color var(--spk-dur-fast) var(--spk-ease-out);
 }
 .clear:hover { background: var(--spk-hover); color: var(--spk-label); }
-.clear:focus-visible { outline: 2px solid var(--spk-brand); outline-offset: 1px; }
+.clear:focus-visible { outline: 2px solid var(--spk-focus-ring); outline-offset: 1px; }

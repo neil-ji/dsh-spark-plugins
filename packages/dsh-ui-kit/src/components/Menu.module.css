@@ -4,7 +4,7 @@
   position: fixed;
   z-index: 120;
   padding: 4px;
-  background: var(--spk-platform-solid);
+  background: var(--spk-surface-float);
   border: 1px solid var(--spk-border-2);
   border-radius: 12px;
   box-shadow: var(--spk-shadow-float);
@@ -29,5 +29,5 @@
   transition: background var(--spk-dur-fast) var(--spk-ease-out);
 }
 .item:hover { background: var(--spk-hover); color: var(--spk-label); }
-.item:focus-visible { outline: 2px solid var(--spk-brand); outline-offset: -2px; }
-.selected { color: var(--spk-brand); }
+.item:focus-visible { outline: 2px solid var(--spk-focus-ring); outline-offset: -2px; }
+.selected { color: var(--spk-brand-fg); font-weight: 600; }

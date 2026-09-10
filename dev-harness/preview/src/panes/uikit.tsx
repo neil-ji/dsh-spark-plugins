@@ -64,7 +64,7 @@ export function UiKitPane() {
       </p>
 
       <div className="pv-grid">
-        <SettingsCard title="按钮 / 分段 / 徽标" description="Button 四态 + SegmentedControl + Pill 五色" accentColor="var(--spk-acc-spark)" badge={<Pill tone="brand">v0.3.1</Pill>}>
+        <SettingsCard title="按钮 / 分段 / 徽标" description="Button 四态 + SegmentedControl + Pill 五色" accentColor="var(--spk-acc-spark-fg)" badge={<Pill tone="brand">v0.3.1</Pill>}>
           <div className="pv-stack">
             <div className="pv-row">
               <Button variant="primary">主要</Button>
@@ -85,7 +85,7 @@ export function UiKitPane() {
               <Pill tone="success">成功</Pill>
               <Pill tone="warn">警告</Pill>
               <Pill tone="error">失败</Pill>
-              <Pill accentColor="var(--spk-acc-npm)" active onClick={() => {}}>可点选</Pill>
+              <Pill accentColor="var(--spk-acc-npm-fg)" active onClick={() => {}}>可点选</Pill>
             </div>
             <div className="pv-row">
               <StateDot status="live" label="在线" />
@@ -96,7 +96,7 @@ export function UiKitPane() {
           </div>
         </SettingsCard>
 
-        <SettingsCard title="表单控件" description="Input / Textarea / SearchInput / Checkbox" accentColor="var(--spk-acc-github)">
+        <SettingsCard title="表单控件" description="Input / Textarea / SearchInput / Checkbox" accentColor="var(--spk-acc-github-fg)">
           <div className="pv-stack">
             <Input label="Token" placeholder="npm_xxx" help="保存后由 agent 全权接管" />
             <Input label="超时（毫秒）" defaultValue="8000" error="必须是整数" />
@@ -106,7 +106,7 @@ export function UiKitPane() {
           </div>
         </SettingsCard>
 
-        <SettingsCard title="金额 / 迷你图" description="Money micros 换算 + Sparkline" accentColor="var(--spk-acc-finance)">
+        <SettingsCard title="金额 / 迷你图" description="Money micros 换算 + Sparkline" accentColor="var(--spk-acc-finance-fg)">
           <div className="pv-stack">
             <div className="pv-row">
               <Money micros={128_400_000} currency="CNY" size="lg" />
@@ -116,20 +116,20 @@ export function UiKitPane() {
           </div>
         </SettingsCard>
 
-        <SettingsCard title="列表 / 折叠 / 统计" description="ListRow + Disclosure + StatGrid" accentColor="var(--spk-acc-hippomemo)">
+        <SettingsCard title="列表 / 折叠 / 统计" description="ListRow + Disclosure + StatGrid" accentColor="var(--spk-acc-hippomemo-fg)">
           <StatGrid>
             <Stat label="总会话" value="37" />
             <Stat label="总成本" value={<Money micros={23_180_000} currency="CNY" size="sm" />} />
             <Stat label="缓存命中" value="87%" positive />
           </StatGrid>
-          <ListRow title="dsh-spark-plugins" meta="24 会话 · 最后活跃 2 分钟前" trailing={<Pill tone="brand">主工作区</Pill>} accentColor="var(--spk-acc-spark)" onClick={() => {}} />
+          <ListRow title="dsh-spark-plugins" meta="24 会话 · 最后活跃 2 分钟前" trailing={<Pill tone="brand">主工作区</Pill>} accentColor="var(--spk-acc-spark-fg)" onClick={() => {}} />
           <ListRow title="（已归档）旧 runner" meta="1 会话" archived />
           <Disclosure name="高级配置（JSON）" description="defaultPrice / providerDefaults / prices" defaultOpen={false}>
             <span>仅高级用户维护；保存前会做 schema 校验。</span>
           </Disclosure>
         </SettingsCard>
 
-        <SettingsCard title="菜单 / 弹窗 / 提示" description="Menu + Modal + toast" accentColor="var(--spk-acc-npm)">
+        <SettingsCard title="菜单 / 弹窗 / 提示" description="Menu + Modal + toast" accentColor="var(--spk-acc-npm-fg)">
           <div className="pv-stack">
             <div className="pv-row">
               <Menu
@@ -147,7 +147,7 @@ export function UiKitPane() {
           </div>
         </SettingsCard>
 
-        <SettingsCard title="图表" description="DonutChart / BarChart / TrendChart" accentColor="#14b8a6">
+        <SettingsCard title="图表" description="DonutChart / BarChart / TrendChart" accentColor="var(--spk-chart-alt-1)">
           <div className="pv-stack">
             <DonutChart rows={donut} centerValue={<Money micros={23_180_000} currency="CNY" size="md" />} centerLabel="总成本" ariaLabel="按 provider 成本" formatValue={money} />
             <BarChart rows={bars} ariaLabel="按模型成本" formatValue={money} axisFormatter={money} />
@@ -155,7 +155,7 @@ export function UiKitPane() {
           </div>
         </SettingsCard>
 
-        <SettingsCard title="终端块 / 图标" description="TerminalBlock + 图标集" accentColor="var(--spk-acc-spark)">
+        <SettingsCard title="终端块 / 图标" description="TerminalBlock + 图标集" accentColor="var(--spk-acc-spark-fg)">
           <div className="pv-stack">
             <TerminalBlock
               title="pnpm preview"

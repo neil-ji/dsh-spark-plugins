@@ -10,7 +10,8 @@ export interface SettingsCardProps {
   icon?: ReactNode
   /** 卡头右侧徽标（如 Pill） */
   badge?: ReactNode
-  /** 模块 accent 色（如 var(--spk-acc-finance)） */
+  /** 模块 accent 色的**文字态**（如 var(--spk-acc-finance-fg)，默认 --spk-brand-fg）——
+   *  用于卡头图标方块的淡底 + 同色图标，必须是白底 ≥4.5:1 的那一档。 */
   accentColor?: string
   className?: string
   children?: ReactNode
@@ -19,7 +20,7 @@ export interface SettingsCardProps {
 /** Spark UI Kit 设置卡 — dock .card + 图标方 + badge 卡头 */
 export function SettingsCard({ title, description, icon, badge, accentColor, className, children }: SettingsCardProps) {
   return (
-    <section className={cx(css.card, className)} style={{ '--acc': accentColor ?? 'var(--spk-brand)' } as CSSProperties}>
+    <section className={cx(css.card, className)} style={{ '--acc': accentColor ?? 'var(--spk-brand-fg)' } as CSSProperties}>
       <header className={css.head}>
         {icon && <span className={css.icon} aria-hidden="true">{icon}</span>}
         <div className={css.titles}>

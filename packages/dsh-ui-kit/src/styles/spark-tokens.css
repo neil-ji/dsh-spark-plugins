@@ -1,16 +1,35 @@
 /* ==========================================================================
-   Spark Design Language — tokens v3（与 docs/spark-dock-preview 同源）
-   中性冷灰骨架 + DSH 品牌蓝 #4d6bfe，克制、原生、无撞色。
-   变量名保持 --spk-*，组件层零改动。
+   Spark Design Language — tokens v4（与 docs/spark-dock-preview 同源）
+   中性冷灰骨架 + DSH 品牌蓝，克制、原生、无撞色。
 
    设计标度（评审基线，五插件面板统一）：
    - 圆角：6（控件内）/ 8（输入类）/ 10（分段条·行）/ 12（卡片）/ 999（tag·pill）
    - 字号：10 tag · 11 meta · 12 body-minor · 13 body · 14 卡片题 · 18 页面题
    - 间距：4 的倍数；卡片 padding 12 14；页头→内容 gap 12
-   - 卡片 surface：layer-2 底 + l1 边框 + radius 12（ui-kit Card / .dock-card / 各面板同规）
+   - 卡片 surface：surface-card 底 + border 边框 + radius 12
    - Tab：ui-kit SegmentedControl（面板页签用 fullWidth 通栏形态），禁止自绘
    - 折叠：ui-kit Disclosure，禁止 <details> / 按钮切换等旁路实现
    - 图标：dsh-ui-kit IconXxx（见 components/icons.tsx 规范）
+
+   v4 修订（可访问性 + 层次，全部由 scripts/audit-contrast.mjs 守住）：
+   1. 语义色不再「一个色值走天下」，按 WCAG 2.1 AA 重定：
+      正文 4.5:1、大字/非文本 3:1；亮色语义色普遍压深一档，
+      暗色语义色提亮一档（原 #16a34a/#d97706 在亮色灰底上只有 2.8:1）。
+   2. 品牌色拆「填充」与「文字」两态：
+      --spk-brand 用于实底（配 --spk-on-brand）；
+      --spk-brand-fg 用于中性面上的文字/图标/描边强调
+      （#4d6bfe 亮度居中，配白字 4.33:1、当文字 4.37:1，两边都不达标）。
+   3. 新增 --spk-surface-card / --spk-surface-float：
+      原来卡片面 = layer-2 = 面板底色，亮暗两态都看不出层次（对比度 ~1.0）。
+      现在 面板(platform) < 卡片(card) < 浮层(float) 三级可辨。
+   4. 模块 accent 拆「实色 --spk-acc-*（图表/指示条/圆点）」与
+      「文字态 --spk-acc-*-fg（图标/胶囊/实底芯片）」；
+      亮色实底芯片用 --spk-on-accent 反白。
+   5. 终端块（永远深底）改用与主题解耦的 --spk-term-*，
+      不再借用会随主题翻转的 --spk-error/--spk-success。
+   6. 分段控件滑块独立成 --spk-seg-thumb：原来滑块用 platform，
+      亮色下 platform(#eef0f4) 与槽底 layer-2(#edeff3) 只差 1.00:1，
+      而选中字是 #ffffff → 亮色主题里选中项只有 1.14:1，完全不可见。
    ========================================================================== */
 
 body {
@@ -30,19 +49,14 @@ body {
   --spk-n-900: #171c27;
   --spk-n-950: #0b0e14;
 
-  /* 品牌蓝阶（DSH #4d6bfe） */
+  /* 品牌蓝阶（DSH #4d6bfe 为 identity primitive，语义档见主题块） */
+  --spk-spark-100: #dfe5ff;
   --spk-spark-300: #93a8ff;
   --spk-spark-400: #6d85fe;
   --spk-spark-500: #4d6bfe;
   --spk-spark-600: #3d5af0;
   --spk-spark-700: #2f46c8;
-
-  /* 五模块 accent（与 dock 预览一致） */
-  --spk-acc-spark: #f59e0b;
-  --spk-acc-hippomemo: #3b82f6;
-  --spk-acc-finance: #22c55e;
-  --spk-acc-github: #8b5cf6;
-  --spk-acc-npm: #cb3837;
+  --spk-spark-800: #24379c;
 
   /* 字体 / 字号 / 圆角 / 动效（不变） */
   --spk-font: "PingFang SC", -apple-system, "SF Pro Text", "Segoe UI",
@@ -66,6 +80,19 @@ body {
   --spk-dur-med: 220ms;
   --spk-dur-slow: 320ms;
   --spk-blur: 16px;
+
+  /* 与主题无关的固定面/字色：终端块（永远深底）与 tooltip 板（永远深板）。
+     这些地方不能借用会随主题翻转的语义色，否则亮色主题下深底配深字。 */
+  --spk-terminal-bg: #171c27;
+  --spk-term-fg: #dde3ec;
+  --spk-term-dim: #949dae;
+  --spk-term-ok: #4ade80;
+  --spk-term-warn: #fbbf24;
+  --spk-term-error: #f87171;
+  --spk-term-prompt: #93a8ff;
+  --spk-tooltip-bg: #232b3a;
+  --spk-tooltip-fg: #f2f5f9;
+  --spk-tooltip-fg-dim: #aab3c2;
 }
 
 /* ── Dark（对齐 dock 预览暗色） ──
@@ -74,11 +101,13 @@ body {
 body[data-ds-dark-theme],
 body[data-theme="dark"] {
   color-scheme: dark;
-  /* dock 层次面（bg-layer-1/2、module-platform） */
+  /* 层次面：bg < platform < card < float（每一级都可辨） */
   --spk-layer-1: #10141d;
   --spk-layer-2: #171c27;
+  --spk-surface-card: #1b212c;
+  --spk-surface-float: #222a37;
   --spk-platform: #161b26;
-  --spk-platform-solid: #161b26;
+  --spk-platform-solid: var(--spk-surface-float);
   --spk-bg: var(--spk-n-950);
   --spk-bg-glow-1: rgba(77, 107, 254, 0.1);
   --spk-bg-glow-2: rgba(124, 196, 255, 0.05);
@@ -90,28 +119,53 @@ body[data-theme="dark"] {
   --spk-label-3: #868ea0;
   --spk-border: #232b3a;
   --spk-border-2: #2d3749;
-  --spk-brand: var(--spk-spark-500);
-  --spk-brand-hover: var(--spk-spark-400);
-  --spk-on-brand: #ffffff;
+  --spk-brand: #6d85fe;
+  --spk-brand-hover: #93a8ff;
+  --spk-brand-fg: #93a8ff;
+  --spk-on-brand: var(--spk-contrast-fill-label);
   --spk-brand-soft: rgba(77, 107, 254, 0.16);
   --spk-contrast-fill: #e8eaf0;
   --spk-contrast-fill-label: #171c27;
   --spk-hover: rgba(255, 255, 255, 0.06);
+  --spk-hover-accent: rgba(109, 133, 254, 0.14);
   --spk-active: rgba(255, 255, 255, 0.11);
   --spk-focus: rgba(109, 133, 254, 0.55);
+  --spk-focus-ring: #93a8ff;
   --spk-success: #4ade80;
   --spk-success-soft: rgba(74, 222, 128, 0.13);
-  --spk-warn: #f59e0b;
-  --spk-warn-soft: rgba(245, 158, 11, 0.13);
+  --spk-warn: #fbbf24;
+  --spk-warn-soft: rgba(251, 191, 36, 0.13);
   --spk-error: #f87171;
   --spk-error-soft: rgba(248, 113, 113, 0.13);
+  --spk-on-error: var(--spk-contrast-fill-label);
   --spk-info: #7cc4ff;
   --spk-info-soft: rgba(124, 196, 255, 0.13);
+  --spk-seg-thumb: #2b3444;
   --spk-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.5);
   --spk-shadow-2: 0 8px 24px rgba(0, 0, 0, 0.5);
   --spk-shadow-float: 0 16px 48px rgba(0, 0, 0, 0.62), 0 0 0 1px rgba(255, 255, 255, 0.06);
   --spk-glow: 0 0 22px rgba(77, 107, 254, 0.3);
   --spk-terminal-bg: #0d1117;
+
+  /* 模块 accent：实色（图表填充 / 指示条 / 圆点）—— 暗底上取亮档 */
+  --spk-acc-spark: #f59e0b;
+  --spk-acc-hippomemo: #60a5fa;
+  --spk-acc-finance: #4ade80;
+  --spk-acc-github: #a78bfa;
+  --spk-acc-npm: #f87171;
+  /* 图表补充色（第 6-8 个系列）：暗底亮档 */
+  --spk-chart-alt-1: #5eead4;
+  --spk-chart-alt-2: #f0abfc;
+  --spk-chart-alt-3: #94a3b8;
+  /* 模块 accent 的文字/小图标态：暗底上亮档天然达标，与实色同值 */
+  --spk-acc-spark-fg: #fbbf24;
+  --spk-acc-hippomemo-fg: #8ab8fd;
+  --spk-acc-finance-fg: #6ee7a0;
+  --spk-acc-github-fg: #bda6fb;
+  --spk-acc-npm-fg: #f8a1a1;
+  /* 实底 accent / 品牌 / 危险色上的文字：统一取「饱和实底上的标签色」
+     （亮色实底 → 白字，暗色亮实底 → 深字），避免三处各写一个近黑值。 */
+  --spk-on-accent: var(--spk-contrast-fill-label);
 }
 
 /* ── Light（对齐 dock 预览亮色；灰纸底 + 纯白卡保证轮廓） ──
@@ -121,9 +175,11 @@ body,
 body[data-theme="light"] {
   color-scheme: light;
   --spk-layer-1: #ffffff;
-  --spk-layer-2: #edeff3;
+  --spk-layer-2: #f4f6fa;
+  --spk-surface-card: #ffffff;
+  --spk-surface-float: #ffffff;
   --spk-platform: #eef0f4;
-  --spk-platform-solid: #ffffff;
+  --spk-platform-solid: var(--spk-surface-float);
   --spk-bg: var(--spk-n-50);
   --spk-bg-glow-1: rgba(77, 107, 254, 0.08);
   --spk-bg-glow-2: rgba(124, 196, 255, 0.06);
@@ -131,30 +187,54 @@ body[data-theme="light"] {
   --spk-surface-solid: var(--spk-n-0);
   --spk-surface-2: var(--spk-n-50);
   --spk-label: #1a1d24;
-  --spk-label-2: #5b6270;
-  --spk-label-3: #667085;
+  --spk-label-2: #525b6b;
+  --spk-label-3: #5f6a7d;
   --spk-border: #d9dee6;
-  --spk-border-2: #c6ccd8;
-  --spk-brand: var(--spk-spark-500);
-  --spk-brand-hover: var(--spk-spark-600);
-  --spk-on-brand: #ffffff;
+  --spk-border-2: #c1c8d4;
+  --spk-brand: #3d5af0;
+  --spk-brand-hover: #2f46c8;
+  --spk-brand-fg: #2f46c8;
+  --spk-on-brand: var(--spk-contrast-fill-label);
   --spk-brand-soft: rgba(77, 107, 254, 0.1);
   --spk-contrast-fill: #1a1d24;
   --spk-contrast-fill-label: #ffffff;
   --spk-hover: rgba(16, 24, 40, 0.05);
+  --spk-hover-accent: rgba(61, 90, 240, 0.1);
   --spk-active: rgba(16, 24, 40, 0.09);
-  --spk-focus: rgba(77, 107, 254, 0.4);
-  --spk-success: #16a34a;
-  --spk-success-soft: rgba(22, 163, 74, 0.1);
-  --spk-warn: #d97706;
-  --spk-warn-soft: rgba(217, 119, 6, 0.1);
-  --spk-error: #dc2626;
-  --spk-error-soft: rgba(220, 38, 38, 0.08);
-  --spk-info: #2b7fd4;
-  --spk-info-soft: rgba(43, 127, 212, 0.1);
+  --spk-focus: rgba(61, 90, 240, 0.4);
+  --spk-focus-ring: #3d5af0;
+  --spk-success: #166534;
+  --spk-success-soft: rgba(22, 101, 52, 0.1);
+  --spk-warn: #9a3412;
+  --spk-warn-soft: rgba(154, 52, 18, 0.1);
+  --spk-error: #c62828;
+  --spk-error-soft: rgba(198, 40, 40, 0.08);
+  --spk-on-error: var(--spk-contrast-fill-label);
+  --spk-info: #1c64b0;
+  --spk-info-soft: rgba(28, 100, 176, 0.1);
+  --spk-seg-thumb: #ffffff;
   --spk-shadow-1: 0 1px 3px rgba(10, 18, 38, 0.08), 0 1px 2px rgba(10, 18, 38, 0.04);
   --spk-shadow-2: 0 8px 24px rgba(10, 18, 38, 0.12);
   --spk-shadow-float: 0 16px 48px rgba(10, 18, 38, 0.16), 0 0 0 1px rgba(10, 18, 38, 0.05);
   --spk-glow: 0 0 20px rgba(77, 107, 254, 0.2);
   --spk-terminal-bg: #171c27;
+
+  /* 模块 accent：实色档（白底 ≥3:1，供图表填充 / 指示条 / 圆点） */
+  --spk-acc-spark: #d97706;
+  --spk-acc-hippomemo: #3b82f6;
+  --spk-acc-finance: #16a34a;
+  --spk-acc-github: #8b5cf6;
+  --spk-acc-npm: #cb3837;
+  /* 图表补充色（第 6-8 个系列）：白底 ≥4.5:1，别再用 #14b8a6 / #e879f9 这类浅到 2:1 的色 */
+  --spk-chart-alt-1: #0f766e;
+  --spk-chart-alt-2: #a21caf;
+  --spk-chart-alt-3: #64748b;
+  /* 模块 accent 的文字态（白底/灰底 ≥4.5:1，供图标 / 胶囊 / 实底芯片） */
+  --spk-acc-spark-fg: #92400e;
+  --spk-acc-hippomemo-fg: #1d4ed8;
+  --spk-acc-finance-fg: #166534;
+  --spk-acc-github-fg: #5b21b6;
+  --spk-acc-npm-fg: #991b1b;
+  /* 实底 accent / 品牌 / 危险色上的文字：统一取「饱和实底上的标签色」 */
+  --spk-on-accent: var(--spk-contrast-fill-label);
 }

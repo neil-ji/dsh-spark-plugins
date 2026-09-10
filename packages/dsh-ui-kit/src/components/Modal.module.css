@@ -8,7 +8,7 @@
 .modal {
   position: relative;
   width: min(440px, calc(100vw - 40px));
-  background: var(--spk-platform-solid);
+  background: var(--spk-surface-float);
   border: 1px solid var(--spk-border);
   border-radius: 20px;
   box-shadow: var(--spk-shadow-float);
@@ -35,8 +35,8 @@
   cursor: pointer;
 }
 .close:hover { background: var(--spk-hover); color: var(--spk-label); }
-.close:focus-visible { outline: 2px solid var(--spk-brand); outline-offset: 2px; }
+.close:focus-visible { outline: 2px solid var(--spk-focus-ring); outline-offset: 2px; }
 
 .body { padding: 10px 16px 2px; font: 400 var(--spk-text-md, 13px) / 1.6 var(--spk-font); color: var(--spk-label-2); }
-.body :strong { color: var(--spk-brand); font-weight: 600; }
+.body :strong { color: var(--spk-brand-fg); font-weight: 600; }
 .foot { display: flex; justify-content: flex-end; gap: 8px; padding: 16px; }

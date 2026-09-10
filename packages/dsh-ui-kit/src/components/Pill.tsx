@@ -6,7 +6,8 @@ export type PillTone = 'neutral' | 'brand' | 'success' | 'warn' | 'error'
 
 export interface PillProps {
   tone?: PillTone
-  /** 直接指定模块 accent 色（如 var(--spk-acc-github)），优先级高于 tone */
+  /** 模块 accent 色的**文字态**（如 var(--spk-acc-github-fg)），优先级高于 tone。
+   *  传实色档（var(--spk-acc-github)）会在亮色主题的白底上掉到 1.9-4.4:1。 */
   accentColor?: string
   /** 提供 onClick 时渲染为可点按钮（过滤/切换 chip） */
   onClick?: () => void

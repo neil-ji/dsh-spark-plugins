@@ -19,7 +19,7 @@
   transition: background var(--spk-dur-fast) var(--spk-ease-out);
 }
 .row:hover { background: var(--spk-hover); }
-.row:focus-visible { outline: 2px solid var(--spk-brand); outline-offset: -2px; }
+.row:focus-visible { outline: 2px solid var(--spk-focus-ring); outline-offset: -2px; }
 
 .main { display: block; min-width: 0; }
 .title {
@@ -38,7 +38,9 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.archived .title { text-decoration: line-through; opacity: 0.55; }
+/* 归档态：删除线 + 降级到 label-3，而不是 opacity —— opacity 会把
+   label 已经达标的对比度再打折（0.55 × label ≈ 3:1 以下）。 */
+.archived .title { text-decoration: line-through; color: var(--spk-label-3); font-weight: 500; }
 
 .trailing {
   display: flex;

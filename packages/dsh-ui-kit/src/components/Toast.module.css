@@ -13,7 +13,7 @@
   align-items: flex-start;
   gap: 8px;
   padding: 10px 14px;
-  background: var(--spk-platform-solid);
+  background: var(--spk-surface-float);
   border: 1px solid var(--spk-border);
   border-left: 3px solid var(--toast-acc, var(--spk-brand));
   border-radius: 12px;
