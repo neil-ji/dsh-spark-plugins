@@ -76,10 +76,17 @@ try {
     if (message.id && pending.has(message.id)) { pending.get(message.id)(message); pending.delete(message.id); return }
     if (message.method === 'Runtime.consoleAPICalled') {
       const text = (message.params.args ?? []).map((a) => a.value ?? a.description ?? a.type).join(' ')
-      console_.push(message.params.type + ': ' + text)
+      // 浏览器自带扩展（chrome-extension:// 里的报错）与我们无关，不进诊断面，
+      // 否则「控制台 0 条」这个信号会被噪声污染。
+      if (!text.includes('chrome-extension://') && !text.includes('moz-extension://')) {
+        console_.push(message.params.type + ': ' + text)
+      }
     }
     if (message.method === 'Runtime.exceptionThrown') {
-      console_.push('exception: ' + (message.params.exceptionDetails?.exception?.description ?? message.params.exceptionDetails?.text))
+      const detail = String(message.params.exceptionDetails?.exception?.description ?? message.params.exceptionDetails?.text ?? '')
+      if (!detail.includes('chrome-extension://') && !detail.includes('moz-extension://')) {
+        console_.push('exception: ' + detail)
+      }
     }
   }
   void rawSend
@@ -174,6 +181,10 @@ try {
       const memoryText = await evalJs(`(document.querySelector('.dock-body')?.textContent ?? '').replace(/\\s+/g, ' ').slice(0, 600)`)
       // 旁白/最近活动里的标题会被截断成「真宿主记忆验收 mtvi…」，所以断言前缀。
       check('记忆列表出现新条目（hippomemo stream 送达）', String(memoryText).includes('真宿主记忆验收'), String(memoryText).slice(0, 260))
+      // 上面那条文字断言会被「旁白/最近活动」里的同一标题**误判为通过**，所以再加一条
+      // 只认事件通道本身的硬断言：客户端不得报通道不可用（否则订阅根本没建立）。
+      const channelWarnings = console_.filter((line) => /事件通道不可用|mount 失败|already mounted|missed the module table/.test(line))
+      check('hippomemo 事件通道无告警（订阅真的建立了）', channelWarnings.length === 0, JSON.stringify(channelWarnings.slice(0, 2)))
     }
 
     // 4) 诊断：控制台里与事件通道/remote 相关的线索

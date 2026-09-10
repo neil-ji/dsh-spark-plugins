@@ -17,12 +17,20 @@ import { hippomemoChannelOf, setHippomemoEventChannel } from './api.ts'
  * @param ctx - client 根上下文（需 `remote` 与 `reflect`）。
  */
 export async function startHippomemoEvents(ctx: ClientContext): Promise<void> {
+  let mountError: unknown = null
   try {
     await ctx.remote.$mount(HIPPOMEMO_REMOTE_CONTRIBUTION)
-    const channel = hippomemoChannelOf(ctx.remote, ctx.reflect)
-    setHippomemoEventChannel(channel)
-    if (channel === null) console.warn('[dsh-hippomemo] 未取到 remote.hippomemo 命名空间，实时刷新将不可用')
   } catch (error) {
-    console.warn('[dsh-hippomemo] 事件流描述符 mount 失败，实时刷新将不可用：', error)
+    // 同一个 contribution 可能被两个 bundle 各挂一次（本包 client 半边 + dock 的 embed 各自
+    // 调用本函数），平台对「已挂载」是**抛错**而不是幂等：`client api: direct method
+    // hippomemo/events is already mounted`（真宿主实测）。那不是失败 —— 命名空间已经在了，
+    // 继续走 reflect 取通道即可；此前这里直接进 catch，导致**没有挂上的那一侧的订阅者拿不到
+    // 通道**，记忆面板静默失去实时刷新。
+    mountError = error
+  }
+  const channel = hippomemoChannelOf(ctx.remote, ctx.reflect)
+  setHippomemoEventChannel(channel)
+  if (channel === null) {
+    console.warn('[dsh-hippomemo] 未取到 remote.hippomemo 命名空间，实时刷新将不可用', mountError ?? '')
   }
 }
