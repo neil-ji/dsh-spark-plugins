@@ -129,7 +129,7 @@
   width: 100%;
   font: inherit;
   color: var(--dsw-alias-label-primary);
-  background: var(--dsw-alias-bg-layer-1);
+  background: var(--dsw-alias-bg-layer-2);
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
   padding: 6px 10px;
@@ -140,7 +140,7 @@
 
 .input:focus-visible,
 .textarea:focus-visible {
-  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline: 2px solid var(--dsw-alias-brand-foreground, #2f46c8);
   outline-offset: 1px;
 }
 
@@ -285,7 +285,7 @@
 
 .discard:focus-visible,
 .save:focus-visible {
-  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline: 2px solid var(--dsw-alias-brand-foreground, #2f46c8);
   outline-offset: 1px;
 }
 
@@ -356,7 +356,7 @@
   line-height: 1.5;
 }
 .syncLink:hover {
-  color: var(--dsw-alias-brand-primary);
+  color: var(--dsw-alias-brand-foreground, #2f46c8);
   text-decoration: underline;
 }
 .syncError {

@@ -11,7 +11,7 @@ export const DOCK_CSS = [
    * 球身 = 平台底色 + 火花暖色径向渐变；玻璃高光 = inset 顶部亮线 + backdrop blur；
    * 品牌光晕 = ::before 径向 halo（呼吸）+ ::after hover 光环（preview 版回归）。
    * mood 染光：--ball-glow 随 Fairy 情绪换色（alert→warn），全部 transform/opacity 动画。 */
-  '[data-plugin="dsh-spark-dock"] .dock-ball { --ball-glow: var(--acc-spark, #f59e0b); position: fixed; width: var(--dock-ball, 48px); height: var(--dock-ball, 48px); border-radius: 50%; display: grid; place-items: center; z-index: 9000; background: radial-gradient(118% 118% at 30% 20%, color-mix(in srgb, var(--ball-glow) 24%, var(--dsw-alias-bg-module-platform)) 0%, var(--dsw-alias-bg-module-platform) 62%); border: 1px solid color-mix(in srgb, var(--ball-glow) 34%, var(--dsw-alias-border-l1)); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); box-shadow: 0 8px 24px rgba(10,18,38,.32), 0 0 18px color-mix(in srgb, var(--ball-glow) 20%, transparent), inset 0 1px 0 rgba(255,255,255,.14), inset 0 0 0 1px rgba(255,255,255,.05); color: var(--dsw-alias-label-primary, #fff); cursor: pointer; touch-action: none; transition: transform 200ms cubic-bezier(.34,1.56,.64,1), box-shadow 240ms ease, border-color 240ms ease; }',
+  '[data-plugin="dsh-spark-dock"] .dock-ball { --ball-glow: var(--spk-acc-spark, #d97706); position: fixed; width: var(--dock-ball, 48px); height: var(--dock-ball, 48px); border-radius: 50%; display: grid; place-items: center; z-index: 9000; background: radial-gradient(118% 118% at 30% 20%, color-mix(in srgb, var(--ball-glow) 24%, var(--dsw-alias-bg-module-platform)) 0%, var(--dsw-alias-bg-module-platform) 62%); border: 1px solid color-mix(in srgb, var(--ball-glow) 34%, var(--dsw-alias-border-l1)); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); box-shadow: 0 8px 24px rgba(10,18,38,.32), 0 0 18px color-mix(in srgb, var(--ball-glow) 20%, transparent), inset 0 1px 0 rgba(255,255,255,.14), inset 0 0 0 1px rgba(255,255,255,.05); color: var(--dsw-alias-label-primary, #fff); cursor: pointer; touch-action: none; transition: transform 200ms cubic-bezier(.34,1.56,.64,1), box-shadow 240ms ease, border-color 240ms ease; }',
   '[data-plugin="dsh-spark-dock"] .dock-ball::before { content: ""; position: absolute; inset: -8px; border-radius: 50%; pointer-events: none; background: radial-gradient(closest-side, color-mix(in srgb, var(--ball-glow) 32%, transparent), transparent 74%); opacity: .45; animation: dock-ball-halo 4.6s ease-in-out infinite; }',
   '[data-plugin="dsh-spark-dock"] .dock-ball::after { content: ""; position: absolute; inset: -5px; border-radius: 50%; pointer-events: none; border: 1px solid var(--ball-glow); opacity: 0; transform: scale(.85); transition: opacity 200ms ease-out, transform 200ms ease-out; }',
   '[data-plugin="dsh-spark-dock"] .dock-ball:hover { transform: scale(1.06); }',
@@ -23,23 +23,25 @@ export const DOCK_CSS = [
   '[data-plugin="dsh-spark-dock"] .dock-ball[aria-expanded="true"]::before { opacity: .7; animation-play-state: paused; }',
   /* mood 染光：换 --ball-glow 即可同时驱动渐变/边框/halo/投影 */
   '[data-plugin="dsh-spark-dock"] .dock-ball.mood-alert { --ball-glow: var(--dsw-alias-state-warn-primary, #f59e0b); }',
-  '[data-plugin="dsh-spark-dock"] .dock-ball.mood-sad { --ball-glow: color-mix(in srgb, var(--dsw-alias-label-tertiary, #8a93a6) 70%, var(--acc-spark, #f59e0b)); }',
+  '[data-plugin="dsh-spark-dock"] .dock-ball.mood-sad { --ball-glow: color-mix(in srgb, var(--dsw-alias-label-tertiary, #8a93a6) 70%, var(--spk-acc-spark, #d97706)); }',
   '[data-plugin="dsh-spark-dock"] .dock-ball svg { width: 24px; height: 24px; overflow: visible; filter: drop-shadow(0 1px 2px rgba(10,18,38,.35)); }',
   '[data-plugin="dsh-spark-dock"] .dock-ball:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 3px; }',
   '@keyframes dock-ball-halo { 0%,100% { opacity: .45; transform: scale(1); } 50% { opacity: .75; transform: scale(1.06); } }',
   '@media (prefers-reduced-motion: reduce) { [data-plugin="dsh-spark-dock"] .dock-ball, [data-plugin="dsh-spark-dock"] .dock-ball::before { animation: none; } [data-plugin="dsh-spark-dock"] .fairy-face, [data-plugin="dsh-spark-dock"] .fairy-face .ahoge { animation: none; } }',
-  '[data-plugin="dsh-spark-dock"] .dock-badge { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; border-radius: 9px; padding: 0 5px; background: var(--dsw-alias-state-error-primary); color: #fff; font: 700 11px/18px var(--dsw-font-family, inherit); text-align: center; box-shadow: 0 0 0 2px var(--dsw-alias-bg-module-platform); }',
+  '[data-plugin="dsh-spark-dock"] .dock-badge { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; border-radius: 9px; padding: 0 5px; background: var(--dsw-alias-state-error-primary); color: var(--dsw-alias-label-primary-foreground, #fff); font: 700 11px/18px var(--dsw-font-family, inherit); text-align: center; box-shadow: 0 0 0 2px var(--dsw-alias-bg-module-platform); }',
 
   /* 面板 —— 结构：flex row = 左 rail(56px) + 右主列 */
   '[data-plugin="dsh-spark-dock"] .dock-panel { position: fixed; z-index: 9100; width: var(--dock-panel-w, 616px); max-width: calc(100vw - 32px); height: var(--dock-panel-h, 680px); max-height: calc(100vh - 32px); display: flex; flex-direction: row; background: var(--dsw-alias-bg-module-platform); border: 1px solid var(--dsw-alias-border-l1); border-radius: 20px; box-shadow: var(--dsw-shadow-lv3, 0 16px 48px rgba(10,18,38,.28)); overflow: hidden; color: var(--dsw-alias-label-primary, #fff); opacity: 0; transform: scale(.94); pointer-events: none; transition: transform 220ms cubic-bezier(.34,1.56,.64,1), opacity 220ms ease; }',
   '[data-plugin="dsh-spark-dock"] .dock-panel.open { opacity: 1; transform: scale(1); pointer-events: auto; }',
 
-  /* 左侧图标模块栏（activity rail） */
-  '[data-plugin="dsh-spark-dock"] .dock-rail { width: 56px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 0; background: var(--dsw-alias-bg-layer-2); border-right: 1px solid var(--dsw-alias-border-l1); }',
+  /* 左侧图标模块栏（activity rail）——用抬起面而非 layer-2：
+     layer-2 是「凹陷/轨道」色，亮色下与面板 platform 几乎同色，且模块 accent 文字压上去只有 1.9-3.7:1。 */
+  '[data-plugin="dsh-spark-dock"] .dock-rail { width: 56px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 0; background: var(--dsw-alias-surface-l1); border-right: 1px solid var(--dsw-alias-border-l1); }',
   '[data-plugin="dsh-spark-dock"] .dock-tab { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; position: relative; border: none; background: transparent; color: var(--dsw-alias-label-tertiary); cursor: pointer; transition: background 160ms ease, color 160ms ease; }',
   '[data-plugin="dsh-spark-dock"] .dock-tab svg { width: 19px; height: 19px; }',
   '[data-plugin="dsh-spark-dock"] .dock-tab:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }',
-  '[data-plugin="dsh-spark-dock"] .dock-tab.active { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }',
+  /* 激活项：文字/图标走 accent 的文字态档，指示条走实色档 */
+  '[data-plugin="dsh-spark-dock"] .dock-tab.active { color: var(--accent-fg, var(--dsw-alias-brand-foreground)); background: color-mix(in srgb, var(--accent-fg, var(--dsw-alias-brand-foreground)) 12%, transparent); }',
   '[data-plugin="dsh-spark-dock"] .dock-tab.active::before { content: ""; position: absolute; left: -8px; top: 50%; transform: translateY(-50%); width: 3px; height: 20px; border-radius: 0 3px 3px 0; background: var(--accent); }',
   '[data-plugin="dsh-spark-dock"] .dock-tab:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 2px; }',
 
@@ -60,21 +62,21 @@ export const DOCK_CSS = [
 
   /* 通用内容件（卡片/行/pill/按钮/表单） */
   '[data-plugin="dsh-spark-dock"] .dock-stack { display: flex; flex-direction: column; gap: 10px; }',
-  /* 卡片 surface 火花基线：radius 12 / padding 12 14 / layer-2（与 ui-kit Card 同规） */
-  '[data-plugin="dsh-spark-dock"] .dock-card { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 12px; padding: 12px 14px; }',
+  /* 卡片 surface 火花基线：radius 12 / padding 12 14 / 抬起面（与 ui-kit Card 同规） */
+  '[data-plugin="dsh-spark-dock"] .dock-card { background: var(--dsw-alias-surface-l1); border: 1px solid var(--dsw-alias-border-l1); border-radius: 12px; padding: 12px 14px; }',
   '[data-plugin="dsh-spark-dock"] .dock-card.list { padding: 4px; }',
   '[data-plugin="dsh-spark-dock"] .dock-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; }',
   '[data-plugin="dsh-spark-dock"] .dock-row:hover { background: var(--dsw-alias-interactive-bg-hover); }',
   '[data-plugin="dsh-spark-dock"] .dock-row .grow { flex: 1; min-width: 0; }',
   '[data-plugin="dsh-spark-dock"] .dock-row .ttl { font-size: 13px; font-weight: 600; color: var(--dsw-alias-label-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }',
   '[data-plugin="dsh-spark-dock"] .dock-row .meta { font-size: 11px; color: var(--dsw-alias-label-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }',
-  '[data-plugin="dsh-spark-dock"] .dock-row.off .ttl { text-decoration: line-through; opacity: .55; }',
+  '[data-plugin="dsh-spark-dock"] .dock-row.off .ttl { text-decoration: line-through; color: var(--dsw-alias-label-tertiary); }',
   '[data-plugin="dsh-spark-dock"] .cryst { color: var(--dsw-alias-state-success-primary); font-weight: 600; }',
   '[data-plugin="dsh-spark-dock"] .dock-pill { position: relative; display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 3px 9px; border-radius: 999px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); cursor: pointer; }',
   /* 热区扩容：pill 视觉小，命中区向外扩 4px（≥ 触控下限的兜底） */
   '[data-plugin="dsh-spark-dock"] .dock-pill::before { content: ""; position: absolute; inset: -4px; border-radius: 999px; }',
   '[data-plugin="dsh-spark-dock"] .dock-pill:disabled { opacity: .55; cursor: default; }',
-  '[data-plugin="dsh-spark-dock"] .dock-pill.on { background: var(--accent, var(--dsw-alias-brand-primary)); border-color: transparent; color: var(--dsw-alias-label-primary-foreground, #fff); }',
+  '[data-plugin="dsh-spark-dock"] .dock-pill.on { background: var(--accent-fg, var(--dsw-alias-brand-foreground)); border-color: transparent; color: var(--dsw-alias-label-primary-foreground, #fff); }',
   '[data-plugin="dsh-spark-dock"] .dock-modbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }',
   '[data-plugin="dsh-spark-dock"] .dock-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px; border-radius: 16px; border: none; background: var(--dsw-alias-button-primary-fill, var(--dsw-alias-brand-primary)); color: var(--dsw-alias-label-primary-foreground, #fff); font: 600 13px/1 var(--dsw-font-family, inherit); cursor: pointer; }',
   '[data-plugin="dsh-spark-dock"] .dock-btn:hover { filter: brightness(1.08); }',
@@ -136,7 +138,7 @@ export const DOCK_CSS = [
   '[data-plugin="dsh-spark-dock"] .dock-narr { display: flex; gap: 8px; margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--dsw-alias-border-l1); font-size: 11px; color: var(--dsw-alias-label-secondary); }',
   '[data-plugin="dsh-spark-dock"] .dock-narr .lab { flex: none; color: var(--dsw-alias-label-tertiary); }',
   '[data-plugin="dsh-spark-dock"] .dock-pill.mini { padding: 1px 7px; font-size: 10px; cursor: default; }',
-  '[data-plugin="dsh-spark-dock"] .dock-pill.mini.accent { background: color-mix(in srgb, var(--accent) 16%, transparent); border-color: transparent; color: var(--accent); }',
+  '[data-plugin="dsh-spark-dock"] .dock-pill.mini.accent { background: color-mix(in srgb, var(--accent-fg, var(--dsw-alias-brand-foreground)) 14%, transparent); border-color: transparent; color: var(--accent-fg, var(--dsw-alias-brand-foreground)); }',
   '[data-plugin="dsh-spark-dock"] .dock-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 14px 16px; font-size: 14px; line-height: 1.5; }',
   '[data-plugin="dsh-spark-dock"] .dock-empty { padding: 28px 12px; text-align: center; color: var(--dsw-alias-label-tertiary); }',
   '[data-plugin="dsh-spark-dock"] .dock-empty .empty-ico { width: 26px; height: 26px; opacity: .55; margin-bottom: 6px; }',
@@ -183,7 +185,7 @@ export const DOCK_CSS = [
   /* 提议卡：类型徽章 + 正文 + 置信条 + 决策操作 */
   '[data-plugin="dsh-spark-dock"] .dock-prop { display: flex; flex-direction: column; gap: 7px; }',
   '[data-plugin="dsh-spark-dock"] .dock-prop-head { display: flex; align-items: center; gap: 8px; }',
-  '[data-plugin="dsh-spark-dock"] .dock-prop-type { font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 2px 8px; border-radius: 6px; background: color-mix(in srgb, var(--accent, var(--dsw-alias-brand-primary)) 15%, transparent); color: var(--accent, var(--dsw-alias-brand-primary)); }',
+  '[data-plugin="dsh-spark-dock"] .dock-prop-type { font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 2px 8px; border-radius: 6px; background: color-mix(in srgb, var(--accent-fg, var(--dsw-alias-brand-foreground)) 14%, transparent); color: var(--accent-fg, var(--dsw-alias-brand-foreground)); }',
   '[data-plugin="dsh-spark-dock"] .dock-prop-text { font-size: 13px; line-height: 1.5; color: var(--dsw-alias-label-primary); }',
   '[data-plugin="dsh-spark-dock"] .dock-prop-actions { display: flex; gap: 6px; margin-top: 2px; }',
   '[data-plugin="dsh-spark-dock"] .dock-prop-actions .dock-btn { height: 28px; padding: 0 14px; font-size: 12px; }',

@@ -38,10 +38,10 @@ export function FairyFace({ mood }: { mood: FairyMood | null }): JSX.Element {
   return (
     <svg viewBox="0 0 48 48" className={'fairy-face' + (mood !== null ? ' mood-' + mood : '')} aria-hidden="true">
       {/* 呆毛：品牌 4 芒火花 */}
-      <path className="ahoge" d="M24 0.8c.4 2.7 2.2 4.5 4.9 4.9-2.7.4-4.5 2.2-4.9 4.9-.4-2.7-2.2-4.5-4.9-4.9 2.7-.4 4.5-2.2 4.9-4.9z" fill="var(--acc-spark, #f59e0b)" />
+      <path className="ahoge" d="M24 0.8c.4 2.7 2.2 4.5 4.9 4.9-2.7.4-4.5 2.2-4.9 4.9-.4-2.7-2.2-4.5-4.9-4.9 2.7-.4 4.5-2.2 4.9-4.9z" style={{ fill: 'var(--spk-acc-spark, #d97706)' }} />
       {/* 腮红 */}
-      <ellipse className="blush" cx="11" cy="28.5" rx="3.4" ry="1.9" fill="var(--acc-spark, #f59e0b)" />
-      <ellipse className="blush" cx="37" cy="28.5" rx="3.4" ry="1.9" fill="var(--acc-spark, #f59e0b)" />
+      <ellipse className="blush" cx="11" cy="28.5" rx="3.4" ry="1.9" style={{ fill: 'var(--spk-acc-spark, #d97706)' }} />
+      <ellipse className="blush" cx="37" cy="28.5" rx="3.4" ry="1.9" style={{ fill: 'var(--spk-acc-spark, #d97706)' }} />
       {/* 眼睛：普通 / 开心弧 */}
       <g className="eyes-normal">
         <ellipse cx="16.5" cy="23" rx="2.8" ry="4.3" fill="currentColor" />
@@ -56,7 +56,7 @@ export function FairyFace({ mood }: { mood: FairyMood | null }): JSX.Element {
       <ellipse className="mouth-open" cx="24" cy="31.8" rx="2.7" ry="3.3" fill="currentColor" />
       <path className="mouth-frown" d="M19.8 33.4 Q24 29.8 28.2 33.4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
       {/* 思考泡 */}
-      <g className="acc-think" fill="var(--acc-spark, #f59e0b)">
+      <g className="acc-think" style={{ fill: 'var(--spk-acc-spark, #d97706)' }}>
         <circle cx="37" cy="14" r="1.7" /><circle cx="41" cy="9.5" r="2.3" /><circle cx="45" cy="4.5" r="1.4" />
       </g>
     </svg>

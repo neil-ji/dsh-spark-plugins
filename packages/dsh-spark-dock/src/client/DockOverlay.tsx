@@ -260,6 +260,7 @@ export function DockOverlay(): JSX.Element {
         aria-label="Spark Dock"
         style={{
           '--accent': activeModule.accent,
+          '--accent-fg': activeModule.accentFg,
           // 面板宽度固定，切换模块不改变尺寸（内容区自适应）
           '--dock-panel-w': '616px',
         } as React.CSSProperties}
@@ -276,7 +277,7 @@ export function DockOverlay(): JSX.Element {
               title={m.label}
               tabIndex={m.id === activeModule.id ? 0 : -1}
               className={m.id === activeModule.id ? 'dock-tab active' : 'dock-tab'}
-              style={{ '--accent': m.accent } as React.CSSProperties}
+              style={{ '--accent': m.accent, '--accent-fg': m.accentFg } as React.CSSProperties}
               onClick={() => selectModule(m.id)}
             >
               {m.icon}

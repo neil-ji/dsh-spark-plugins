@@ -21,8 +21,10 @@ export interface DockModule {
   label: string
   name: string
   sub: string
-  /** 模块强调色（css color 值），驱动 tab 激活态与面板内 pill。 */
+  /** 模块强调色实色档（css color 值）：驱动指示条 / 计量条 / 图表等图形对象。 */
   accent: string
+  /** 模块强调色的文字态档：驱动图标 / 胶囊文字 / 实底芯片，保证 AA 对比度。 */
+  accentFg: string
   icon: ReactNode
   panes: DockPane[]
 }
@@ -60,19 +62,19 @@ export const DOCK_MODULES: DockModule[] = [
   {
     id: 'spark', label: '火花', name: '火花流 Sparks',
     sub: '手动捕获 · 结晶 · 涌现提议 · 脚本目录 · Graph',
-    accent: 'var(--acc-spark, #f59e0b)', icon: <SparkIcon />,
+    accent: 'var(--spk-acc-spark, #d97706)', accentFg: 'var(--spk-acc-spark-fg, #92400e)', icon: <SparkIcon />,
     panes: sparkPanes,
   },
   {
     id: 'hippomemo', label: '记忆', name: '记忆 HippoMemo',
     sub: '四脑区总览 · 记忆 CRUD · 我的偏好 · 进化引擎',
-    accent: 'var(--acc-hippomemo, #3b82f6)', icon: <HippoIcon />,
+    accent: 'var(--spk-acc-hippomemo, #3b82f6)', accentFg: 'var(--spk-acc-hippomemo-fg, #1d4ed8)', icon: <HippoIcon />,
     panes: hippoPanes,
   },
   {
     id: 'finance', label: '成本', name: '财务审计 Finance',
     sub: '余额 · Token 用量与成本总览',
-    accent: 'var(--acc-finance, #22c55e)', icon: <FinanceIcon />,
+    accent: 'var(--spk-acc-finance, #16a34a)', accentFg: 'var(--spk-acc-finance-fg, #166534)', icon: <FinanceIcon />,
     // finance：全功能内嵌 FinanceCard，自带 4 页签（总览/连接/供应商/高级）
     // + 吸底保存行，无需 dock 子页。
     panes: [{ id: 'main', label: '总览', render: () => <FinanceEmbedPane /> }],
@@ -80,13 +82,13 @@ export const DOCK_MODULES: DockModule[] = [
   {
     id: 'github', label: 'GitHub', name: 'GitHub 连接',
     sub: '令牌 · 操作权限 · Git 身份与代理',
-    accent: 'var(--acc-github, #8b5cf6)', icon: <GithubIcon />,
+    accent: 'var(--spk-acc-github, #8b5cf6)', accentFg: 'var(--spk-acc-github-fg, #5b21b6)', icon: <GithubIcon />,
     panes: [{ id: 'main', label: '连接', render: () => <GithubEmbedPane /> }],
   },
   {
     id: 'npm', label: 'npm', name: 'npm 发布',
     sub: '细粒度 Token · 注册表与套件包状态',
-    accent: 'var(--acc-npm, #cb3837)', icon: <NpmIcon />,
+    accent: 'var(--spk-acc-npm, #cb3837)', accentFg: 'var(--spk-acc-npm-fg, #991b1b)', icon: <NpmIcon />,
     panes: [{ id: 'main', label: '发布', render: () => <NpmEmbedPane /> }],
   },
 ]

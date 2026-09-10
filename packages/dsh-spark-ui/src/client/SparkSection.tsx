@@ -492,7 +492,7 @@ function ScriptsTab(props: ScriptsTabProps): ReactNode {
                         <li key={i} style={{ fontSize: 13, lineHeight: '20px', color: 'var(--dsw-alias-label-primary)', marginBottom: 4 }}>
                           <Pill>{step.kind === 'instruction' ? t('scriptStepInstruction') : t('scriptStepToolCall')}</Pill>{' '}
                           {step.payload}
-                          {step.note !== undefined ? <span style={{ opacity: 0.6 }}>  ({step.note})</span> : null}
+                          {step.note !== undefined ? <span style={{ color: 'var(--dsw-alias-label-tertiary)' }}>  ({step.note})</span> : null}
                         </li>
                       ))}
                     </ol>
@@ -535,7 +535,8 @@ function GraphTab(props: GraphTabProps): ReactNode {
           const toY = edge.kind === 'crystallized' ? 20 : b.y
           return (
             <line key={'e' + i} x1={a.x} y1={a.y} x2={toX} y2={toY}
-              stroke={edge.kind === 'crystallized' ? 'var(--dsw-alias-state-success-primary, var(--dsw-static-green-500))' : 'var(--dsw-alias-state-warn-primary, var(--dsw-static-deepseek-450))'}
+              /* 颜色走 style：SVG presentation attribute 里的 var() 解析不受保证 */
+              style={{ stroke: edge.kind === 'crystallized' ? 'var(--dsw-alias-state-success-primary, var(--dsw-static-green-500))' : 'var(--dsw-alias-state-warn-primary, var(--dsw-static-deepseek-450))' }}
               strokeWidth={edge.kind === 'crystallized' ? 2 : 1.5}
               strokeDasharray={isGhost ? '6 4' : ''}
               opacity={isGhost ? 0.55 : 0.85}
@@ -544,8 +545,9 @@ function GraphTab(props: GraphTabProps): ReactNode {
         })}
         {layout.nodes.map(node => (
           <g key={node.id} transform={`translate(${node.x}, ${node.y})`}>
-            <circle r={14} fill={node.spark.crystallized !== null ? 'var(--dsw-alias-state-success-primary, var(--dsw-static-green-500))' : 'var(--dsw-alias-brand-primary, var(--dsw-static-deepseek-450))'} stroke='var(--dsw-alias-bg-layer-0, #000)' strokeWidth={1.5} />
-            <text textAnchor='middle' dy={4} fontSize={10} fill='#fff' fontWeight={600}>
+            <circle r={14} style={{ fill: node.spark.crystallized !== null ? 'var(--dsw-alias-state-success-primary, var(--dsw-static-green-500))' : 'var(--dsw-alias-brand-primary, var(--dsw-static-deepseek-450))', stroke: 'var(--dsw-alias-bg-layer-0, #000)' }} strokeWidth={1.5} />
+            {/* 节点底色是饱和实底：字色必须跟着主题翻（亮色实底→白字，暗色亮蓝实底→深字） */}
+            <text textAnchor='middle' dy={4} fontSize={10} style={{ fill: 'var(--dsw-alias-label-primary-foreground, #fff)' }} fontWeight={600}>
               {(node.spark.title || '?').slice(0, 2).toUpperCase()}
             </text>
             <title>{node.spark.title}</title>

@@ -24,7 +24,7 @@
   padding: 12px 14px;
   border: 1px solid var(--dsw-alias-border-l1);
   border-radius: 12px;
-  background: var(--dsw-alias-bg-layer-2);
+  background: var(--dsw-alias-surface-l1);
 }
 
 .cardTitle {

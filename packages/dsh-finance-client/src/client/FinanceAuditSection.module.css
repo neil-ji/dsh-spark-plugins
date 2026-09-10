@@ -55,7 +55,6 @@
 
 .subtitle {
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
-  opacity: 0.72;
   font-size: 13px;
   line-height: 20px;
 }
@@ -100,8 +99,8 @@
   border: 1px solid var(--dsw-alias-border-l1);
   border-radius: 12px;
   background:
-    radial-gradient(140% 160% at 8% 0%, color-mix(in srgb, var(--acc-finance, #22c55e) 9%, transparent) 0%, transparent 55%),
-    var(--dsw-alias-bg-layer-1, var(--dsw-alias-bg-layer-2));
+    radial-gradient(140% 160% at 8% 0%, color-mix(in srgb, var(--spk-acc-finance, #16a34a) 9%, transparent) 0%, transparent 55%),
+    var(--dsw-alias-surface-l1, var(--dsw-alias-bg-layer-2));
 }
 
 .heroLabel {
@@ -223,24 +222,23 @@
   white-space: nowrap;
 }
 
-/* Source pill tints. The four sources the host distinguishes in
-   `FinanceListProvidersEntry.sources` get four stable hues so the user can
-   tell at a glance which providers came from where. */
+/* Source pill tints. 四个来源各自一个稳定色相 —— 一律走主题 token /
+   accent 的文字态档，写死 hex 会在暗色主题上变成深字压深底。 */
 .balanceRowSource[data-source='host-known'] {
-  background: var(--dsw-alias-feedback-info-bg, color-mix(in srgb, var(--dsw-static-deepseek-500, #4f6df5) 16%, transparent));
-  color: var(--dsw-alias-feedback-info-fg, var(--dsw-static-deepseek-700, #1e3a8a));
+  background: var(--dsw-alias-feedback-info-bg, color-mix(in srgb, var(--spk-info, #1c64b0) 16%, transparent));
+  color: var(--dsw-alias-feedback-info-fg, var(--spk-info, #1c64b0));
 }
 .balanceRowSource[data-source='user-config'] {
-  background: color-mix(in srgb, #a855f7 18%, transparent);
-  color: #6b21a8;
+  background: color-mix(in srgb, var(--spk-acc-github, #8b5cf6) 16%, transparent);
+  color: var(--spk-acc-github-fg, #5b21b6);
 }
 .balanceRowSource[data-source='ledger-observed'] {
-  background: color-mix(in srgb, #64748b 18%, transparent);
-  color: #334155;
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
 }
 .balanceRowSource[data-source='llm-runtime'] {
-  background: var(--dsw-alias-feedback-warning-bg, color-mix(in srgb, #f59e0b 18%, transparent));
-  color: var(--dsw-alias-feedback-warning-fg, #b45309);
+  background: var(--dsw-alias-feedback-warning-bg, color-mix(in srgb, var(--spk-warn, #9a3412) 18%, transparent));
+  color: var(--dsw-alias-feedback-warning-fg, var(--spk-warn, #9a3412));
 }
 
 /* Status dot — 6px colored circle that prefixes the row's status text. The
@@ -255,24 +253,24 @@
   background: var(--dsw-alias-label-tertiary, #94a3b8);
 }
 .balanceRowDot[data-status='ok'] {
-  background: #10b981; /* emerald-500 */
+  background: var(--dsw-alias-state-success-primary, #166534);
 }
 .balanceRowDot[data-status='missing-credential'] {
-  background: #f59e0b; /* amber-500 */
+  background: var(--dsw-alias-state-warn-primary, #9a3412);
 }
 .balanceRowDot[data-status='unsupported'] {
-  background: #94a3b8; /* slate-400 */
+  background: var(--dsw-alias-label-tertiary, #5f6a7d);
 }
 .balanceRowDot[data-status='error'] {
-  background: #ef4444; /* red-500 */
+  background: var(--dsw-alias-state-error-primary, #c62828);
 }
 
 /* Validity state colors — only the background tint shifts; the text keeps
-   the secondary tone so contrast is preserved in dark mode. */
+   the warning tone so contrast is preserved in dark mode. */
 .balanceRowValidity[data-state='remaining'],
 .balanceRowValidity[data-state='expired'] {
-  background: var(--dsw-alias-feedback-warning-bg, color-mix(in srgb, var(--dsw-static-warning-500, #f59e0b) 18%, transparent));
-  color: var(--dsw-alias-feedback-warning-fg, var(--dsw-static-warning-700, #b45309));
+  background: var(--dsw-alias-feedback-warning-bg, color-mix(in srgb, var(--spk-warn, #9a3412) 18%, transparent));
+  color: var(--dsw-alias-feedback-warning-fg, var(--spk-warn, #9a3412));
 }
 
 .balanceRowStat {
@@ -312,7 +310,6 @@
   font-size: 11px;
   line-height: 16px;
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
-  opacity: 0.8;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   overflow: hidden;
@@ -384,7 +381,8 @@
   overflow: auto;
   border: 1px solid var(--dsw-alias-border-l1);
   border-radius: 12px;
-  background: var(--dsw-alias-bg-layer-1, var(--dsw-alias-bg-layer-2));
+  /* 卡面用抬起面；斑马纹用凹陷面 layer-2 —— 之前两者都是 layer-1，条纹 1.00:1 完全看不见 */
+  background: var(--dsw-alias-surface-l1, var(--dsw-alias-bg-layer-2));
 }
 
 .byModelTable {
@@ -430,7 +428,7 @@
 }
 
 .byModelTable tbody tr:nth-child(odd) {
-  background: var(--dsw-alias-bg-layer-1, transparent);
+  background: var(--dsw-alias-bg-layer-2);
 }
 
 .byModelTable td {
@@ -452,13 +450,12 @@
 .byModelTableEmpty {
   text-align: center;
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
-  opacity: 0.86;
   padding: 24px 12px !important;
 }
 
 .byModelTableEmptyHint {
   font-size: 11px;
-  opacity: 0.72;
+  color: var(--dsw-alias-label-tertiary);
   margin-top: 2px;
   margin-bottom: 4px;
   max-width: 360px;
@@ -488,13 +485,12 @@
   min-height: var(--fin-kpi-min, 78px);
   border: 1px solid var(--dsw-alias-border-l1);
   border-radius: 12px;
-  background: var(--dsw-alias-bg-layer-1, var(--dsw-alias-bg-layer-2));
+  background: var(--dsw-alias-surface-l1, var(--dsw-alias-bg-layer-2));
   padding: var(--fin-kpi-pad, 12px 14px);
 }
 
 .kpiLabel {
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
-  opacity: 0.72;
   font-size: 12px;
   line-height: 18px;
 }
@@ -511,8 +507,7 @@
 }
 
 .kpiSub {
-  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
-  opacity: 0.6;
+  color: var(--dsw-alias-label-tertiary);
   font-size: 12px;
   line-height: 18px;
 }
@@ -535,7 +530,7 @@
   gap: 10px;
   border: 1px solid var(--dsw-alias-border-l1);
   border-radius: 12px;
-  background: var(--dsw-alias-bg-layer-2);
+  background: var(--dsw-alias-surface-l1, var(--dsw-alias-bg-layer-2));
   padding: var(--fin-card-pad, 12px 14px);
   min-width: 0;
 }
@@ -558,12 +553,10 @@
   font-size: 12px;
   line-height: 18px;
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
-  opacity: 0.72;
 }
 
 .empty {
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
-  opacity: 0.66;
   font-size: 12px;
   line-height: 18px;
   padding: 12px 0;
@@ -627,7 +620,7 @@
 }
 
 .statusDetail {
-  opacity: 0.68;
+  color: var(--dsw-alias-label-tertiary);
   font-size: 12px;
   line-height: 18px;
 }
@@ -715,7 +708,6 @@
   font-size: 12px;
   line-height: 18px;
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
-  opacity: 0.72;
 }
 
 /* viewBox is 640x220 (32:11) — the aspect-ratio keeps text and dots
@@ -810,7 +802,6 @@
 
 .prefsLabel {
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
-  opacity: 0.72;
   font-size: 11px;
   line-height: 16px;
   margin-right: 2px;
@@ -830,29 +821,30 @@
   color: var(--dsw-alias-label-primary);
 }
 
+/* 未选中态用 token 降一级，不用 opacity：opacity 会把已算好的对比度打对折。 */
 .seg {
   background: transparent;
-  opacity: 0.55;
+  color: var(--dsw-alias-label-tertiary);
 }
 
 .seg:hover {
   background: var(--dsw-alias-interactive-bg-hover);
-  opacity: 0.9;
+  color: var(--dsw-alias-label-primary);
 }
 
 .segOn {
-  background: var(--dsw-static-deepseek-500);
+  background: var(--dsw-alias-brand-primary);
   color: var(--dsw-alias-label-primary-foreground);
 }
 
 .chip {
   background: transparent;
   border-color: var(--dsw-alias-border-l2);
-  opacity: 0.55;
+  color: var(--dsw-alias-label-tertiary);
 }
 
 .chip:hover {
-  opacity: 0.9;
+  color: var(--dsw-alias-label-primary);
 }
 
 .chipOn {
@@ -863,9 +855,9 @@
 /* "Stale sync" banner above the dashboard — surfaces when the
    community price table has not been refreshed in over 24h. */
 .staleSyncHint {
-  color: var(--dsw-alias-feedback-warning-fg, var(--dsw-static-warning-700, #b45309));
-  background: var(--dsw-alias-feedback-warning-bg, color-mix(in srgb, var(--dsw-static-warning-500, #f59e0b) 14%, transparent));
-  border: 1px solid color-mix(in srgb, var(--dsw-static-warning-500, #f59e0b) 30%, transparent);
+  color: var(--dsw-alias-feedback-warning-fg, var(--spk-warn, #9a3412));
+  background: var(--dsw-alias-feedback-warning-bg, color-mix(in srgb, var(--spk-warn, #9a3412) 14%, transparent));
+  border: 1px solid color-mix(in srgb, var(--spk-warn, #9a3412) 30%, transparent);
   border-radius: 10px;
   padding: 8px 12px;
   font-size: 12px;
@@ -881,7 +873,6 @@
   font-size: 11px;
   line-height: 16px;
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
-  opacity: 0.8;
   padding-top: 8px;
   border-top: 1px solid var(--dsw-alias-border-l1);
 }
@@ -889,7 +880,6 @@
 .shiftSavingsTopLabel {
   color: var(--dsw-alias-label-primary);
   font-weight: 600;
-  opacity: 1;
 }
 
 

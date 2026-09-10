@@ -107,13 +107,6 @@ function pageItems(page: number, totalPages: number): PageItem[] {
   items.push(totalPages)
   return items
 }
-const BRAIN_REGION_TONE: Record<BrainRegion, string> = {
-  pfc: 'var(--dsw-static-blue-500, #2563EB)',
-  amy: 'var(--dsw-static-red-500, #DC2626)',
-  hippo: 'var(--dsw-static-violet-500, #7C3AED)',
-  cortex: 'var(--dsw-static-slate-500, #64748B)',
-}
-
 // ========== BrainStrip ==========
 function BrainStrip({ t, stats, usage, preferences, candidates, narrative, reloadKey }: {
   t: Translate; stats: MemoryStats | null; usage: MemoryUsageStats | null;

@@ -389,8 +389,10 @@ describe('FinanceAuditSection (commit 21: multi-provider)', () => {
     const list = providerList([okProvider('deepseek-official', 50_000_000)])
     const html = renderToStaticMarkup(createElement(FinanceAuditSection, readyProps(list, led)))
     expect(html).toContain('byProvider')
-    // Plan providers get a separate color in the donut（DonutChart 把颜色渲染成 SVG stroke 属性）。
-    expect(html).toContain('stroke="#a855f7"')
+    // Plan providers get a separate color in the donut. DonutChart 把颜色渲染成
+    // 内联 style 的 stroke（不是 SVG presentation attribute）——attribute 里的
+    // var() 解析不受保证，所以色值一律走 style 通道。
+    expect(html).toContain('style="stroke:#a855f7"')
   })
 
   it('shows the windowed-era effective date when windowedSinceMs is set', () => {
