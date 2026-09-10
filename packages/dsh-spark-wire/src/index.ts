@@ -1,7 +1,16 @@
 /**
  * Shared wire contract for the dsh-spark cognitive-layer plugin.
+ *
+ * 2026-09 事件层收敛（ADR-001/002）：**事件契约与 view 契约一样只在这里声明一次**。
+ * 宿主侧 cordis 事件（`sparks/changed` 等）经 `spark.events()` 这条 typert stream
+ * 方法下发，每个产出项按 `sparkStreamFrameSchema` 校验；客户端订阅的类型来自
+ * 下面的 `TypertRemoteNamespaceMap` 增强 —— host 的 emit 与 client 的订阅引用
+ * 同一份声明，不可能漂移（此前 host 的事件 union 在 `dsh-spark/src/types.ts` 里
+ * 明写 "never cross the wire"，却正是 SSE 的载荷格式，客户端只能手抄一遍）。
  */
 import { z } from 'zod'
+import type { InvocationDescriptor, TypertRemoteContribution } from '@deepseek-ai/dsh-typert-protocol'
+import type { TypertContribution } from '@deepseek-ai/dsh-typert-registry/types'
 
 export const sparkScopeSchema = z.enum(['session', 'project', 'global'])
 export const sparkStatusSchema = z.enum(['active', 'archived'])
@@ -191,4 +200,103 @@ export function okResult<T>(value: T): SparkResult<T> {
 
 export function errResult(code: string, message: string): SparkResult<never> {
   return { ok: false, error: { code, message } }
+}
+
+/* ────────────────────────── 事件契约（唯一声明处） ────────────────────────── */
+
+/** `sparks/changed` 的载荷：宿主每次火花变更后 emit。 */
+export const sparkChangedEventSchema = z.object({
+  operation: z.enum(['capture', 'patch', 'archive', 'delete', 'crystallize']),
+  id: sparkIdSchema,
+  record: sparkViewSchema.nullable(),
+  at: z.number().int().nonnegative(),
+})
+
+/** `proposals/changed` 的载荷。 */
+export const proposalsChangedEventSchema = z.object({
+  at: z.number().int().nonnegative(),
+  newProposals: z.array(proposalViewSchema),
+  resolvedProposal: proposalViewSchema.nullable(),
+})
+
+/** `scripts/changed` 的载荷。 */
+export const scriptsChangedEventSchema = z.object({
+  at: z.number().int().nonnegative(),
+  operation: z.enum(['create', 'invoke', 'delete', 'result']),
+})
+
+/**
+ * 一帧流数据（`spark.events()` 的产出项）。
+ *
+ * `ready` 是每个物理世代的**基线帧**：客户端收到它意味着「从现在起的事件不会丢」，
+ * 因此必须在此刻重新拉取一次状态（世代之间的空白窗口不回放）——这与平台
+ * `RemoteStreamItem.accept()` 的基线语义一致（参考第一方 `workspaceFiles/changes`）。
+ */
+export const sparkReadyFrameSchema = z.object({
+  kind: z.literal('ready'),
+  at: z.number().int().nonnegative(),
+})
+
+export const sparkStreamFrameSchema = z.discriminatedUnion('kind', [
+  sparkReadyFrameSchema,
+  z.object({ kind: z.literal('spark'), payload: sparkChangedEventSchema }),
+  z.object({ kind: z.literal('proposal'), payload: proposalsChangedEventSchema }),
+  z.object({ kind: z.literal('script'), payload: scriptsChangedEventSchema }),
+])
+
+export type SparkChangedEvent = z.infer<typeof sparkChangedEventSchema>
+export type ProposalsChangedEvent = z.infer<typeof proposalsChangedEventSchema>
+export type ScriptsChangedEvent = z.infer<typeof scriptsChangedEventSchema>
+export type SparkStreamFrame = z.infer<typeof sparkStreamFrameSchema>
+/** 变更帧的 kind（= 事件主题），供订阅侧按主题路由。 */
+export type SparkTopic = Exclude<SparkStreamFrame['kind'], 'ready'>
+
+declare module '@deepseek-ai/dsh-typert-protocol' {
+  interface TypertRemoteMap {
+    /** 一条流下发全部 spark 领域事件（readiness 基线 + 变更帧），signal 由传输注入。 */
+    'spark/events': (signal?: AbortSignal) => AsyncIterable<SparkStreamFrame>
+  }
+  interface TypertRemoteNamespaceMap {
+    spark: {
+      events: (signal?: AbortSignal) => AsyncIterable<SparkStreamFrame>
+    }
+  }
+}
+
+/** 事件流方法描述符：`mode: 'stream'` + 取消参数 + 逐项 codec（每个产出项都校验）。 */
+export const SPARK_INVOCATIONS: readonly InvocationDescriptor[] = [
+  {
+    id: 'dsh-spark#spark/events',
+    service: 'sparkEvents',
+    namespace: 'spark',
+    method: 'events',
+    mode: 'stream',
+    invocation: { kind: 'direct' },
+    parameters: [],
+    // signal 不进 wire 参数，由传输层在业务参数之后注入（见 typert InvocationDescriptor.cancellation）。
+    cancellation: { parameter: 'signal' },
+    result: { mode: 'strict', typeSymbol: 'dsh-spark#SparkStreamFrame', schema: sparkStreamFrameSchema },
+  },
+]
+
+/** 宿主侧贡献：`ctx.typert.register(SPARK_HOST_CONTRIBUTION)`。 */
+export const SPARK_HOST_CONTRIBUTION: TypertContribution = {
+  package: 'dsh-spark',
+  face: 'host',
+  schemas: [
+    { name: 'SparkView', schema: sparkViewSchema },
+    { name: 'ProposalView', schema: proposalViewSchema },
+    { name: 'SparkChangedEvent', schema: sparkChangedEventSchema },
+    { name: 'ProposalsChangedEvent', schema: proposalsChangedEventSchema },
+    { name: 'ScriptsChangedEvent', schema: scriptsChangedEventSchema },
+    { name: 'SparkStreamFrame', schema: sparkStreamFrameSchema },
+  ],
+  model: { services: [], events: [], objects: [] },
+  invocations: [...SPARK_INVOCATIONS],
+}
+
+/** 客户端侧贡献：`ctx.remote.$mount(SPARK_REMOTE_CONTRIBUTION)`。 */
+export const SPARK_REMOTE_CONTRIBUTION: TypertRemoteContribution = {
+  package: 'dsh-spark',
+  descriptors: [...SPARK_INVOCATIONS],
 }

@@ -2,13 +2,22 @@
  * 预览用的假宿主上下文：够真插件 client 半侧跑起来的**最小** cordis ctx 形状。
  *
  * 覆盖面来自 docs/LOCAL-DEV-HARNESS.md §1.6 实测：本仓库插件只消费
- * effect / locale.register|bind / remote.$mount|$on|credentials /
+ * effect / locale.register|bind / remote.$mount|$on|$stream|命名空间 /
  * reflect.get / settingsScope.bind。
  *
  * 全部内存态：不写 settings.yaml、不发任何请求、不碰 DSH_HOME。
  */
 import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
+import type { SparkStreamFrame } from 'dsh-spark-wire'
+import {
+  createSupervisedStream,
+  hippomemoEventsGeneration,
+  sparkEventsGeneration,
+  type HippomemoStreamFrame,
+  type StreamOptions,
+  type SupervisedStream,
+} from './streams.ts'
 
 export type Lang = 'zh' | 'en'
 export type Scenario = 'ok' | 'empty' | 'error'
@@ -109,6 +118,15 @@ export interface MockCtx {
   remote: {
     $mount: (contribution: unknown) => Promise<unknown>
     $on: (event: string, listener: () => void) => () => void
+    /** 平台 `$stream` 的预览替身（监督/重连语义同形，见 mock/streams.ts）。 */
+    $stream: <Item>(options: StreamOptions<Item>) => SupervisedStream<Item>
+    /** 事件流命名空间（产品契约：先 ready 基线帧，再变更帧）。 */
+    spark: {
+      events: (signal?: AbortSignal) => AsyncIterable<SparkStreamFrame>
+    }
+    hippomemo: {
+      events: (signal?: AbortSignal) => AsyncIterable<HippomemoStreamFrame>
+    }
     credentials: {
       describe: (refs: readonly string[]) => Promise<RemoteResult<Record<string, MockCredential>>>
       set: (ref: string, value: string) => Promise<RemoteResult<unknown>>
@@ -168,6 +186,13 @@ export function createMockCtx(options: MockCtxOptions): MockCtx {
     remote: {
       $mount: async (contribution) => contribution,
       $on: () => () => {},
+      $stream: (options) => createSupervisedStream(options),
+      spark: {
+        events: (signal?: AbortSignal) => sparkEventsGeneration(signal ?? new AbortController().signal),
+      },
+      hippomemo: {
+        events: (signal?: AbortSignal) => hippomemoEventsGeneration(signal ?? new AbortController().signal),
+      },
       credentials: {
         describe: async (refs) => {
           if (options.scenario() === 'error') return err('credential seam unavailable (preview error scenario)')
@@ -189,7 +214,18 @@ export function createMockCtx(options: MockCtxOptions): MockCtx {
         },
       },
     },
-    reflect: { get: (id) => namespaces.get(id) },
+    // 与真宿主同形：`remote.<ns>` 是动态提供的服务 —— 预览里它挂在 ctx.remote 上，
+    // 而 reflect 要能取回（产品的 `reflect.get('remote.<ns>')` 路径就靠这里）。
+    reflect: {
+      get: (id) => {
+        const registered = namespaces.get(id)
+        if (registered !== undefined) return registered
+        if (id.startsWith('remote.')) {
+          return (ctx.remote as unknown as Record<string, unknown>)[id.slice('remote.'.length)]
+        }
+        return undefined
+      },
+    },
     settingsScope: {
       bind(spec) {
         let scope = scopes.get(spec.namespace)

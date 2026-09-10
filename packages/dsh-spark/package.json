@@ -1,6 +1,6 @@
 {
   "name": "dsh-spark",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "DSH 火花认知层 host：spark 流（情景记忆）+ JSONL 持久化 + HTTP API + agent 工具",
   "type": "module",
   "main": "lib/index.js",
@@ -26,18 +26,21 @@
   "scripts": {
     "build": "node build.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test --test-reporter=spec test/spark-core.test.ts test/proposals.test.ts test/scripts.test.ts test/valence.test.ts"
+    "test": "node --test --test-reporter=spec test/spark-core.test.ts test/proposals.test.ts test/scripts.test.ts test/valence.test.ts test/events.test.ts"
   },
   "publishConfig": {
     "access": "public"
   },
   "dependencies": {
+    "dsh-spark-plugin-kit": "workspace:*",
     "dsh-spark-wire": "workspace:^"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^0.1.2-rc.1",
     "@deepseek-ai/dsh-host-webserver": "^0.1.2-rc.1",
     "@deepseek-ai/dsh-tools": "^0.1.2-rc.1",
+    "@deepseek-ai/dsh-typert-protocol": "^0.1.2-rc.1",
+    "@deepseek-ai/dsh-typert-registry": "^0.1.2-rc.1",
     "@deepseek-ai/schemastery": "^0.1.2-rc.1",
     "zod": "^4.0.0"
   },
@@ -45,6 +48,8 @@
     "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/dsh-host-webserver": "0.1.2-rc.1",
     "@deepseek-ai/dsh-tools": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-typert-protocol": "^0.1.2-rc.1",
+    "@deepseek-ai/dsh-typert-registry": "^0.1.2-rc.1",
     "@deepseek-ai/schemastery": "^3.18.1",
     "@types/node": "^22.0.0",
     "esbuild": "^0.25.0",

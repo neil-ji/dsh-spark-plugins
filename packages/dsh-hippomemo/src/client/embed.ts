@@ -9,6 +9,7 @@
  * 见 tsdown.config.mjs 的 client-embed 配置块。
  */
 export { MemorySection, type MemorySectionProps } from './MemorySection.tsx'
-export { createHippomemoApi, type HippomemoApi } from './api.ts'
+export { createHippomemoApi, type HippomemoApi, setHippomemoEventChannel } from './api.ts'
+export { startHippomemoEvents } from './start.ts'
 export { HIPPOMEMO_CSS } from './style.ts'
 export { zh, en, type HippomemoLocaleKey } from './locales.ts'

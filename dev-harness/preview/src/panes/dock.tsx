@@ -17,7 +17,7 @@ import { startGithubEmbed } from 'dsh-spark-dock/github'
 import { startNpmEmbed } from 'dsh-spark-dock/npm'
 import { startFinanceEmbed } from 'dsh-spark-dock/finance'
 import { setHippoT } from 'dsh-spark-dock/hippo'
-import { HIPPOMEMO_CSS, en as hippoEn, zh as hippoZh } from 'dsh-hippomemo/embed'
+import { HIPPOMEMO_CSS, en as hippoEn, startHippomemoEvents, zh as hippoZh } from 'dsh-hippomemo/embed'
 import { en as githubEn, zh as githubZh } from 'dsh-connector-github-ui/embed'
 import { en as npmEn, zh as npmZh } from 'dsh-connector-npm-ui/embed'
 import { en as financeEn, zh as financeZh } from 'dsh-spark-finance-client/embed'
@@ -34,8 +34,9 @@ function injectStyle(css: string, tag: string, plugin: string): void {
   document.head.appendChild(style)
 }
 
-/** 复刻 dock client 入口的装配（真宿主里由 cordis apply 调用）。 */
-function bootstrapDock(lang: Lang, scenario: Scenario): void {
+/** 复刻 dock client 入口的装配（真宿主里由 cordis apply 调用）。返回假 ctx，
+ * 因为预览要像宿主那样把 `remote` 通过组件 props 交给 DockOverlay（插槽 inject 面的等价物）。 */
+function bootstrapDock(lang: Lang, scenario: Scenario): ReturnType<typeof createMockCtx> {
   const ctx = createMockCtx({ lang: () => lang, scenario: () => scenario })
   const dictionaries: Array<[string, Record<string, string>, Record<string, string>]> = [
     ['hippomemo.settings', hippoZh, hippoEn],
@@ -61,8 +62,12 @@ function bootstrapDock(lang: Lang, scenario: Scenario): void {
   startGithubEmbed(ctx)
   startNpmEmbed(ctx)
   startFinanceEmbed(ctx)
+  // 记忆面板的事件通道（ADR-001）：真 dock 的 apply 也走这一条；
+  // mount 是异步的，通道注入发生在下一个微任务（面板挂载时已就绪）。
+  void startHippomemoEvents(ctx)
 
   setReflectGetter((id) => ctx.reflect.get(id))
+  return ctx
 }
 
 /** 仿真的 dsh web 会话外壳（只为给悬浮球一个真实的背景与层级）。 */
@@ -116,19 +121,27 @@ function MockDshShell({ children }: { children: ReactNode }): JSX.Element {
   )
 }
 
-/** 单飞装配：真宿主里 apply() 在挂载前调用，预览等价地在首帧渲染前装配好。 */
-let booted = false
-function ensureBooted(lang: Lang, scenario: Scenario): void {
-  if (booted) return
-  booted = true
-  bootstrapDock(lang, scenario)
+/** 单飞装配构件：ctx 与事件通道都只建一次（真宿主由 applier 建一次并保持引用稳定）。 */
+interface Booted {
+  ctx: ReturnType<typeof createMockCtx>
+  channel: { remote: ReturnType<typeof createMockCtx>['remote']; events: ReturnType<typeof createMockCtx>['remote']['spark'] }
+}
+
+let booted: Booted | null = null
+function ensureBooted(lang: Lang, scenario: Scenario): Booted {
+  if (booted !== null) return booted
+  const ctx = bootstrapDock(lang, scenario)
+  booted = { ctx, channel: { remote: ctx.remote, events: ctx.remote.spark } }
+  return booted
 }
 
 export function DockPane({ lang, scenario }: { lang: Lang; scenario: Scenario }): JSX.Element {
-  ensureBooted(lang, scenario)
+  const { channel } = ensureBooted(lang, scenario)
   return (
     <MockDshShell>
-      <DockOverlay />
+      {/* 真宿主由槽位 inject 面下发事件通道（`$stream` + reflect 取回的命名空间）；
+          预览在这里等价地显式组装（且引用稳定，与真宿主一致）。 */}
+      <DockOverlay channel={channel} />
     </MockDshShell>
   )
 }

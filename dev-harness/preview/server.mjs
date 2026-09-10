@@ -54,6 +54,8 @@ const DOCK_MODULES = {
   'dsh-spark-dock/npm': 'packages/dsh-spark-dock/src/client/npm/NpmEmbed.tsx',
   'dsh-spark-dock/finance': 'packages/dsh-spark-dock/src/client/finance/FinanceEmbed.tsx',
   'dsh-spark-dock/hippo': 'packages/dsh-spark-dock/src/client/hippo/HippoEmbed.tsx',
+  // 事件契约（帧 schema + typert 描述符）：dock 与 mock 都要它，源码口径直接吃 src。
+  'dsh-spark-wire': 'packages/dsh-spark-wire/src/index.ts',
 }
 
 /** 真产物口径：插件自带的 embed 库入口（自包含，只有 react 是外部依赖）。 */
@@ -252,6 +254,28 @@ function assertSameOrigin(req) {
   }
 }
 
+/**
+ * hippomemo 侧的假载波（同样 harness 专属）：产品宿主自 2026-09（ADR-001）起不再暴露
+ * `/hippomemo/events`，记忆变更统一走 `ctx.remote.hippomemo.events()`。
+ * 这里扮演物理载波，`src/mock/streams.ts` 把帧按产品契约喂给插件代码。
+ */
+const hippoStreamClients = new Set()
+
+function subscribeHippoStream(req, res) {
+  res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-store', connection: 'keep-alive' })
+  res.write(': connected\n\n')
+  hippoStreamClients.add(res)
+  const timer = setInterval(() => { try { res.write(': keepalive\n\n') } catch { /* closed */ } }, 15_000)
+  req.on('close', () => { clearInterval(timer); hippoStreamClients.delete(res) })
+}
+
+function broadcastHippo(change) {
+  const frame = 'data: ' + JSON.stringify(change) + '\n\n'
+  for (const res of hippoStreamClients) {
+    try { res.write(frame) } catch { hippoStreamClients.delete(res) }
+  }
+}
+
 async function handleHippomemo(req, res, url) {
   const path = url.pathname
   const method = req.method ?? 'GET'
@@ -266,19 +290,27 @@ async function handleHippomemo(req, res, url) {
   }
 
   if (path === '/hippomemo/events') {
-    res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' })
-    res.write(': connected\n\n')
-    const timer = setInterval(() => { try { res.write(': keepalive\n\n') } catch { /* closed */ } }, 15_000)
-    req.on('close', () => clearInterval(timer))
-    return
+    return subscribeHippoStream(req, res)
   }
   if (path === '/hippomemo/records' && method === 'GET') return envelope(hippo.list(url.searchParams))
-  if (path === '/hippomemo/records' && method === 'POST') return envelope(hippo.create(body))
+  if (path === '/hippomemo/records' && method === 'POST') {
+    const result = hippo.create(body)
+    broadcastHippo({ operation: 'put', id: result?.id ?? result?.value?.id ?? 'unknown' })
+    return envelope(result)
+  }
   if (path.startsWith('/hippomemo/records/')) {
     const id = decodeURIComponent(path.slice('/hippomemo/records/'.length))
     if (method === 'GET') return envelope(hippo.get(id))
-    if (method === 'PATCH') return envelope(hippo.update(id, body))
-    if (method === 'DELETE') return envelope(hippo.remove(id))
+    if (method === 'PATCH') {
+      const result = hippo.update(id, body)
+      broadcastHippo({ operation: 'put', id })
+      return envelope(result)
+    }
+    if (method === 'DELETE') {
+      const result = hippo.remove(id)
+      broadcastHippo({ operation: 'deleted', id })
+      return envelope(result)
+    }
   }
   if (path === '/hippomemo/stats') return envelope(hippo.stats())
   if (path === '/hippomemo/tags') return envelope(hippo.tags())
@@ -292,36 +324,84 @@ async function handleHippomemo(req, res, url) {
   return json(res, 404, { ok: false, error: { code: 'not-found', message: path } })
 }
 
+/**
+ * spark 侧三条 SSE 流的订阅者表（sparks / proposals / scripts）。
+ *
+ * **这些端点是 harness 专属的「假载波」**：产品宿主自 2026-09（ADR-001）起不再暴露
+ * `/sparks|/proposals|/scripts/events`，领域事件统一走 `spark.events()`（typert stream
+ * 跑在 remote mux 上）。预览没有 dsh 进程，于是由这里扮演物理载波：
+ * `src/mock/streams.ts` 把这些帧按产品契约（ready 基线 + 变更帧）喂给插件代码，
+ * 插件侧看到的仍是 `ctx.remote.spark.events()`。
+ */
+const sparkStreamClients = new Map()
+
+function subscribeSparkStream(path, req, res) {
+  res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-store', connection: 'keep-alive' })
+  res.write(': connected\n\n')
+  let set = sparkStreamClients.get(path)
+  if (set === undefined) { set = new Set(); sparkStreamClients.set(path, set) }
+  set.add(res)
+  const timer = setInterval(() => { try { res.write(': keepalive\n\n') } catch { /* closed */ } }, 15_000)
+  req.on('close', () => { clearInterval(timer); set.delete(res) })
+}
+
+function broadcastSpark(path, change) {
+  const set = sparkStreamClients.get(path)
+  if (set === undefined) return
+  const frame = 'data: ' + JSON.stringify(change) + '\n\n'
+  for (const res of set) {
+    try { res.write(frame) } catch { set.delete(res) }
+  }
+}
+
 /** spark 侧：dock 的火花流 / 涌现提议 / 脚本目录（同样是真 fetch 路径）。 */
 async function handleSpark(req, res, url) {
   const path = url.pathname
   const method = req.method ?? 'GET'
   const body = method === 'POST' || method === 'PATCH' ? JSON.parse((await readBody(req)) || '{}') : {}
 
-  if (path === '/sparks/events') {
-    res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' })
-    res.write(': connected\n\n')
-    const timer = setInterval(() => { try { res.write(': keepalive\n\n') } catch { /* closed */ } }, 15_000)
-    req.on('close', () => clearInterval(timer))
-    return
+  if (path === '/sparks/events' || path === '/proposals/events' || path === '/scripts/events') {
+    return subscribeSparkStream(path, req, res)
   }
   if (path === '/sparks' && method === 'GET') return json(res, 200, spark.list(url.searchParams))
-  if (path === '/sparks' && method === 'POST') return json(res, 200, spark.capture(body))
+  if (path === '/sparks' && method === 'POST') {
+    const result = spark.capture(body)
+    if (result.ok === true) broadcastSpark('/sparks/events', { operation: 'capture', id: result.value.id, record: result.value, at: Date.now() })
+    return json(res, 200, result)
+  }
   if (path.startsWith('/sparks/')) {
     const rest = path.slice('/sparks/'.length)
     if (rest.endsWith('/crystallize') && method === 'POST') {
-      return json(res, 200, spark.crystallize(decodeURIComponent(rest.slice(0, -'/crystallize'.length))))
+      const id = decodeURIComponent(rest.slice(0, -'/crystallize'.length))
+      const result = spark.crystallize(id)
+      if (result.ok === true) broadcastSpark('/sparks/events', { operation: 'crystallize', id, at: Date.now() })
+      return json(res, 200, result)
     }
-    if (method === 'PATCH') return json(res, 200, spark.patch(decodeURIComponent(rest), body))
+    if (method === 'PATCH') {
+      const id = decodeURIComponent(rest)
+      const result = spark.patch(id, body)
+      if (result.ok === true) {
+        broadcastSpark('/sparks/events', { operation: result.value.status === 'archived' ? 'archive' : 'patch', id, record: result.value, at: Date.now() })
+      }
+      return json(res, 200, result)
+    }
   }
   if (path === '/proposals' && method === 'GET') return json(res, 200, spark.proposals(url.searchParams))
-  if (path === '/proposals/reflect' && method === 'POST') return json(res, 200, spark.reflect())
+  if (path === '/proposals/reflect' && method === 'POST') {
+    const result = spark.reflect()
+    if (result.ok === true) broadcastSpark('/proposals/events', { at: Date.now(), newProposals: [], resolvedProposal: null })
+    return json(res, 200, result)
+  }
   if (path.startsWith('/proposals/') && path.endsWith('/resolve') && method === 'POST') {
-    return json(res, 200, spark.resolveProposal(decodeURIComponent(path.slice('/proposals/'.length, -'/resolve'.length)), body.status))
+    const result = spark.resolveProposal(decodeURIComponent(path.slice('/proposals/'.length, -'/resolve'.length)), body.status)
+    if (result.ok === true) broadcastSpark('/proposals/events', { at: Date.now(), newProposals: [], resolvedProposal: result.value })
+    return json(res, 200, result)
   }
   if (path === '/scripts' && method === 'GET') return json(res, 200, spark.scripts(url.searchParams))
   if (path.startsWith('/scripts/') && path.endsWith('/invoke') && method === 'POST') {
-    return json(res, 200, spark.invokeScript(decodeURIComponent(path.slice('/scripts/'.length, -'/invoke'.length))))
+    const result = spark.invokeScript(decodeURIComponent(path.slice('/scripts/'.length, -'/invoke'.length)))
+    if (result.ok === true) broadcastSpark('/scripts/events', { at: Date.now(), operation: 'invoke' })
+    return json(res, 200, result)
   }
   return json(res, 404, { ok: false, error: { code: 'not-found', message: path } })
 }

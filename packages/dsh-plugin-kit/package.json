@@ -1,6 +1,6 @@
 {
   "name": "dsh-spark-plugin-kit",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "DSH 第三方插件公共层：client 设置页样板（settings.section 注册 / locale / CSS 注入）",
   "type": "module",
   "main": "./lib/index.mjs",

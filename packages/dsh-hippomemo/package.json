@@ -1,6 +1,6 @@
 {
   "name": "dsh-hippomemo",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "DSH 跨会话/跨工作区共享记忆插件：自动召回、显式沉淀、LLM 复核的记忆进化",
   "type": "module",
   "main": "lib/index.js",
@@ -86,6 +86,8 @@
     "@deepseek-ai/dsh-storage-domain": "^0.1.2-rc.1",
     "@deepseek-ai/dsh-system-prompt": "^0.1.2-rc.1",
     "@deepseek-ai/dsh-tools": "^0.1.2-rc.1",
+    "@deepseek-ai/dsh-typert-protocol": "^0.1.2-rc.1",
+    "@deepseek-ai/dsh-typert-registry": "^0.1.2-rc.1",
     "@deepseek-ai/schemastery": "^0.1.2-rc.1",
     "react": "*",
     "zod": "*"
@@ -107,11 +109,14 @@
     "@deepseek-ai/dsh-storage-domain": "0.1.2-rc.1",
     "@deepseek-ai/dsh-system-prompt": "0.1.2-rc.1",
     "@deepseek-ai/dsh-tools": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-typert-protocol": "^0.1.2-rc.1",
+    "@deepseek-ai/dsh-typert-registry": "^0.1.2-rc.1",
     "@deepseek-ai/schemastery": "^3.18.1",
     "@types/node": "^22.0.0",
     "@types/react": "^18.3.0",
     "tsdown": "^0.22.2",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "zod": "^4.4.3"
   },
   "dependencies": {
     "dsh-spark-plugin-kit": "workspace:*",

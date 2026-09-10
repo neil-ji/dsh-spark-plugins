@@ -39,11 +39,6 @@ async function handle(req: IncomingMessage, res: ServerResponse, service: Memory
     const url = new URL(req.url ?? '/', 'http://x')
     const sub = url.pathname.slice(PREFIX.length)
 
-    if (req.method === 'GET' && sub === '/events') {
-      handleEvents(req, res, service)
-      return
-    }
-
     if (req.method === 'GET' && sub === '/stats') {
       send(res, 200, okEnvelope(service.stats()))
       return
@@ -119,19 +114,6 @@ async function handle(req: IncomingMessage, res: ServerResponse, service: Memory
   } catch (error) {
     send(res, 400, errorEnvelope('BAD_REQUEST', error instanceof Error ? error.message : String(error)))
   }
-}
-
-function handleEvents(req: IncomingMessage, res: ServerResponse, service: MemoryService): void {
-  res.writeHead(200, {
-    'content-type': 'text/event-stream; charset=utf-8',
-    'cache-control': 'no-cache, no-transform',
-    'connection': 'keep-alive',
-  })
-  res.write(': connected\n\n')
-  const unsubscribe = service.subscribe((change) => {
-    res.write('data: ' + JSON.stringify(change) + '\n\n')
-  })
-  req.on('close', () => { unsubscribe() })
 }
 
 function listQueryFromUrl(url: URL): MemoryListQuery {

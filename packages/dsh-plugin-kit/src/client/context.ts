@@ -39,6 +39,16 @@ export interface ClientLocaleService {
 export interface ClientRemoteService {
   $mount(contribution: unknown): Promise<unknown>
   $on(event: string, listener: () => void): () => void
+  /**
+   * 平台监督的可重连逻辑流（typert `$stream`）：一条物理载波承载所有插件事件，
+   * 代际重连与取消由平台负责。见 `./events.ts` 的订阅运行时（ADR-001/004）。
+   */
+  $stream<Item>(options: {
+    readonly name: string
+    readonly open: (signal: AbortSignal) => AsyncIterable<Item>
+    readonly ended: (accepted: boolean) => Error
+    readonly carrierFailed?: (error: unknown) => void
+  }): import('./events.ts').SupervisedStream<Item>
 }
 
 /** ctx.reflect：绕过 inject 声明读取动态服务（$mount 后的 remote.<ns>）。 */

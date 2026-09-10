@@ -22,6 +22,7 @@ const PORT = Number(process.env.PREVIEW_VERIFY_PORT ?? 5199)
 const ALIASES = {
   'dsh-ui-kit': 'packages/dsh-ui-kit/dist/index.js',
   'dsh-spark-plugin-kit/client': 'packages/dsh-plugin-kit/lib/client/index.js',
+  'dsh-spark-wire': 'packages/dsh-spark-wire/src/index.ts',
   'dsh-spark-dock/DockOverlay': 'packages/dsh-spark-dock/src/client/DockOverlay.tsx',
   'dsh-spark-dock/style': 'packages/dsh-spark-dock/src/client/style.ts',
   'dsh-connector-github-ui/embed': 'packages/dsh-github-ui/lib/embed.cjs',

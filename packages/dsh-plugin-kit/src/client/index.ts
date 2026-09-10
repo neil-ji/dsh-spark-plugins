@@ -5,6 +5,11 @@
  * 逐字重复的 settings.section 注册、locale 字典注册、CSS 注入收敛为一条
  * 调用；业务代码只保留 section 组件与 inject 面。
  *
+ * 2026-09（ADR-004）新增 `events.ts`：**插件共享的事件订阅运行时** ——
+ * 平台 `$stream` 之上补扇出 / 引用计数 / 基线重同步。此前唯一正确的实现
+ * （refcount 注册表）长在 dsh-spark-dock 这个 app 包里，插件复不到，
+ * 于是 hippomemo 只能自己 `new EventSource`。
+ *
  * 内部对 slots.register 的深层泛型约束做封装（类型细节收敛在包内），
  * 调用处仍保留组件的 props 类型检查。
  */
@@ -103,4 +108,14 @@ export type {
 } from './settings-card.ts'
 export { bindSnapshotSelector } from './snapshot.ts'
 export type { SnapshotSelectorHook } from './snapshot.ts'
+export { subscribeFrames, useFrames, openStreamNames } from './events.ts'
+export type {
+  FramedEvent,
+  StreamRemote,
+  StreamOptions,
+  SubscribeFramesOptions,
+  SupervisedStream,
+  SupervisedStreamItem,
+  UseFramesOptions,
+} from './events.ts'
 export type { ClientContext } from './context.ts'

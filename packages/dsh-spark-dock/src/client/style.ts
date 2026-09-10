@@ -7,28 +7,31 @@
 export const DOCK_CSS = [
   '[data-plugin="dsh-spark-dock"] { pointer-events: auto; font-family: var(--dsw-font-family, -apple-system, "PingFang SC", sans-serif); }',
 
-  /* 悬浮球 —— 2026-09 视觉主题重构：
-   * 球身 = 平台底色 + 火花暖色径向渐变；玻璃高光 = inset 顶部亮线 + backdrop blur；
-   * 品牌光晕 = ::before 径向 halo（呼吸）+ ::after hover 光环（preview 版回归）。
-   * mood 染光：--ball-glow 随 Fairy 情绪换色（alert→warn），全部 transform/opacity 动画。 */
-  '[data-plugin="dsh-spark-dock"] .dock-ball { --ball-glow: var(--spk-acc-spark, #d97706); position: fixed; width: var(--dock-ball, 48px); height: var(--dock-ball, 48px); border-radius: 50%; display: grid; place-items: center; z-index: 9000; background: radial-gradient(118% 118% at 30% 20%, color-mix(in srgb, var(--ball-glow) 24%, var(--dsw-alias-bg-module-platform)) 0%, var(--dsw-alias-bg-module-platform) 62%); border: 1px solid color-mix(in srgb, var(--ball-glow) 34%, var(--dsw-alias-border-l1)); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); box-shadow: 0 8px 24px rgba(10,18,38,.32), 0 0 18px color-mix(in srgb, var(--ball-glow) 20%, transparent), inset 0 1px 0 rgba(255,255,255,.14), inset 0 0 0 1px rgba(255,255,255,.05); color: var(--dsw-alias-label-primary, #fff); cursor: pointer; touch-action: none; transition: transform 200ms cubic-bezier(.34,1.56,.64,1), box-shadow 240ms ease, border-color 240ms ease; }',
-  '[data-plugin="dsh-spark-dock"] .dock-ball::before { content: ""; position: absolute; inset: -8px; border-radius: 50%; pointer-events: none; background: radial-gradient(closest-side, color-mix(in srgb, var(--ball-glow) 32%, transparent), transparent 74%); opacity: .45; animation: dock-ball-halo 4.6s ease-in-out infinite; }',
-  '[data-plugin="dsh-spark-dock"] .dock-ball::after { content: ""; position: absolute; inset: -5px; border-radius: 50%; pointer-events: none; border: 1px solid var(--ball-glow); opacity: 0; transform: scale(.85); transition: opacity 200ms ease-out, transform 200ms ease-out; }',
-  '[data-plugin="dsh-spark-dock"] .dock-ball:hover { transform: scale(1.06); }',
-  '[data-plugin="dsh-spark-dock"] .dock-ball:hover::after { opacity: .55; transform: scale(1); }',
-  '[data-plugin="dsh-spark-dock"] .dock-ball:active { transform: scale(.94); transition-duration: 90ms; }',
-  '[data-plugin="dsh-spark-dock"] .dock-ball.dragging { cursor: grabbing; transform: scale(1.1); }',
-  '[data-plugin="dsh-spark-dock"] .dock-ball.dragging::before { opacity: .8; animation-play-state: paused; }',
-  /* 面板打开：halo 驻留 + 呼吸暂停，球读作「已激活」而非持续吸引注意 */
-  '[data-plugin="dsh-spark-dock"] .dock-ball[aria-expanded="true"]::before { opacity: .7; animation-play-state: paused; }',
-  /* mood 染光：换 --ball-glow 即可同时驱动渐变/边框/halo/投影 */
-  '[data-plugin="dsh-spark-dock"] .dock-ball.mood-alert { --ball-glow: var(--dsw-alias-state-warn-primary, #f59e0b); }',
-  '[data-plugin="dsh-spark-dock"] .dock-ball.mood-sad { --ball-glow: color-mix(in srgb, var(--dsw-alias-label-tertiary, #8a93a6) 70%, var(--spk-acc-spark, #d97706)); }',
-  '[data-plugin="dsh-spark-dock"] .dock-ball svg { width: 24px; height: 24px; overflow: visible; filter: drop-shadow(0 1px 2px rgba(10,18,38,.35)); }',
-  '[data-plugin="dsh-spark-dock"] .dock-ball:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 3px; }',
-  '@keyframes dock-ball-halo { 0%,100% { opacity: .45; transform: scale(1); } 50% { opacity: .75; transform: scale(1.06); } }',
-  '@media (prefers-reduced-motion: reduce) { [data-plugin="dsh-spark-dock"] .dock-ball, [data-plugin="dsh-spark-dock"] .dock-ball::before { animation: none; } [data-plugin="dsh-spark-dock"] .fairy-face, [data-plugin="dsh-spark-dock"] .fairy-face .ahoge { animation: none; } }',
-  '[data-plugin="dsh-spark-dock"] .dock-badge { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; border-radius: 9px; padding: 0 5px; background: var(--dsw-alias-state-error-primary); color: var(--dsw-alias-label-primary-foreground, #fff); font: 700 11px/18px var(--dsw-font-family, inherit); text-align: center; box-shadow: 0 0 0 2px var(--dsw-alias-bg-module-platform); }',
+  /* 悬浮球 —— 2026-09 静默形态（角色层移除后的静态品牌标识）：
+   * 形态 = 浮层面玻璃球（--spk-surface-float 92% + backdrop blur）+ 顶部冷光 + 内壁亮线；
+   * 身份 = --ball-accent（默认 --spk-brand）只驱动「极淡染光 + hover 描边 + 外发光」三处，
+   *        换一个变量即可整体改色（mood-alert/mood-sad 档位保留，供角色层恢复时复用）；
+   * 动效 = 全量移除：无 keyframes、无 hover 缩放、无 transition。状态只靠
+   *        描边色 / 投影 / 表面亮度区分（hover 收紧描边、按下压成内阴影、展开描边实色化）。
+   * 标识色一律 --spk-brand-fg（亮 7.3:1 / 暗 6.5:1 on 球面），实色档 --spk-brand 只在暗色
+   * 下压到 4.5:1 边缘，故不用于标识。 */
+  '[data-plugin="dsh-spark-dock"] .dock-ball { --ball-accent: var(--spk-brand); --ball-ring: color-mix(in srgb, var(--ball-accent) 46%, var(--spk-border-2)); position: fixed; width: var(--dock-ball, 48px); height: var(--dock-ball, 48px); border-radius: 50%; display: grid; place-items: center; z-index: 9000; background: linear-gradient(180deg, color-mix(in srgb, var(--spk-n-0) 13%, transparent) 0%, color-mix(in srgb, var(--spk-n-0) 3%, transparent) 46%, transparent 100%), radial-gradient(124% 124% at 50% 2%, color-mix(in srgb, var(--ball-accent) 12%, transparent) 0%, transparent 64%), color-mix(in srgb, var(--spk-surface-float) 92%, transparent); border: 1px solid var(--spk-border-2); backdrop-filter: blur(var(--spk-blur)) saturate(1.3); -webkit-backdrop-filter: blur(var(--spk-blur)) saturate(1.3); box-shadow: var(--spk-shadow-2), 0 0 24px color-mix(in srgb, var(--ball-accent) 15%, transparent), inset 0 1px 0 color-mix(in srgb, var(--spk-n-0) 18%, transparent); color: var(--spk-brand-fg); cursor: pointer; touch-action: none; }',
+  /* hover：描边收紧 + 染光加深，几何与尺寸不动 */
+  '[data-plugin="dsh-spark-dock"] .dock-ball:hover { border-color: var(--ball-ring); box-shadow: var(--spk-shadow-2), 0 0 28px color-mix(in srgb, var(--ball-accent) 26%, transparent), inset 0 1px 0 color-mix(in srgb, var(--spk-n-0) 22%, transparent); }',
+  /* active：读作「按下去」——抬升收回，落成内阴影 */
+  '[data-plugin="dsh-spark-dock"] .dock-ball:active { box-shadow: var(--spk-shadow-1), inset 0 2px 6px color-mix(in srgb, var(--spk-n-950) 26%, transparent); }',
+  '[data-plugin="dsh-spark-dock"] .dock-ball.dragging { cursor: grabbing; border-color: var(--ball-ring); }',
+  /* 展开：描边实色化 + 外发光加强，读作「已激活」，不靠呼吸吸引注意 */
+  '[data-plugin="dsh-spark-dock"] .dock-ball[aria-expanded="true"] { border-color: var(--ball-accent); box-shadow: var(--spk-shadow-2), 0 0 30px color-mix(in srgb, var(--ball-accent) 24%, transparent), inset 0 1px 0 color-mix(in srgb, var(--spk-n-0) 18%, transparent); }',
+  /* 情绪档（当前 dormant：Fairy 层未启用。恢复角色层时无需再动球身样式） */
+  '[data-plugin="dsh-spark-dock"] .dock-ball.mood-alert { --ball-accent: var(--spk-warn); }',
+  '[data-plugin="dsh-spark-dock"] .dock-ball.mood-sad { --ball-accent: var(--spk-label-3); }',
+  '[data-plugin="dsh-spark-dock"] .dock-ball svg { width: 22px; height: 22px; overflow: visible; }',
+  /* MASTER §5.3：focus ring 一律 --spk-focus-ring（≥3:1 非文本），禁移除 */
+  '[data-plugin="dsh-spark-dock"] .dock-ball:focus-visible { outline: 2px solid var(--spk-focus-ring); outline-offset: 3px; }',
+  '@media (prefers-reduced-motion: reduce) { [data-plugin="dsh-spark-dock"] .fairy-face, [data-plugin="dsh-spark-dock"] .fairy-face .ahoge { animation: none; } }',
+  /* badge 环色 = 球面（v4.1 起球身是 surface-float 玻璃球，不再是平台底色） */
+  '[data-plugin="dsh-spark-dock"] .dock-badge { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; border-radius: 9px; padding: 0 5px; background: var(--dsw-alias-state-error-primary); color: var(--dsw-alias-label-primary-foreground, #fff); font: 700 11px/18px var(--dsw-font-family, inherit); text-align: center; box-shadow: 0 0 0 2px var(--spk-surface-float); }',
 
   /* 面板 —— 结构：flex row = 左 rail(56px) + 右主列 */
   '[data-plugin="dsh-spark-dock"] .dock-panel { position: fixed; z-index: 9100; width: var(--dock-panel-w, 616px); max-width: calc(100vw - 32px); height: var(--dock-panel-h, 680px); max-height: calc(100vh - 32px); display: flex; flex-direction: row; background: var(--dsw-alias-bg-module-platform); border: 1px solid var(--dsw-alias-border-l1); border-radius: 20px; box-shadow: var(--dsw-shadow-lv3, 0 16px 48px rgba(10,18,38,.28)); overflow: hidden; color: var(--dsw-alias-label-primary, #fff); opacity: 0; transform: scale(.94); pointer-events: none; transition: transform 220ms cubic-bezier(.34,1.56,.64,1), opacity 220ms ease; }',
@@ -103,7 +106,10 @@ export const DOCK_CSS = [
   '[data-plugin="dsh-spark-dock"] .dock-hline { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 6px 0 2px; }',
   '[data-plugin="dsh-spark-dock"] .dock-hline b { font-size: 12px; font-weight: 700; color: var(--dsw-alias-label-primary); }',
 
-  /* ── Fairy 表情层（docs/spark-dock-preview fairy.css 子集） ── */
+  /* ── Fairy 表情层（docs/spark-dock-preview fairy.css 子集）──
+   * 当前 **dormant**：角色层由 DockOverlay 的 FAIRY_LAYER_ENABLED 关闭，球内不再渲染
+   * .fairy-face，这些规则不会被应用。保留是为了「一行恢复」：把开关置 true 即整套表情/
+   * 动画回来（视觉资产与恢复路径见 design-system/spark-dock/MASTER.md §4.1）。 */
   '[data-plugin="dsh-spark-dock"] .fairy-face { width: 46px; height: 46px; overflow: visible; color: var(--dsw-alias-label-primary, #fff); animation: dock-bob 3.4s ease-in-out infinite; }',
   '[data-plugin="dsh-spark-dock"] .fairy-face .ahoge { transform-origin: 24px 9px; animation: dock-ahoge 2.8s ease-in-out infinite; }',
   '[data-plugin="dsh-spark-dock"] .fairy-face .eyes-happy, [data-plugin="dsh-spark-dock"] .fairy-face .mouth-open, [data-plugin="dsh-spark-dock"] .fairy-face .mouth-frown, [data-plugin="dsh-spark-dock"] .fairy-face .acc-think { display: none; }',
@@ -127,10 +133,19 @@ export const DOCK_CSS = [
   '[data-plugin="dsh-spark-dock"] .fairy-face.mood-sad .mouth-smile { display: none; }',
   '[data-plugin="dsh-spark-dock"] .fairy-face.mood-sad .mouth-frown { display: block; }',
 
-  /* ── 播报气泡 ── */
-  '[data-plugin="dsh-spark-dock"] .dock-bubble { position: fixed; z-index: 9300; max-width: 250px; padding: 9px 12px; border-radius: 14px; background: var(--dsw-alias-bg-module-platform); border: 1px solid var(--dsw-alias-border-l1); box-shadow: var(--dsw-shadow-lv2, 0 8px 24px rgba(10,18,38,.16)); color: var(--dsw-alias-label-primary); font: 500 12px/1.5 var(--dsw-font-family, inherit); pointer-events: auto; }',
-  '[data-plugin="dsh-spark-dock"] .dock-bubble .src { display: block; margin-top: 2px; font-size: 11px; color: var(--dsw-alias-label-tertiary); }',
-  '[data-plugin="dsh-spark-dock"] .dock-bubble.mood-alert { border-color: var(--dsw-alias-state-warn-primary); }',
+  /* ── 播报气泡（事件文本，零动画）──
+   * 材质对齐 ui-kit Toast：浮层面 + `--spk-border` + `--spk-shadow-2` + 12 圆角 + 3px 品牌脊线，
+   * 让「球旁一句话」读作同一浮层家族（原来是平台底色，比面板还暗，压不住背景）。
+   * 文字两档：正文 = `--spk-label`（12:1 暗 / 16.9:1 亮），来源 = `--spk-label-2`
+   * （5.6 / 6.9）—— `--spk-label-3` 在暗色浮层面上只有 4.39:1，不达 AA，故不用。
+   * 出现与消失都是瞬时的（无 transition / keyframes），mood 只在表情层开启时参与。
+   * `width: max-content` 是关键：气泡是 shrink-to-fit 的 fixed 元素，若不钉宽度，它的
+   * 「静态位置」在浮层容器里可能贴着视口右侧，可用宽度只剩几十像素 —— 文案会被折成五行的
+   * 竖条（定位 JS 量到的 offsetWidth 也随之偏小，最终 left 再被错误夹取）。显式 max-content
+   * 让宽度只由文案与 max-width 决定，与容器布局彻底解耦。 */
+  '[data-plugin="dsh-spark-dock"] .dock-bubble { position: fixed; z-index: 9300; width: max-content; max-width: min(250px, calc(100vw - 24px)); padding: 9px 12px; border-radius: 12px; background: var(--spk-surface-float); border: 1px solid var(--spk-border); border-left: 3px solid var(--spk-brand); box-shadow: var(--spk-shadow-2); color: var(--spk-label); font: 500 var(--spk-text-sm, 12px)/1.5 var(--spk-font, inherit); pointer-events: auto; }',
+  '[data-plugin="dsh-spark-dock"] .dock-bubble .src { display: block; margin-top: 2px; font-size: var(--spk-text-xs, 11px); font-weight: 400; color: var(--spk-label-2); }',
+  '[data-plugin="dsh-spark-dock"] .dock-bubble.mood-alert { border-left-color: var(--spk-warn); }',
   '[data-plugin="dsh-spark-dock"] .grow-spacer { flex: 1; }',
   '[data-plugin="dsh-spark-dock"] .dock-statrow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }',
   '[data-plugin="dsh-spark-dock"] .dock-stat .k { font-size: 11px; color: var(--dsw-alias-label-tertiary); }',

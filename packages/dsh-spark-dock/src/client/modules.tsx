@@ -4,6 +4,7 @@
  * （原则：dock 不写业务，只消费各包已导出的 client api / 组件）。
  */
 import type { ReactNode } from 'react'
+import type { SparkEventChannel } from './spark/remote.ts'
 import { SparksPane, ProposalsPane, ScriptsPane, GraphPane } from './spark/SparkModule.tsx'
 import { FinanceEmbedPane } from './finance/FinanceEmbed.tsx'
 import { HippoEmbedPane } from './hippo/HippoEmbed.tsx'
@@ -13,7 +14,16 @@ import { NpmEmbedPane } from './npm/NpmEmbed.tsx'
 export interface DockPane {
   id: string
   label: string
-  render: () => ReactNode
+  /**
+   * 渲染子页。`deps` 是 dock 通过插槽 inject 面下发的依赖（不再是模块级单例）：
+   * 目前只有事件通道 `channel`；其余模块自带装配（后续 ADR-003 会一并收进贡献点）。
+   */
+  render: (deps: DockPaneDeps) => ReactNode
+}
+
+/** 子页依赖面（dock → 模块）。 */
+export interface DockPaneDeps {
+  channel: SparkEventChannel | null
 }
 
 export interface DockModule {
@@ -44,11 +54,11 @@ const placeholder = (moduleLabel: string, paneLabel: string, phase: string) => (
   <div className="dock-empty">{moduleLabel} · {paneLabel} — 真实数据接入于 {phase}。</div>
 )
 
-/** spark：真实数据（dsh-spark http api）。 */
+/** spark：真实数据（dsh-spark http api + 统一事件流）。 */
 const sparkPanes = [
-  { id: 'sparks', label: '火花流', render: () => <SparksPane /> },
-  { id: 'proposals', label: '涌现提议', render: () => <ProposalsPane /> },
-  { id: 'scripts', label: '脚本目录', render: () => <ScriptsPane /> },
+  { id: 'sparks', label: '火花流', render: (deps: DockPaneDeps) => <SparksPane {...deps} /> },
+  { id: 'proposals', label: '涌现提议', render: (deps: DockPaneDeps) => <ProposalsPane {...deps} /> },
+  { id: 'scripts', label: '脚本目录', render: (deps: DockPaneDeps) => <ScriptsPane {...deps} /> },
   { id: 'graph', label: 'Graph', render: () => <GraphPane /> },
 ]
 

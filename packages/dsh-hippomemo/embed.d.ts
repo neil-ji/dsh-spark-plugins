@@ -5,8 +5,9 @@
  */
 export { MemorySection } from './lib/types/client/MemorySection'
 export type { MemorySectionProps } from './lib/types/client/MemorySection'
-export { createHippomemoApi } from './lib/types/client/api'
-export type { HippomemoApi } from './lib/types/client/api'
+export { createHippomemoApi, setHippomemoEventChannel } from './lib/types/client/api'
+export type { HippomemoApi, HippomemoEventChannel, HippomemoEventsFace } from './lib/types/client/api'
+export { startHippomemoEvents } from './lib/types/client/start'
 export { zh, en } from './lib/types/client/locales'
 export type { HippomemoLocaleKey } from './lib/types/client/locales'
 export declare const HIPPOMEMO_CSS: string[]

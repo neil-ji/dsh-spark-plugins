@@ -252,6 +252,9 @@ dev-harness/preview/
   src/mock/fixtures.ts   # github / npm / finance 的 fixture（形状对照各 wire 类型）
   src/mock/snapshot.ts   # bindSnapshotSelector 的 8 行副本
   src/panes/*.tsx        # 六个画布：dock / github / npm / finance / hippomemo / ui-kit
+  ball-shots.mjs         # 悬浮球视觉走查：CDP(headless Edge) 抓球特写 + 计算样式度量 → .dev/ball-review/
+                         #   含播报气泡链路：POST /sparks → SSE → 断言出现/几何/a11y/4.2s 自动消失
+  png-analyze.mjs        # 球特写的像素分析（零依赖解 PNG）：径向剖面 = 球面 / 描边 / 外发光 / 焦点环
 ```
 
 命令：
@@ -283,6 +286,15 @@ pnpm preview:verify   # 自检：Node 冒烟 + 服务器/fixture 断言，退出
 - **hippomemo 与 spark 走真 HTTP**（它们的 client 半侧本来就是 `fetch('/hippomemo/...')`、
   `fetch('/sparks...')`），所以服务端 fixture 能 100% 复用真代码路径；error 场景必须返回顶层
   `{ok:false,error}` 信封（包在 `{ok:true,value}` 里会被 client 当成成功）。
+- **spark / hippomemo 的 SSE 端点只属于 harness**：产品宿主自 2026-09（ADR-001）起已无
+  `/sparks|/proposals|/scripts|/hippomemo /events`，领域事件统一走
+  `ctx.remote.<ns>.events()`（typert stream 跑在 remote mux 上）。预览没有 dsh 进程，
+  于是由 `src/mock/streams.ts` 扮演物理载波：假 `$stream`（含跨世代重开语义）+
+  `spark.events()` / `hippomemo.events()` 两个代 opener，把 fixture SSE 的帧按产品契约
+  （`ready` 基线 + 变更帧）喂给插件代码。写入操作（capture/patch/crystallize 与
+  records 增改删）会广播 `data:` 帧，所以「面板实时刷新」「悬浮球气泡」都能在预览里验。
+  **注意预览比真宿主宽松**（mock 没有 cordis 的 inject 门；fixture 给 schema 必填项兜默认值），
+  访问规则 / 必填校验 / 服务生命周期三类回归必须靠真宿主（`dev-harness/real-host-check.mjs`）。
 - **dock 的 embed starter 是模块级单飞**：预览里切语言/场景必须整页重载才能重新装配
   （等价于宿主重载插件），只有主题是纯 CSS 切换。
 - 本机（无可用浏览器会话时）用 `react-dom/server` 的 `renderToString` + 直接调真 controller 的

@@ -7,9 +7,10 @@
  *  - shell.overlay 是 click-through 层，本组件根节点自带 pointer-events: auto
  */
 import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
-import { SegmentedControl } from 'dsh-ui-kit'
+import { IconSparkles, SegmentedControl } from 'dsh-ui-kit'
 import { DOCK_MODULES } from './modules.tsx'
-import { FairyFace, useFairy } from './fairy/FairyFace.tsx'
+import type { SparkEventChannel } from './spark/remote.ts'
+import { useFairy } from './fairy/FairyFace.tsx'
 
 const M = 16
 const BALL = 48
@@ -17,6 +18,21 @@ const GAP = 12
 const POS_KEY = 'dsh.spark-dock:pos'
 const OPEN_KEY = 'dsh.spark-dock:open'
 const ACTIVE_KEY = 'dsh.spark-dock:active'
+
+/**
+ * 球的两层能力开关（2026-09「静默形态」）—— 拆开是为了让「发言」可以独立于「表情」存在：
+ *
+ *  - BALL_FACE_ENABLED：表情 / 情绪染光 / 球体动画（呆毛、浮动、缩放、呼吸、播报时的弹跳）。
+ *    关闭时球内渲染静态品牌标识（ui-kit IconSparkles），不带 mood class。
+ *  - BALL_BUBBLE_ENABLED：事件播报气泡 —— 真实事件文本（无 emoji / 无动画，出现与消失都是
+ *    瞬时的），定位在球旁并自动避让视口。它不属于「表情/动画」，因此默认保留。
+ *
+ * 两者的共同依赖是 Fairy 事件订阅（`useFairy`），任一开启即订阅；都关掉就不再开 SSE。
+ * 恢复整套角色层：两个都置 true（球的 mood 染光档与 fairy CSS 全部保留）。
+ * 见 design-system/spark-dock/MASTER.md §4.1。显式标注 boolean，避免字面量收窄。
+ */
+const BALL_FACE_ENABLED: boolean = false
+const BALL_BUBBLE_ENABLED: boolean = true
 
 interface Pt { x: number; y: number }
 
@@ -40,7 +56,11 @@ function loadPos(): Pt {
   return defaultPos()
 }
 
-export function DockOverlay(): JSX.Element {
+/**
+ * Spark Dock overlay 组件。`channel` 由插槽 inject 面下发（平台把 inject 结果合成组件 props），
+ * 供模块子页与播报层订阅统一事件流 —— 取代此前「dock apply 里设模块级单例」的做法。
+ */
+export function DockOverlay({ channel = null }: { channel?: SparkEventChannel | null }): JSX.Element {
   const ballRef = useRef<HTMLButtonElement | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
   const posRef = useRef<Pt>(loadPos())
@@ -54,7 +74,10 @@ export function DockOverlay(): JSX.Element {
   // 切模块时子页回落到第一个
   useEffect(() => { setPaneId(activeModule.panes[0].id) }, [activeModule])
   const activePane = activeModule.panes.find((p) => p.id === paneId) ?? activeModule.panes[0]
-  const { mood, bubble } = useFairy()
+  // 订阅只需一层开着；mood 只服务球的表情层，气泡只取文本（互不牵连）
+  const fairy = useFairy(channel, BALL_FACE_ENABLED || BALL_BUBBLE_ENABLED)
+  const mood = BALL_FACE_ENABLED ? fairy.mood : null
+  const bubble = BALL_BUBBLE_ENABLED ? fairy.bubble : null
 
   const selectModule = useCallback((id: string) => {
     setActiveId(id)
@@ -244,11 +267,20 @@ export function DockOverlay(): JSX.Element {
         aria-expanded={open}
         aria-haspopup="dialog"
       >
-        <FairyFace mood={mood} />
+        {/* 静默形态的品牌标识（ui-kit 图标层，尺寸由 .dock-ball svg 接管）；
+            BALL_FACE_ENABLED 恢复后这里换回 <FairyFace mood={mood} />。 */}
+        <IconSparkles size={14} />
         {/* badge 等 pending 计数有真实数据源后再恢复 */}
       </button>
+      {/* 播报气泡：真实事件文本，惰性状态（MASTER §5.8 → role=status + aria-live），
+          出现/消失瞬时无动画；mood 只在表情层开启时参与（仅换描边色）。 */}
       {bubble !== null && (
-        <div ref={bubbleRef} className={'dock-bubble' + (mood !== null ? ' mood-' + mood : '')}>
+        <div
+          ref={bubbleRef}
+          className={'dock-bubble' + (mood !== null ? ' mood-' + mood : '')}
+          role="status"
+          aria-live="polite"
+        >
           {bubble.text}
           <span className="src">— {bubble.src}</span>
         </div>
@@ -312,7 +344,7 @@ export function DockOverlay(): JSX.Element {
               onChange={setPaneId}
             />
           )}
-          {activePane.render()}
+          {activePane.render({ channel })}
           </div>
         </div>
       </div>

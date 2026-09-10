@@ -2,24 +2,19 @@
  * dsh-spark host-side types.
  *
  * Wire-facing schemas live in dsh-spark-wire so the client bundle can use
- * them too. This module adds internal types the host needs (storage
- * interface, change-event payload, hippo-bridge helper) that never cross
- * the wire.
+ * them too. **事件载荷也属于 wire**（ADR-002）：`SparkChangedEvent` 由
+ * `dsh-spark-wire` 的 zod schema 定义并在此转出，不再在本模块另立一份
+ * 声明 —— 之前的版本在这里写着 "never cross the wire"，而它实际就是
+ * SSE 的载荷格式，客户端只能手抄一遍且没有校验。
  */
 import type { SparkScope, SparkStatus, SparkView, SparkCapture, SparkPatch, SparkId, SparkCrystallize, SparkCrystallized } from 'dsh-spark-wire'
 
 export type { SparkScope, SparkStatus, SparkView, SparkCapture, SparkPatch, SparkId, SparkCrystallized, SparkCrystallize }
+/** 火花变更事件（= `sparks/changed` 载荷，契约在 wire 包）。 */
+export type { SparkChangedEvent } from 'dsh-spark-wire'
 
 /** Strongly-typed id branded at construction time. */
 export type SparkRecordId = SparkId
-
-/** Internal change-event payload emitted by SparkService after every mutation. */
-export interface SparkChangedEvent {
-  operation: 'capture' | 'patch' | 'archive' | 'delete' | 'crystallize'
-  id: SparkRecordId
-  record: SparkView | null
-  at: number
-}
 
 /** Storage backend interface. */
 export interface SparkStorage {

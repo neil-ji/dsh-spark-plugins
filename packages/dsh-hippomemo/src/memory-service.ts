@@ -19,6 +19,10 @@ import type {
 import { derivePendingCandidates } from './memory-evolve.ts'
 import { recencyDecay } from './relevance.ts'
 import { registerHippomemoHttpRoutes } from './http.ts'
+// Type-only: pulls the `ctx.typert` host augmentation (register/withdraw).
+import type {} from '@deepseek-ai/dsh-typert-registry'
+import { HippomemoEventsService } from './events-service.ts'
+import { HIPPOMEMO_HOST_CONTRIBUTION } from './wire.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -95,7 +99,7 @@ function resolveConfig(config: HippomemoConfig = {}): ResolvedConfig {
 }
 
 export class MemoryService extends Service {
-  static inject = ['storageDomain', 'webServer']
+  static inject = ['storageDomain', 'webServer', 'typert']
 
   static Config: z<HippomemoConfig> = z.object({
     maxMemories: z.number().step(1).min(1).default(DEFAULT_CONFIG.maxMemories),
@@ -112,6 +116,8 @@ export class MemoryService extends Service {
   private citationTable?: KvTable<MemoryId, CitationRecord>
   private readonly citationLog: CitationRecord[] = []
   private readonly listeners = new Set<(change: HippomemoChanged) => void>()
+  /** 统一事件通道的宿主服务（`hippomemo.events()` stream，见 wire.ts）。 */
+  private eventsService: HippomemoEventsService | null = null
 
   constructor(ctx: Context, config: HippomemoConfig = {}) {
     super(ctx, 'memory')
@@ -157,6 +163,10 @@ export class MemoryService extends Service {
     this.citationLog.length = 0
     for (const [, citation] of this.citationTable.entries()) this.citationLog.push(citation)
     registerHippomemoHttpRoutes(this.ctx, this)
+    // 统一事件通道（ADR-001）：cordis `hippomemo/changed` → `hippomemo.events()` stream，
+    // 取代原先 `http.ts` 里那条手写 SSE（/hippomemo/events）。
+    this.ctx.typert.register(HIPPOMEMO_HOST_CONTRIBUTION)
+    this.eventsService = new HippomemoEventsService(this.ctx)
   }
 
   get(id: MemoryId): MemoryRecord | undefined {

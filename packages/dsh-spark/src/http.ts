@@ -1,5 +1,10 @@
 /**
  * Plugin-owned HTTP API under /sparks/*, /proposals/*, and /scripts/*.
+ *
+ * 2026-09（ADR-001）：**事件不再走 HTTP**。原先这里注册三条 SSE 端点
+ * （`/sparks|/proposals|/scripts/events`），与 hippomemo 那条各自实现一遍流式与
+ * 载荷；现在统一由 `spark.events()`（typert stream，单一 mux 载波、逐项 schema
+ * 校验、可取消）下发，见 `events.ts`。本文件只剩「请求-响应」型 JSON API。
  */
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
@@ -38,26 +43,6 @@ export function registerSparkHttpRoutes(ctx: Context, service: SparkService, scr
       path: PREFIX_SCRIPTS,
       handler: (req, res) => { void handleScripts(ctx, req, res, scriptService) },
     }), 'scripts.httpRoutes')
-  }
-
-  ctx.effect(() => ctx.webServer.register({
-    kind: 'prefix',
-    path: PREFIX_SPARKS + '/events',
-    handler: (req, res) => { handleSparksEvents(ctx, req, res) },
-  }), 'spark.eventsStream')
-
-  ctx.effect(() => ctx.webServer.register({
-    kind: 'prefix',
-    path: PREFIX_PROPOSALS + '/events',
-    handler: (req, res) => { handleProposalsEvents(ctx, req, res) },
-  }), 'proposals.eventsStream')
-
-  if (scriptService !== undefined) {
-    ctx.effect(() => ctx.webServer.register({
-      kind: 'prefix',
-      path: PREFIX_SCRIPTS + '/events',
-      handler: (req, res) => { handleScriptsEvents(ctx, req, res) },
-    }), 'scripts.eventsStream')
   }
 }
 
@@ -253,45 +238,6 @@ async function handleScripts(
   } catch (error) {
     send(res, 400, errorEnvelope('BAD_REQUEST', error instanceof Error ? error.message : String(error)))
   }
-}
-
-function handleSparksEvents(ctx: Context, req: IncomingMessage, res: ServerResponse): void {
-  res.writeHead(200, {
-    'content-type': 'text/event-stream; charset=utf-8',
-    'cache-control': 'no-cache, no-transform',
-    'connection': 'keep-alive',
-  })
-  res.write(': connected\n\n')
-  const dispose = ctx.on('sparks/changed', (change) => {
-    res.write('data: ' + JSON.stringify(change) + '\n\n')
-  })
-  req.on('close', () => { dispose() })
-}
-
-function handleProposalsEvents(ctx: Context, req: IncomingMessage, res: ServerResponse): void {
-  res.writeHead(200, {
-    'content-type': 'text/event-stream; charset=utf-8',
-    'cache-control': 'no-cache, no-transform',
-    'connection': 'keep-alive',
-  })
-  res.write(': connected\n\n')
-  const dispose = ctx.on('proposals/changed', (change) => {
-    res.write('data: ' + JSON.stringify(change) + '\n\n')
-  })
-  req.on('close', () => { dispose() })
-}
-
-function handleScriptsEvents(ctx: Context, req: IncomingMessage, res: ServerResponse): void {
-  res.writeHead(200, {
-    'content-type': 'text/event-stream; charset=utf-8',
-    'cache-control': 'no-cache, no-transform',
-    'connection': 'keep-alive',
-  })
-  res.write(': connected\n\n')
-  const dispose = ctx.on('scripts/changed', (change) => {
-    res.write('data: ' + JSON.stringify(change) + '\n\n')
-  })
-  req.on('close', () => { dispose() })
 }
 
 function queryFromUrl(url: URL): Record<string, unknown> {

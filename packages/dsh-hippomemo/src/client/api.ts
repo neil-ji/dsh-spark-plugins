@@ -1,10 +1,55 @@
 /** Tiny fetch wrapper for the plugin-owned /hippomemo API. */
 
+import { subscribeFrames, type StreamRemote } from 'dsh-spark-plugin-kit/client'
+import type { HippomemoStreamFrame } from '../wire.ts'
 import type {
   CitationListQuery, CitationListResult, EvolveReport, MemoryListQuery, MemoryListResult,
   MemoryPatchInput, MemoryPutInput, MemoryRecord, MemoryStats, MemoryUsageStats,
   PendingCandidateListResult, PreferenceListQuery, PreferenceListResult, RecallNarrative,
 } from '../types.ts'
+
+/**
+ * 记忆事件流客户端面（结构镜像；契约在 `../wire.ts`）。
+ *
+ * 平台规则（真宿主实测）：`remote.hippomemo` **不能写进 inject**（它是本包 `$mount`
+ * 之后才提供的服务，注入会死锁），只能 `ctx.reflect.get('remote.hippomemo')`；
+ * `$stream` 在 `ctx.remote` 上。所以通道由 embedder 组装一次后注入本模块。
+ */
+export interface HippomemoEventsFace {
+  events(signal?: AbortSignal): AsyncIterable<HippomemoStreamFrame>
+}
+
+export interface HippomemoEventChannel {
+  readonly remote: StreamRemote
+  readonly events: HippomemoEventsFace
+}
+
+/** 逻辑流名（与宿主方法同名，同时是 kit 订阅运行时的复用键）。 */
+export const HIPPOMEMO_EVENTS_STREAM = 'hippomemo/events'
+
+let channel: HippomemoEventChannel | null = null
+
+/**
+ * 注入事件通道（由 client apply / dock embed 在 `$mount` 之后调用）。
+ * @param next - 组装好的通道；null 表示不可用（降级为不订阅）。
+ */
+export function setHippomemoEventChannel(next: HippomemoEventChannel | null): void {
+  channel = next
+}
+
+/**
+ * 组装通道（`$mount` 之后调用）。
+ * @param remote - `ctx.remote`（提供 `$stream`）。
+ * @param reflect - `ctx.reflect`（取回动态命名空间）。
+ */
+export function hippomemoChannelOf(
+  remote: StreamRemote,
+  reflect: { get(id: string): unknown },
+): HippomemoEventChannel | null {
+  const namespace = reflect.get('remote.hippomemo') as HippomemoEventsFace | undefined
+  if (namespace === undefined || namespace === null || typeof namespace.events !== 'function') return null
+  return { remote, events: namespace }
+}
 
 interface Envelope {
   ok: boolean
@@ -115,11 +160,21 @@ export function createHippomemoApi(): HippomemoApi {
     candidates: () => request<PendingCandidateListResult>('/hippomemo/candidates'),
     narrative: () => request<RecallNarrative>('/hippomemo/narrative'),
     events: (onChange) => {
-      const source = new EventSource('/hippomemo/events')
-      source.onmessage = (event) => {
-        try { onChange(JSON.parse(event.data)) } catch { /* ignore malformed keepalive frames */ }
+      // 统一事件通道（ADR-001）：不再 new EventSource，改走 kit 的引用计数订阅。
+      // 同一 name 只有一条逻辑流，所以 MemorySection 的两处订阅点自动收敛为一条连接；
+      // `ready` 基线帧也会回调（世代之间的窗口不回放，消费者据此重取）。
+      if (channel === null) {
+        console.warn('[dsh-hippomemo] 事件通道不可用，记忆面板将失去实时刷新')
+        return () => {}
       }
-      return () => { source.close() }
+      const active = channel
+      return subscribeFrames<HippomemoStreamFrame>(active.remote, {
+        name: HIPPOMEMO_EVENTS_STREAM,
+        open: (signal) => active.events.events(signal),
+        kinds: ['memory'],
+        onFrame: (frame) => { if (frame.kind === 'memory') onChange({ operation: frame.payload.operation, id: frame.payload.id }) },
+        onReady: () => { onChange({ operation: 'put', id: '' }) },
+      })
     },
   }
 }

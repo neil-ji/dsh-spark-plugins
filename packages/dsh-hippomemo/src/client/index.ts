@@ -15,6 +15,7 @@ import { injectPluginStyle } from 'dsh-spark-plugin-kit/client'
 // 导入不会被剪，此处显式注入保证 --spk-*/--dsw-* token 层落到页面（否则组件被冲淡成低对比灰）。
 import { sparkTokenCss } from 'dsh-ui-kit'
 import { HIPPOMEMO_CSS } from './style.ts'
+import { startHippomemoEvents } from './start.ts'
 import { en, zh, type HippomemoLocaleKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -25,9 +26,9 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 
 const NS = 'hippomemo.settings'
 
-export const inject = ['locale']
+export const inject = ['locale', 'remote'] as const
 
-export function apply(ctx: ClientContext): void {
+export async function apply(ctx: ClientContext): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const anyCtx = ctx as any
   anyCtx.effect(() => {
@@ -40,4 +41,6 @@ export function apply(ctx: ClientContext): void {
   injectPluginStyle(hippoCss, 'hippomemo', 'hippomemo')
   // 注入 Spark token 层（幂等：同一 style id 只注入一次；即便 ui-kit 自注入已存在也安全）。
   injectPluginStyle(sparkTokenCss, 'dsh-ui-kit/tokens', 'dsh-ui-kit')
+  // 统一事件通道（ADR-001）：standalone 路径也要装配，否则记忆面板失去实时刷新。
+  await startHippomemoEvents(ctx)
 }

@@ -230,6 +230,12 @@ const PANEL = '--spk-platform'
 const FLOAT = '--spk-surface-float'
 const L1 = '--spk-layer-1'
 const L2 = '--spk-layer-2'
+/**
+ * 悬浮球球面 = `--spk-surface-float` 92% 叠在面板底上（玻璃球是半透明的，
+ * 只用 surface-float 的不透明值算会和实际渲染偏掉 8%）。
+ * 球浮在应用底/面板底之上，这两个底恰好都在浮层面附近，故合成后取值稳定。
+ */
+const BALL = 'mix(--spk-surface-float, 92, --spk-platform)'
 
 /**
  * @typedef {object} Pair
@@ -313,6 +319,19 @@ export const THEMED_PAIRS = /** @type {Pair[]} */ ([
   { id: 'layer-2 track vs card', source: 'BarChart track / donutTrack', min: 1.05, fg: L2, bg: CARD },
   { id: '表格斑马纹 vs 卡面', source: 'FinanceAuditSection .byModelTable 奇偶行', min: 1.05, fg: L2, bg: CARD },
   { id: '表头 vs 卡面', source: 'FinanceAuditSection .byModelTable thead（吸顶）', min: 1.05, fg: L2, bg: CARD },
+
+  // ── J. 悬浮球（2026-09 静默形态）──────────────────────────────────
+  //   球身 = 92% surface-float 玻璃球；标识走 --spk-brand-fg（实色档 --spk-brand
+  //   在暗色下只有 4.50:1，正好压在 AA 线上，故不用于标识）。
+  { id: '球标识 on 球面', source: 'dock .dock-ball svg（ui-kit 图标层）', min: 4.5, fg: '--spk-brand-fg', bg: BALL },
+  { id: '球 focus ring vs 球面', source: 'dock .dock-ball:focus-visible（MASTER §5.3）', min: 3.0, fg: '--spk-focus-ring', bg: BALL },
+  { id: '球身 vs 面板底（层次）', source: 'dock .dock-ball 球底与面板底可辨', min: 1.05, fg: BALL, bg: PANEL },
+  { id: '[提示] 球描边 vs 球面', source: 'border-2 只负责描轮廓，非唯一线索（另有阴影 + 内壁亮线）', min: 3.0, fg: '--spk-border-2', bg: BALL, soft: true },
+  //   播报气泡 = ui-kit Toast 同款浮层（球旁的事件播报，零动画）。来源行走 label-2：
+  //   label-3 在暗色浮层面上 4.39:1 不达 AA。
+  { id: '气泡正文 on 浮层面', source: 'dock .dock-bubble 事件文本', min: 4.5, fg: '--spk-label', bg: FLOAT },
+  { id: '气泡来源行 on 浮层面', source: 'dock .dock-bubble .src（label-3 于此仅 4.39，禁用）', min: 4.5, fg: '--spk-label-2', bg: FLOAT },
+  { id: '气泡品牌脊线 vs 浮层面', source: 'dock .dock-bubble border-left（非文本 3:1）', min: 3.0, fg: '--spk-brand', bg: FLOAT },
 ])
 
 /** 逐模块 accent 配对（实色图形 / 文字态 / 实底芯片 / 淡底胶囊）。 */

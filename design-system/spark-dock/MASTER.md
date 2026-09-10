@@ -113,6 +113,67 @@ n-700 #40485a · n-800 #2d3749 · n-850 #232b3a · n-900 #171c27 · n-950 #0b0e1
 - 动效：`--spk-ease-out`（进出场）/ `--spk-ease-spring`（开合弹跳）；dur fast 120 / med 220 / slow 320；
   全部动画须有 reduced-motion 降级（`styles/base.css` 已全局兜底）
 
+### 4.1 悬浮球（v4.1 静默形态）
+
+它是全站唯一的常驻浮层控件，调性必须比面板更冷：**读作「一颗玻璃透镜上的品牌标识」，
+不是吉祥物，也不是会呼吸的按钮。**
+
+| 维度 | 规格 |
+| --- | --- |
+| 尺寸 | 48px 圆（`--dock-ball`），触控 ≥ 44px 不变 |
+| 球身 | `--spk-surface-float` @ 92%（半透明玻璃）+ `backdrop-filter: blur(--spk-blur) saturate(1.3)` |
+| 受光 | 顶部白光 13% → 46% 处 3% → 透明；顶部径向品牌染光 12%（124% 半径，自 50% 2% 起） |
+| 描边 | 1px `--spk-border-2`（冷灰）+ 内壁亮线 `inset 0 1px 0 --spk-n-0 @18%` |
+| 投影 | `--spk-shadow-2` + 品牌外发光（rest 24px @15% / hover 28px @26% / 展开 30px @24%） |
+| 标识 | ui-kit `IconSparkles`（22px，由 `.dock-ball svg` 接管尺寸），色 = `--spk-brand-fg` |
+| 身份变量 | `--ball-accent`（默认 `--spk-brand`）单点驱动染光 / hover 描边 / 外发光 |
+
+状态（**一律不动几何**）：
+
+| 状态 | 表现 |
+| --- | --- |
+| rest | 描边 `--spk-border-2`，外发光 15% |
+| hover | 描边 = 品牌 46% 混 `--spk-border-2`，外发光 26% |
+| active | `--spk-shadow-1` + 内阴影（读作「按下去」） |
+| dragging | 光标 grabbing + 品牌描边（无缩放） |
+| `[aria-expanded=true]` | 描边 = `--ball-accent` 实色，外发光 24%（读作「已激活」） |
+| `:focus-visible` | `--spk-focus-ring` 2px + offset 3px（≥3:1，禁移除） |
+
+硬约束（`pnpm check:contrast` §J 组守住）：
+
+1. **球体不得有持续动画**：无 keyframes、无呼吸、无 hover 缩放/弹簧过渡。状态差异只走
+   描边色 / 投影 / 表面亮度 —— 静态即可区分，靠动效吸引注意是玩具感的主要来源。
+2. 标识色**必须**是 `--spk-brand-fg`（亮 7.34:1 / 暗 6.49:1 on 球面）；实色档 `--spk-brand`
+   在暗色下只有 4.50:1，正好压在 AA 线上，不得用于标识。
+3. 球身与面板底需可辨（≥1.05，实测亮 1.13 / 暗 1.18）；1px 描边不承担唯一线索
+   （另有投影 + 内壁亮线，故描边本身按参考档留档）。
+
+**角色层拆成两个独立开关**（`DockOverlay.tsx`）：
+
+| 开关 | 现值 | 管什么 |
+| --- | --- | --- |
+| `BALL_FACE_ENABLED` | `false` | Fairy 表情（呆毛/眼/嘴/腮红）、情绪染光、球体动画（浮动、呆毛摆动、张嘴闪烁、hover 缩放） |
+| `BALL_BUBBLE_ENABLED` | `true` | **事件播报气泡** —— 真实事件文本，无 emoji、无动画，与表情无关 |
+
+任一开启即订阅 Fairy 事件流（都关则不开 SSE）；表情关闭时 mood 被丢弃、不影响气泡。
+
+### 4.2 播报气泡（「发言」）
+
+球旁一句话的能力：后台出现真实事件时，球旁边弹出一条文本提示，4.2s 后自动消失。
+
+| 维度 | 规格 |
+| --- | --- |
+| 数据链路 | `/sparks/events`（SSE，共享引用计数注册表 `streams.ts`）→ `operation: capture \| crystallize` → `announce()`（同文本 4s 去重）→ `useFairy` → 气泡 |
+| 材质 | 与 ui-kit `Toast` 同款浮层：`--spk-surface-float` + 1px `--spk-border` + `--spk-shadow-2` + 12 圆角 + 左侧 3px `--spk-brand` 脊线（`mood-alert` 时脊线转 `--spk-warn`） |
+| 文字 | 正文 `--spk-label` 12px/500；来源行 `--spk-label-2` 11px/400。**来源行禁用 `--spk-label-3`**（暗色浮层面上只有 4.39:1，不达 AA） |
+| 宽度 | `width: max-content` + `max-width: min(250px, 100vw - 24px)`。**必须钉 max-content**：气泡是 shrink-to-fit 的 fixed 元素，不钉宽度时其「静态位置」若贴视口右侧，可用宽度只剩 ~60px，文案折成五行竖条，定位 JS 量到的 `offsetWidth` 也随之偏小、`left` 再被错误夹取（实测 72×91 → 修正后 100×57） |
+| 定位 | 球上方居中（gap 12px），贴顶翻到球下方，左右夹取视口（`m = 12`） |
+| 动效 | 零（无 transition / keyframes），出现与消失瞬时 |
+| 语义 | `role="status"` + `aria-live="polite"`（MASTER §5.8 惰性状态），屏幕阅读器能听到播报 |
+| 事件覆盖 | 现状只有火花流两种 op。proposals / hippomemo / github / npm 的播报是**未实现**（早前把 reflect/resolve 分支判定为死代码后裁掉），要做属于新增 |
+
+硬约束（`pnpm check:contrast` §J 组守住）：气泡正文 4.5、来源行 4.5、品牌脊线（非文本）3.0。
+
 ## 5. 组件规则
 
 1. 品牌实底钮 = `--spk-brand` + `--spk-on-brand`；危险钮 = `--spk-error` + `--spk-on-error`
@@ -137,6 +198,18 @@ pnpm test             # 含 scripts/tests/contrast.spec.ts 153 项断言
 
 ## 7. 变更记录
 
+- **v4.2（2026-09-10）悬浮球拆出「发言」能力**：角色层一分为二 —— `BALL_FACE_ENABLED=false`
+  （表情/染光/动画保持关闭）、`BALL_BUBBLE_ENABLED=true`（事件播报气泡保留：它是真实事件文本，
+  既非 emoji 也非动画，不应随表情一起被移除）。同时修掉气泡的两个既有缺陷：① 宽度被静态位置
+  压成 ~60px 竖条（改 `width: max-content`，实测 72×91 → 100×57）；② 无播报语义（补
+  `role="status"` + `aria-live="polite"`）。材质对齐 ui-kit Toast，来源行从 label-3 提到 label-2
+  （label-3 在暗色浮层面上仅 4.39:1）。详见 §4.2。
+- **v4.1（2026-09-10）悬浮球静默形态**：移除球的角色层表现 —— 不再渲染 Fairy 表情、
+  不再呼吸/上下浮动/张嘴闪烁、不再随情绪染光，hover 不再缩放；球改为玻璃透镜 + 品牌蓝标识
+  （`--spk-brand-fg`），身份色从「火花琥珀」回归品牌蓝（v4 已把暖意的角色限定给火花模块 accent
+  与角色层，角色层退场后暖色即失去承载者）。同时把球纳入 `pnpm check:contrast` 的 §J 组
+  （标识对比度 / focus ring / 球身与面板底层次）。脸与动画的代码全部保留（`FAIRY_LAYER_ENABLED`），
+  静态设计稿 `docs/spark-dock-preview/` 仍按角色层完整留档。详见 §4.1。
 - **v4（2026-09-07）定调「冷灰 + DSH 品牌蓝」**；废弃「暖炭 + 琥珀」方案。
   同时：品牌/accent 拆角色档、面层次分 `platform < card < float`、终端块与主题解耦、
   语义色按 AA 重定、移除文字 `opacity` 弱化、SVG 颜色改走内联 style。

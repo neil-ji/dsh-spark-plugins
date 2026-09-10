@@ -8,11 +8,32 @@
  *  - 脚本目录 = 行内成功率/调用量计量可视化
  */
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useFrames } from 'dsh-spark-plugin-kit/client'
 import type { SparkView, ProposalView, ScriptView } from 'dsh-spark-wire'
 import { createDockSparksApi, type DockSparksApi } from './sparkApi.ts'
-import { subscribeStream } from '../streams.ts'
+import { SPARK_EVENTS_STREAM, type SparkEventChannel } from './remote.ts'
 
 const api: DockSparksApi = createDockSparksApi()
+
+/** 子页依赖面：事件通道由 dock 通过插槽 inject 面下发（不再用模块级单例）。 */
+export interface SparkPaneDeps {
+  channel: SparkEventChannel | null
+}
+
+/**
+ * 子页实时刷新：订阅统一事件流（ADR-001），只对关心的主题生效；`ready` 基线帧同样要重取
+ * —— 世代之间的窗口不回放，基线即「从现在开始不会丢」。
+ */
+function useSparkTopicRefresh(channel: SparkEventChannel | null, kinds: readonly string[], reload: () => void): void {
+  useFrames({
+    remote: channel?.remote ?? null,
+    name: SPARK_EVENTS_STREAM,
+    open: (signal) => (channel as SparkEventChannel).events.events(signal),
+    kinds,
+    onFrame: () => reload(),
+    onReady: () => reload(),
+  })
+}
 
 function timeAgo(ts: number): string {
   const s = Math.max(1, Math.floor((Date.now() - ts) / 1000))
@@ -79,7 +100,7 @@ function Meter({ pct, tone }: { pct: number; tone?: 'good' | 'warn' | undefined 
 
 /* ─────────── 火花流：一条输入流 + 列表 ─────────── */
 
-export function SparksPane(): JSX.Element {
+export function SparksPane({ channel }: SparkPaneDeps): JSX.Element {
   const [status, setStatus] = useState<'active' | 'archived'>('active')
   const { data: sparks, error, reload } = useApiResource<SparkView[]>(() => api.list({ status, limit: 50 }), [status])
   const [draft, setDraft] = useState('')
@@ -90,7 +111,7 @@ export function SparksPane(): JSX.Element {
   const [captured, setCaptured] = useState(false)
   const capturedTimer = useRef(0)
 
-  useEffect(() => subscribeStream('/sparks/events', () => reload()), [reload])
+  useSparkTopicRefresh(channel, ['spark'], reload)
   useEffect(() => () => window.clearTimeout(capturedTimer.current), [])
 
   const submit = async (e: FormEvent) => {
@@ -201,11 +222,11 @@ function SparkList({ sparks, reload }: { sparks: SparkView[]; reload: () => void
 
 /* ─────────── 涌现提议：提议卡 ─────────── */
 
-export function ProposalsPane(): JSX.Element {
+export function ProposalsPane({ channel }: SparkPaneDeps): JSX.Element {
   const { data: proposals, error, reload } = useApiResource<ProposalView[]>(() => api.listProposals({ status: 'pending', limit: 50 }), [])
   const [reflecting, setReflecting] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
-  useEffect(() => subscribeStream('/proposals/events', () => reload()), [reload])
+  useSparkTopicRefresh(channel, ['proposal'], reload)
 
   const reflect = async () => {
     if (reflecting) return
@@ -267,12 +288,12 @@ export function ProposalsPane(): JSX.Element {
 
 /* ─────────── 脚本目录：计量可视化 ─────────── */
 
-export function ScriptsPane(): JSX.Element {
+export function ScriptsPane({ channel }: SparkPaneDeps): JSX.Element {
   const { data: scripts, error, reload } = useApiResource<ScriptView[]>(() => api.listScripts(), [])
   const [message, setMessage] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const messageTimer = useRef(0)
-  useEffect(() => subscribeStream('/scripts/events', () => reload()), [reload])
+  useSparkTopicRefresh(channel, ['script'], reload)
   useEffect(() => () => window.clearTimeout(messageTimer.current), [])
 
   const invoke = async (sc: ScriptView) => {

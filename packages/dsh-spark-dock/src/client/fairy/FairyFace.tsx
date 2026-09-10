@@ -2,16 +2,22 @@
  * Fairy face: the ball's expressive SVG (ahoge spark + eyes + mouth + blush),
  * driven by real plugin events via fairyEvents. Restraint: moods fire only on
  * real events, auto-relax to idle; no idle animation loops beyond a slow bob.
+ *
+ * 2026-09 静默形态：DockOverlay 以 BALL_FACE_ENABLED=false 调用本 hook，
+ * 球内不再渲染 FairyFace；事件订阅由 BALL_BUBBLE_ENABLED 决定（气泡要听事件）。
+ * 组件与规则全部保留，恢复角色层只需把开关置回 true。
  */
 import { useEffect, useState } from 'react'
+import type { SparkEventChannel } from '../spark/remote.ts'
 import { onFairyAnnouncement, startFairyEvents, type FairyMood } from './fairyEvents.ts'
 
-export function useFairy(): { mood: FairyMood | null; bubble: { text: string; src: string } | null } {
+export function useFairy(channel: SparkEventChannel | null, enabled = true): { mood: FairyMood | null; bubble: { text: string; src: string } | null } {
   const [mood, setMood] = useState<FairyMood | null>(null)
   const [bubble, setBubble] = useState<{ text: string; src: string } | null>(null)
 
   useEffect(() => {
-    const stopEvents = startFairyEvents()
+    if (!enabled || channel === null) return
+    const stopEvents = startFairyEvents(channel)
     let moodTimer = 0
     let bubbleTimer = 0
     const off = onFairyAnnouncement((a) => {
@@ -28,7 +34,7 @@ export function useFairy(): { mood: FairyMood | null; bubble: { text: string; sr
       window.clearTimeout(moodTimer)
       window.clearTimeout(bubbleTimer)
     }
-  }, [])
+  }, [channel, enabled])
 
   return { mood, bubble }
 }

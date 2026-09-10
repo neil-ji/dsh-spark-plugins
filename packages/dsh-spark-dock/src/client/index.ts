@@ -6,10 +6,12 @@
  */
 import type { ClientContext } from 'dsh-spark-plugin-kit/client'
 import { injectPluginStyle } from 'dsh-spark-plugin-kit/client'
+import { SPARK_REMOTE_CONTRIBUTION } from 'dsh-spark-wire'
+import { sparkChannelOf, type SparkEventChannel } from './spark/remote.ts'
 import { en as ghEn, zh as ghZh } from 'dsh-connector-github-ui/embed'
 import { en as npmEn, zh as npmZh } from 'dsh-connector-npm-ui/embed'
 import { en as finEn, zh as finZh } from 'dsh-spark-finance-client/embed'
-import { en, HIPPOMEMO_CSS, zh } from 'dsh-hippomemo/embed'
+import { en, HIPPOMEMO_CSS, startHippomemoEvents, zh } from 'dsh-hippomemo/embed'
 import { DockOverlay } from './DockOverlay.tsx'
 import { setHippoT } from './hippo/HippoEmbed.tsx'
 import { startGithubEmbed } from './github/GithubEmbed.tsx'
@@ -18,6 +20,11 @@ import { startFinanceEmbed } from './finance/FinanceEmbed.tsx'
 import { DOCK_CSS } from './style.ts'
 import { setReflectGetter } from './reflect.ts'
 
+/**
+ * 客户端服务依赖。**注意不要把 `remote.spark` 写进来**：该服务由下面的
+ * `$mount(SPARK_REMOTE_CONTRIBUTION)` 才提供，注入它会死锁（fiber 永远等不到，
+ * 悬浮球整个不挂载）。动态命名空间一律走 `ctx.reflect.get('remote.spark')`。
+ */
 export const inject = ['slots', 'locale', 'remote', 'remote.credentials', 'settingsScope'] as const
 
 /** 幂等注入插件级 CSS（与 registerSettingsSection 的 injectPluginStyle 同形）。 */
@@ -36,8 +43,18 @@ function injectDockStyle(): () => void {
  * Mount the Spark Dock overlay.
  * @param ctx - client root context.
  */
-export function apply(ctx: ClientContext): void {
+export async function apply(ctx: ClientContext): Promise<void> {
   const removeStyle = injectDockStyle()
+  // 统一事件通道（ADR-001）：先 mount spark 的 stream 描述符并**等它完成**，
+  // 再经 reflect 取回动态命名空间组装通道（`remote.spark` 不能写进 inject，见上）。
+  let channel: SparkEventChannel | null = null
+  try {
+    await ctx.remote.$mount(SPARK_REMOTE_CONTRIBUTION)
+    channel = sparkChannelOf(ctx.remote, ctx.reflect)
+    if (channel === null) console.warn('[dsh-spark-dock] 未取到 remote.spark 命名空间，实时刷新将不可用')
+  } catch (error) {
+    console.warn('[dsh-spark-dock] spark 事件流描述符 mount 失败，实时刷新将不可用：', error)
+  }
   // hippomemo 全功能内嵌：注册其 locale 字典 + 注入其插件 CSS（幂等 tag 同
   // 原插件，重复加载时良性跳过），再绑定 t 交给 HippoEmbedPane。
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -53,6 +70,8 @@ export function apply(ctx: ClientContext): void {
   const removeHippoCss = injectPluginStyle(hippoCss, 'hippomemo', 'dsh-hippomemo')
   void removeHippoCss
   setHippoT(anyCtx.locale.bind('hippomemo.settings'))
+  // 记忆面板的事件通道（ADR-001）：与 spark 同法装配（mount → reflect → 注入通道）。
+  await startHippomemoEvents(ctx)
   // github 内嵌：注册其字典（重复容忍）+ 异步装配 remote/controller 注入面。
   for (const [lang, dict] of [['zh', ghZh], ['en', ghEn]] as const) {
     try { anyCtx.locale.register('settings.github', lang, dict) } catch { /* already registered */ }
@@ -74,11 +93,15 @@ export function apply(ctx: ClientContext): void {
     inject(name: string, register: () => unknown): unknown
     register(entry: Record<string, unknown>, component: unknown): unknown
   }
+  // 注入面取稳定引用：槽位组件每次渲染都会调 inject，
+  // 若返回新对象则 props 身份每次都变 → 订阅 effect 反复重跑（预览走查抓到过一次悬空）。
+  const injected = { channel }
   slots.inject('shell.overlay', () => slots.register({
     name: 'shell.overlay',
     id: 'spark-dock',
     order: 10,
-    inject: () => ({}),
+    // 通过插槽 inject 面把事件通道交给组件（取代模块级单例）。
+    inject: () => injected,
   }, DockOverlay))
   ctx.effect(() => () => removeStyle())
 }
