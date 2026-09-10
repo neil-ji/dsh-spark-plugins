@@ -29,7 +29,8 @@
     "dsh-hippomemo": "workspace:*",
     "dsh-spark-finance-client": "workspace:*",
     "dsh-spark-plugin-kit": "workspace:*",
-    "dsh-spark-wire": "workspace:*"
+    "dsh-spark-wire": "workspace:*",
+    "dsh-ui-kit": "workspace:*"
   },
   "dsh": {
     "bundle": {

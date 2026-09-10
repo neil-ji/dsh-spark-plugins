@@ -26,6 +26,7 @@ interface FinanceInjected {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let injected: FinanceInjected | undefined
 let started = false
+let failed = false
 const listeners = new Set<() => void>()
 
 /** 由 client 入口在 apply 时调用：异步装配注入面，完成后通知 pane 重渲染。 */
@@ -37,7 +38,11 @@ export function startFinanceEmbed(ctx: any): void {
     // 原 finance-client 插件同场加载时已 mount 过 → 直接复用
   }).then(() => {
     const finance = ctx.reflect.get('remote.finance')
-    if (finance === undefined) return // finance 宿主未加载：pane 保持失败态
+    if (finance === undefined) {
+      failed = true // finance 宿主未加载：pane 显示明确的失败态（区别于加载中）
+      for (const l of listeners) l()
+      return
+    }
     const controller = new FinanceAuditController(finance)
     const useSnapshot = bindSnapshotSelector(controller.store) as SnapshotSelectorHook<FinanceAuditState>
     const t = ctx.locale.bind('settings.finance') as (key: FinanceKey) => string
@@ -74,7 +79,9 @@ export function FinanceEmbedPane(): ReactNode {
     return () => { listeners.delete(remount) }
   }, [])
   if (injected === undefined) {
-    return <div className="dock-empty">财务审计模块加载中…</div>
+    return failed
+      ? <div className="dock-empty dock-embed-failed">财务审计模块装配失败：宿主未提供 remote.finance。重载插件或检查宿主后重试。</div>
+      : <div className="dock-empty"><span className="dock-spin" aria-hidden="true" /> 财务审计模块加载中…</div>
   }
   return <FinanceCard {...injected.card} defaultOpen />
 }

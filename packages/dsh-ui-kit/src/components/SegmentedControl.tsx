@@ -13,6 +13,8 @@ export interface SegmentedControlProps<V extends string = string> {
   onChange: (value: V) => void
   ariaLabel?: string
   disabled?: boolean | undefined
+  /** 面板页签形态：占满整行、各 tab 等宽（dock subtabbar 观感）。 */
+  fullWidth?: boolean | undefined
   className?: string
 }
 
@@ -23,6 +25,7 @@ export function SegmentedControl<V extends string = string>({
   onChange,
   ariaLabel,
   disabled,
+  fullWidth,
   className,
 }: SegmentedControlProps<V>) {
   const rootRef = useRef<HTMLDivElement>(null)
@@ -43,7 +46,7 @@ export function SegmentedControl<V extends string = string>({
   }, [value, options])
 
   return (
-    <div ref={rootRef} role="tablist" aria-label={ariaLabel} className={cx(css.seg, className)}>
+    <div ref={rootRef} role="tablist" aria-label={ariaLabel} className={cx(css.seg, fullWidth && css.segFull, className)}>
       {thumb && <span className={css.thumb} style={{ left: thumb.left, width: thumb.width }} aria-hidden="true" />}
       {options.map((opt) => (
         <button

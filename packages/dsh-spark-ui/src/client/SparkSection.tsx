@@ -4,7 +4,7 @@
  * network graph view (Phase 7).
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Button, Input, Pill, Textarea } from 'dsh-ui-kit'
+import { Button, Input, PanelShell, Pill, SegmentedControl, Textarea } from 'dsh-ui-kit'
 import { bindSnapshotSelector, type SnapshotSelectorHook } from 'dsh-spark-plugin-kit/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
@@ -218,8 +218,7 @@ function Loaded({ injected }: { injected: SparkSectionInjected }): ReactNode {
   if (state.status === 'error') {
     return (
       <div className="spark-section" data-plugin="dsh-spark-ui">
-        <h2 className="spark-title">{t('title')}</h2>
-        <p className="spark-intro">{t('intro')}</p>
+        <PanelShell title={t('title')} subtitle={t('intro')} />
         <div className="spark-error">{t('loadFailed') + ': ' + (state.error ?? '')}</div>
         <Button variant="secondary" disabled={busy} onClick={() => controller.load()}>{t('retry')}</Button>
       </div>
@@ -228,15 +227,22 @@ function Loaded({ injected }: { injected: SparkSectionInjected }): ReactNode {
 
   return (
     <div className="spark-section" data-plugin="dsh-spark-ui">
-      <h2 className="spark-title">{t('title')}</h2>
-      <p className="spark-intro">{t('intro')}</p>
+      <PanelShell title={t('title')} subtitle={t('intro')} />
 
       <div className="spark-toolbar">
         <div className="spark-toolbar-left">
-          <TabButton current={tab} value='sparks' onChange={setTab}>{t('filterAll').replace('All', 'Sparks')}</TabButton>
-          <TabButton current={tab} value='proposals' onChange={setTab}>{t('proposalsTab')}</TabButton>
-          <TabButton current={tab} value='scripts' onChange={setTab}>{t('scriptsTab')}</TabButton>
-          <TabButton current={tab} value='graph' onChange={setTab}>{t('graphTab')}</TabButton>
+          <SegmentedControl
+            fullWidth
+            ariaLabel={t('title')}
+            options={[
+              { value: 'sparks', label: t('filterAll').replace('All', 'Sparks') },
+              { value: 'proposals', label: t('proposalsTab') },
+              { value: 'scripts', label: t('scriptsTab') },
+              { value: 'graph', label: t('graphTab') },
+            ]}
+            value={tab}
+            onChange={setTab}
+          />
         </div>
         <div className="spark-toolbar-right">
           <span className={'spark-live' + (state.live ? ' spark-live-on' : '')}>{state.live ? t('liveOn') : t('liveOff')}</span>
@@ -270,11 +276,6 @@ function Loaded({ injected }: { injected: SparkSectionInjected }): ReactNode {
       )}
     </div>
   )
-}
-
-function TabButton<T extends string>({ current, value, onChange, children }: { current: T; value: T; onChange: (next: T) => void; children: ReactNode }): ReactNode {
-  const active = current === value
-  return <Button variant={active ? 'primary' : 'secondary'} onClick={() => onChange(value)}>{children}</Button>
 }
 
 function FilterButton<T extends string>({ current, value, onChange, children }: { current: T; value: T; onChange: (next: T) => void; children: ReactNode }): ReactNode {

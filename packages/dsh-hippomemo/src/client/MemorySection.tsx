@@ -13,13 +13,15 @@
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
-  BarChart, Button, DonutChart, IconBranchOutline16, IconChevronDownOutline14,
-  IconChevronLeftOutline14, IconChevronRightOutline14, IconChevronUpOutline14,
-  IconEditOutline16, IconPlusOutline16, IconThinkOutline16, IconTrashOutline16,
-  IconWarningOutline16, Input, ListRow, Menu, Modal, Pill, SearchInput,
+  BarChart, Button, DonutChart,
+  Input, ListRow, Menu, Modal, Pill, SearchInput,
   SegmentedControl, StateDot, Textarea, TrendChart,
 } from 'dsh-ui-kit'
 import type { ChartDatum } from 'dsh-ui-kit'
+import {
+  IconBranch, IconChevronDown, IconChevronLeft, IconChevronRight, IconChevronUp,
+  IconEdit, IconPlus, IconThink, IconTrash, IconWarning,
+} from './icons.tsx'
 import type { HippomemoApi, MemoryTagCount } from './api.ts'
 import type { HippomemoLocaleKey } from './locales.ts'
 import type {
@@ -71,7 +73,7 @@ function HippomemoSelect({ value, placeholder, options, onChange }: {
           onClick={openMenu}>
           <span className='hippomemo-select-label'>{label}</span>
           <span className='hippomemo-select-chevron' aria-hidden='true'>
-            <IconChevronDownOutline14 />
+            <IconChevronDown />
           </span>
         </Button>
       )}
@@ -145,7 +147,6 @@ function BrainStrip({ t, stats, usage, preferences, candidates, narrative, reloa
     <section className='hippomemo-brain-panel' aria-label={t('title')}>
       <div className='hippomemo-panel-head'>
         <h3 className='hippomemo-panel-title'>{t('title')}</h3>
-        <Pill className='hippomemo-pill'>实时</Pill>
         <span className='hippomemo-panel-count'>{t('todoTitle')} · {todoCount}</span>
       </div>
       <div className='hippomemo-brain-strip'>
@@ -166,7 +167,7 @@ function BrainStrip({ t, stats, usage, preferences, candidates, narrative, reloa
           })}
           <span className='hippomemo-brain-spacer' />
           <Button size='sm' variant='secondary' onClick={() => { setExpanded(!expanded) }}
-            icon={<IconChevronDownOutline14 className={expanded ? 'hippomemo-chev hippomemo-chev-up' : 'hippomemo-chev'} />}>
+            icon={<IconChevronDown className={expanded ? 'hippomemo-chev hippomemo-chev-up' : 'hippomemo-chev'} />}>
             {expanded ? t('brainCollapse') : t('brainExpand')}
           </Button>
         </div>
@@ -205,11 +206,10 @@ function TodoQuadrantImpl({ t, items, now, onResolve }: {
       <div className='hippomemo-quadrant'>
         <div className='hippomemo-panel-head'>
           <h3 className='hippomemo-panel-title'>{t('todoTitle')}</h3>
-          <Pill className='hippomemo-pill'>行动</Pill>
           <span className='hippomemo-panel-count'>0 项</span>
         </div>
         <p className='hippomemo-quadrant-empty'>
-          <IconWarningOutline16 size={14} /> {t('todoEmpty')}
+          <IconWarning size={12} /> {t('todoEmpty')}
         </p>
       </div>
     );
@@ -218,7 +218,6 @@ function TodoQuadrantImpl({ t, items, now, onResolve }: {
     <div className='hippomemo-quadrant'>
       <div className='hippomemo-panel-head'>
         <h3 className='hippomemo-panel-title'>{t('todoTitle')}</h3>
-        <Pill className='hippomemo-pill'>行动</Pill>
         <span className='hippomemo-panel-count'>{items.length} 项</span>
       </div>
       <ul className='hippomemo-todo-list'>
@@ -244,7 +243,7 @@ function TodoQuadrantImpl({ t, items, now, onResolve }: {
               <div className='hippomemo-todo-body'>
                 <div className='hippomemo-todo-title'>{item.title}</div>
                 <div className='hippomemo-todo-desc'>
-                  <Pill className={'hippomemo-todo-kind hippomemo-kind-' + item.memoryKind}>{t(kindKeyMap[item.kind])}</Pill>
+                  <Pill className={'hippomemo-tag hippomemo-kind-' + item.memoryKind}>{t(kindKeyMap[item.kind])}</Pill>
                   <span className='hippomemo-todo-reason'>{item.reason}</span>
                   <span className='hippomemo-todo-meta'>{formatRelative(item.detectedAt, now)}</span>
                 </div>
@@ -252,7 +251,7 @@ function TodoQuadrantImpl({ t, items, now, onResolve }: {
               {item.kind === 'observation' ? (
                 // On-observation records are engine-owned: auto-archive at the deadline,
                 // auto-cancel on citation. Read-only status row, nothing to resolve.
-                <Pill className='hippomemo-todo-kind hippomemo-todo-auto'>自动</Pill>
+                <Pill className='hippomemo-tag hippomemo-tag-success'>自动</Pill>
               ) : (
                 <Button size='sm' variant='secondary' className='hippomemo-todo-act'
                   onClick={() => { onResolve(item) }}>
@@ -276,7 +275,6 @@ function RecallQuadrant({ t, citations, narrative, now }: {
       <div className='hippomemo-quadrant'>
         <div className='hippomemo-panel-head'>
           <h3 className='hippomemo-panel-title'>{t('recallTitle')}</h3>
-          <Pill className='hippomemo-pill'>验证</Pill>
           <span className='hippomemo-panel-count'>—</span>
         </div>
         <p className='hippomemo-quadrant-empty'>{t('recallEmpty')}</p>
@@ -306,7 +304,6 @@ function RecallQuadrant({ t, citations, narrative, now }: {
     <div className='hippomemo-quadrant'>
       <div className='hippomemo-panel-head'>
         <h3 className='hippomemo-panel-title'>{t('recallTitle')}</h3>
-        <Pill className='hippomemo-pill'>验证</Pill>
         <span className='hippomemo-panel-count'>
           {formatRelative(narrative?.ts ?? citations[0]?.ts ?? now, now)}
         </span>
@@ -335,7 +332,6 @@ function PreferenceQuadrant({ t, items, totalRecall, onAction }: {
       <section className='hippomemo-pref-zone'>
         <div className='hippomemo-panel-head'>
           <h3 className='hippomemo-panel-title'>{t('prefTitle')}</h3>
-          <Pill className='hippomemo-pill hippomemo-pill-preference'>{t('preference')}</Pill>
         </div>
         <p className='hippomemo-quadrant-empty'>{t('prefEmpty')}</p>
       </section>
@@ -347,7 +343,6 @@ function PreferenceQuadrant({ t, items, totalRecall, onAction }: {
     <section className='hippomemo-pref-zone'>
       <div className='hippomemo-panel-head'>
         <h3 className='hippomemo-panel-title'>{t('prefTitle')}</h3>
-        <Pill className='hippomemo-pill hippomemo-pill-preference'>{t('preference')}</Pill>
         <span className='hippomemo-panel-count'>
           {t('prefActive', { n: items.length, rate: String(Math.min(100, rate)) })}
         </span>
@@ -362,7 +357,7 @@ function PreferenceQuadrant({ t, items, totalRecall, onAction }: {
             const isAuto = item.source === 'auto';
             return (
               <li className={'hippomemo-pref-row' + (item.confirmed ? ' hippomemo-pref-row-confirmed' : '')} key={item.id}>
-                <Pill className={'hippomemo-pref-source hippomemo-pref-source-' + (isAuto ? 'auto' : 'manual')}>
+                <Pill className={'hippomemo-tag ' + (isAuto ? 'hippomemo-tag-error' : 'hippomemo-tag-brand')}>
                   {isAuto ? t('prefSourceAuto') : t('prefSourceManual')}
                 </Pill>
                 <div className='hippomemo-pref-body'>
@@ -475,7 +470,6 @@ function MemoryListPanel({ t, api, detailId, onDetail }: {
     <section className='hippomemo-memory-panel'>
       <div className='hippomemo-panel-head'>
         <h3 className='hippomemo-panel-title'>{t('title')}</h3>
-        <Pill className='hippomemo-pill'>浏览</Pill>
         <span className='hippomemo-panel-count'>{total} 条</span>
       </div>
       <div className='hippomemo-toolbar'>
@@ -487,8 +481,8 @@ function MemoryListPanel({ t, api, detailId, onDetail }: {
           title={order === 'desc' ? t('orderDesc') : t('orderAsc')}
           aria-label={order === 'desc' ? t('orderDesc') : t('orderAsc')}
           onClick={toggleOrder}
-          icon={order === 'desc' ? <IconChevronDownOutline14 /> : <IconChevronUpOutline14 />} />
-        <Button variant='primary' size='md' icon={<IconPlusOutline16 />}
+          icon={order === 'desc' ? <IconChevronDown /> : <IconChevronUp />} />
+        <Button variant='primary' size='md' icon={<IconPlus />}
           onClick={() => { onDetail('new'); }}>{t('newMemory')}</Button>
       </div>
       <details className='hippomemo-filters'>
@@ -559,10 +553,10 @@ function MemoryListPanel({ t, api, detailId, onDetail }: {
                 meta={(
                   <>
                     {record.kind !== 'preference' ? (
-                      <Pill className={'hippomemo-kind-pill hippomemo-kind-' + record.kind}>{t(record.kind)}</Pill>
+                      <Pill className={'hippomemo-tag hippomemo-kind-' + record.kind}>{t(record.kind)}</Pill>
                     ) : null}
                     {scoped ? (
-                      <Pill className='hippomemo-model-pill' title={(record.modelIds ?? []).join(', ')}>
+                      <Pill className='hippomemo-tag hippomemo-tag-mono' title={(record.modelIds ?? []).join(', ')}>
                         {(record.modelIds ?? [])[0] + ((record.modelIds?.length ?? 0) > 1 ? ' +' + String((record.modelIds?.length ?? 0) - 1) : '')}
                       </Pill>
                     ) : null}
@@ -577,20 +571,20 @@ function MemoryListPanel({ t, api, detailId, onDetail }: {
                 trailing={(
                   <>
                     {record.kind === 'preference' ? (
-                      <Pill className='hippomemo-pill hippomemo-pill-preference'>
-                        <IconThinkOutline16 size={12} />
+                      <Pill className='hippomemo-tag hippomemo-tag-brand'>
+                        <IconThink size={12} />
                         {t('preference')}
                       </Pill>
                     ) : null}
                     {record.sourceSparkId !== undefined && record.sourceSparkId !== null && record.sourceSparkId.length > 0 ? (
                       <span className='hippomemo-row-spark' title={t('sourceSparkHint')}>
-                        <IconBranchOutline16 size={14} />
+                        <IconBranch size={14} />
                       </span>
                     ) : null}
                     <Button size='sm' variant='ghost' title={t('edit')} aria-label={t('edit')}
                       className='hippomemo-icon-btn'
                       onClick={() => { onDetail(record.id); }}
-                      icon={<IconEditOutline16 size={14} />} />
+                      icon={<IconEdit size={14} />} />
                     <Button size='sm' variant='ghost' title={t('delete')} aria-label={t('delete')}
                       className='hippomemo-icon-btn hippomemo-icon-btn-danger'
                       disabled={deletingId !== null}
@@ -602,7 +596,7 @@ function MemoryListPanel({ t, api, detailId, onDetail }: {
                         try { await api.remove(record.id); } finally { setDeletingId(null); }
                         reload();
                       }}
-                      icon={<IconTrashOutline16 size={14} />} />
+                      icon={<IconTrash size={14} />} />
                   </>
                 )}
               />
@@ -620,7 +614,7 @@ function MemoryListPanel({ t, api, detailId, onDetail }: {
               options={PAGE_SIZES.map(size => ({ value: String(size), label: t('pageSizeLabel') + ' ' + String(size) }))}
               onChange={changePageSize} />
             <Button variant='ghost' size='sm' disabled={page <= 1}
-              onClick={() => { setPage(page - 1); }} icon={<IconChevronLeftOutline14 />}>{t('prevPage')}</Button>
+              onClick={() => { setPage(page - 1); }} icon={<IconChevronLeft />}>{t('prevPage')}</Button>
             {pageItems(page, totalPages).map((item, index) => (
               item === 'gap'
                 ? <span key={'gap-' + String(index)} className='hippomemo-pager-gap'>…</span>
@@ -629,7 +623,7 @@ function MemoryListPanel({ t, api, detailId, onDetail }: {
                     onClick={() => { setPage(item); }}>{item}</Button>
             ))}
             <Button variant='ghost' size='sm' disabled={page >= totalPages}
-              onClick={() => { setPage(page + 1); }} icon={<IconChevronRightOutline14 />}>{t('nextPage')}</Button>
+              onClick={() => { setPage(page + 1); }} icon={<IconChevronRight />}>{t('nextPage')}</Button>
           </div>
         </div>
       ) : null}
@@ -703,35 +697,35 @@ function MemoryDetailModal({ api, t, id, refreshKey, onBack, onEdit, onDeleted }
       contentClassName='hippomemo-detail-modal-body'
       footer={(
         <div className='hippomemo-detail-modal-footer'>
-          <Button size='sm' variant='ghost' icon={<IconEditOutline16 />} onClick={() => { onEdit(record.id); }}>{t('edit')}</Button>
+          <Button size='sm' variant='ghost' icon={<IconEdit />} onClick={() => { onEdit(record.id); }}>{t('edit')}</Button>
           <Button size='sm' variant='ghost' onClick={() => { void archiveToggle(); }}>
             {record.status === 'archived' ? t('restore') : t('archive')}
           </Button>
           <Button size='sm' variant='ghost' className='hippomemo-button-danger'
-            icon={<IconTrashOutline16 />} onClick={() => { void remove(); }}>{t('delete')}</Button>
+            icon={<IconTrash />} onClick={() => { void remove(); }}>{t('delete')}</Button>
         </div>
       )}
     >
       <div data-plugin='dsh-hippomemo' className='hippomemo-modal-scope'>
       <div className='hippomemo-detail-pills'>
-        <Pill className={'hippomemo-kind-pill hippomemo-kind-' + record.kind}>
-          {record.kind === 'preference' ? <IconThinkOutline16 className='hippomemo-pill-icon' size={12} /> : null}
+        <Pill className={'hippomemo-tag hippomemo-kind-' + record.kind}>
+          {record.kind === 'preference' ? <IconThink size={12} className='hippomemo-tag-icon' /> : null}
           {t(record.kind)}
         </Pill>
-        <Pill className='hippomemo-scope-pill'>{t(record.scope)}</Pill>
+        <Pill className='hippomemo-tag hippomemo-tag-neutral'>{t(record.scope)}</Pill>
         {record.scope === 'global' ? (
-          <Pill className={'hippomemo-proven-pill hippomemo-proven-' + (record.globalProven ? 'yes' : 'no')}>
+          <Pill className={'hippomemo-tag hippomemo-tag-neutral hippomemo-proven-' + (record.globalProven ? 'yes' : 'no')}>
             {record.globalProven ? t('proven') : t('unproven') + '·' + (record.seenWorkspaces?.length ?? 0)}
           </Pill>
         ) : null}
-        <Pill className={'hippomemo-status-pill hippomemo-status-' + record.status}>{t(record.status)}</Pill>
+        <Pill className={'hippomemo-tag hippomemo-tag-neutral hippomemo-status-' + record.status}>{t(record.status)}</Pill>
       </div>
       <div className='hippomemo-modal-content hippomemo-detail-content'>{record.content}</div>
       {record.tags.length > 0 ? (
         <div className='hippomemo-tag-list'>
           <span className='hippomemo-tag-label'>{t('tags')}</span>
           {record.tags.map(tagItem => (
-            <Pill key={tagItem} className='hippomemo-tag-pill'>#{tagItem}</Pill>
+            <Pill key={tagItem} className='hippomemo-tag hippomemo-tag-neutral'>#{tagItem}</Pill>
           ))}
         </div>
       ) : null}
@@ -739,7 +733,7 @@ function MemoryDetailModal({ api, t, id, refreshKey, onBack, onEdit, onDeleted }
         <div className='hippomemo-tag-list'>
           <span className='hippomemo-tag-label'>{t('modelIdsLabel')}</span>
           {record.modelIds!.map(modelId => (
-            <Pill key={modelId} className='hippomemo-model-pill' title={t('modelIdsHint')}>{modelId}</Pill>
+            <Pill key={modelId} className='hippomemo-tag hippomemo-tag-mono' title={t('modelIdsHint')}>{modelId}</Pill>
           ))}
         </div>
       ) : null}
@@ -752,7 +746,7 @@ function MemoryDetailModal({ api, t, id, refreshKey, onBack, onEdit, onDeleted }
             <dt>{t('sourceSpark')}</dt>
             <dd>
               <Pill className='hippomemo-source-spark-pill' title={t('sourceSparkHint')}>
-                <IconBranchOutline16 size={12} /> {t('sourceSparkBadge')}: 
+                <IconBranch size={12} /> {t('sourceSparkBadge')}: 
                 <code className='hippomemo-source-spark-id'>{(record.sourceSparkId ?? '').slice(0, 8)}</code>
               </Pill>
             </dd>
@@ -764,7 +758,7 @@ function MemoryDetailModal({ api, t, id, refreshKey, onBack, onEdit, onDeleted }
         <div className='hippomemo-fact'><dt>{t('usageCited')}</dt><dd>{record.citationCount} · {record.lastCitedAt === null ? '—' : formatDate(record.lastCitedAt)}</dd></div>
       </dl>
       <div className='hippomemo-lineage'>
-        <h4 className='hippomemo-lineage-title'><IconBranchOutline16 size={14} /> {t('modalLineage')}</h4>
+        <h4 className='hippomemo-lineage-title'><IconBranch size={14} /> {t('modalLineage')}</h4>
         {hasSpark ? (
           <div className='hippomemo-lineage-row'>
             <Pill className='hippomemo-lineage-node hippomemo-lineage-spark'>
@@ -1095,10 +1089,10 @@ function EvolvePanel({ api, t }: { api: HippomemoApi; t: Translate }): ReactNode
                 const kind = kindMap.get(verdict.id);
                 return (
                   <div className='hippomemo-evolve-verdict' key={verdict.id}>
-                    <Pill className={'hippomemo-verdict-' + verdict.verdict}>
+                    <Pill className={'hippomemo-tag hippomemo-verdict-' + verdict.verdict}>
                       {verdict.verdict === 'keep' ? t('evolveKeep') : t('evolveNoise')}
                     </Pill>
-                    <Pill className={'hippomemo-evolve-kind hippomemo-kind-' + (kind ?? 'unknown')}>
+                    <Pill className={'hippomemo-tag hippomemo-kind-' + (kind ?? 'unknown')}>
                       {kind === undefined ? '—' : t(kind)}
                     </Pill>
                     <span className='hippomemo-evolve-verdict-id'>{verdict.id.slice(0, 8)}</span>
@@ -1116,8 +1110,8 @@ function EvolvePanel({ api, t }: { api: HippomemoApi; t: Translate }): ReactNode
                 const kind = kindMap.get(action.id);
                 return (
                   <div className='hippomemo-evolve-action' key={action.id + action.action}>
-                    <Pill className={'hippomemo-action-' + action.action}>{t(ACTION_LABELS[action.action])}</Pill>
-                    <Pill className={'hippomemo-evolve-kind hippomemo-kind-' + (kind ?? 'unknown')}>
+                    <Pill className={'hippomemo-tag hippomemo-tag-neutral hippomemo-action-' + action.action}>{t(ACTION_LABELS[action.action])}</Pill>
+                    <Pill className={'hippomemo-tag hippomemo-kind-' + (kind ?? 'unknown')}>
                       {kind === undefined ? '—' : t(kind)}
                     </Pill>
                     <span className='hippomemo-evolve-action-id'>{action.id.slice(0, 8)}</span>
@@ -1151,7 +1145,6 @@ function OverviewTab({ t, stats, usage, preferences, candidates, narrative, cita
       <section className='hippomemo-section-card'>
         <div className='hippomemo-panel-head'>
           <h3 className='hippomemo-panel-title'>{t('overviewLiveActivity')}</h3>
-          <Pill className='hippomemo-pill'>{t('recallTitle')}</Pill>
         </div>
         <RecallQuadrant t={t} citations={citations} narrative={narrative} now={now} />
       </section>
@@ -1181,17 +1174,11 @@ function EvolutionTab({ t, stats, usage, candidates, now, onResolve, api, reload
   return (
     <div className='hippomemo-tab'>
       <section className='hippomemo-section-card'>
-        <div className='hippomemo-panel-head'>
-          <h3 className='hippomemo-panel-title'>{t('evolutionCandidatesTitle')}</h3>
-          <Pill className='hippomemo-pill'>{t('todoTitle')}</Pill>
-          <span className='hippomemo-panel-count'>{candidates?.total ?? 0} 项</span>
-        </div>
         <TodoQuadrantImpl t={t} items={candidates?.items ?? []} now={now} onResolve={onResolve} />
       </section>
       <section className='hippomemo-section-card'>
         <div className='hippomemo-panel-head'>
           <h3 className='hippomemo-panel-title'>{t('evolutionStatsTitle')}</h3>
-          <Pill className='hippomemo-pill'>{t('usage')}</Pill>
         </div>
         {stats !== null ? (
           <div className='hippomemo-meta'>
@@ -1279,6 +1266,7 @@ export function MemorySection({ api, t }: MemorySectionProps): ReactNode {
       <p className='hippomemo-intro'>{t('intro')}</p>
       <SegmentedControl<SectionTab>
         className='hippomemo-tabs'
+        fullWidth
         ariaLabel='hippomemo section'
         value={tab} onChange={setTab}
         options={[

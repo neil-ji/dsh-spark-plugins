@@ -1,0 +1,39 @@
+.shell {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.titles {
+  flex: 1;
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font: 600 18px/26px var(--spk-font);
+  letter-spacing: -0.01em;
+  color: var(--spk-label);
+}
+
+.subtitle {
+  margin: 0;
+  font: 400 12px/18px var(--spk-font);
+  color: var(--spk-label-2);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}

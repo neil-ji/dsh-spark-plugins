@@ -23,6 +23,7 @@ interface NpmInjected {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let injected: NpmInjected | undefined
 let started = false
+let failed = false
 const listeners = new Set<() => void>()
 
 /** 由 client 入口在 apply 时调用：异步装配注入面，完成后通知 pane 重渲染。 */
@@ -34,7 +35,11 @@ export function startNpmEmbed(ctx: any): void {
     // 原 npm-ui 插件同场加载时已 mount 过同一 contribution → 直接复用
   }).then(() => {
     const npm = ctx.reflect.get('remote.npm')
-    if (npm === undefined) return // 连接器宿主未加载：pane 保持加载失败态
+    if (npm === undefined) {
+      failed = true // 连接器宿主未加载：pane 显示明确的失败态（区别于加载中）
+      for (const l of listeners) l()
+      return
+    }
     const controller = new NpmUiStore(ctx, npm)
     const useSnapshot = bindSnapshotSelector(controller.store)
     injected = { controller, useSnapshot, t: ctx.locale.bind('settings.npm') }
@@ -54,7 +59,9 @@ export function NpmEmbedPane(): ReactNode {
     return () => { listeners.delete(remount) }
   }, [])
   if (injected === undefined) {
-    return <div className="dock-empty">npm 连接模块加载中…</div>
+    return failed
+      ? <div className="dock-empty dock-embed-failed">npm 连接模块装配失败：宿主未提供 remote.npm。重载插件或检查连接器宿主后重试。</div>
+      : <div className="dock-empty"><span className="dock-spin" aria-hidden="true" /> npm 连接模块加载中…</div>
   }
   return (
     <div className="dock-embed dock-embed-connector">

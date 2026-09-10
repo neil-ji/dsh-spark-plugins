@@ -30,6 +30,11 @@ export { ListRow, type ListRowProps } from './components/ListRow.tsx'
 export { Disclosure, type DisclosureProps } from './components/Disclosure.tsx'
 export { SettingsCard, Stat, StatGrid, type SettingsCardProps, type StatProps } from './components/SettingsCard.tsx'
 
+// 面板骨架（插件面板统一骨架，火花基线：见各组件头注释）
+export { PanelShell, type PanelShellProps } from './components/PanelShell.tsx'
+export { Card, type CardProps } from './components/Card.tsx'
+export { EmptyState, type EmptyStateProps } from './components/EmptyState.tsx'
+
 export { Menu, type MenuProps, type MenuItem } from './components/Menu.tsx'
 
 // 浮层与反馈
@@ -49,10 +54,18 @@ export { Money, formatMicros, type MoneyProps, type MoneySize } from './componen
 export { TerminalBlock, type TerminalBlockProps, type TerminalLine, type TerminalTone } from './components/TerminalBlock.tsx'
 export { Sparkline, type SparklineProps } from './components/Sparkline.tsx'
 
+// 图标：lucide-react 驱动的工作区唯一图标层（规范见 components/icons.tsx 头注释）
+export {
+  IconBranch, IconChevronDown, IconChevronLeft, IconChevronRight, IconChevronUp,
+  IconDollar, IconEdit, IconGithub, IconPackage, IconPlus, IconSparkles,
+  IconThink, IconTrash, IconWarning, type IconProps,
+} from './components/icons.tsx'
+
+// 遗留命名（0.3.x，@deprecated）：指向新图标，待下游迁移后移除
 export {
   IconChevronDownOutline14, IconChevronUpOutline14, IconChevronLeftOutline14, IconChevronRightOutline14,
   IconPlusOutline16, IconTrashOutline16, IconEditOutline16, IconBranchOutline16,
-  IconThinkOutline16, IconWarningOutline16, type IconProps,
+  IconThinkOutline16, IconWarningOutline16,
 } from './components/icons.tsx'
 
 export { cx } from './cx.js'

@@ -28,6 +28,7 @@ interface GithubInjected {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let injected: GithubInjected | undefined
 let started = false
+let failed = false
 const listeners = new Set<() => void>()
 
 /** 由 client 入口在 apply 时调用：异步装配注入面，完成后通知 pane 重渲染。 */
@@ -40,7 +41,11 @@ export function startGithubEmbed(ctx: any): void {
   }).then(() => {
     // mounted namespace 是动态 cordis 服务（remote.github），走 reflect 读取
     const github = ctx.reflect.get('remote.github')
-    if (github === undefined) return // 连接器宿主未加载：pane 保持加载失败态
+    if (github === undefined) {
+      failed = true // 连接器宿主未加载：pane 显示明确的失败态（区别于加载中）
+      for (const l of listeners) l()
+      return
+    }
     const controller = new GithubSettingsStore(ctx, github)
     const useSnapshot = bindSnapshotSelector(controller.store)
     injected = { controller, useSnapshot, t: ctx.locale.bind('settings.github') }
@@ -61,7 +66,9 @@ export function GithubEmbedPane(): ReactNode {
     return off
   }, [])
   if (injected === undefined) {
-    return <div className="dock-empty">GitHub 连接模块加载中…</div>
+    return failed
+      ? <div className="dock-empty dock-embed-failed">GitHub 连接模块装配失败：宿主未提供 remote.github。重载插件或检查连接器宿主后重试。</div>
+      : <div className="dock-empty"><span className="dock-spin" aria-hidden="true" /> GitHub 连接模块加载中…</div>
   }
   return (
     <div className="dock-embed dock-embed-connector">

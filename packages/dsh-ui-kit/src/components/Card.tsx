@@ -1,0 +1,32 @@
+import type { ReactNode } from 'react'
+import { cx } from '../cx.js'
+import css from './Card.module.css'
+
+export interface CardProps {
+  /** 可选卡片头（14px/600）；有 actions 时构成头行两端布局。 */
+  title?: ReactNode
+  /** 头部右侧插槽（按钮/徽标），仅在提供 title 时渲染。 */
+  actions?: ReactNode
+  children: ReactNode
+  /** brand：边框着品牌色（结晶/高亮等强调场景）。 */
+  tone?: 'default' | 'brand'
+  className?: string
+}
+
+/**
+ * 插件面板统一卡片 surface（火花基线）：radius 12、padding 12 14、
+ * layer-2 背景、l1 边框。替代 .spark-card / .dock-card / 各面板自绘卡片。
+ */
+export function Card({ title, actions, children, tone = 'default', className }: CardProps) {
+  return (
+    <section className={cx(css.card, tone === 'brand' && css.brand, className)}>
+      {(title != null || actions != null) && (
+        <div className={css.head}>
+          {title != null && <h3 className={css.title}>{title}</h3>}
+          {actions != null && <div className={css.actions}>{actions}</div>}
+        </div>
+      )}
+      {children}
+    </section>
+  )
+}

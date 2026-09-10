@@ -7,7 +7,9 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
+import { createElement } from 'react'
 import { registerSettingsSection } from 'dsh-spark-plugin-kit/client'
+import { IconSparkles } from 'dsh-ui-kit'
 import { SparkSection, SparkController, bindSparkController } from './SparkSection.tsx'
 import { createSparksApi } from './api.ts'
 import { SPARK_CSS } from './style.ts'
@@ -39,6 +41,7 @@ export function apply(ctx: ClientContext): void {
     namespace: NS,
     dictionaries: { zh, en },
     labelKey: 'nav',
+    icon: createElement(IconSparkles, { size: 14 }),
     inject: () => ({ api, controller, useSnapshot }),
     css: SPARK_CSS,
     cssTag: 'spark',

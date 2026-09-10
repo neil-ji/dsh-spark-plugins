@@ -86,6 +86,8 @@ pnpm typecheck    # 类型检查全部包
 pnpm test         # 测试全部包（含根 vitest，共 255 用例）
 pnpm dev          # 构建全部 + 安装到 web profile
 pnpm dev --run    # 构建 + 安装 + 前台启动 dogfood（dsh --profile web --port 3999）
+pnpm preview      # 零 dsh 组件预览（真 embed 产物 + 假宿主，127.0.0.1:5180）
+pnpm preview:verify  # 预览自检：Node 冒烟 + 服务器/fixture 断言（52 项）
 pnpm install:profile  # 仅重新安装到 profile（pack→tarball，与普通用户安装同路径）
 pnpm escape       # 启动「应急逃生」profile（纯官方 web，端口 3998）
 pnpm escape:init  # 仅初始化/刷新逃生 profile（幂等）
@@ -94,7 +96,25 @@ pnpm finance:sync-prices  # 从 models.dev 社区价格表同步非 DeepSeek 计
 
 ## 本地运行机制
 
-> 分两种用法：**沙箱三线开发**（不碰 `~/.dsh`，推荐日常）与 **dogfood 安装验证**（装进 web profile）。
+> 分三种用法：**零 dsh 预览**（不装 dsh，仿真 dsh web 外壳 + 真悬浮球，推荐走查）、**沙箱三线开发**
+> （不碰 `~/.dsh`，推荐日常联调）与 **dogfood 安装验证**（装进 web profile）。
+
+### 零 dsh 预览（模拟 dsh web + 真 spark-dock 悬浮球）
+
+机器上**不需要任何 dsh 安装、不写任何 profile、不起 dsh 进程**：画布是仿真的 dsh web 会话界面，
+右下角是**真的** `dsh-spark-dock` 悬浮球——点开就是真面板（火花 / 记忆 / 成本 / GitHub / npm
+五个模块，各插件的完整设置 UI），拖动吸附四角、位置记 localStorage。
+
+```bash
+pnpm preview         # http://127.0.0.1:5180/  真产物口径，改码自动重建 + 页面自动刷新
+pnpm preview:source  # 源码口径（packages/*/src/client/embed.ts），免构建
+pnpm preview:verify  # 自检 52 项（Node 冒烟 + 服务器/fixture 断言）
+```
+
+左栏其余画布是组件级单渲染（GitHub / npm / 财务审计 / HippoMemo / UI Kit），便于逐个走查；
+顶栏可切语言、明暗主题与 `ok|empty|error` 三档 fixture。财务卡的配置编辑走内存版
+`settingsScope`（真的能改能还原），记忆与火花的假数据来自预览服务器 `/hippomemo/*`、`/sparks/*` fixture。
+细节、一致性边界与排障见 [docs/COMPONENT-PREVIEW.md](docs/COMPONENT-PREVIEW.md)。
 
 ### 沙箱三线开发（数据隔离 + HMR）
 

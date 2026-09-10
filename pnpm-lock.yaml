@@ -356,7 +356,7 @@ importers:
         version: link:../dsh-ui-kit
       react:
         specifier: '*'
-        version: 18.3.1
+        version: 19.2.8
       zod:
         specifier: '*'
         version: 4.4.3
@@ -375,7 +375,7 @@ importers:
         version: 0.1.2-rc.1(@deepseek-ai/cordis@4.0.1)
       '@deepseek-ai/dsh-client-store':
         specifier: 0.1.2-rc.1
-        version: 0.1.2-rc.1(@deepseek-ai/cordis@4.0.1)(@types/react@18.3.31)(react@18.3.1)
+        version: 0.1.2-rc.1(@deepseek-ai/cordis@4.0.1)(@types/react@18.3.31)(react@19.2.8)
       '@deepseek-ai/dsh-client-ui-primitives':
         specifier: 0.1.2-rc.1
         version: 0.1.2-rc.1(@deepseek-ai/cordis@4.0.1)
@@ -643,6 +643,9 @@ importers:
       dsh-spark-wire:
         specifier: workspace:*
         version: link:../dsh-spark-wire
+      dsh-ui-kit:
+        specifier: workspace:*
+        version: link:../dsh-ui-kit
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: ^4.0.1
@@ -753,6 +756,9 @@ importers:
       katex:
         specifier: ^0.16.47
         version: 0.16.47
+      lucide-react:
+        specifier: ^1.43.0
+        version: 1.43.0(react@18.3.1)
       mdast-util-from-markdown:
         specifier: ^2.0.3
         version: 2.0.3
@@ -2205,6 +2211,11 @@ packages:
   lru-cache@5.1.1:
     resolution: {integrity: sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w==}
 
+  lucide-react@1.43.0:
+    resolution: {integrity: sha512-ubtnda1fVK5ky0PNEpOmB0wiwhpZUyJiol4K14KCm+QKvuCkfUu54Et/rIjyupJpwiJ5Hg+BLQE86/GEsS+IgQ==}
+    peerDependencies:
+      react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
+
   magic-string@0.30.21:
     resolution: {integrity: sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==}
 
@@ -2418,6 +2429,10 @@ packages:
 
   react@18.3.1:
     resolution: {integrity: sha512-wS+hAgJShR0KhEvPJArfuPVN1+Hz1t0Y6n5jLrGQbkb4urgPE/0Rve+1kMB1v/oWgHgm4WIcV+i7F2pTVj+2iQ==}
+    engines: {node: '>=0.10.0'}
+
+  react@19.2.8:
+    resolution: {integrity: sha512-PWaYA1L/q9u2u7xYQi+Y3L3Yfnie7XyLeaJICV1MGD6LprsBxcAqGjYyr0eY3p+QdsA+x/Irkt4Qif8D63+Sbw==}
     engines: {node: '>=0.10.0'}
 
   regex-recursion@6.0.2:
@@ -2942,6 +2957,15 @@ snapshots:
       '@deepseek-ai/cordis': 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
       immer: 10.2.0
       zustand: 4.4.7(@types/react@18.3.31)(immer@10.2.0)(react@18.3.1)
+    transitivePeerDependencies:
+      - '@types/react'
+      - react
+
+  '@deepseek-ai/dsh-client-store@0.1.2-rc.1(@deepseek-ai/cordis@4.0.1)(@types/react@18.3.31)(react@19.2.8)':
+    dependencies:
+      '@deepseek-ai/cordis': 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
+      immer: 10.2.0
+      zustand: 4.4.7(@types/react@18.3.31)(immer@10.2.0)(react@19.2.8)
     transitivePeerDependencies:
       - '@types/react'
       - react
@@ -3920,6 +3944,10 @@ snapshots:
     dependencies:
       yallist: 3.1.1
 
+  lucide-react@1.43.0(react@18.3.1):
+    dependencies:
+      react: 18.3.1
+
   magic-string@0.30.21:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.5.5
@@ -4313,6 +4341,8 @@ snapshots:
     dependencies:
       loose-envify: 1.4.0
 
+  react@19.2.8: {}
+
   regex-recursion@6.0.2:
     dependencies:
       regex-utilities: 2.3.0
@@ -4526,6 +4556,10 @@ snapshots:
     dependencies:
       react: 18.3.1
 
+  use-sync-external-store@1.2.0(react@19.2.8):
+    dependencies:
+      react: 19.2.8
+
   vary@1.1.2: {}
 
   verkit@0.3.2: {}
@@ -4686,5 +4720,13 @@ snapshots:
       '@types/react': 18.3.31
       immer: 10.2.0
       react: 18.3.1
+
+  zustand@4.4.7(@types/react@18.3.31)(immer@10.2.0)(react@19.2.8):
+    dependencies:
+      use-sync-external-store: 1.2.0(react@19.2.8)
+    optionalDependencies:
+      '@types/react': 18.3.31
+      immer: 10.2.0
+      react: 19.2.8
 
   zwitch@2.0.4: {}

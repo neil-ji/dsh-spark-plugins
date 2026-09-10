@@ -7,6 +7,7 @@
  *  - shell.overlay 是 click-through 层，本组件根节点自带 pointer-events: auto
  */
 import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { SegmentedControl } from 'dsh-ui-kit'
 import { DOCK_MODULES } from './modules.tsx'
 import { FairyFace, useFairy } from './fairy/FairyFace.tsx'
 
@@ -259,8 +260,8 @@ export function DockOverlay(): JSX.Element {
         aria-label="Spark Dock"
         style={{
           '--accent': activeModule.accent,
-          // 宽模块（finance/hippomemo）内容区 680px，其余 560px；rail 56px 计入面板宽
-          '--dock-panel-w': activeModule.wide === true ? '736px' : '616px',
+          // 面板宽度固定，切换模块不改变尺寸（内容区自适应）
+          '--dock-panel-w': '616px',
         } as React.CSSProperties}
       >
         {/* 结构重构：左侧图标模块栏 + 右侧主列（模块头/子页/内容） */}
@@ -302,20 +303,13 @@ export function DockOverlay(): JSX.Element {
           </div>
           <div className="dock-body">
           {activeModule.panes.length > 1 && (
-            <div className="subtabbar" role="tablist" aria-label={`${activeModule.name} 子页`}>
-              {activeModule.panes.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={p.id === activePane.id}
-                  className={p.id === activePane.id ? 'subtab on' : 'subtab'}
-                  onClick={() => setPaneId(p.id)}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
+            <SegmentedControl
+              fullWidth
+              ariaLabel={`${activeModule.name} 子页`}
+              options={activeModule.panes.map((p) => ({ value: p.id, label: p.label }))}
+              value={activePane.id}
+              onChange={setPaneId}
+            />
           )}
           {activePane.render()}
           </div>

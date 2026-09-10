@@ -1,0 +1,35 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid var(--spk-border);
+  border-radius: 12px;
+  background: var(--spk-layer-2);
+  padding: 12px 14px;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.title {
+  margin: 0;
+  font: 600 14px/22px var(--spk-font);
+  color: var(--spk-label);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.brand {
+  border-color: color-mix(in srgb, var(--spk-brand) 45%, var(--spk-border));
+}

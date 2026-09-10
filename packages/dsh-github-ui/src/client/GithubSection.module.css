@@ -6,6 +6,10 @@
 
 .title {
   margin: 0;
+  font-size: 18px;
+  line-height: 26px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .intro {
@@ -16,10 +20,11 @@
 .card {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px;
-  border: 1px solid var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.1));
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--dsw-alias-border-l1);
   border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-2);
 }
 
 .cardTitle {

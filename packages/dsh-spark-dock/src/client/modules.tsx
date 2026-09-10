@@ -24,27 +24,18 @@ export interface DockModule {
   /** 模块强调色（css color 值），驱动 tab 激活态与面板内 pill。 */
   accent: string
   icon: ReactNode
-  /** 宽面板（680px）：长表单/多列模块（finance、hippomemo）开启。 */
-  wide?: boolean
   panes: DockPane[]
 }
 
-/* 16px 线性图标（与 demo 对齐，stroke=currentColor 以吃强调色） */
-const stroke = (d: string) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
-    {d.split('|').map((seg, i) => <path key={i} d={seg} strokeLinecap="round" strokeLinejoin="round" />)}
-  </svg>
-)
+/* 模块图标：统一走 dsh-ui-kit 图标层（lucide），CSS `.dock-tab svg` 控制渲染尺寸。
+ * 强调色经 currentColor 继承（tab active 态 color = --accent）。 */
+import { IconDollar, IconGithub, IconPackage, IconSparkles, IconThink } from 'dsh-ui-kit'
 
-const SparkIcon = () => (
-  <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-    <path d="M12 2.6c.7 5.2 4.2 8.7 9.4 9.4-5.2.7-8.7 4.2-9.4 9.4-.7-5.2-4.2-8.7-9.4-9.4 5.2-.7 8.7-4.2 9.4-9.4z" />
-  </svg>
-)
-const HippoIcon = () => stroke('M8.9 8.4 11 15.1|M15.1 8.4 13 15.1|M7 9.4V17|M17 9.4V17')
-const FinanceIcon = () => stroke('M12 7.6v8.8|M9 8.5c0-.6 1.3-1 3-1s3 .4 3 1-1.2.9-3 1.2-3 .7-3 1.3 1.2 1 3 1 3-.4 3-1|M12 7.6v1.4|M12 15.2v1.2')
-const GithubIcon = () => stroke('M6 8.4v7.2|M18 11.4c0 2-1 3.2-2.4 3.8|M6 12c1.8 0 3.6.8 5.4 2.4')
-const NpmIcon = () => stroke('M12 3 21 8.2v7.6L12 21 3 15.8V8.2 12 3z|M3 8.2l9 5.2 9-5.2|M12 13.4V21')
+const SparkIcon = () => <IconSparkles size={14} />
+const HippoIcon = () => <IconThink size={14} />
+const FinanceIcon = () => <IconDollar size={14} />
+const GithubIcon = () => <IconGithub size={14} />
+const NpmIcon = () => <IconPackage size={14} />
 
 /** 子页占位（后续阶段逐个替换为真实数据渲染）。 */
 const placeholder = (moduleLabel: string, paneLabel: string, phase: string) => () => (
@@ -75,13 +66,13 @@ export const DOCK_MODULES: DockModule[] = [
   {
     id: 'hippomemo', label: '记忆', name: '记忆 HippoMemo',
     sub: '四脑区总览 · 记忆 CRUD · 我的偏好 · 进化引擎',
-    accent: 'var(--acc-hippomemo, #3b82f6)', icon: <HippoIcon />, wide: true,
+    accent: 'var(--acc-hippomemo, #3b82f6)', icon: <HippoIcon />,
     panes: hippoPanes,
   },
   {
     id: 'finance', label: '成本', name: '财务审计 Finance',
     sub: '余额 · Token 用量与成本总览',
-    accent: 'var(--acc-finance, #22c55e)', icon: <FinanceIcon />, wide: true,
+    accent: 'var(--acc-finance, #22c55e)', icon: <FinanceIcon />,
     panes: [{ id: 'main', label: '总览', render: () => <FinanceEmbedPane /> }],
   },
   {
@@ -92,7 +83,7 @@ export const DOCK_MODULES: DockModule[] = [
   },
   {
     id: 'npm', label: 'npm', name: 'npm 发布',
-    sub: 'granular token · 注册表与套件包状态',
+    sub: '细粒度 Token · 注册表与套件包状态',
     accent: 'var(--acc-npm, #cb3837)', icon: <NpmIcon />,
     panes: [{ id: 'main', label: '发布', render: () => <NpmEmbedPane /> }],
   },

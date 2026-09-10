@@ -50,7 +50,7 @@ export default [
     // dsh-spark-plugin-kit 是纯库（无 dsh.client 声明、非 loader entry），tsdown 默认把
     // dependencies external 化会让 client 在运行时 require 落空（HARNESS 报
     // "missed the module table"）；显式内联，与其他 client 插件一致只 external 平台模块。
-    deps: { alwaysBundle: [/^dsh-spark-plugin-kit/, /^dsh-ui-kit/] },
+    deps: { alwaysBundle: [/^dsh-spark-plugin-kit/, /^dsh-ui-kit/, /^lucide-react/] },
     // client.js 先写到临时名，由 build.mjs 在 tsdown 结束后原子 rename 成
     // lib/client.js——避免构建过程中读方（dsh web 的 /plugins/... 路由）看到
     // 空/半截文件（此前实测过 build 窗口内会短暂出现空文件）。
@@ -73,6 +73,6 @@ export default [
     dts: false,
     clean: false,
     external: ['react', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'],
-    deps: { alwaysBundle: [/^dsh-spark-plugin-kit/, /^dsh-ui-kit/] },
+    deps: { alwaysBundle: [/^dsh-spark-plugin-kit/, /^dsh-ui-kit/, /^lucide-react/] },
   },
 ]

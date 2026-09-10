@@ -14,7 +14,7 @@ Windows 一键安装脚本（§9），以及 **Release 托管预构建产物 + �
 
 | 线 | 做什么 | 装进 dsh？ | 数据隔离手段 | HMR | 适合 |
 | --- | --- | --- | --- | --- | --- |
-| **1 独立 harness** | 起一个 vite 服务，本地打开页面看插件 UI + 触发按钮 | 否，零 dsh 进程 | 无 dsh 数据，全部内存/fixture | Vite HMR（源码级）/ bundle 重建 | UI 走查、功能验证、回归、验收 |
+| **1 独立 harness** | 起一个本地服务，浏览器直接看插件 UI + 触发按钮 | 否，零 dsh 进程 | 无 dsh 数据，全部内存/fixture | 产物变更自动整页刷新 / 源码级重建 | UI 走查、功能验证、回归、验收 |
 | **2 本地集成** | 本地仓库 → 沙箱 `$DSH_HOME` 的 dev profile | 是（沙箱 profile） | 独立 `DSH_HOME=.dev/home` | 客户端 HMR 自动；宿主端 HMR 可选 | 真实宿主环境联调、跨插件交互 |
 | **3 远端集成** | GitHub 仓库 → 沙箱 `$DSH_HOME` 的 dev profile | 是（沙箱 profile） | 同上 | 无（只验证安装路径） | 复现用户安装路径、发布前体检 |
 
@@ -150,8 +150,15 @@ curl.exe -s http://127.0.0.1:3997/__dev/probe   # 看 services.hmr / entries[].f
 
 ## 2. 线 1：独立 dev harness（不装进 dsh）
 
+> **状态：已落地（2026-09-08）**，实现在 `dev-harness/preview/`，入口 `pnpm preview`。
+> 与下面原始设计的差异：不引 vite（用仓库已有的 esbuild 单文件打包 + SSE 整页刷新）；
+> 默认画布直接是**仿真 dsh web 外壳 + 真 spark-dock 悬浮球**（点开即真面板），其余画布是
+> 各插件 `*/embed` 产物的组件级渲染；仍未做假 RPC/SSE 全链路与真 `lib/client.js` 的
+> `__ModuleLoader__` 复刻。
+> 落地清单、命令与自检见 §2.6；下面的 §2.1–2.5 保留原始设计意图，尚未实现的部分已标注。
+
 **定位**：纯 UI / 功能 / 回归 / 验收。没有 dsh 进程、没有 `$DSH_HOME` 写入、不调用模型。
-**形态**：`dev-harness/`（不入 npm 发布列表）+ vite dev server，默认 `127.0.0.1:5180`。
+**形态**：`dev-harness/`（不入 npm 发布列表）+ 本地服务，默认 `127.0.0.1:5180`。
 
 ### 2.1 页面结构
 
@@ -226,6 +233,64 @@ dev-harness/
 "harness": "node scripts/harness.mjs",
 "harness:bundle": "node scripts/harness.mjs --mode bundle"
 ```
+
+### 2.6 已落地实现（组件级预览，2026-09-08）
+
+```
+dev-harness/preview/
+  server.mjs             # 单文件服务：esbuild 打包 + 静态资源 + /hippomemo|/sparks|/proposals|/scripts fixture + SSE 刷新 + /__preview/probe
+  index.html             # 挂载点 + dsh-ui-kit 令牌层（tokens.css）
+  verify.mjs             # pnpm preview:verify：Node 冒烟 + 服务器断言（52 项）
+  fixtures/hippomemo.mjs # /hippomemo/* 的内存假宿主（8 条记忆 + 引用 + 偏好 + 候选 + 进化报告）
+  fixtures/sparks.mjs    # /sparks|/proposals|/scripts 的内存假宿主（4 火花 + 3 提议 + 2 脚本，可捕获/归档/决议）
+  tests/smoke.tsx        # 真产物 + 假宿主的无 DOM 渲染与数据流断言（含 DockOverlay）
+  src/main.tsx           # 预览壳：画布选择 / 语言 / 主题 / 场景(ok|empty|error) / 重载
+  src/preview.css        # 壳 + 仿真 dsh web 外壳的样式
+  src/panes/dock.tsx     # 默认画布：仿真 dsh web 外壳 + 真 DockOverlay（镜像 dock client 入口的 apply）
+  src/mock/ctx.ts        # 假宿主 ctx（effect / locale / remote.$mount|$on|credentials / reflect / settingsScope）
+  src/mock/plugins.ts    # 四个插件的注入面装配（镜像 dock 的 EmbedPane）
+  src/mock/fixtures.ts   # github / npm / finance 的 fixture（形状对照各 wire 类型）
+  src/mock/snapshot.ts   # bindSnapshotSelector 的 8 行副本
+  src/panes/*.tsx        # 六个画布：dock / github / npm / finance / hippomemo / ui-kit
+```
+
+命令：
+
+```bash
+pnpm preview          # 5180，真产物口径（lib/embed.cjs），esbuild watch + 页面自动刷新
+pnpm preview:source   # 5180，源码口径（packages/*/src/client/embed.ts），改码免构建
+pnpm preview:verify   # 自检：Node 冒烟 + 服务器/fixture 断言，退出码即结论
+```
+
+关键事实（实测）：
+
+- **默认画布是 dock 本身**：仿真 dsh web 外壳（侧栏 + 会话流 + 输入框）+ 真
+  `DockOverlay`（悬浮球/面板/模块栏/子页全是真的）。dock 没有 `./embed` 入口（产物是
+  ModuleLoader 包装的 `client.js`），所以预览吃它的**源码**组件并复刻 `client/index.ts`
+  的 `apply()` 装配；这是与 §2.2 原设计（跑真 `lib/client.js`）的主要偏离。
+- **`lib/embed.cjs` 是自包含的**：四个 embed 产物里唯一的 `require` 只有 react/react-dom
+  （`dsh-ui-kit`、`dsh-plugin-kit`、`dsh-*-wire`、`dsh-client-store` 全部已内联），所以
+  "零 dsh" 真的成立——不需要任何 `@deepseek-ai/*` 运行时。
+- 根 `node_modules` **不 link 工作区包**，所以预览侧用 esbuild 的 resolve 插件把
+  `dsh-connector-*/embed`、`dsh-spark-finance-client/embed`、`dsh-hippomemo/embed`、
+  `dsh-ui-kit`、`dsh-spark-plugin-kit/client` 与 dock 的 `dsh-spark-dock/*` 指到真实文件
+  （源码口径额外指 `dsh-spark-finance/remote`）。
+- **esbuild 的 context API 忽略 `write: false` 的路径语义**：产物 path 会是 `<stdout>`，
+  必须显式给 `outfile` 才能从 `outputFiles` 取回字节（否则 `/preview.js` 永远 503）。
+- 插件 CSS 变量 `--dsw-*` / `--spk-*` 由 `dsh-ui-kit` 的令牌层提供：
+  `packages/dsh-ui-kit/dist/styles/tokens.css`（= base + spark-tokens + dsw-bridge），
+  暗色走 `body[data-theme="dark"]`——预览壳直接切这个属性。
+- **hippomemo 与 spark 走真 HTTP**（它们的 client 半侧本来就是 `fetch('/hippomemo/...')`、
+  `fetch('/sparks...')`），所以服务端 fixture 能 100% 复用真代码路径；error 场景必须返回顶层
+  `{ok:false,error}` 信封（包在 `{ok:true,value}` 里会被 client 当成成功）。
+- **dock 的 embed starter 是模块级单飞**：预览里切语言/场景必须整页重载才能重新装配
+  （等价于宿主重载插件），只有主题是纯 CSS 切换。
+- 本机（无可用浏览器会话时）用 `react-dom/server` 的 `renderToString` + 直接调真 controller 的
+  `load()` 做无 DOM 断言：DockOverlay 骨架、首屏渲染、数据流、`settingsScope` 的 set/unset 都能验。
+
+仍未做（保留为后续）：假 RPC/SSE 全链路（`globalThis.__DSH_TRANSPORT__`）、
+真 `lib/client.js` 的 `window.__ModuleLoader__` + `__DSH_BOOT__` 复刻、场景按钮矩阵与回归清单导出、
+React Fast Refresh。
 
 ---
 
@@ -364,7 +429,7 @@ scripts/
   dev-verify.mjs      # 探针 + SSE + boot 图断言（三条线共用）
   dev-shared.mjs      # 公共层（路径/包索引/YAML/进程/SSE）
   install-profile.mjs # tarball 安装器（--home / --only / --register-bundles）
-  harness.mjs         # 线 1：vite dev server（P3，未做）
+  harness.mjs         # 线 1 的旧计划入口（未做；实际落地为 dev-harness/preview/server.mjs）
   remote-verify.mjs   # 线 3：clone → build → install → verify（P2，未做）
 docs/
   install.sh          # 类 Unix 一键安装（--home / --repo / --register-bundles）
@@ -376,7 +441,9 @@ dev-harness/          # 控制平面插件 + 场景注册表（线 1/线 2 共�
 根 `package.json` scripts（新增，不动现有 `dev` / `install:profile` / `escape`）：
 
 ```json
-"harness":            "node scripts/harness.mjs",
+"preview":            "node dev-harness/preview/server.mjs --open",
+"preview:source":     "node dev-harness/preview/server.mjs --source",
+"preview:verify":     "node dev-harness/preview/verify.mjs",
 "sandbox:init":       "node scripts/dev-home.mjs init",
 "sandbox:reset":      "node scripts/dev-home.mjs reset --yes",
 "sandbox:doctor":     "node scripts/dev-home.mjs doctor",
@@ -546,7 +613,7 @@ profile 的 `node_modules`（Windows 上混用 junction 与拷贝会让 pnpm 在
 ### 9.5 下一步
 
 - P3：dsh 版本矩阵（沙箱 + 指定 dsh 版本 + 同一套断言）
-- 仅在确需 React Fast Refresh 时才做线 1 的 Vite harness；永久排除在验收门之外
+- 仅在确需 React Fast Refresh 时才把线 1 升级为 Vite harness；线 1 的**组件级预览已落地**（§2.6），永久排除在验收门之外
 
 ---
 

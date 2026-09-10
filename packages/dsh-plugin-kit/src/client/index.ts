@@ -9,7 +9,7 @@
  * 调用处仍保留组件的 props 类型检查。
  */
 import type { ClientContext } from './context.ts'
-import type { ComponentType } from 'react'
+import type { ComponentType, ReactNode } from 'react'
 
 export interface SettingsSectionOptions<I extends object> {
   /** settings.section 条目 id（设置页导航 key，也是 CSS tag 默认值）。 */
@@ -22,6 +22,12 @@ export interface SettingsSectionOptions<I extends object> {
   dictionaries: Record<string, Record<string, string>>
   /** 导航 label 的字典 key（自动绑定到 namespace 的 t）。 */
   labelKey: string
+  /**
+   * 导航图标（ReactNode，如 dsh-ui-kit 的 <IconSparkles size={14} />）。
+   * 宿主 settings-general 的导航行会优先渲染它，未提供时落回 shell 齿轮 fallback
+   * （需宿主 dsh-client-ui-settings-general >= 支持 row.icon 透传的版本）。
+   */
+  icon?: ReactNode
   /** 业务注入面；组件 props 会额外获得绑定的 t。 */
   inject: () => I
   /** 可选：插件级 CSS（幂等注入，style[data-plugin-css=tag]）。 */
@@ -39,7 +45,7 @@ export function registerSettingsSection<I extends object, P extends object = I>(
   options: SettingsSectionOptions<I>,
   Section: ComponentType<P>,
 ): () => void {
-  const { id, order, namespace, dictionaries, labelKey, inject, css, cssTag } = options
+  const { id, order, namespace, dictionaries, labelKey, icon, inject, css, cssTag } = options
   if (css !== undefined) injectPluginStyle(css, cssTag ?? id, id)
   // slots/locale 的深层泛型（SlotMap 合并、LocaleNamespaceMap 合并）在此封装。
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -62,6 +68,7 @@ export function registerSettingsSection<I extends object, P extends object = I>(
       id,
       order,
       label: () => t(labelKey),
+      icon,
       inject: injected,
     }, Section),
   )
