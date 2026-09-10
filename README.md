@@ -83,7 +83,8 @@ npm 连接器 token 优先使用说明（粘贴 token → 测试连接 → 保�
 ```bash
 pnpm build        # 构建全部包（各包产出 lib/ 或 dist/）
 pnpm typecheck    # 类型检查全部包
-pnpm test         # 测试全部包（含根 vitest，共 255 用例）
+pnpm test         # 测试全部包：根 vitest 250 + finance 153 + finance-client 131（共 534 用例）
+pnpm check:contrast  # 设计系统亮/暗对比度 + token 完整性闸门（142 项配对，AA）
 pnpm dev          # 构建全部 + 安装到 web profile
 pnpm dev --run    # 构建 + 安装 + 前台启动 dogfood（dsh --profile web --port 3999）
 pnpm preview      # 零 dsh 组件预览（真 embed 产物 + 假宿主，127.0.0.1:5180）

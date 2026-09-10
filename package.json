@@ -28,6 +28,7 @@
     "preview:source": "node dev-harness/preview/server.mjs --source",
     "preview:verify": "node dev-harness/preview/verify.mjs",
     "check:dsh-upgrade": "node scripts/check-dsh-upgrade.mjs --write-report",
+    "check:contrast": "node scripts/audit-contrast.mjs",
     "dryrun:dsh-upgrade": "node scripts/dryrun-upgrade.mjs",
     "finance:sync-prices": "node scripts/sync-finance-prices.mjs",
     "publish:all": "node scripts/publish-all.mjs"
