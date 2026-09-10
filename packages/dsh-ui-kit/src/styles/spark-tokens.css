@@ -6,6 +6,10 @@
    - 圆角：6（控件内）/ 8（输入类）/ 10（分段条·行）/ 12（卡片）/ 999（tag·pill）
    - 字号：10 tag · 11 meta · 12 body-minor · 13 body · 14 卡片题 · 18 页面题
    - 间距：4 的倍数；卡片 padding 12 14；页头→内容 gap 12
+     → 语义档 --spk-gap-page（卡片间）/ --spk-gap-card（卡片内）/ --spk-pad-card，
+       所有插件面板只能引用这些令牌，不得再写字面量间距
+   - 分组：功能分组一律 ui-kit Card 包裹，分组标题写在**该 Card 的 title**上
+     （页面级 <h2> + 无边框分组的旧写法已废弃）
    - 卡片 surface：surface-card 底 + border 边框 + radius 12
    - Tab：ui-kit SegmentedControl（面板页签用 fullWidth 通栏形态），禁止自绘
    - 折叠：ui-kit Disclosure，禁止 <details> / 按钮切换等旁路实现
@@ -74,6 +78,21 @@ body {
   --spk-radius-lg: 14px;
   --spk-radius-xl: 20px;
   --spk-radius-full: 999px;
+  /* 间距标度：4 的倍数（设计基线 «间距：4 的倍数；卡片 padding 12 14；页头→内容 gap 12»）。
+     五插件面板一律用这三个语义档，不再各写 10/14/16 之类的近似值 —— 这是
+     「全局统一边距」的唯一真相来源。 */
+  --spk-space-1: 4px;
+  --spk-space-2: 8px;
+  --spk-space-3: 12px;
+  --spk-space-4: 16px;
+  /* 面板内容列：卡片之间 / 页头→内容 */
+  --spk-gap-page: var(--spk-space-3);
+  /* 卡片内部：行与行、字段与字段 */
+  --spk-gap-card: var(--spk-space-2);
+  /* 卡片内边距（与 ui-kit Card 同值） */
+  --spk-pad-card: var(--spk-space-3) 14px;
+  /* 面板内容区内边距（与 dock .dock-body 同值） */
+  --spk-pad-panel: 14px var(--spk-space-4);
   --spk-ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
   --spk-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --spk-dur-fast: 120ms;

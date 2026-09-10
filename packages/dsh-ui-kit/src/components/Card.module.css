@@ -1,12 +1,12 @@
 .card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--spk-gap-card, 8px);
   min-width: 0;
   border: 1px solid var(--spk-border);
   border-radius: 12px;
   background: var(--spk-surface-card);
-  padding: 12px 14px;
+  padding: var(--spk-pad-card, 12px 14px);
 }
 
 .head {
@@ -14,7 +14,7 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--spk-gap-card, 8px);
 }
 
 .title {
@@ -27,7 +27,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
+  gap: var(--spk-space-1, 4px);
 }
 
 .brand {

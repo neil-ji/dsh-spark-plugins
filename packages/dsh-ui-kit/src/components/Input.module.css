@@ -1,3 +1,6 @@
+/* 字段包装壳：调用方 className 也会落到这里（见 Input.tsx 的 FieldShell 注释）。
+   它才是 flex 行的子项 —— flex/min-width/width 这类布局意图必须作用在这一层。
+   min-width: 0 允许它在窄行里收缩，而不是把相邻按钮挤出容器。 */
 .field { min-width: 0; }
 
 .label {
