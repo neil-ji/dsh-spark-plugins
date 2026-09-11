@@ -74,9 +74,16 @@
 
 ## 5. 架构
 
+> **落地现状（2026-09-11 核对）**：悬浮球 + 指挥舱面板、拖拽吸附、Fairy 心情状态机均已实现
+> （`packages/dsh-spark-dock`，注册到 `shell.overlay`）。但本节 §5.2/§5.3 的
+> `registerDockModule()` **没有落地** —— dock 至今在 `modules.tsx` 编译期硬编码 5 个模块
+> （评审 F4 / P3 未做），插件侧也没有自注册路径。另一方面「彻底移除 `settings.section`」
+> 已经完成：`settings.section` 注册能力与退役包 `dsh-spark-ui` 一并删除，
+> `settings.plugin.item` 配置卡也同日移除（评审 F8/P4 的一部分）。
+
 ### 5.1 新包 `packages/dsh-spark-dock`（client overlay + 自 patch）
 
-镜像 `dsh-spark-ui` 的包形 + 自带 `cordis.patch.yml`：
+镜像 host/client 双产物包形 + 自带 `cordis.patch.yml`：
 
 - `package.json` → `dsh.bundle.patch = ./cordis.patch.yml` + `dsh.client`（platform web，
   inject: `dsh-client-modules` / `dsh-client-locale` / `dsh-client-ui-slots` / `dsh-client-ui-settings`）。
@@ -95,7 +102,7 @@
 ### 5.3 插件侧接入（每个 apply 加一处注册，设置页保留为兜底）
 
 ```ts
-// 例：dsh-spark-ui/src/client/index.ts 的 apply()
+// 例：某插件 client 入口的 apply()（此路径当时未落地，现由 dock 的 modules.tsx 承担）
 registerDockModule({
   id: 'spark', order: 10, icon: 'sparkle', accent: 'amber',
   label: () => t('nav'),
@@ -129,7 +136,8 @@ registerDockModule({
 
 - 球覆盖聊天输入/滚动条风险 → 默认 16px 边距 + 可拖 + 可折叠；必要时在面板开时加 body 右 padding（v2 评估）。
 - 已彻底移除 `settings.section`，无兜底入口：若 Dock 客户端加载失败，插件功能页将不可达。缓解：Dock 的 `apply` 内包 try/catch +
-  错误态（球仍可点、面板显示坏点提示）；紧急回滚 = 把 `registerSettingsSection` 那段重新加回（改动可逆、每插件几行）。
+  错误态（球仍可点、面板显示坏点提示）；紧急回滚 = 从 git 取回退役前的设置页注册代码（该能力与退役包 `dsh-spark-ui` 已于
+  2026-09-11 一并删除，不再是「每插件几行」的现场改动）。
 - 3080 常驻服务的旧 module 缓存 → 改码必须 bump 版本 + 重跑安装（本仓库既有纪律）。
 - `window.__SPARK_DOCK__` 若未来官方也用了同名 → 加 `data-dsh-spark-dock` 版本探测，冲突时改名。
 ## 8. Fairy 人格动效（v2 · 有生命的悬浮球，纯 UI 模拟）

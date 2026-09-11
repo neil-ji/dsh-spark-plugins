@@ -71,7 +71,7 @@ pnpm preview:titles   # 子页标题层级走查：重复的 Title/Label（V1/V2
 
 | 一致 | 不一致（需线 2 才能覆盖） |
 | --- | --- |
-| 悬浮球/面板组件、四个插件设置页、controller、字典、CSS Modules、`dsh-ui-kit` 组件与令牌 | 槽位注册（`shell.overlay` / `settings.section`）与真 shell 布局 |
+| 悬浮球/面板组件、四个插件设置页、controller、字典、CSS Modules、`dsh-ui-kit` 组件与令牌 | 槽位注册（`shell.overlay`）与真 shell 布局 |
 | dock 的装配顺序（字典 → CSS → embed starter → reflect） | cordis 生命周期、`clientModules` 的 boot 图与 `rev` 缓存 |
 | remote 调用形状（`RemoteResult` 信封、参数、错误分支） | 真 RPC / SSE 传输、`__DSH_TRANSPORT__`、并发与重连 |
 | `settingsScope` 的 set/unset/user 层语义 | 真 settings 文档持久化与 revision 竞争 |

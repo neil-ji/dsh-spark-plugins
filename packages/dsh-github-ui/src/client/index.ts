@@ -2,9 +2,9 @@
  * dsh-github-ui client half: registers the github dictionaries and mounts the
  * github Remote namespace into the web client shell.
  *
- * 入口退位（2026-09）：完整设置页与插件配置卡片均已由 dsh-spark-dock 悬浮球
- * 内嵌（dock import 本包 ./embed 的 GithubSection 并自行 mount remote），
- * 这里不再注册 settings.section / settings.plugin.item。
+ * 入口退位（2026-09）：完整设置页已由 dsh-spark-dock 悬浮球内嵌
+ * （dock import 本包 ./embed 的 GithubSection 并自行 mount remote）——
+ * 本入口只负责注册字典 + 把 remote 命名空间挂进 shell，不注册任何插槽。
  */
 import type { ClientContext } from 'dsh-spark-plugin-kit/client'
 // Type-only: pulls ctx.locale.

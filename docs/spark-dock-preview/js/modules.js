@@ -373,7 +373,7 @@ const CONTENT = {
       <div class="hline" style="margin:8px 0 4px"><b>套件包状态</b></div>
       <div class="row" style="padding-left:0;padding-right:0"><i class="sdot done"></i><div class="grow"><div class="ttl"><code class="code">dsh-spark-finance</code></div></div><span class="labsub">已发布 · 最新 0.4.0</span></div>
       <div class="row" style="padding-left:0;padding-right:0"><i class="sdot done"></i><div class="grow"><div class="ttl"><code class="code">dsh-spark-plugin-kit</code></div></div><span class="labsub">已发布 · 最新 0.1.0</span></div>
-      <div class="row" style="padding-left:0;padding-right:0"><i class="sdot done"></i><div class="grow"><div class="ttl"><code class="code">dsh-spark-ui</code></div></div><span class="labsub">已发布 · 最新 0.2.0</span></div>
+      <div class="row" style="padding-left:0;padding-right:0"><i class="sdot done"></i><div class="grow"><div class="ttl"><code class="code">dsh-hippomemo</code></div></div><span class="labsub">已发布 · 最新 0.2.6</span></div>
       <div class="row" style="padding-left:0;padding-right:0"><i class="sdot error"></i><div class="grow"><div class="ttl"><code class="code">dsh-spark-dock</code></div></div><span class="labsub">未发布</span></div>
       <button class="btn ghost sm" type="button" style="width:100%;margin-top:6px">重试</button>
     </div>`,

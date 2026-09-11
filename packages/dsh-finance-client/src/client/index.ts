@@ -4,8 +4,8 @@
  *
  * 入口退位（2026-09）：设置页入口（dashboard + 连接/同步/provider 配置卡）
  * 已完全由 dsh-spark-dock 悬浮球内嵌（dock import 本包 ./embed 的
- * FinanceCard 并自行 mount remote + bind settingsScope），这里不再注册
- * settings.plugin.item。
+ * FinanceCard 并自行 mount remote + bind settingsScope）——本入口只负责注册
+ * 字典 + 把 remote 命名空间挂进 shell，不注册任何插槽。
  */
 
 import type { ClientContext } from 'dsh-spark-plugin-kit/client'

@@ -1,8 +1,7 @@
 /**
- * Minimal sparks API subset for the dock (fetch wrapper mirrors
- * dsh-spark-ui/src/client/api.ts; keep in sync or converge into a shared
- * client package later — dock intentionally does NOT import dsh-spark-ui/client
- * because its index has settings-section registration side effects).
+ * Minimal sparks API subset for the dock (fetch wrapper over the spark host's
+ * `/sparks` `/proposals` `/scripts` routes; the retired dsh-spark-ui carried a
+ * near-duplicate of this file, so there is nothing left to keep in sync).
  */
 import type { SparkView, SparkCapture, ProposalView, ProposalStatus, ScriptView } from 'dsh-spark-wire'
 

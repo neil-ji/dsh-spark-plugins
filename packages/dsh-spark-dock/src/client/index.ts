@@ -27,7 +27,8 @@ import { setReflectGetter } from './reflect.ts'
  */
 export const inject = ['slots', 'locale', 'remote', 'remote.credentials', 'settingsScope'] as const
 
-/** 幂等注入插件级 CSS（与 registerSettingsSection 的 injectPluginStyle 同形）。 */
+/** 幂等注入插件级 CSS（与 plugin-kit 的 injectPluginStyle 同形，此处自带一份
+ *  以便在 kit CSS 注入之前就能落样式）。 */
 function injectDockStyle(): () => void {
   const tag = 'dsh-spark-dock'
   const existing = document.head.querySelector(`style[data-plugin-css="${tag}"]`)

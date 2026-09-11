@@ -1,5 +1,5 @@
 /**
- * dsh-spark-dock build — 与 dsh-spark-ui 同构：
+ * dsh-spark-dock build —— host/client 双产物形制：
  *  - tsc 发声明到 lib/types
  *  - esbuild 发 node 半边 lib/index.js（空 loader 入口）
  *  - esbuild 发浏览器半边 lib/client.js，包成 window.__ModuleLoader__.load

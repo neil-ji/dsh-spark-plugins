@@ -93,7 +93,7 @@ For coverage:
     src/tool.ts             memory_* tools
     src/context.ts          automatic recall
     src/extractor.ts        automatic candidate extraction
-    src/client/index.ts     settings.section registration
+    src/client/index.ts     locale + CSS injection (no slot registration)
     src/client/MemorySection.tsx
     src/client/api.ts       fetch wrapper
     src/client/locales.ts

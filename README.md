@@ -56,7 +56,7 @@ sh install.sh --from-source          # 开发路径：clone + pnpm install + bui
 | 包 | 目录 | 说明 |
 | --- | --- | --- |
 | dsh-hippomemo | packages/dsh-hippomemo | 跨会话/跨工作区共享记忆插件 |
-| dsh-spark-plugin-kit | packages/dsh-plugin-kit | 公共层：client 设置页样板（settings.section / locale / CSS 注入） |
+| dsh-spark-plugin-kit | packages/dsh-plugin-kit | 公共层：事件订阅运行时（$stream 扇出/引用计数）· 插件 CSS 注入 · Snapshot 绑定 |
 | dsh-ui-kit | packages/dsh-ui-kit | 本地 React 组件库（复刻 DSH 设计系统，零 cordis） |
 | dsh-spark-finance | packages/dsh-finance | 成本统计插件 host（remote/typert + 计算核心） |
 | dsh-spark-finance-client | packages/dsh-finance-client | 成本统计插件 client（设置页 UI） |
@@ -181,7 +181,9 @@ pnpm escape:init   # 只初始化/刷新，不启动；之后手动 dsh --profil
 ## 新增一个插件
 
 1. `packages/<name>` 下建包（host 出 `lib/index.js`，client 出 `lib/client.js`，参考 dsh-hippomemo）。
-2. 需要 client UI 时引用 `dsh-spark-plugin-kit` 的 `registerSettingsSection`。
+2. 需要 client UI 时出 `embed` 入口（纯组件 + controller + 字典），并在 `dsh-spark-dock` 的
+   `src/client/modules.tsx` 登记一个模块 —— 插件的功能 UI 只走悬浮球 Dock
+   （`shell.overlay` 插槽），设置页插槽自 2026-09 起已全部退役。
 3. 在 `plugin-registry.json` 登记，`pnpm dev` 后即可在 3999 验证。
 ## License
 

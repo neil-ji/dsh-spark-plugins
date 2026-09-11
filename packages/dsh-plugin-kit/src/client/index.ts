@@ -1,83 +1,18 @@
 /**
- * dsh-spark-plugin-kit client: DSH 插件 Web 设置页的公共样板。
+ * dsh-spark-plugin-kit client：五个插件的客户端公共层。
  *
- * 把四个插件（hippomemo / finance / connector-github / connector-npm）里
- * 逐字重复的 settings.section 注册、locale 字典注册、CSS 注入收敛为一条
- * 调用；业务代码只保留 section 组件与 inject 面。
+ * 2026-09 起插件功能 UI 只走 dsh-spark-dock 悬浮球（`shell.overlay` 插槽），
+ * 设置页入口（`settings.section`）与 `settings.plugin.item` 配置卡随退役世代
+ * `dsh-spark-ui` 一并删除 —— 本包因此不再提供插槽注册样板，只保留三件事：
  *
- * 2026-09（ADR-004）新增 `events.ts`：**插件共享的事件订阅运行时** ——
- * 平台 `$stream` 之上补扇出 / 引用计数 / 基线重同步。此前唯一正确的实现
- * （refcount 注册表）长在 dsh-spark-dock 这个 app 包里，插件复不到，
- * 于是 hippomemo 只能自己 `new EventSource`。
- *
- * 内部对 slots.register 的深层泛型约束做封装（类型细节收敛在包内），
- * 调用处仍保留组件的 props 类型检查。
+ * - `injectPluginStyle`：插件级 CSS 幂等注入（dock 与各内嵌模块共用）；
+ * - `bindSnapshotSelector`：SnapshotStore → useSyncExternalStore 绑定；
+ * - `events.ts`：**插件共享的事件订阅运行时**（ADR-001/004）—— 平台 `$stream`
+ *   之上补扇出 / 引用计数 / 基线重同步。此前唯一正确的实现（refcount 注册表）
+ *   长在 dsh-spark-dock 这个 app 包里，插件复不到，于是 hippomemo 只能自己
+ *   `new EventSource`。
  */
 import type { ClientContext } from './context.ts'
-import type { ComponentType, ReactNode } from 'react'
-
-export interface SettingsSectionOptions<I extends object> {
-  /** settings.section 条目 id（设置页导航 key，也是 CSS tag 默认值）。 */
-  id: string
-  /** 排序权重（与官方 sections 对齐，如 20/30）。 */
-  order: number
-  /** locale 命名空间（需先在 LocaleNamespaceMap 里 declare module 合并）。 */
-  namespace: string
-  /** 该命名空间下的字典表（如 { zh: {...}, en: {...} }）。 */
-  dictionaries: Record<string, Record<string, string>>
-  /** 导航 label 的字典 key（自动绑定到 namespace 的 t）。 */
-  labelKey: string
-  /**
-   * 导航图标（ReactNode，如 dsh-ui-kit 的 <IconSparkles size={14} />）。
-   * 宿主 settings-general 的导航行会优先渲染它，未提供时落回 shell 齿轮 fallback
-   * （需宿主 dsh-client-ui-settings-general >= 支持 row.icon 透传的版本）。
-   */
-  icon?: ReactNode
-  /** 业务注入面；组件 props 会额外获得绑定的 t。 */
-  inject: () => I
-  /** 可选：插件级 CSS（幂等注入，style[data-plugin-css=tag]）。 */
-  css?: string
-  /** CSS 注入标签，默认取 id。 */
-  cssTag?: string
-}
-
-/**
- * 注册一个 settings.section 设置页：locale 字典注册 + 可选 CSS 注入 +
- * 插槽注册。返回 disposer（供 apply 的 cleanup 使用）。
- */
-export function registerSettingsSection<I extends object, P extends object = I>(
-  ctx: ClientContext,
-  options: SettingsSectionOptions<I>,
-  Section: ComponentType<P>,
-): () => void {
-  const { id, order, namespace, dictionaries, labelKey, icon, inject, css, cssTag } = options
-  if (css !== undefined) injectPluginStyle(css, cssTag ?? id, id)
-  // slots/locale 的深层泛型（SlotMap 合并、LocaleNamespaceMap 合并）在此封装。
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const anyCtx = ctx as any
-  anyCtx.effect(
-    () => {
-      // 0.1.2 locale.register 按语言逐条注册（rc.2 形态是 register(ns, { zh, en })）。
-      const disposers = Object.entries(dictionaries).map(([lang, dict]) =>
-        anyCtx.locale.register(namespace, lang, dict),
-      )
-      return () => { for (const dispose of disposers) dispose() }
-    },
-    namespace + ': dictionaries',
-  )
-  const t = anyCtx.locale.bind(namespace)
-  const injected = (): unknown => ({ ...inject(), t })
-  return anyCtx.slots.inject('settings.section', () =>
-    anyCtx.slots.register({
-      name: 'settings.section',
-      id,
-      order,
-      label: () => t(labelKey),
-      icon,
-      inject: injected,
-    }, Section),
-  )
-}
 
 /** 注入插件级 CSS（幂等：同 tag 只注入一次，样式挂在宿主 document）。 */
 export function injectPluginStyle(css: string, tag: string, plugin: string): void {
@@ -91,21 +26,6 @@ export function injectPluginStyle(css: string, tag: string, plugin: string): voi
   document.head.appendChild(style)
 }
 
-export {
-  booleanCardField,
-  choiceCardField,
-  numberCardField,
-  StagedSettingsCard,
-  textCardField,
-} from './settings-card.ts'
-export type {
-  CardFieldSpec,
-  CardFieldState,
-  CardFieldWrite,
-  CardShellState,
-  StagedCardActions,
-  StagedSettingsCardState,
-} from './settings-card.ts'
 export { bindSnapshotSelector } from './snapshot.ts'
 export type { SnapshotSelectorHook } from './snapshot.ts'
 export { subscribeFrames, useFrames, openStreamNames } from './events.ts'

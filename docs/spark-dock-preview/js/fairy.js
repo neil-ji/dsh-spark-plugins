@@ -94,7 +94,7 @@ const EVENTS = [
   { html: '火花结晶成功 → HippoMemo', src: 'Sparks · crystallize', mood: 'cheer' },
   { html: '涌现提议 <b>+2</b> 待决议', src: 'Sparks · reflect', mood: 'think' },
   { html: '社区价格表同步完成 · fx 7.2', src: 'Finance · sync', mood: 'happy' },
-  { html: 'npm 发布成功 <b>dsh-spark-ui@0.2.0</b>', src: 'npm · publish', mood: 'cheer' },
+  { html: 'npm 发布成功 <b>dsh-spark-dock@0.1.6</b>', src: 'npm · publish', mood: 'cheer' },
   { html: 'GitHub 连接测试失败 · 401', src: 'GitHub · test', mood: 'sad' },
 ];
 function fireEvent(i) {

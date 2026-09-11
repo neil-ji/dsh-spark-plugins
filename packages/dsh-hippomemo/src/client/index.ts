@@ -1,10 +1,9 @@
 /**
  * dsh-hippomemo client entry: dictionary + plugin CSS injection only.
  *
- * 入口退位（2026-09）：完整设置页与插件配置卡片均已由 dsh-spark-dock 悬浮球
- * 内嵌（dock import 本包 ./embed 的 MemorySection），这里不再注册
- * settings.section / settings.plugin.item。保留字典 + CSS 注入
- * （dock 内嵌也用同一份，幂等）。
+ * 入口退位（2026-09）：完整设置页已由 dsh-spark-dock 悬浮球内嵌
+ * （dock import 本包 ./embed 的 MemorySection）——本入口只保留字典 + CSS
+ * 注入（dock 内嵌也用同一份，幂等），不注册任何插槽。
  */
 import type { ClientContext } from 'dsh-spark-plugin-kit/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'

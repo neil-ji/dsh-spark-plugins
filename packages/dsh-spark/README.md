@@ -42,4 +42,4 @@ Covers JSONL round-trip, malformed-line tolerance, atomic patch/remove, concurre
 
 - **Phase 4.5** — Periodic scheduler (intervalMs) for EmergeService + LLM-backed proposals (semantic similarity, contradict detection).
 - **Phase 6.5** — ValenceService feedback loop: mined preferences participate in Phase 3 cognitive filter (boost matching preferences, suppress stale ones via decay).
-- **Phase 7** — Force-directed graph view in `dsh-spark-ui` with ghost-edges for pending proposals.
+- **Phase 7** — Force-directed graph view in the dock's Spark module (`Graph` 子页) with ghost-edges for pending proposals.

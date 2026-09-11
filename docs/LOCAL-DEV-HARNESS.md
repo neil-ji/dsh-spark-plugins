@@ -139,7 +139,7 @@ curl.exe -s http://127.0.0.1:3997/__dev/probe   # 看 services.hmr / entries[].f
 - `ctx` 就是普通 cordis Context；插件客户端半侧只用到 `effect / locale.register|bind / slots.inject|register /
   remote.$mount|$on|<ns> / reflect.get / settingsScope.bind / createSnapshotStore`。
 - **`ctx.slots.register` 在没有父级声明该槽时会抛错**（`dsh-client-ui-slots/lib/index.js:72-74`），
-  所以 harness 必须先注册一个声明 `settings.section` / `shell.overlay` 的父条目。
+  所以 harness 必须先注册一个声明 `shell.overlay` 的父条目（设置页插槽 `settings.section` 已于 2026-09 退役）。
 - 宿主 RPC 传输：`POST /api/<ns>/<method>`，请求 `{type:'client-request',rpcId,method,payload:{args}}`，
   响应 `{type:'server-response',rpcId,result:{ok,value|error}}`；流式走 `/api/remote.mux` WebSocket。
   harness 可用官方钩子 `globalThis.__DSH_TRANSPORT__ = { fetch, openStream }` 注入假实现。

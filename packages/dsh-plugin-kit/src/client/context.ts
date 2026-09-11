@@ -10,14 +10,15 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { SettingsScopeBinder } from '@deepseek-ai/dsh-client-ui-settings/client'
 
-/** ctx.slots：插槽注册面（settings.section / settings.plugin.item 等契约由
- *  client-ui-slots 的 SlotMap 声明合并提供，这里只约束我们调用的形状）。 */
+/** ctx.slots：插槽注册面。本仓库唯一消费的插槽是 dsh-spark-dock 的
+ *  `shell.overlay`（悬浮球）；SlotMap 的其余契约由 client-ui-slots 声明合并提供，
+ *  这里只约束我们调用的形状。 */
 export interface ClientSlotsService {
   inject(name: string, register: () => unknown): unknown
   register<I extends object, P extends object>(
     entry: {
       name: string
-      /** settings.section 用 id；settings.plugin.item（keyed）用 key。 */
+      /** list 类插槽用 id（如 shell.overlay）；keyed 插槽用 key。 */
       id?: string
       order?: number
       key?: string
