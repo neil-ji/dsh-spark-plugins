@@ -25,8 +25,15 @@ const ALIASES = {
   'dsh-spark-wire': 'packages/dsh-spark-wire/src/index.ts',
   'dsh-spark-dock/DockOverlay': 'packages/dsh-spark-dock/src/client/DockOverlay.tsx',
   'dsh-spark-dock/style': 'packages/dsh-spark-dock/src/client/style.ts',
-  // Node 冒烟只编译 mock/plugins.ts + DockOverlay + embed 库形态（组件级单渲染画布同源）；
-  // Dock 画布的真 client `apply()` 路径由预览服务器（server.mjs 的 alias + 剥壳）承担。
+  // W4：Node 冒烟也跑真 client 入口的 apply（配 inject 门），这样
+  // 「忘了声明 inject / 注册不上槽位」在无浏览器的情况下也能被抓到。
+  'dsh-spark-dock/client': 'packages/dsh-spark-dock/src/client/index.ts',
+  'dsh-connector-github-ui/client': 'packages/dsh-github-ui/src/client/index.ts',
+  'dsh-spark-finance-client/client': 'packages/dsh-finance-client/src/client/index.ts',
+  'dsh-hippomemo/client': 'packages/dsh-hippomemo/src/client/index.ts',
+  'dsh-connector-wire': 'packages/dsh-github-wire/src/index.ts',
+  'dsh-connector-npm-wire': 'packages/dsh-npm-wire/src/index.ts',
+  'dsh-spark-finance/remote': 'packages/dsh-finance/lib/typert.remote-client.js',
   'dsh-connector-npm-ui/client': 'packages/dsh-npm-ui/src/client/index.ts',
   'dsh-connector-npm-ui/embed': 'packages/dsh-npm-ui/lib/embed.cjs',
   'dsh-connector-github-ui/embed': 'packages/dsh-github-ui/lib/embed.cjs',
@@ -153,6 +160,20 @@ async function runServerChecks() {
       body: JSON.stringify({ title: 'verify 捕获', content: '来自 preview:verify', scope: 'project', tags: ['verify'], sourceSessionId: 'spark-dock' }),
     })).json()
     check('spark: 捕获写入生效', captured.ok === true && captured.value?.title === 'verify 捕获', JSON.stringify(captured).slice(0, 160))
+
+    // W4 保真（F14）：真宿主的 capture schema 要求 sourceSessionId；预览此前给默认值，
+    // 「客户端漏传必填字段」这类回归到真宿主才 400。现在预览同样拒绝。
+    const rejected = await fetch('http://127.0.0.1:' + PORT + '/sparks', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title: '缺必填', content: '没有 sourceSessionId' }),
+    })
+    const rejectedBody = await rejected.json()
+    check(
+      'spark: 漏传 sourceSessionId 返回 400 BAD_REQUEST（与真宿主同）',
+      rejected.status === 400 && rejectedBody.ok === false && rejectedBody.error?.code === 'BAD_REQUEST' && String(rejectedBody.error?.message).includes('sourceSessionId'),
+      'status=' + rejected.status + ' ' + JSON.stringify(rejectedBody).slice(0, 160),
+    )
 
     const switched = await fetch('http://127.0.0.1:' + PORT + '/__preview/scenario', {
       method: 'POST',

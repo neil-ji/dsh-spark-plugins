@@ -155,6 +155,8 @@ export interface MockCtx {
     dictionary: (namespace: string, lang: Lang, dict: Record<string, string>) => void
     scope: (namespace: string, base?: object) => MockSettingsScope<object>
     scopes: Map<string, MockSettingsScope<object>>
+    /** 服务生命周期替身：跑掉所有 effect disposer 并清空槽位 ledger。 */
+    teardown: () => void
   }
 }
 
@@ -174,6 +176,52 @@ export interface MockSlotEntry {
   label: (() => string) | undefined
   inject: () => object
   component: unknown
+}
+
+/**
+ * **W4 保真（F14）：inject 门**。
+ *
+ * 真宿主对未声明 inject 的服务访问会直接抛错（`cannot get property "slots" without
+ * inject`），而假宿主此前把 `ctx.slots` / `ctx.remote.credentials` 白送 ——
+ * 「插件忘了把服务写进 inject」这类回归在预览里完全测不出来（评审 F14）。
+ *
+ * 这里按真宿主的规则包一层：`slots` / `locale` / `settingsScope` 必须声明；
+ * `remote` 的 `$mount` / `$on` / `$stream` 需要 `remote`；`remote.credentials`
+ * 需要 `remote.credentials`；**动态命名空间（`remote.<ns>`）必须走 reflect**，
+ * 直接读会被拒（与真宿主的 `RemoteError` 同形）。`ctx.effect` / `ctx.reflect` 不设门
+ * —— 真宿主里它们不是 inject 服务（dock 就是无 inject 直接读 reflect 的）。
+ *
+ * @param ctx - 假宿主 ctx
+ * @param inject - 该插件 `export const inject` 的内容
+ */
+export function withInjectGate<T extends object>(ctx: T, inject: readonly string[]): T {
+  const has = (service: string): boolean => inject.includes(service)
+  const deny = (service: string): never => {
+    throw new Error('cannot get property "' + service + '" without inject')
+  }
+  const gatedRemote = new Proxy((ctx as unknown as MockCtx).remote, {
+    get(target, property: string | symbol): unknown {
+      if (typeof property !== 'string') return Reflect.get(target, property)
+      if (property === 'credentials') return has('remote.credentials') ? Reflect.get(target, property) : deny('remote.credentials')
+      if (property === '$mount' || property === '$on' || property === '$stream') {
+        return has('remote') ? Reflect.get(target, property) : deny('remote')
+      }
+      // 动态命名空间（remote.spark / remote.npm …）：真宿主必须经 reflect 取，直接读抛错。
+      if (Reflect.has(target, property)) return deny('remote.' + property)
+      return Reflect.get(target, property)
+    },
+  })
+  return new Proxy(ctx, {
+    get(target, property: string | symbol): unknown {
+      if (typeof property === 'string') {
+        if (property === 'slots' || property === 'locale' || property === 'settingsScope') {
+          return has(property) ? Reflect.get(target, property) : deny(property)
+        }
+        if (property === 'remote') return has('remote') || has('remote.credentials') ? gatedRemote : deny('remote')
+      }
+      return Reflect.get(target, property)
+    },
+  })
 }
 
 /** 替换字典串里的 {name} 占位符（与真宿主 locale 行为对齐）。 */
@@ -325,6 +373,19 @@ export function createMockCtx(options: MockCtxOptions): MockCtx {
         return scope
       },
       scopes,
+      /**
+       * 服务生命周期替身：跑掉所有 effect 的 disposer（真宿主卸载插件 fiber 时做的
+       * 同一件事），用来验证「插件 apply 注册的槽位/样式真的会被清掉」。
+       */
+      teardown: () => {
+        for (const dispose of [...disposers].reverse()) {
+          try { dispose() } catch (error) { console.warn('[preview] teardown disposer failed', error) }
+        }
+        disposers.length = 0
+        // 槽位注册的 disposer 归插件的 effect 持有（上面已跑）；这里兜底清一次 ledger。
+        slotRegistrations.clear()
+        for (const name of [...slotSnapshots.keys()]) rebuildSlotSnapshot(name)
+      },
     },
   }
   return ctx

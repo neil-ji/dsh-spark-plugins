@@ -78,7 +78,7 @@ npm 连接器 token 优先使用说明（粘贴 token → 测试连接 → 保�
 | --- | --- | --- |
 | 架构 | `pnpm check:architecture` | ① **孤包**：`packages/*` 里出现既非插件、也不在插件依赖闭包内的包（退役世代就是这么漏的）；② **依赖边界**：宿主半边 import react/ui-kit/客户端入口、插件互相 import、`<pkg>/embed` 被非 app 引用、ui-kit 沾平台依赖、wire 沾 cordis；③ **契约漂移**：wire 描述符声明的方法在宿主实现里不存在、两份手抄 manifest 不一致（`sourceLocation` 行号漂移目前只告警，`--strict-locations` 升级为失败）；④ **inject 面覆盖**：client 半边用到 `ctx.slots` / `ctx.remote.credentials` 等服务却没写进该包 `inject` —— 真宿主会因此让整条 loader entry 失败 |
 | 设计系统 | `pnpm check:contrast` | 亮/暗对比度 AA（154 项配对）+ token 完整性 + 文档/设计稿漂移 |
-| 预览保真 | `pnpm preview:verify` | 真 embed 产物 + 假宿主跑通数据流（56 项） |
+| 预览保真 | `pnpm preview:verify` | 真 embed 产物 + 假宿主跑通数据流（74 项）；假宿主已与真宿主同形：**inject 门**（未声明服务访问抛错、动态命名空间必须走 reflect）、写入路径**按 wire schema 单源校验**（缺必填 → 400 BAD_REQUEST）、以及 teardown 生命周期 —— 五个插件的真 `apply()` 也在冒烟里跑 |
 | 版本纪律 | `pnpm check:version-bump` | 改了发布输入（`src/**`、构建配置、清单）却没在同一个 commit 里 bump 该包 `version` —— 版本没变，宿主就继续供旧 client 字节。注释/空白改动会剥离后比较，不算发布改动 |
 | dsh 版本体检 | `pnpm check:dsh-upgrade` | 见下节（上游 API 面 diff + 符号存活） |
 

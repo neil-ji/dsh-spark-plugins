@@ -408,6 +408,17 @@ function broadcastSpark(path, change) {
   }
 }
 
+/**
+ * 与真宿主同形的状态码映射：契约校验失败 = 400（`http.ts` 的 BAD_REQUEST），
+ * 找不到 = 404，其余业务错误沿用 200 + 失败信封（预览的既有口径）。
+ */
+const statusFor = (error) => {
+  const code = error?.code
+  if (code === 'BAD_REQUEST') return 400
+  if (code === 'not-found' || code === 'NOT_FOUND') return 404
+  return 200
+}
+
 /** spark 侧：dock 的火花流 / 涌现提议 / 脚本目录（同样是真 fetch 路径）。 */
 async function handleSpark(req, res, url) {
   const path = url.pathname
@@ -421,7 +432,7 @@ async function handleSpark(req, res, url) {
   if (path === '/sparks' && method === 'POST') {
     const result = spark.capture(body)
     if (result.ok === true) broadcastSpark('/sparks/events', { operation: 'capture', id: result.value.id, record: result.value, at: Date.now() })
-    return json(res, 200, result)
+    return json(res, result.ok === true ? 200 : statusFor(result.error), result)
   }
   if (path.startsWith('/sparks/')) {
     const rest = path.slice('/sparks/'.length)
@@ -429,7 +440,7 @@ async function handleSpark(req, res, url) {
       const id = decodeURIComponent(rest.slice(0, -'/crystallize'.length))
       const result = spark.crystallize(id)
       if (result.ok === true) broadcastSpark('/sparks/events', { operation: 'crystallize', id, at: Date.now() })
-      return json(res, 200, result)
+      return json(res, result.ok === true ? 200 : statusFor(result.error), result)
     }
     if (method === 'PATCH') {
       const id = decodeURIComponent(rest)
@@ -437,7 +448,7 @@ async function handleSpark(req, res, url) {
       if (result.ok === true) {
         broadcastSpark('/sparks/events', { operation: result.value.status === 'archived' ? 'archive' : 'patch', id, record: result.value, at: Date.now() })
       }
-      return json(res, 200, result)
+      return json(res, result.ok === true ? 200 : statusFor(result.error), result)
     }
   }
   if (path === '/proposals' && method === 'GET') return json(res, 200, spark.proposals(url.searchParams))

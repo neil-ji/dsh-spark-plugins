@@ -82,6 +82,26 @@ pnpm preview:titles   # 子页标题层级走查：重复的 Title/Label（V1/V2
 | `settingsScope` 的 set/unset/user 层语义 | 真 settings 文档持久化与 revision 竞争 |
 | spark / hippomemo 的真 fetch 路径与 SSE | 真宿主下的会话数据、凭据落盘 |
 
+## W4 保真：预览与真宿主同形的三道门
+
+零 dsh 预览此前比真宿主**更宽松**（评审 F14），现在补齐三处，让「访问规则 / schema 必填 /
+服务生命周期」三类回归在 5180 就能抓到：
+
+1. **inject 门**（`src/mock/ctx.ts` 的 `withInjectGate`）：每个插件拿到的 ctx 都按自己的
+   `export const inject` 包一层 —— 访问未声明服务抛 `cannot get property "<service>" without inject`；
+   `ctx.remote` 的 `$mount/$on/$stream` 需要 `remote`、`credentials` 需要 `remote.credentials`、
+   **动态命名空间（`remote.<ns>`）直接读一律抛错**（必须走 `reflect`），与真宿主实测一致。
+2. **写入路径按 wire schema 单源校验**（`fixtures/sparks.mjs`）：mock 直接 import
+   `dsh-spark-wire` 的 `sparkCaptureSchema` / `sparkPatchSchema`（与真宿主 `SparkService`
+   同一份 zod），缺 `sourceSessionId`、空 title、非法 status 一律 400 `BAD_REQUEST` ——
+   以前这里给 `sourceSessionId` 兜默认值，漏传必填只有真宿主才暴露。
+3. **生命周期替身**（`ctx.__preview.teardown()`）：跑掉所有 effect disposer 并清空槽位
+   ledger，等价于真宿主卸载插件 fiber；冒烟据此断言「五个模块注册后能被完整注销」。
+
+`pnpm preview:verify` 的 Node 冒烟会**跑五个插件的真 `apply()`**（带 inject 门），
+断言自注册顺序为 `spark,hippomemo,finance,github,npm` 且 teardown 后 ledger 清空 ——
+不需要浏览器就能抓到「忘了声明 inject / 注册不上槽位」这类回归。
+
 ## 自检覆盖（`pnpm preview:verify`）
 
 - Node 冒烟（`tests/smoke.tsx`，真产物 + 假宿主，无 DOM）：

@@ -10,7 +10,8 @@
  */
 import { renderToString } from 'react-dom/server'
 import type { ReactElement } from 'react'
-import { createMockCtx, type Lang, type Scenario } from '../src/mock/ctx.ts'
+import { createMockCtx, withInjectGate, type Lang, type MockCtx, type Scenario } from '../src/mock/ctx.ts'
+import { createSparkStore } from '../fixtures/sparks.mjs'
 import {
   FinanceCard,
   GithubSection,
@@ -44,7 +45,8 @@ async function flush(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 260))
 }
 
-/** DockOverlay 在渲染期读 window/localStorage（位置与开合状态），Node 侧补个最小壳。 */
+/** DockOverlay 在渲染期读 window/localStorage（位置与开合状态），Node 侧补个最小壳。
+ *  插件的 apply 会走 `injectPluginStyle` / CSS Modules 内联注入 → 也要一个最小 document。 */
 function shimBrowserGlobals(): void {
   const scope = globalThis as unknown as Record<string, unknown>
   scope['window'] ??= {
@@ -59,6 +61,11 @@ function shimBrowserGlobals(): void {
     getItem: () => null,
     setItem: () => {},
     removeItem: () => {},
+  }
+  scope['document'] ??= {
+    head: { appendChild() {}, querySelector: () => null },
+    querySelector: () => null,
+    createElement: () => ({ dataset: {}, style: {}, setAttribute() {}, remove() {}, appendChild() {} }),
   }
 }
 
@@ -221,6 +228,90 @@ export async function run(): Promise<{ checks: Check[] }> {
     await flush()
     const state = injected.controller.store.getSnapshot()
     check('npm: empty 场景 packages 为空', (state.statusView?.packages.length ?? -1) === 0, JSON.stringify(state.statusView?.packages.length))
+  }
+
+  /* ── W4 保真：契约 schema 单源校验（F14）── */
+  {
+    // 真宿主 SparkService.capture() 会用 wire 的 sparkCaptureSchema 解析；
+    // 预览 fixture 此前给 sourceSessionId 兜默认值，导致「漏传必填」静默通过。
+    const store = createSparkStore()
+    const missing = store.capture({ title: 'verify', content: '漏了 sourceSessionId' })
+    check(
+      'spark: 漏传必填 sourceSessionId 被拒（BAD_REQUEST，与真宿主同）',
+      missing.ok === false && missing.error?.code === 'BAD_REQUEST' && String(missing.error?.message).includes('sourceSessionId'),
+      JSON.stringify(missing).slice(0, 200),
+    )
+    const blank = store.capture({ title: '', content: 'x', sourceSessionId: 'sess' })
+    check('spark: 空 title 也被拒（schema min(1)）', blank.ok === false && blank.error?.code === 'BAD_REQUEST', JSON.stringify(blank).slice(0, 160))
+    const valid = store.capture({ title: 'verify', content: 'ok', sourceSessionId: 'sess-preview' })
+    check('spark: 合法入参写入成功', valid.ok === true && valid.value?.sourceSessionId === 'sess-preview', JSON.stringify(valid).slice(0, 160))
+    const badPatch = store.patch(valid.value.id, { status: 'nonsense' })
+    check('spark: 非法 patch 状态被拒', badPatch.ok === false && badPatch.error?.code === 'BAD_REQUEST', JSON.stringify(badPatch).slice(0, 160))
+  }
+
+  /* ── W4 保真：inject 门（真宿主拒绝未声明服务的访问）── */
+  {
+    const ctx = createMockCtx({ lang: () => lang, scenario: () => scenario })
+    const gated = withInjectGate(ctx, ['locale']) as unknown as MockCtx
+    check('inject 门: 声明过的 locale 可访问', typeof gated.locale.register === 'function', '')
+    let slotsError = ''
+    try { void (gated as unknown as { slots: unknown }).slots } catch (error) { slotsError = String(error) }
+    check('inject 门: 未声明的 slots 抛错（与真宿主同形）', slotsError.includes('cannot get property "slots" without inject'), slotsError)
+    let credentialsError = ''
+    const remoteGated = withInjectGate(ctx, ['locale', 'remote']) as unknown as MockCtx
+    try { void (remoteGated.remote as unknown as { credentials: unknown }).credentials } catch (error) { credentialsError = String(error) }
+    check('inject 门: 未声明的 remote.credentials 抛错', credentialsError.includes('cannot get property "remote.credentials" without inject'), credentialsError)
+    check('inject 门: 声明过的 remote.$mount 可访问', typeof remoteGated.remote.$mount === 'function', '')
+    let namespaceError = ''
+    try { void (remoteGated.remote as unknown as { spark: unknown }).spark } catch (error) { namespaceError = String(error) }
+    check('inject 门: 动态命名空间必须走 reflect（直接读抛错）', namespaceError.includes('cannot get property "remote.spark" without inject'), namespaceError)
+  }
+
+  /* ── W4 保真：服务生命周期（effect disposer 真的会清掉注册）── */
+  {
+    const ctx = createMockCtx({ lang: () => lang, scenario: () => scenario })
+    let disposed = 0
+    ctx.effect(() => () => { disposed += 1 })
+    ctx.slots.register({ name: 'spark.dock.module', id: 'probe', order: 1 }, () => null)
+    const before = ctx.slots.snapshot('spark.dock.module').length
+    ctx.__preview.teardown()
+    const after = ctx.slots.snapshot('spark.dock.module').length
+    check('生命周期: teardown 跑掉 effect disposer', disposed === 1, 'disposed=' + disposed)
+    check('生命周期: teardown 清空槽位 ledger', before === 1 && after === 0, 'before=' + before + ' after=' + after)
+  }
+
+  /* ── W4 保真：五个插件的真 apply + inject 门（无浏览器也能抓到注册回归）── */
+  {
+    shimBrowserGlobals()
+    const ctx = createMockCtx({ lang: () => lang, scenario: () => scenario })
+    buildGithubInjected(ctx, scenario)
+    buildNpmInjected(ctx, scenario)
+    buildFinanceInjected(ctx, scenario)
+    const [dock, github, npm, finance, hippomemo] = await Promise.all([
+      import('dsh-spark-dock/client'),
+      import('dsh-connector-github-ui/client'),
+      import('dsh-connector-npm-ui/client'),
+      import('dsh-spark-finance-client/client'),
+      import('dsh-hippomemo/client'),
+    ])
+    let applyError = ''
+    try {
+      for (const mod of [dock, github, npm, finance, hippomemo]) {
+        await mod.apply(withInjectGate(ctx, (mod.inject ?? []) as readonly string[]) as never)
+      }
+    } catch (error) {
+      applyError = String(error)
+    }
+    check('dock: 五个插件真 apply 全部通过 inject 门', applyError === '', applyError)
+    const entries = ctx.slots.snapshot('spark.dock.module')
+    const ids = entries.map((entry) => entry.id)
+    check(
+      'dock: 五个模块自注册且按 order 排序',
+      ids.join(',') === 'spark,hippomemo,finance,github,npm',
+      JSON.stringify(ids),
+    )
+    ctx.__preview.teardown()
+    check('dock: teardown 后模块全部注销', ctx.slots.snapshot('spark.dock.module').length === 0, JSON.stringify(ctx.slots.snapshot('spark.dock.module').map((entry) => entry.id)))
   }
 
   return { checks }

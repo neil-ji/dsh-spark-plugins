@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useState, useSyncExternalStore, type ComponentType, type ReactNode } from 'react'
 import { DockOverlay, type DockRenderSlot } from 'dsh-spark-dock/DockOverlay'
 import { DOCK_CSS } from 'dsh-spark-dock/style'
-import { createMockCtx, type Lang, type MockCtx, type Scenario } from '../mock/ctx.ts'
+import { createMockCtx, withInjectGate, type Lang, type MockCtx, type Scenario } from '../mock/ctx.ts'
 import { buildFinanceInjected, buildGithubInjected, buildNpmInjected } from '../mock/plugins.ts'
 
 /** 幂等注入 dock 的全局样式（真宿主由 dock apply 注入；spark 模块的 tab 也用它）。 */
@@ -120,7 +120,13 @@ function ensureBooted(lang: Lang, scenario: Scenario): Booted {
   return booted
 }
 
-/** 依次跑五个插件的真 apply（dock 自己也会注册 spark 模块）。 */
+/**
+ * 依次跑五个插件的真 apply（dock 自己也会注册 spark 模块）。
+ *
+ * **W4 保真（F14）**：每个插件拿到的 ctx 都套了 `withInjectGate` —— 访问没写进自己
+ * `inject` 的服务会像真宿主一样抛错。假宿主不再白送服务，「忘了声明 inject」在
+ * 预览里就会当场炸，而不是等到真宿主整条 loader entry 失败。
+ */
 async function applyPlugins(ctx: MockCtx): Promise<void> {
   const [dock, github, npm, finance, hippomemo] = await Promise.all([
     import('dsh-spark-dock/client'),
@@ -130,11 +136,9 @@ async function applyPlugins(ctx: MockCtx): Promise<void> {
     import('dsh-hippomemo/client'),
   ])
   // dock 第一个：它声明 shell.overlay 与 `spark.dock.module` 子槽，并注册 spark 模块。
-  await dock.apply(ctx as never)
-  await github.apply(ctx as never)
-  await npm.apply(ctx as never)
-  await finance.apply(ctx as never)
-  await hippomemo.apply(ctx as never)
+  for (const mod of [dock, github, npm, finance, hippomemo]) {
+    await mod.apply(withInjectGate(ctx, (mod.inject ?? []) as readonly string[]) as never)
+  }
 }
 
 export function DockPane({ lang, scenario }: { lang: Lang; scenario: Scenario }): JSX.Element {

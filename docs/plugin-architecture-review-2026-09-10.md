@@ -16,6 +16,15 @@
 > 新增闸门：`pnpm check:architecture` 的 **inject 面覆盖**（client 用到 `ctx.slots` /
 > `ctx.remote.credentials` 却没写进 `inject` → 真宿主会让整条 loader entry 失败）。
 >
+> **状态（2026-09-11 深夜）**：**W4（F14 预览保真）已落地** —— 假宿主加
+> **inject 门**（未声明服务访问抛 `cannot get property "X" without inject`；
+> `remote.<ns>` 动态命名空间必须走 reflect，直接读同样抛错）、预览侧写入路径改为
+> **按 wire schema 单源校验**（`fixtures/sparks.mjs` 直接用 `dsh-spark-wire` 的
+> `sparkCaptureSchema` / `sparkPatchSchema`，缺 `sourceSessionId` 返回 400
+> BAD_REQUEST，与真宿主同形），mock ctx 增加 **teardown** 生命周期替身。
+> `preview:verify` 从 61 项扩到 **74 项**，其中 11 项专测这三类保真：契约必填、
+> inject 门、以及「五个插件真 `apply()`（带 inject 门）→ 自注册顺序 → teardown 注销」。
+>
 > **评审范围**：`packages/*` 全 17 包的 host/client 数据面与事件面，重点是「事件如何从宿主到浏览器」
 > 与「dock 如何组合五个插件」。结论基于**逐文件核对**，每条发现都带 `文件:行` 证据；
 > 未能证实的一律标注 **UNVERIFIED**。
@@ -44,7 +53,7 @@
 | F11 | **刷新策略四套并存**：SSE 推送（spark/hippomemo）、平台转发事件（`credentials/reference-updated`、`settings/document-updated`）、**600ms 轮询**（finance backfill）+ 30min 定时器、以及**页内 `window` 自定义事件**当变更总线（`dsh-finance-dsh-override-changed`） | P1 | `dsh-finance-client/src/client/controller.ts:117`、`FinanceAuditSection.tsx:468,478-481` |
 | F12 | **错误语义三套**：github 把失败抛成 `status:'error'`；npm 在成功值里再嵌一层 `ok:false`，且 `token.status` 失败被静默吞掉（UI 显示「未配置」而非错误）；finance 同时用 envelope、slot `status`、结果 `ok:false` 三种表达 | P2 | `github-ui/src/client/store.ts:77-92`、`npm-ui/src/client/store.ts:99-103,120-123`、`dsh-finance/src/typert.host.ts:51,72` |
 | F13 | **connector 三家约 60% 同构，契约靠手抄**：两份 ~150 行凭据/加载 store 有 ~90 行逐字相同；三个 wire 各自手写 ~80 行 descriptor/contribution 样板；finance 把同一份 8 方法 manifest 维护两份（各 ~145 行）；plugin-kit 在 connector 半边**只被当作类型**使用 | P2 | `github-ui/src/client/store.ts:16-30,45-47,63-93,110-131` vs `npm-ui/src/client/store.ts:22-36,55-57,74-112,130-151`；`dsh-finance/src/typert.host.ts:81-225` vs `typert.remote-client.ts:68-212` |
-| F14 | **zero-dsh 预览比真宿主更宽松**：mock ctx 没有 cordis 的 inject 门（直接给 `remote.spark`），fixture 又给 `sourceSessionId` 兜默认值（真宿主 schema 必填 → 400）。于是「访问规则 / schema 必填 / 服务生命周期」三类回归预览测不出来 | P1 | `dev-harness/preview/src/mock/ctx.ts:168-176`、`fixtures/sparks.mjs:112-129` vs `dsh-spark/src/http.ts` 的 zod 校验；实测记录见 §7 |
+| F14 | **zero-dsh 预览比真宿主更宽松**（**已关闭**：2026-09-11 W4 落地 —— 假宿主加 inject 门 + 动态命名空间必须走 reflect，预览侧写入路径按 wire schema 单源校验并返回 400，mock ctx 增加 teardown 生命周期，Node 冒烟跑五个插件真 `apply()` 断言自注册顺序与注销）：mock ctx 没有 cordis 的 inject 门（直接给 `remote.spark`），fixture 又给 `sourceSessionId` 兜默认值（真宿主 schema 必填 → 400）。于是「访问规则 / schema 必填 / 服务生命周期」三类回归预览测不出来 | P1 | `dev-harness/preview/src/mock/ctx.ts:168-176`、`fixtures/sparks.mjs:112-129` vs `dsh-spark/src/http.ts` 的 zod 校验；实测记录见 §7 |
 
 **判断**：不是「没实现」，而是**实现方向选错了层**。宿主侧做对了（领域服务 → cordis 事件），
 从「服务」到「浏览器」这一段各自为政，于是所有跨插件能力（统一下发、连接预算、播报、

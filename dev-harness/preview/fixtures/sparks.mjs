@@ -4,13 +4,24 @@
  * 与 hippomemo 同理——dock 的 sparkApi 本来就是 `fetch('/sparks...')`，
  * 所以服务端换数据即可，插件代码一行不改。
  *
+ * **W4 保真（F14）**：写入路径按 **wire 契约 schema 单源校验**（`dsh-spark-wire`
+ * 的 `sparkCaptureSchema` / `sparkPatchSchema`，与真宿主 `SparkService.capture()`
+ * 用的是同一份 zod）。此前这里给 `sourceSessionId` 兜默认值，导致「客户端漏传必填
+ * 字段」在预览里静默通过、到真宿主才 400 —— 现在预览会以同样的 BAD_REQUEST 拒绝。
+ *
  * scenario：ok（默认）· empty（空库）· error（每次调用都失败）。
  */
+import { sparkCaptureSchema, sparkPatchSchema } from '../../../packages/dsh-spark-wire/lib/index.js'
 
 const WORKSPACE = 'F:\\AgentStudio\\dsh-spark-plugins'
 const HOUR = 3600_000
 const DAY = 24 * HOUR
 const now = Date.now()
+
+/** 与真宿主的 BAD_REQUEST 信封同形（`http.ts` 的 errorEnvelope('BAD_REQUEST', …)）。 */
+function badRequest(issues) {
+  return { code: 'BAD_REQUEST', message: issues.map((issue) => issue.path.join('.') + ': ' + issue.message).join('; ') }
+}
 
 const SPARKS = [
   {
@@ -111,17 +122,23 @@ export function createSparkStore() {
 
     capture(input) {
       if (fail()) return { ok: false, error }
+      // 真宿主 SparkService.capture() 的第一件事就是 `sparkCaptureSchema.parse(input)`
+      // （required: title/content/sourceSessionId…）。预览必须同样严格，否则
+      // 「漏传必填字段」这类回归只有在真宿主才暴露（F14）。
+      const parsed = sparkCaptureSchema.safeParse(input)
+      if (!parsed.success) return { ok: false, error: badRequest(parsed.error.issues) }
+      const value = parsed.data
       const created = {
         id: 'spk-' + Math.random().toString(36).slice(2, 8),
-        title: String(input.title ?? '（无标题）').slice(0, 200),
-        content: String(input.content ?? ''),
-        scope: input.scope ?? 'project',
-        workspacePath: input.workspacePath ?? null,
+        title: value.title,
+        content: value.content,
+        scope: value.scope,
+        workspacePath: value.workspacePath,
         status: 'active',
-        tags: Array.isArray(input.tags) ? input.tags : [],
-        sourceSessionId: input.sourceSessionId ?? 'spark-dock',
-        sourceAgentId: input.sourceAgentId ?? null,
-        sourceTurn: input.sourceTurn ?? null,
+        tags: [...value.tags],
+        sourceSessionId: value.sourceSessionId,
+        sourceAgentId: value.sourceAgentId,
+        sourceTurn: value.sourceTurn,
         createdAt: Date.now(), updatedAt: Date.now(), resolvedAt: null, crystallized: null,
       }
       sparks = [created, ...sparks]
@@ -130,10 +147,13 @@ export function createSparkStore() {
 
     patch(id, patch) {
       if (fail()) return { ok: false, error }
+      const parsed = sparkPatchSchema.safeParse(patch)
+      if (!parsed.success) return { ok: false, error: badRequest(parsed.error.issues) }
+      const fields = parsed.data
       let updated = null
       sparks = sparks.map((item) => {
         if (item.id !== id) return item
-        updated = { ...item, ...patch, updatedAt: Date.now() }
+        updated = { ...item, ...fields, updatedAt: Date.now() }
         if (updated.status === 'archived' && updated.resolvedAt === null) updated.resolvedAt = Date.now()
         return updated
       })
