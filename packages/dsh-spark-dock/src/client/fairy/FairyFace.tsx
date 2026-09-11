@@ -1,23 +1,25 @@
 /**
  * Fairy face: the ball's expressive SVG (ahoge spark + eyes + mouth + blush),
- * driven by real plugin events via fairyEvents. Restraint: moods fire only on
- * real events, auto-relax to idle; no idle animation loops beyond a slow bob.
+ * driven by real plugin events via the kit announcement bus. Restraint: moods
+ * fire only on real events, auto-relax to idle; no idle animation loops beyond
+ * a slow bob.
  *
  * 2026-09 静默形态：DockOverlay 以 BALL_FACE_ENABLED=false 调用本 hook，
- * 球内不再渲染 FairyFace；事件订阅由 BALL_BUBBLE_ENABLED 决定（气泡要听事件）。
+ * 球内不再渲染 FairyFace；订阅由 BALL_BUBBLE_ENABLED 决定（气泡要听播报）。
  * 组件与规则全部保留，恢复角色层只需把开关置回 true。
+ *
+ * F7：这里只消费播报，不含任何插件文案；事件订阅与文案翻译在各自的模块里
+ * （spark → `spark/SparkDockModule.tsx` 的 `startSparkAnnouncements`）。
  */
 import { useEffect, useState } from 'react'
-import type { SparkEventChannel } from '../spark/remote.ts'
-import { onFairyAnnouncement, startFairyEvents, type FairyMood } from './fairyEvents.ts'
+import { onFairyAnnouncement, type FairyMood } from './fairyEvents.ts'
 
-export function useFairy(channel: SparkEventChannel | null, enabled = true): { mood: FairyMood | null; bubble: { text: string; src: string } | null } {
+export function useFairy(enabled = true): { mood: FairyMood | null; bubble: { text: string; src: string } | null } {
   const [mood, setMood] = useState<FairyMood | null>(null)
   const [bubble, setBubble] = useState<{ text: string; src: string } | null>(null)
 
   useEffect(() => {
-    if (!enabled || channel === null) return
-    const stopEvents = startFairyEvents(channel)
+    if (!enabled) return
     let moodTimer = 0
     let bubbleTimer = 0
     const off = onFairyAnnouncement((a) => {
@@ -29,12 +31,11 @@ export function useFairy(channel: SparkEventChannel | null, enabled = true): { m
       bubbleTimer = window.setTimeout(() => setBubble(null), 4200)
     })
     return () => {
-      stopEvents()
       off()
       window.clearTimeout(moodTimer)
       window.clearTimeout(bubbleTimer)
     }
-  }, [channel, enabled])
+  }, [enabled])
 
   return { mood, bubble }
 }

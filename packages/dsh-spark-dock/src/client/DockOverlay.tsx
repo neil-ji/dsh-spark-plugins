@@ -83,8 +83,9 @@ export function DockOverlay({ channel = null, renderSlot }: DockOverlayProps): J
   const posRef = useRef<Pt>(loadPos())
   const [open, setOpen] = useState(() => localStorage.getItem(OPEN_KEY) === '1')
   const [activeId, setActiveId] = useState(() => localStorage.getItem(ACTIVE_KEY) ?? 'spark')
-  // 订阅只需一层开着；mood 只服务球的表情层，气泡只取文本（互不牵连）
-  const fairy = useFairy(channel, BALL_FACE_ENABLED || BALL_BUBBLE_ENABLED)
+  // 订阅只需一层开着；mood 只服务球的表情层，气泡只取文本（互不牵连）。
+  // F7：这里只消费 kit 的播报总线，事件订阅与文案翻译在各自的模块里。
+  const fairy = useFairy(BALL_FACE_ENABLED || BALL_BUBBLE_ENABLED)
   const mood = BALL_FACE_ENABLED ? fairy.mood : null
   const bubble = BALL_BUBBLE_ENABLED ? fairy.bubble : null
 

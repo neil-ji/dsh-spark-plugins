@@ -37,6 +37,16 @@
 > `credentials.ts`（`CredentialView` + `credentials` 声明合并 + `CredentialToken`）
 > 与 `page.ts`（`PageLoader`：generation 竞态守卫 + status/error 迁移 +
 > `refreshIfLoaded`），并补 11 项单测（含「慢的旧请求不得覆盖新请求」两条竞态断言）。
+>
+> **状态（2026-09-12 晚）**：**F7 落地** —— 播报总线上收
+> `dsh-spark-plugin-kit/client` 的 `announcements.ts`（`publishAnnouncement` /
+> `onAnnouncement`，4s 同文案去重集中在总线，符合 ADR-004「去重/节流策略上收 kit」）。
+> 文案与情绪由**模块自己**发布：spark 的 `startSparkAnnouncements()`（住在
+> `spark/SparkDockModule.tsx`）、hippomemo 的 `startHippomemoAnnouncements()`
+> （住在 `hippomemo/src/client/announce.ts`；顺带给世代基线帧加 `baseline: true`，
+> 以免重连误报「新增记忆」）。dock 的 fairy 层退化为纯消费者（`useFairy()` 不再需要
+> 事件通道），并新增静态闸门 `fairy-domain-import`：fairy 目录不得 import `*-wire`
+> 或别的插件 UI，只允许共享库（kit / ui-kit）。
 > 两家 store 158/152 行 → **106/100 行**（−139/+64）。kit 因此新增 peer
 > `@deepseek-ai/dsh-typert-protocol`（凭据 seam 的平台类型单处声明，
 > 不再由两个插件各抄一份声明合并）。
@@ -62,7 +72,7 @@
 | F4 | **dock 是编译期聚合器，不是外壳**（**已关闭**：2026-09-11 P3/ADR-003 落地，五个模块全部自注册，`modules.tsx` 已删）：5 个模块的元数据硬编码在 dock，加一个插件要改 dock 源码并重新发版 | P1 | `dock/src/client/modules.tsx:61-94`、`dock/src/client/index.ts:9-17,39-83` |
 | F5 | **共享基础设施长在 app 包里**：唯一正确的连接复用实现（refcount 注册表）在 dock 内部，插件无法复用；hippomemo 因此自己开 EventSource，且有**两处**订阅点无引用计数 | P1 | `dock/src/client/streams.ts:35-52`；`dsh-hippomemo/src/client/api.ts:117-123`、`MemorySection.tsx:446,1234` |
 | F6 | **一个插件两份客户端产物、两次挂载**（**已关闭**：2026-09-11 P4 —— `embed.cjs` 第二产物与 `./embed` 导出/构建已删除，每包只剩 `lib/client.js`；各包自己的 `apply()` 单次 `$mount`，重复挂载错误消失；`src/client/embed.ts` 仅作组件级预览画布的源码 barrel）：`client.js`（平台 loader）与 `embed.cjs`（给 dock 用）并存；同一 remote 命名空间被两个 bundle 各 `$mount` 一次，「容忍」而非归属 | P1 | `dock/src/client/index.ts:9-17`、`GithubEmbed.tsx:39` vs `dsh-github-ui/src/client/index.ts:48` |
-| F7 | **播报/文案策略写在壳里**：`fairyEvents.ts` 用字符串匹配把 spark 的业务事件翻成文案与情绪，且有 4s 文案级去重 | P1 | `dock/src/client/fairy/fairyEvents.ts:32-51` |
+| F7 | **播报/文案策略写在壳里**（**已关闭**：2026-09-12 —— 播报总线上收 `dsh-spark-plugin-kit/client` 的 `announcements.ts`，文案与情绪由模块自己 `publishAnnouncement`；dock 的 fairy 层退化为纯消费者（只订阅总线画气泡），并有静态闸门禁止 fairy 层 import 领域契约 / 插件 UI）：`fairyEvents.ts` 用字符串匹配把 spark 的业务事件翻成文案与情绪，且有 4s 文案级去重 | P1 | `dock/src/client/fairy/fairyEvents.ts:32-51` |
 | F8 | **退役世代仍参与构建**（**已关闭**：2026-09-11 包连同 kit 死代码一并删除）：`dsh-spark-ui@0.1.4` 还在 workspace（自带 3 条 EventSource + 完整 spark 面板），已从 `plugin-registry.json` 摘除但仍是 `packages/*` 成员 | P2 | `pnpm-workspace.yaml:1-2`、`plugin-registry.json`（无此项） |
 | F9 | **连接预算被当成局部问题**：6 条 HTTP/1.1 长连接上限是全局约束，却由一个 app 包内的注册表局部缓解；harness 还复制了客户端逻辑（`bindSnapshotSelector` 8 行副本） | P2 | `docs/LOCAL-DEV-HARNESS.md:286-289`、`streams.ts` 注释 |
 | F10 | **同一件事三套宿主注册风格**：spark/hippomemo 手写 HTTP 路由；github/npm 用声明式 `ctx.typert.register(HOST_CONTRIBUTION)`；**finance 完全没有 register**，改为手抄 `typert.host.ts` / `typert.remote-client.ts` 两份「像生成器产物」的 manifest —— 且 `sourceLocation` 行号**已经漂移**（写成 `index.ts:96`，实际 `:333`；`listProviders`/`refreshBalance` 都写 `:999`） | P1 | `dsh-github/src/index.ts:39`、`dsh-npm/src/index.ts:40`、`dsh-finance/src/index.ts`（无 `typert.register`，grep 零命中）、`dsh-finance/src/typert.host.ts:95` |

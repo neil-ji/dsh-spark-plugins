@@ -131,7 +131,19 @@ export interface HippomemoApi {
   candidates(): Promise<PendingCandidateListResult>
   /** v3 UI: brain-strip narration row (F10-light fallback). */
   narrative(): Promise<RecallNarrative>
-  events(onChange: (event: { operation: string; id: string }) => void): () => void
+  events(onChange: (event: MemoryChangeEvent) => void): () => void
+}
+
+/**
+ * 一条记忆变更通知。
+ *
+ * `baseline: true` 是**世代基线**（首次订阅或断线重连后的 `ready` 帧），不是一次真实
+ * 写入 —— 面板据此重取列表，播报层据此**不**弹气泡（否则每次重连都会误报「新增记忆」）。
+ */
+export interface MemoryChangeEvent {
+  operation: string
+  id: string
+  baseline?: boolean
 }
 
 export function createHippomemoApi(): HippomemoApi {
@@ -173,7 +185,7 @@ export function createHippomemoApi(): HippomemoApi {
         open: (signal) => active.events.events(signal),
         kinds: ['memory'],
         onFrame: (frame) => { if (frame.kind === 'memory') onChange({ operation: frame.payload.operation, id: frame.payload.id }) },
-        onReady: () => { onChange({ operation: 'put', id: '' }) },
+        onReady: () => { onChange({ operation: 'put', id: '', baseline: true }) },
       })
     },
   }

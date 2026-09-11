@@ -16,6 +16,7 @@ import { sparkTokenCss } from 'dsh-ui-kit'
 import { HIPPOMEMO_CSS } from './style.ts'
 import { startHippomemoEvents } from './start.ts'
 import { registerHippoDockModule } from './HippoDockModule.tsx'
+import { startHippomemoAnnouncements } from './announce.ts'
 import { en, zh, type HippomemoLocaleKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -44,6 +45,9 @@ export async function apply(ctx: ClientContext): Promise<void> {
   injectPluginStyle(sparkTokenCss, 'dsh-ui-kit/tokens', 'dsh-ui-kit')
   // 统一事件通道（ADR-001）：standalone 路径也要装配，否则记忆面板失去实时刷新。
   await startHippomemoEvents(ctx)
+  // F7：本模块自己的播报（文案与情绪住在这里，壳只订阅总线呈现）。
+  const stopAnnouncements = startHippomemoAnnouncements()
+  ctx.effect(() => stopAnnouncements, 'hippomemo: announcements')
   // ADR-003：注册 dock 模块（面板 UI 归插件自己）。
   registerHippoDockModule(ctx)
 }

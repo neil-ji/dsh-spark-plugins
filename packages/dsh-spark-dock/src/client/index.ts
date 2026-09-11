@@ -16,7 +16,7 @@ import type { ClientContext } from 'dsh-spark-plugin-kit/client'
 import { injectPluginStyle } from 'dsh-spark-plugin-kit/client'
 import { SPARK_REMOTE_CONTRIBUTION } from 'dsh-spark-wire'
 import { sparkChannelOf, type SparkEventChannel } from './spark/remote.ts'
-import { registerSparkDockModule } from './spark/SparkDockModule.tsx'
+import { registerSparkDockModule, startSparkAnnouncements } from './spark/SparkDockModule.tsx'
 import { DockOverlay } from './DockOverlay.tsx'
 import { DOCK_CSS } from './style.ts'
 
@@ -57,8 +57,14 @@ export async function apply(ctx: ClientContext): Promise<void> {
   } catch (error) {
     console.warn('[dsh-spark-dock] spark 事件流描述符 mount 失败，实时刷新将不可用：', error)
   }
-  // 1) 自己的模块走同一条自注册路径（spark 的 UI 住在本包）。
+  // 1) 自己的模块走同一条自注册路径（spark 的 UI 与播报文案都住在本包）。
   registerSparkDockModule(ctx, { channel })
+  // 1b) spark 的播报（F7）：模块自己订阅统一事件流并把帧翻成气泡文案；
+  //     壳只订阅 kit 的播报总线（见 fairy/FairyFace.tsx）。
+  if (channel !== null) {
+    const stopAnnouncements = startSparkAnnouncements(channel)
+    ctx.effect(() => stopAnnouncements, 'spark-dock: announcements')
+  }
   // 2) 声明 shell.overlay 里的悬浮球，并声明 dock 的子槽 —— 插件据此自注册。
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const slots = (ctx as any).slots as {

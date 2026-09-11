@@ -56,7 +56,7 @@ sh install.sh --from-source          # 开发路径：clone + pnpm install + bui
 | 包 | 目录 | 说明 |
 | --- | --- | --- |
 | dsh-hippomemo | packages/dsh-hippomemo | 跨会话/跨工作区共享记忆插件 |
-| dsh-spark-plugin-kit | packages/dsh-plugin-kit | 公共层：事件订阅运行时（$stream 扇出/引用计数）· 连接器页面公共层（凭据 seam 门面 + 带竞态守卫的加载骨架）· 插件 CSS 注入 · Snapshot 绑定 · dock 模块契约 |
+| dsh-spark-plugin-kit | packages/dsh-plugin-kit | 公共层：事件订阅运行时（$stream 扇出/引用计数）· 连接器页面公共层（凭据 seam 门面 + 带竞态守卫的加载骨架）· 插件 CSS 注入 · Snapshot 绑定 · dock 模块契约 · 播报总线（文案归模块，壳只呈现） |
 | dsh-ui-kit | packages/dsh-ui-kit | 本地 React 组件库（复刻 DSH 设计系统，零 cordis） |
 | dsh-spark-finance | packages/dsh-finance | 成本统计插件 host（remote/typert + 计算核心） |
 | dsh-spark-finance-client | packages/dsh-finance-client | 成本统计插件 client（设置页 UI） |
@@ -76,7 +76,7 @@ npm 连接器 token 优先使用说明（粘贴 token → 测试连接 → 保�
 
 | 闸门 | 命令 | 挡住什么 |
 | --- | --- | --- |
-| 架构 | `pnpm check:architecture` | ① **孤包**：`packages/*` 里出现既非插件、也不在插件依赖闭包内的包（退役世代就是这么漏的）；② **依赖边界**：宿主半边 import react/ui-kit/客户端入口、插件互相 import、`<pkg>/embed` 被非 app 引用、ui-kit 沾平台依赖、wire 沾 cordis；③ **契约漂移**：wire 描述符声明的方法在宿主实现里不存在、两份手抄 manifest 不一致（`sourceLocation` 行号漂移目前只告警，`--strict-locations` 升级为失败）；④ **inject 面覆盖**：client 半边用到 `ctx.slots` / `ctx.remote.credentials` 等服务却没写进该包 `inject` —— 真宿主会因此让整条 loader entry 失败；⑤ **单产物**：任何包再导出 / 构建 `./embed` 第二产物（P4 已删，防回潮） |
+| 架构 | `pnpm check:architecture` | ① **孤包**：`packages/*` 里出现既非插件、也不在插件依赖闭包内的包（退役世代就是这么漏的）；② **依赖边界**：宿主半边 import react/ui-kit/客户端入口、插件互相 import、`<pkg>/embed` 被非 app 引用、ui-kit 沾平台依赖、wire 沾 cordis；③ **契约漂移**：wire 描述符声明的方法在宿主实现里不存在、两份手抄 manifest 不一致（`sourceLocation` 行号漂移目前只告警，`--strict-locations` 升级为失败）；⑥ **fairy 呈现层**不得 import 领域契约 / 插件 UI（F7：文案归模块）；④ **inject 面覆盖**：client 半边用到 `ctx.slots` / `ctx.remote.credentials` 等服务却没写进该包 `inject` —— 真宿主会因此让整条 loader entry 失败；⑤ **单产物**：任何包再导出 / 构建 `./embed` 第二产物（P4 已删，防回潮） |
 | 设计系统 | `pnpm check:contrast` | 亮/暗对比度 AA（154 项配对）+ token 完整性 + 文档/设计稿漂移 |
 | 预览保真 | `pnpm preview:verify` | 真 client 产物 + 假宿主跑通数据流（74 项）；假宿主已与真宿主同形：**inject 门**（未声明服务访问抛错、动态命名空间必须走 reflect）、写入路径**按 wire schema 单源校验**（缺必填 → 400 BAD_REQUEST）、以及 teardown 生命周期 —— 五个插件的真 `apply()` 也在冒烟里跑 |
 | 版本纪律 | `pnpm check:version-bump` | 改了发布输入（`src/**`、构建配置、清单）却没在同一个 commit 里 bump 该包 `version` —— 版本没变，宿主就继续供旧 client 字节。注释/空白改动会剥离后比较，不算发布改动 |

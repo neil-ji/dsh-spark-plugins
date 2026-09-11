@@ -170,6 +170,18 @@ describe('边界规则', () => {
     })).toEqual([])
   })
 
+  it('F7：dock 的 fairy 呈现层不得 import 领域契约或插件 UI', () => {
+    expect(run({
+      pkg: 'dsh-spark-dock', role: 'app', file: 'packages/dsh-spark-dock/src/client/fairy/fairyEvents.ts',
+      source: "import type { SparkStreamFrame } from 'dsh-spark-wire'",
+    }).map((entry) => entry.code)).toContain('fairy-domain-import')
+
+    expect(run({
+      pkg: 'dsh-spark-dock', role: 'app', file: 'packages/dsh-spark-dock/src/client/fairy/fairyEvents.ts',
+      source: "import { onAnnouncement, publishAnnouncement } from 'dsh-spark-plugin-kit/client'",
+    })).toEqual([])
+  })
+
   it('ui-kit 零平台依赖、wire 协议纯净、自引用不算跨包', () => {
     expect(run({
       pkg: 'dsh-ui-kit', role: 'ui-kit', file: 'packages/dsh-ui-kit/src/index.ts',

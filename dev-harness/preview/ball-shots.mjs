@@ -223,7 +223,7 @@ try {
       transition: cs.transitionProperty + ' ' + cs.transitionDuration, animation: cs.animationName,
     }
   })()`)
-  const fired = await evalJs(`fetch('/sparks', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: '气泡走查', content: 'ball-shots', scope: 'project', tags: ['probe'] }) }).then(r => r.ok)`)
+  const fired = await evalJs(`fetch('/sparks', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: '气泡走查', content: 'ball-shots', scope: 'project', tags: ['probe'], sourceSessionId: 'ball-shots' }) }).then(r => r.ok)`)
   await sleep(600)
   metrics['bubble-shown'] = await bubbleProbe()
   console.log('bubble-shown: ' + JSON.stringify(metrics['bubble-shown']))
@@ -236,7 +236,7 @@ try {
 
   // 亮色气泡（整页重载会重置模块级去重窗口，故可再发一次同样的文本）
   await setUi('light')
-  await evalJs(`fetch('/sparks', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: '气泡走查 · 亮色', content: 'ball-shots', scope: 'project', tags: ['probe'] }) }).then(r => r.ok)`)
+  await evalJs(`fetch('/sparks', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: '气泡走查 · 亮色', content: 'ball-shots', scope: 'project', tags: ['probe'], sourceSessionId: 'ball-shots' }) }).then(r => r.ok)`)
   await sleep(600)
   metrics['bubble-shown-light'] = await bubbleProbe()
   console.log('bubble-shown-light: ' + JSON.stringify(metrics['bubble-shown-light']))
@@ -248,7 +248,7 @@ try {
   await evalJs(`document.querySelector('.dock-ball').click()`)
   await sleep(800)
   const marker = '走查-扇出-' + Date.now().toString(36)
-  await evalJs(`fetch('/sparks', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: ${JSON.stringify(marker)}, content: 'pane fan-out probe', scope: 'project', tags: ['probe'] }) }).then(r => r.ok)`)
+  await evalJs(`fetch('/sparks', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: ${JSON.stringify(marker)}, content: 'pane fan-out probe', scope: 'project', tags: ['probe'], sourceSessionId: 'ball-shots' }) }).then(r => r.ok)`)
   await sleep(1200)
   metrics['pane-fanout'] = await evalJs(`(() => {
     const body = document.querySelector('.dock-body')

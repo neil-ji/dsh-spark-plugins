@@ -162,6 +162,14 @@ export function checkFileBoundaries({ pkg, role, file, imports, roleOf }) {
         if (rule.match(spec)) push(rule.code, `wire 必须保持协议纯净：${spec}`)
       }
     }
+    // F7：dock 的 fairy 层是**播报呈现层** —— 只消费 kit 的播报总线（共享库允许），
+    // 不得 import 任何领域契约（`*-wire`）或别的插件 UI，否则「文案归模块」又被拉回壳里。
+    if (/(^|\/)dsh-spark-dock\/src\/client\/fairy\//.test(file)) {
+      const sharedLib = bare === 'dsh-spark-plugin-kit' || bare === 'dsh-ui-kit'
+      if (!sharedLib && (/^dsh-[^/]+-wire$/.test(spec) || /^dsh-[^/]+\/(client|embed)$/.test(spec))) {
+        push('fairy-domain-import', `fairy 呈现层不得 import 领域契约 / 插件 UI：${spec}`)
+      }
+    }
   }
   return violations
 }

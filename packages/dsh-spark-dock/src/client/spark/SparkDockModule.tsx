@@ -8,9 +8,16 @@
  */
 import { createElement, useState, type ReactNode } from 'react'
 import { IconSparkles, SegmentedControl } from 'dsh-ui-kit'
-import { registerDockModule, type ClientContext, type DockModuleOwnerProps } from 'dsh-spark-plugin-kit/client'
+import {
+  publishAnnouncement,
+  registerDockModule,
+  subscribeFrames,
+  type ClientContext,
+  type DockModuleOwnerProps,
+} from 'dsh-spark-plugin-kit/client'
+import type { SparkChangedEvent, SparkStreamFrame } from 'dsh-spark-wire'
 import { GraphPane, ProposalsPane, ScriptsPane, SparksPane } from './SparkModule.tsx'
-import type { SparkEventChannel } from './remote.ts'
+import { SPARK_EVENTS_STREAM, type SparkEventChannel } from './remote.ts'
 
 /** 模块的注入面：统一事件流通道（apply 里装配好后下发）。 */
 export interface SparkModuleInject {
@@ -40,6 +47,36 @@ export function SparkDockModule(props: SparkModuleInject & DockModuleOwnerProps)
       : paneId === 'proposals' ? createElement(ProposalsPane, { channel })
         : paneId === 'scripts' ? createElement(ScriptsPane, { channel })
           : createElement(GraphPane))
+}
+
+/**
+ * spark 自己的播报（F7：**文案归模块**，dock 的 fairy 层不再含任何插件字符串）。
+ *
+ * 订阅统一事件流把 `sparks/changed` 翻成气泡文案；`sparks` 主题的帧由 wire 的
+ * `SparkStreamFrame` 描述（类型与 zod 校验都在 `dsh-spark-wire`）。
+ *
+ * 这里**故意不做「只订阅一次」的闩锁**：闩锁 + effect 重跑（channel 身份变化）会
+ * 出现「先退订、再拒绝重订」的悬空状态 —— 悬浮球从此收不到任何事件（预览走查抓到）。
+ * 生命周期交给 kit 的引用计数：同名的逻辑流只开一条，最后一个订阅者离开才关闭。
+ * @param channel - dock 组装好的 spark 事件通道（`$stream` + 命名空间）。
+ * @returns disposer。
+ */
+export function startSparkAnnouncements(channel: SparkEventChannel): () => void {
+  return subscribeFrames<SparkStreamFrame>(channel.remote, {
+    name: SPARK_EVENTS_STREAM,
+    open: (signal) => channel.events.events(signal),
+    kinds: ['spark'],
+    onFrame: (frame) => { if (frame.kind === 'spark') announceSparkChange(frame.payload) },
+  })
+}
+
+/** `sparks/changed` → 播报（纯文本 + 情绪）。 */
+function announceSparkChange(payload: SparkChangedEvent): void {
+  if (payload.operation === 'capture') {
+    publishAnnouncement({ mood: 'happy', text: '捕获了新火花', src: '火花 Spark · capture' })
+  } else if (payload.operation === 'crystallize') {
+    publishAnnouncement({ mood: 'cheer', text: '火花结晶成功', src: '火花 Spark · crystallize' })
+  }
 }
 
 /**

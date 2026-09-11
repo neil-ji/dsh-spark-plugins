@@ -168,7 +168,7 @@ registerDockModule({
 
 - 气泡 `role=status aria-live=polite`（不抢焦点），弹入 spring 220ms，停 4s 自动收；说话期间嘴型 talk 动画。
 - 定位：默认球上方（球近顶→下方，尾针随之翻转）；**面板开→侧向避让**（球在右半屏→气泡弹左侧，反之亦然），视口夹取。
-- 真实接线点（预览为模拟器，正式实现换成这些源）：
+- 真实接线点（**F7 起由模块自己发布到 kit 的播报总线 `publishAnnouncement()`**，壳只订阅呈现；预览为模拟器，正式实现换成这些源）：
   - HippoMemo `/hippomemo/events` SSE（put/patch/remove）→ 「新增记忆「x」」；citations → 「引用了 n 条记忆」；`candidates` 变化 → 徽标 +N。
   - Sparks `/proposals/events` → 「涌现提议 +n 待决议」（think）；crystallize 成功 → cheer。
   - Finance 同步状态（getSyncStatus）→ 「价格表已 N 小时未同步」/「同步完成」（happy）；余额行「已过期 n 天」→ sad 轻提示。
