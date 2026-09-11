@@ -63,18 +63,7 @@ export default [
       intro: 'var module = { exports: {} }; var exports = module.exports;',
     },
   },
-  {
-    // embed：给 dsh-spark-dock 内嵌用的纯库入口——同 client 的内联/external
-    // 规则，但无 ModuleLoader banner/footer、不注册槽位。
-    name: 'dsh-hippomemo/client-embed',
-    entry: { embed: 'src/client/embed.ts' },
-    outDir: 'lib',
-    format: ['cjs'],
-    platform: 'browser',
-    target: 'es2020',
-    dts: false,
-    clean: false,
-    external: ['react', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'],
-    deps: { alwaysBundle: [/^dsh-spark-plugin-kit/, /^dsh-ui-kit/, /^lucide-react/, /^zod/] },
-  },
+  // 注：本包曾额外产出 client-embed（lib/embed.cjs，给 dock 内嵌的第二份产物）。
+  // ADR-003 之后 dock 不再 import 任何插件 UI，插件走 client.js 自注册 —— 已删除
+  // （评审 F6 / P4）。组件级预览画布改吃 src/client/embed.ts 这个**源码 barrel**。
 ]

@@ -16,7 +16,7 @@ export function FinancePane({ lang, scenario }: { lang: Lang; scenario: Scenario
   return (
     <div className="pv-frame pv-wide">
       <p className="pv-hint">
-        真产物 <code>dsh-spark-finance-client/embed</code> · 假 <code>remote.finance</code> +
+        源码 barrel <code>dsh-spark-finance-client/embed</code> · 假 <code>remote.finance</code> +
         内存 <code>settingsScope('finance')</code>。页签 = 总览 / 连接 / 供应商 / 高级（无折叠交互）；
         改字段会立刻出现 override 徽标，保存/还原走内存层（刷新即复原）。
       </p>

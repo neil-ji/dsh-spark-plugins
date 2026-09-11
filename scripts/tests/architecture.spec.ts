@@ -22,6 +22,7 @@ import {
   findContractDrift,
   findInjectGaps,
   findOrphanPackages,
+  findSecondProducts,
   halfOf,
   implementationLine,
   implementsMethod,
@@ -243,6 +244,14 @@ describe('inject 面覆盖', () => {
     expect(violations).toEqual([])
     // 五个出 web 客户端产物的插件（dock + github / npm / finance / hippomemo）
     expect(checked).toBeGreaterThanOrEqual(5)
+  })
+})
+
+describe('单产物（P4）', () => {
+  it('真实仓库：没有包再导出 / 构建 ./embed 第二产物', () => {
+    const { violations, checked } = findSecondProducts(ROOT)
+    expect(violations).toEqual([])
+    expect(checked).toBeGreaterThanOrEqual(15)
   })
 })
 

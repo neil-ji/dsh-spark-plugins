@@ -9,14 +9,14 @@
 
 ```bash
 pnpm preview          # http://127.0.0.1:5180/   默认画布 = Dock 悬浮球，改码自动重建 + 页面自动刷新
-pnpm preview:source   # 同一端口，插件改吃 packages/*/src/client/embed.ts（免构建，改源码最快）
+pnpm preview:source   # 同一端口，插件 client 入口改吃 src/client/index.ts（免构建，改源码最快）
 pnpm preview:verify   # 自检 52 项：Node 冒烟 + 服务器/fixture 断言；退出码即结论
 pnpm preview:layout   # 真渲染盒模型走查：重叠 / 横向溢出 / 折行必须为 0
 pnpm preview:titles   # 子页标题层级走查：重复的 Title/Label（V1/V2/V3）必须为 0
 ```
 
 前置：仓库已 `pnpm install`，且各包**已构建**（`pnpm build`，或至少
-`packages/*/lib/client.js`、`packages/*/lib/embed.cjs`、`packages/dsh-plugin-kit/lib/client/`、
+`packages/*/lib/client.js`、`packages/dsh-plugin-kit/lib/client/`、
 `packages/dsh-ui-kit/dist/` 存在）。不需要 dsh。
 
 ## 默认画布：Dock 悬浮球（模拟真实 dsh web）
@@ -42,10 +42,10 @@ pnpm preview:titles   # 子页标题层级走查：重复的 Title/Label（V1/V2
 
 | 画布 | 真产物入口 | 假后端 |
 | --- | --- | --- |
-| GitHub 连接器 | `dsh-connector-github-ui/embed` | `remote.github` + `remote.credentials`（`ghp_bad…` → 401） |
-| npm 发布管线 | `dsh-connector-npm-ui/embed` | `remote.npm`（`npm_bad…` → 403） |
-| 财务审计 | `dsh-spark-finance-client/embed` | `remote.finance` + 内存版 `settingsScope`（能改能还原） |
-| 记忆（HippoMemo） | `dsh-hippomemo/embed` | 预览服务器 `/hippomemo/*` fixture |
+| GitHub 连接器 | `dsh-connector-github-ui/embed`（源码 barrel） | `remote.github` + `remote.credentials`（`ghp_bad…` → 401） |
+| npm 发布管线 | `dsh-connector-npm-ui/embed`（源码 barrel） | `remote.npm`（`npm_bad…` → 403） |
+| 财务审计 | `dsh-spark-finance-client/embed`（源码 barrel） | `remote.finance` + 内存版 `settingsScope`（能改能还原） |
+| 记忆（HippoMemo） | `dsh-hippomemo/embed`（源码 barrel） | 预览服务器 `/hippomemo/*` fixture |
 | UI Kit 组件 | `dsh-ui-kit` | 无（纯组件） |
 
 顶栏通用能力：**中文 / English**、**暗色 / 亮色**、**`ok | empty | error` 三档场景**、**重载**；
@@ -63,7 +63,7 @@ pnpm preview:titles   # 子页标题层级走查：重复的 Title/Label（V1/V2
 ## 为什么"不装 dsh"能成立
 
 1. **Dock 画布**吃各包的 `lib/client.js`（ADR-003 起插件自注册，预览剥掉
-   `window.__ModuleLoader__` 壳再调 `apply()`）；**组件级画布**吃 `lib/embed.cjs`
+   `window.__ModuleLoader__` 壳再调 `apply()`）；**组件级画布**吃 `src/client/embed.ts`（源码 barrel，P4 起不再有 embed 产物）
    （库形态入口，产物里唯一的 `require` 只有 react / react-dom —— `dsh-ui-kit`、
    `dsh-spark-plugin-kit`、`dsh-*-wire`、`dsh-client-store` 构建时已内联，
    **没有 `@deepseek-ai/*` 运行时依赖**）。
@@ -117,7 +117,7 @@ pnpm preview:titles   # 子页标题层级走查：重复的 Title/Label（V1/V2
 ## 已知限制
 
 - 预览渲染的是 **dock 的源码组件**（`src/client/DockOverlay.tsx`），插件侧是真
-  `lib/client.js`（剥壳后调用 `apply()`）；组件级画布仍吃 `lib/embed.cjs`。
+  `lib/client.js`（剥壳后调用 `apply()`）；组件级画布吃 `src/client/embed.ts` 源码 barrel。
   假 slots 不校验平台授权，`clientModules` 的 boot 图 / `external` 外部化 / `rev` 缓存
   也验不了——那部分口径由线 2 沙箱（`pnpm sandbox:verify`）与
   `dev-harness/real-host-check.mjs` 承担。
@@ -150,7 +150,7 @@ pnpm preview:titles   # 子页标题层级走查：重复的 Title/Label（V1/V2
 
 | 现象 | 原因 / 处理 |
 | `/preview.js` 返回 503 | 构建失败。看 `/__preview/probe` 的 `errors`，或跑 `pnpm preview:verify` 看首条错误 |
-| 页面空白、控制台报 `Could not resolve …/embed` | 该包没构建：`pnpm build`（或 `pnpm --filter <pkg> build`） |
+| 页面空白、控制台报 `Could not resolve …` | `pnpm install` 后重试；`*/client` 需要 `pnpm build` 产出 `lib/client.js` |
 | 悬浮球/面板没样式 | `packages/dsh-spark-dock` 的 `DOCK_CSS` 没进来：看 `pnpm preview:verify` 的 dock 组断言 |
 | 样式全丢 | `packages/dsh-ui-kit/dist/styles/tokens.css` 不存在：`pnpm --filter dsh-ui-kit build` |
 | 球跑到屏幕外了 | 顶栏「复位悬浮球」（清 `dsh.spark-dock:*` 后重载） |

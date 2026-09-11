@@ -19,10 +19,10 @@ import { createServer } from 'node:http'
 import { readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
-import { createHash } from 'node:crypto'
 import { dirname, extname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as esbuild from 'esbuild'
+import { cssModulesPlugin } from './bundler.mjs'
 import { createHippoStore } from './fixtures/hippomemo.mjs'
 import { createSparkStore } from './fixtures/sparks.mjs'
 
@@ -53,6 +53,14 @@ const DOCK_MODULES = {
   'dsh-spark-wire': 'packages/dsh-spark-wire/src/index.ts',
 }
 
+/** 组件级画布用的 `…/embed` 源码 barrel（P4：不再是构建产物，两种口径同一份）。 */
+const EMBED_BARRELS = {
+  'dsh-connector-github-ui/embed': 'packages/dsh-github-ui/src/client/embed.ts',
+  'dsh-connector-npm-ui/embed': 'packages/dsh-npm-ui/src/client/embed.ts',
+  'dsh-spark-finance-client/embed': 'packages/dsh-finance-client/src/client/embed.ts',
+  'dsh-hippomemo/embed': 'packages/dsh-hippomemo/src/client/embed.ts',
+}
+
 /** 真产物口径：插件自带的 embed 库入口（自包含，只有 react 是外部依赖）。 */
 const BUNDLE_ALIASES = {
   ...DOCK_MODULES,
@@ -65,10 +73,9 @@ const BUNDLE_ALIASES = {
   'dsh-connector-npm-ui/client': 'packages/dsh-npm-ui/lib/client.js',
   'dsh-spark-finance-client/client': 'packages/dsh-finance-client/lib/client.js',
   'dsh-hippomemo/client': 'packages/dsh-hippomemo/lib/client.js',
-  'dsh-connector-github-ui/embed': 'packages/dsh-github-ui/lib/embed.cjs',
-  'dsh-connector-npm-ui/embed': 'packages/dsh-npm-ui/lib/embed.cjs',
-  'dsh-spark-finance-client/embed': 'packages/dsh-finance-client/lib/embed.cjs',
-  'dsh-hippomemo/embed': 'packages/dsh-hippomemo/lib/embed.cjs',
+  // 组件级画布（非 Dock 画布）吃的 `…/embed`：P4 之后它只是**源码 barrel**
+  // （产品里不存在 embed 产物），两种口径都指向同一个 src 文件。
+  ...EMBED_BARRELS,
 }
 
 /** 源码口径：直接吃 src/client/embed.ts，改码免构建。 */
@@ -83,49 +90,14 @@ const SOURCE_ALIASES = {
   'dsh-connector-github-ui/client': 'packages/dsh-github-ui/src/client/index.ts',
   'dsh-spark-finance-client/client': 'packages/dsh-finance-client/src/client/index.ts',
   'dsh-hippomemo/client': 'packages/dsh-hippomemo/src/client/index.ts',
-  'dsh-connector-github-ui/embed': 'packages/dsh-github-ui/src/client/embed.ts',
-  'dsh-connector-npm-ui/embed': 'packages/dsh-npm-ui/src/client/embed.ts',
-  'dsh-spark-finance-client/embed': 'packages/dsh-finance-client/src/client/embed.ts',
-  'dsh-hippomemo/embed': 'packages/dsh-hippomemo/src/client/embed.ts',
+  ...EMBED_BARRELS,
   // finance 客户端只做类型引用，唯一的值引用是 remote 协议对象（已构建产物）。
   'dsh-spark-finance/remote': 'packages/dsh-finance/lib/typert.remote-client.js',
 }
 
 const PACKAGE_NAME = 'preview'
 
-/** 与各包 build.mjs 同形的 CSS Modules 内联（源码口径才需要）。 */
-const cssModulesPlugin = () => ({
-  name: 'css-modules',
-  setup(build) {
-    build.onResolve({ filter: /\.module\.css$/ }, (args) => ({
-      path: resolve(args.resolveDir, args.path),
-      namespace: 'css-mod',
-    }))
-    build.onLoad({ filter: /.*/, namespace: 'css-mod' }, (args) => {
-      const css = readFileSync(args.path, 'utf8')
-      const hash = 'x' + createHash('sha1').update(css).digest('hex').slice(0, 6)
-      const mapping = {}
-      const rewritten = css.replace(/\.([_a-zA-Z][\w-]*)/g, (match, name) => {
-        mapping[name] = hash + '_' + name
-        return '.' + hash + '_' + name
-      })
-      const tagId = PACKAGE_NAME + '/' + relative(REPO_ROOT, args.path).replace(/\\/g, '/')
-      const entries = Object.entries(mapping).map(([k, v]) => JSON.stringify(k) + ': ' + JSON.stringify(v)).join(', ')
-      const contents = [
-        'const css = ' + JSON.stringify(rewritten) + ';',
-        'const tagId = ' + JSON.stringify(tagId) + ';',
-        'if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]") === null) {',
-        '  const tag = document.createElement("style");',
-        '  tag.dataset.pluginCss = tagId;',
-        '  tag.textContent = css;',
-        '  document.head.appendChild(tag);',
-        '}',
-        'export default { ' + entries + ' };',
-      ].join('\n')
-      return { contents, loader: 'js' }
-    })
-  },
-})
+// CSS Modules 内联插件与 verify.mjs 的 Node 冒烟共用（见 bundler.mjs）。
 
 /**
  * 需要「剥 ModuleLoader 壳」的入口（ADR-003）：插件 client 半边在真宿主里由
@@ -245,7 +217,9 @@ const buildOptions = {
   plugins: [
     aliasPlugin(MODE === 'source' ? SOURCE_ALIASES : BUNDLE_ALIASES),
     clientBundleShim(),
-    ...(MODE === 'source' ? [cssModulesPlugin()] : []),
+    // ADR-003 之后组件级画布吃 src/client/embed.ts 源码 barrel（不再有 embed.cjs
+    // 预构建产物），两种口径都要内联 CSS Modules。
+    cssModulesPlugin(PACKAGE_NAME, REPO_ROOT),
     capturePlugin(),
   ],
 }
@@ -561,7 +535,7 @@ server.listen(PORT, HOST, () => {
   const url = 'http://' + HOST + ':' + PORT + '/'
   console.log('[preview] 零 dsh 组件预览已启动')
   console.log('  地址      ' + url)
-  console.log('  模式      ' + MODE + (MODE === 'source' ? '（src/client/embed.ts 源码）' : '（lib/embed.cjs 真产物）'))
+  console.log('  模式      ' + MODE + (MODE === 'source' ? '（插件 client 入口源码）' : '（lib/client.js 真产物 + 组件级画布源码 barrel）'))
   console.log('  监听      ' + (WATCH ? '开（改码自动重建 + 页面自动刷新）' : '关'))
   console.log('  探针      ' + url + '__preview/probe')
   if (bundleState.errors.length > 0) console.log('  构建错误  ' + bundleState.errors.length + ' 条，见探针')

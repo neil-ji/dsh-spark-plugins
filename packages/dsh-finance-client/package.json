@@ -1,6 +1,6 @@
 {
   "name": "dsh-spark-finance-client",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "DSH 成本统计插件 client：财务审计设置页（余额电量、KPI 与成本图表），UI 对齐 DSH 设计系统",
   "type": "module",
   "homepage": "https://neil-ji.github.io/dsh-spark-plugins/",
@@ -23,11 +23,7 @@
       "types": "./lib/types/client/index.d.ts",
       "default": "./lib/client.js"
     },
-    "./package.json": "./package.json",
-    "./embed": {
-      "types": "./lib/types/client/embed.d.ts",
-      "default": "./lib/embed.cjs"
-    }
+    "./package.json": "./package.json"
   },
   "dsh": {
     "client": {
@@ -42,8 +38,7 @@
     }
   },
   "files": [
-    "lib",
-    "lib/embed.cjs"
+    "lib"
   ],
   "license": "MIT",
   "peerDependencies": {

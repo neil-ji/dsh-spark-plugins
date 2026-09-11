@@ -18,7 +18,7 @@ export function NpmPane({ lang, scenario }: { lang: Lang; scenario: Scenario }) 
   return (
     <div className="pv-frame">
       <p className="pv-hint">
-        真产物 <code>dsh-connector-npm-ui/embed</code> · 假 <code>remote.npm</code>。
+        源码 barrel <code>dsh-connector-npm-ui/embed</code> · 假 <code>remote.npm</code>。
         试试：<code>npm_bad…</code> 测试连接看 403 提示，或保存一个 token 看状态面板刷新。
       </p>
       <NpmSection {...injected} />

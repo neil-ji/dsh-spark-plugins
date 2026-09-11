@@ -1,12 +1,9 @@
 /**
- * dsh-hippomemo embed entry: library-shaped re-exports for embedders
- * (dsh-spark-dock 悬浮球内嵌完整设置面板).
+ * **组件级预览专用 barrel（P4：不是产品入口）**。
  *
- * 与 client.ts 入口的区别：不带 window.__ModuleLoader__ banner/footer，也不碰
- * 任何插槽 —— 纯组件 + api 工厂 + CSS + 字典，由宿主（dock）自行注入
- * api/t/css。与 client bundle 相同的内联规则
- * （dsh-spark-plugin-kit / dsh-ui-kit 内联，react 与平台模块 external），
- * 见 tsdown.config.mjs 的 client-embed 配置块。
+ * 只被 `dev-harness/preview` 的组件级画布引用（对齐 `…/embed` 这个历史 specifier）；
+ * 不产出 `lib/embed.cjs`、不在 `package.json` 的 `exports` 里（tsdown 的
+ * client-embed 配置块已删除）。产品路径只有 `client.js` 自注册（ADR-003）。
  */
 export { MemorySection, type MemorySectionProps } from './MemorySection.tsx'
 export { createHippomemoApi, type HippomemoApi, setHippomemoEventChannel } from './api.ts'

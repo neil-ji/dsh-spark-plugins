@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import * as esbuild from 'esbuild'
+import { cssModulesPlugin } from './bundler.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(HERE, '..', '..')
@@ -35,10 +36,11 @@ const ALIASES = {
   'dsh-connector-npm-wire': 'packages/dsh-npm-wire/src/index.ts',
   'dsh-spark-finance/remote': 'packages/dsh-finance/lib/typert.remote-client.js',
   'dsh-connector-npm-ui/client': 'packages/dsh-npm-ui/src/client/index.ts',
-  'dsh-connector-npm-ui/embed': 'packages/dsh-npm-ui/lib/embed.cjs',
-  'dsh-connector-github-ui/embed': 'packages/dsh-github-ui/lib/embed.cjs',
-  'dsh-spark-finance-client/embed': 'packages/dsh-finance-client/lib/embed.cjs',
-  'dsh-hippomemo/embed': 'packages/dsh-hippomemo/lib/embed.cjs',
+  // 组件级画布 / 冒烟吃 `*/embed`，P4 之后它只是源码 barrel（无构建产物）。
+  'dsh-connector-npm-ui/embed': 'packages/dsh-npm-ui/src/client/embed.ts',
+  'dsh-connector-github-ui/embed': 'packages/dsh-github-ui/src/client/embed.ts',
+  'dsh-spark-finance-client/embed': 'packages/dsh-finance-client/src/client/embed.ts',
+  'dsh-hippomemo/embed': 'packages/dsh-hippomemo/src/client/embed.ts',
 }
 
 const aliasPlugin = {
@@ -72,7 +74,9 @@ async function runSmoke() {
       // 需要一个真 require 才能解析，否则 esbuild 的 __require 会抛
       // "Dynamic require of \"stream\" is not supported"。
       banner: { js: "import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);" },
-      plugins: [aliasPlugin],
+      // 组件级画布与冒烟都改吃 src/client/embed.ts 源码 barrel（P4 删掉了 embed.cjs），
+      // 所以 Node 侧也要内联 CSS Modules —— 与 server.mjs 共用同一个插件。
+      plugins: [aliasPlugin, cssModulesPlugin('preview-verify', REPO_ROOT)],
     })
     if (result.errors.length > 0) {
       check('smoke: esbuild 打包', false, result.errors.map((error) => error.text).join('; '))

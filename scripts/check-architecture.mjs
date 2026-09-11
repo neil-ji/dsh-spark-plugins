@@ -409,8 +409,7 @@ export function extractInjectList(source) {
  * 检查每个带 `dsh.client` 的包：client 半边用到的服务是否都在 inject 里声明。
  * @param {string} root
  */
-export function findInjectGaps(root) {
-  const packages = readWorkspacePackages(root)
+export function findInjectGaps(root) {  const packages = readWorkspacePackages(root)
   const violations = []
   let checked = 0
   for (const [name, record] of packages) {
@@ -444,10 +443,51 @@ export function findInjectGaps(root) {
   return { violations, checked }
 }
 
+/* ──────────────────────────── 5. 单产物（P4） ──────────────────────────── */
+
+/**
+ * P4 不变量：**一个插件只有一份客户端产物**（`lib/client.js` 平台 loader 形态）。
+ *
+ * 历史上每包还额外产出 `lib/embed.cjs`（给 dock 内嵌的第二产物，评审 F6）；
+ * ADR-003 之后 dock 不再 import 任何插件 UI，第二产物已删除。这条闸门防止回潮：
+ * `exports` 里不得再出现 `./embed`，`files` 里不得再列 `embed.cjs`，
+ * `build.mjs` / `tsdown.config.mjs` 里也不得再构建 embed 入口。
+ * （`src/client/embed.ts` 允许存在 —— 它只是组件级预览画布的**源码 barrel**。）
+ *
+ * @param {string} root
+ */
+export function findSecondProducts(root) {
+  const packages = readWorkspacePackages(root)
+  const violations = []
+  let checked = 0
+  for (const [name, record] of packages) {
+    const exportsMap = record.pkg.exports ?? {}
+    const files = Array.isArray(record.pkg.files) ? record.pkg.files : []
+    checked += 1
+    if (Object.prototype.hasOwnProperty.call(exportsMap, './embed')) {
+      violations.push({ pkg: name, code: 'embed-export', detail: `${name} 仍导出 ./embed（第二产物已退役，见 P4/F6）` })
+    }
+    for (const entry of files) {
+      if (String(entry).includes('embed')) {
+        violations.push({ pkg: name, code: 'embed-file', detail: `${name} 的 files 仍列 embed 产物：${entry}` })
+      }
+    }
+    for (const config of ['build.mjs', 'tsdown.config.mjs']) {
+      const path = join(record.dir, config)
+      if (!existsSync(path)) continue
+      const source = stripComments(readFileSync(path, 'utf8'))
+      if (/entryPoints:\s*\{[^}]*embed|entry:\s*\{[^}]*embed\s*:/.test(source)) {
+        violations.push({ pkg: name, code: 'embed-build', detail: `${name} 的 ${config} 仍在构建 embed 入口` })
+      }
+    }
+  }
+  return { violations, checked }
+}
+
 /* ──────────────────────────── CLI ──────────────────────────── */
 
 function parseArgs(argv) {
-  const options = { only: ['orphans', 'boundaries', 'contracts', 'injects'], json: false, strictLocations: false }
+  const options = { only: ['orphans', 'boundaries', 'contracts', 'injects', 'products'], json: false, strictLocations: false }
   for (const arg of argv) {
     if (arg === '--json') options.json = true
     else if (arg === '--strict-locations') options.strictLocations = true
@@ -457,8 +497,8 @@ function parseArgs(argv) {
 }
 
 export function runChecks(root, options = {}) {
-  const only = options.only ?? ['orphans', 'boundaries', 'contracts', 'injects']
-  const report = { orphans: null, boundaries: null, contracts: null, injects: null, failures: 0, warnings: 0 }
+  const only = options.only ?? ['orphans', 'boundaries', 'contracts', 'injects', 'products']
+  const report = { orphans: null, boundaries: null, contracts: null, injects: null, products: null, failures: 0, warnings: 0 }
   if (only.includes('orphans')) {
     const result = findOrphanPackages(root)
     report.orphans = result
@@ -484,6 +524,11 @@ export function runChecks(root, options = {}) {
     report.injects = result
     report.failures += result.violations.length
   }
+  if (only.includes('products')) {
+    const result = findSecondProducts(root)
+    report.products = result
+    report.failures += result.violations.length
+  }
   return report
 }
 
@@ -495,7 +540,7 @@ function main(argv) {
     process.exitCode = report.failures > 0 ? 1 : 0
     return
   }
-  console.log('══ 架构闸门（孤包 / 边界 / 契约 / 注入面） ══')
+  console.log('══ 架构闸门（孤包 / 边界 / 契约 / 注入面 / 单产物） ══')
   if (report.orphans !== null) {
     const { orphans, total, closureSize } = report.orphans
     if (orphans.length === 0) console.log(`  ok    workspace 孤包        0 个（${total} 个包全在 registry 闭包内，闭包 ${closureSize} 个）`)
@@ -519,6 +564,11 @@ function main(argv) {
   if (report.injects !== null) {
     const { violations, checked } = report.injects
     if (violations.length === 0) console.log(`  ok    inject 面覆盖        ${checked} 个 client 插件用到的服务都写进了 inject`)
+    for (const violation of violations) console.log(`  FAIL  ${violation.code.padEnd(20)} ${violation.detail}`)
+  }
+  if (report.products !== null) {
+    const { violations, checked } = report.products
+    if (violations.length === 0) console.log(`  ok    单产物（P4）         ${checked} 个包都只有一份客户端产物（无 ./embed 导出 / 构建 / files）`)
     for (const violation of violations) console.log(`  FAIL  ${violation.code.padEnd(20)} ${violation.detail}`)
   }
   const verdict = report.failures > 0 ? 'FAIL' : 'PASS'

@@ -25,6 +25,13 @@
 > `preview:verify` 从 61 项扩到 **74 项**，其中 11 项专测这三类保真：契约必填、
 > inject 门、以及「五个插件真 `apply()`（带 inject 门）→ 自注册顺序 → teardown 注销」。
 >
+> **状态（2026-09-12）**：**P4 的「单产物」落地** —— 四个 UI 包删除 `embed.cjs`
+> 第二产物（构建步骤 / `./embed` 导出 / `files` 条目），`src/client/embed.ts` 降级为
+> **组件级预览画布的源码 barrel**（不产出、不导出）；预览两种口径统一吃源码 barrel，
+> CSS Modules 内联插件抽到 `dev-harness/preview/bundler.mjs` 共用。
+> `check:architecture` 新增第 ⑤ 查「单产物」不变量（`./embed` 导出 / embed 构建入口 /
+> files 里的 embed 产物一律判失败），防止第二产物回潮。F6 因此关闭。
+>
 > **评审范围**：`packages/*` 全 17 包的 host/client 数据面与事件面，重点是「事件如何从宿主到浏览器」
 > 与「dock 如何组合五个插件」。结论基于**逐文件核对**，每条发现都带 `文件:行` 证据；
 > 未能证实的一律标注 **UNVERIFIED**。
@@ -45,7 +52,7 @@
 | F3 | **平台已有的统一通道没被采用**：第三方插件可用 `mode:'stream'`（自有命名空间 + 逐项 codec + 单一 mux 载波 + 可取消），而 `ctx.remote.$on` 的转发白名单是 first-party 常量，第三方加不进去。**全仓 `mode:'stream'` 实例数 = 0**（grep 零命中），即这条通道从未被验证过 | P0 | `dsh-typert-protocol/lib/types/types.d.ts:181-221`；`dsh-api-remotes/lib/types/remote-events.d.ts:12-69` |
 | F4 | **dock 是编译期聚合器，不是外壳**（**已关闭**：2026-09-11 P3/ADR-003 落地，五个模块全部自注册，`modules.tsx` 已删）：5 个模块的元数据硬编码在 dock，加一个插件要改 dock 源码并重新发版 | P1 | `dock/src/client/modules.tsx:61-94`、`dock/src/client/index.ts:9-17,39-83` |
 | F5 | **共享基础设施长在 app 包里**：唯一正确的连接复用实现（refcount 注册表）在 dock 内部，插件无法复用；hippomemo 因此自己开 EventSource，且有**两处**订阅点无引用计数 | P1 | `dock/src/client/streams.ts:35-52`；`dsh-hippomemo/src/client/api.ts:117-123`、`MemorySection.tsx:446,1234` |
-| F6 | **一个插件两份客户端产物、两次挂载**：`client.js`（平台 loader）与 `embed.cjs`（给 dock 用）并存；同一 remote 命名空间被两个 bundle 各 `$mount` 一次，「容忍」而非归属 | P1 | `dock/src/client/index.ts:9-17`、`GithubEmbed.tsx:39` vs `dsh-github-ui/src/client/index.ts:48` |
+| F6 | **一个插件两份客户端产物、两次挂载**（**已关闭**：2026-09-11 P4 —— `embed.cjs` 第二产物与 `./embed` 导出/构建已删除，每包只剩 `lib/client.js`；各包自己的 `apply()` 单次 `$mount`，重复挂载错误消失；`src/client/embed.ts` 仅作组件级预览画布的源码 barrel）：`client.js`（平台 loader）与 `embed.cjs`（给 dock 用）并存；同一 remote 命名空间被两个 bundle 各 `$mount` 一次，「容忍」而非归属 | P1 | `dock/src/client/index.ts:9-17`、`GithubEmbed.tsx:39` vs `dsh-github-ui/src/client/index.ts:48` |
 | F7 | **播报/文案策略写在壳里**：`fairyEvents.ts` 用字符串匹配把 spark 的业务事件翻成文案与情绪，且有 4s 文案级去重 | P1 | `dock/src/client/fairy/fairyEvents.ts:32-51` |
 | F8 | **退役世代仍参与构建**（**已关闭**：2026-09-11 包连同 kit 死代码一并删除）：`dsh-spark-ui@0.1.4` 还在 workspace（自带 3 条 EventSource + 完整 spark 面板），已从 `plugin-registry.json` 摘除但仍是 `packages/*` 成员 | P2 | `pnpm-workspace.yaml:1-2`、`plugin-registry.json`（无此项） |
 | F9 | **连接预算被当成局部问题**：6 条 HTTP/1.1 长连接上限是全局约束，却由一个 app 包内的注册表局部缓解；harness 还复制了客户端逻辑（`bindSnapshotSelector` 8 行副本） | P2 | `docs/LOCAL-DEV-HARNESS.md:286-289`、`streams.ts` 注释 |
@@ -231,7 +238,7 @@ export interface InvocationDescriptor {
 | **P1** | 迁完 spark 三条流，删除 3 个 SSE 端点与 `dock/streams.ts` | `/sparks\|/proposals\|/scripts/events` 404（或彻底移除路由）；panes 只依赖 kit 订阅 | 低 |
 | **P2** | hippomemo 迁到同一条通道（含它的两处订阅点收敛为一处） | 记忆面板实时刷新正常；连接数从 N+ 降到 1 WS(+1 平台 SSE) | 低 |
 | **P3** | ~~dock 贡献点化（ADR-003）：先让**一个**插件（github）自注册，其余照旧；再加第二个；最后删 `modules.tsx` 与 4 个静态 import~~ **已完成（2026-09-11）**：五个模块全部自注册，`modules.tsx` + 三处 dock 侧 embed pane 删除，真宿主 22/22 | 新增第 6 个插件不改 dock 源码即可出现模块栏；dock bundle 不再依赖 4 个 UI 包（3.3MB → 664KB） | 中（加载顺序/懒加载语义） |
-| **P4** | 治理：~~退役 `dsh-spark-ui`~~ **已做（2026-09-11，连同 kit 的 `registerSettingsSection` 与 `settings-card.ts` 死代码）**；取消 `embed.cjs` 双产物、文案映射归模块待做 | `pnpm -r build` 包数下降；页面里不再有两份同名插件代码 | 低 |
+| **P4** | 治理：~~退役 `dsh-spark-ui`~~ **已做**；~~取消 `embed.cjs` 双产物~~ **已做（2026-09-11）**：四包删除 embed 构建步骤 / `./embed` 导出 / files 条目，闸门新增「单产物」不变量；`src/client/embed.ts` 降级为组件级预览的源码 barrel。文案映射归模块待做 | `pnpm -r build` 包数下降；页面里不再有两份同名插件代码 | 低 |
 | **P5** | connector 收敛：凭据/加载 store 上收 kit（一份 ~90 行样板替三家）、descriptor 单处声明、finance 改回 `ctx.typert.register`、错误语义统一 | 三个 UI 包净减代码；finance manifest 不再手抄（`sourceLocation` 漂移消失） | 低（纯内部重构，契约不变） |
 
 **为什么不一次性大重写**：P0 是全案的唯一技术赌注（stream 可用性），必须先用最小切片证伪；

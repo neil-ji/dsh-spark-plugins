@@ -32,7 +32,7 @@ export function HippomemoPane({ lang }: { lang: Lang; scenario: string }) {
   return (
     <div className="pv-frame pv-wide">
       <p className="pv-hint">
-        真产物 <code>dsh-hippomemo/embed</code> · 数据源 = 预览服务器 <code>/hippomemo/*</code> fixture
+        源码 barrel <code>dsh-hippomemo/embed</code> · 数据源 = 预览服务器 <code>/hippomemo/*</code> fixture
         （8 条记忆 + 引用 + 偏好 + 候选）。场景切 empty/error 可看空态与失败态。
       </p>
       <div data-plugin="dsh-hippomemo">
