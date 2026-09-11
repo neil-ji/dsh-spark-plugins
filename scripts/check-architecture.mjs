@@ -1,0 +1,458 @@
+/**
+ * 架构闸门（三道，全部可在 CI 里零依赖运行）：
+ *
+ *   1. orphans    —— workspace 孤包：`packages/*` 里的每个包都必须落在
+ *                    `plugin-registry.json` 的插件 + workspace 依赖闭包内。
+ *                    （退役世代 `dsh-spark-ui` 长期留在 workspace 里构建，就是这条漏的。）
+ *   2. boundaries —— import 边界：按角色限制依赖边与半边职责，见 ALLOWED_EDGES / RULES。
+ *   3. contracts  —— 契约漂移：wire 描述符声明的远端方法必须在宿主实现里存在；
+ *                    finance 的两份手抄 manifest 必须彼此一致、与宿主成员一致。
+ *                    `sourceLocation` 行号漂移默认只告警（--strict-locations 升级为失败）。
+ *
+ * 用法：
+ *   node scripts/check-architecture.mjs [--only=orphans,boundaries,contracts] [--json] [--strict-locations]
+ * 退出码：0 = 通过（可能带警告），1 = 有硬失败。
+ */
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { join, relative, sep } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { computeClosure, readWorkspacePackages } from './lib/workspace.mjs'
+
+const ROOT = fileURLToPath(new URL('..', import.meta.url))
+const posix = (path) => path.split(sep).join('/')
+
+/* ──────────────────────────── 角色与允许的依赖边 ──────────────────────────── */
+
+/**
+ * 包角色。角色决定「这个包允许依赖谁」，是整套边界规则的最小集合。
+ * - app：dock（唯一允许静态 import 插件 UI 产物的包）
+ * - client：出 web 客户端产物的插件半边
+ * - host：宿主半边
+ * - plugin-kit / ui-kit / wire：公共层叶子包，不得反向依赖任何插件
+ * @param {object} pkg - package.json 内容
+ */
+export function inferRole(pkg) {
+  if (pkg.name === 'dsh-spark-dock') return 'app'
+  if (pkg.name === 'dsh-ui-kit') return 'ui-kit'
+  if (pkg.name === 'dsh-spark-plugin-kit') return 'plugin-kit'
+  if (String(pkg.name).endsWith('-wire')) return 'wire'
+  if (pkg.dsh?.client?.platform !== undefined) return 'client'
+  return 'host'
+}
+
+/** 角色 → 允许依赖的角色。`undefined` = 不限制（只有 app）。 */
+export const ALLOWED_EDGES = {
+  app: undefined,
+  client: ['plugin-kit', 'ui-kit', 'wire', 'host'],
+  host: ['wire', 'plugin-kit'],
+  'plugin-kit': [],
+  wire: [],
+  'ui-kit': [],
+}
+
+/** 宿主编译期绝不允许出现的运行时依赖（会被打进宿主 lib/index.js）。 */
+const HOST_FORBIDDEN = [
+  { match: (spec) => spec === 'react' || spec === 'react-dom', code: 'host-react', valueOnly: true },
+  { match: (spec) => spec === 'dsh-ui-kit', code: 'host-ui-kit', valueOnly: true },
+  { match: (spec) => /^@deepseek-ai\/dsh-client-/.test(spec), code: 'host-platform-client', valueOnly: false },
+  { match: (spec) => /^dsh-[^/]+\/(client|embed)$/.test(spec), code: 'host-client-entry', valueOnly: false },
+]
+
+/** wire 包必须保持协议纯净：只有 zod + typert 协议类型。 */
+const WIRE_FORBIDDEN = [
+  { match: (spec) => spec === 'react' || spec === 'react-dom', code: 'wire-react' },
+  { match: (spec) => spec === '@deepseek-ai/cordis' || spec.startsWith('@deepseek-ai/cordis/'), code: 'wire-cordis' },
+  { match: (spec) => /^@deepseek-ai\/dsh-client-/.test(spec), code: 'wire-platform-client' },
+]
+
+/* ──────────────────────────── import 解析 ──────────────────────────── */
+
+/**
+ * 去掉块注释与行注释：注释里写 `import { X } from 'dsh-ui-kit'` 是做文档说明，
+ * 不是依赖（ui-kit 的 icons.tsx 就有一处），扫源码时必须先剥掉。
+ */
+export function stripComments(source) {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .map((line) => {
+      const index = line.indexOf('//')
+      if (index < 0) return line
+      const head = line.slice(0, index)
+      return head.includes("'") || head.includes('"') ? line : head
+    })
+    .join('\n')
+}
+
+/** `import type` / `export type` 前缀；inline `{ type A }` 保守地按 value 处理。 */
+const FROM_RE = /\b(import|export)\s+(type\s+)?[^'"]*?from\s*['"]([^'"]+)['"]/g
+const SIDE_EFFECT_RE = /\bimport\s*['"]([^'"]+)['"]/g
+const REQUIRE_RE = /\brequire\(\s*['"]([^'"]+)['"]\s*\)/g
+
+/**
+ * 提取一个源文件里的全部模块 specifier。
+ * 用正则而不是 AST：`from` / 裸 `import` / `require` 三种写法都要覆盖，
+ * 且多行 import 必须能匹配（所以不能按行匹配）。返回 `typeOnly` 标记，
+ * 因为 `import type` 在构建期被完全擦除，不构成运行时耦合。
+ * @param {string} rawSource
+ * @returns {{spec: string, typeOnly: boolean}[]}
+ */
+export function collectImports(rawSource) {
+  const source = stripComments(rawSource)
+  const out = []
+  for (const match of source.matchAll(FROM_RE)) out.push({ spec: match[3], typeOnly: match[2] !== undefined })
+  for (const match of source.matchAll(SIDE_EFFECT_RE)) out.push({ spec: match[1], typeOnly: false })
+  for (const match of source.matchAll(REQUIRE_RE)) out.push({ spec: match[1], typeOnly: false })
+  return out
+}
+
+/** 半边判定：`src/client/**` 之外都算宿主半边（含 src/index.ts 与 *.remote-client.ts）。 */
+export function halfOf(file) {
+  return /(^|\/)src\/client\//.test(posix(file)) ? 'client' : 'host'
+}
+
+/** 这些角色没有「宿主半边」概念（纯客户端库 / 应用 / 契约包）。 */
+const NO_HOST_HALF = new Set(['app', 'ui-kit'])
+
+/**
+ * 单个文件的边界检查（纯函数，便于单测）。
+ * @param {{pkg: string, role: string, file: string, imports: {spec: string, typeOnly: boolean}[], roleOf: (name: string) => string | undefined}} input
+ * @returns {{code: string, pkg: string, file: string, detail: string}[]}
+ */
+export function checkFileBoundaries({ pkg, role, file, imports, roleOf }) {
+  const violations = []
+  const half = halfOf(file)
+  const push = (code, detail) => violations.push({ code, pkg, file, detail })
+  for (const entry of imports) {
+    const spec = entry.spec
+    if (spec.startsWith('.') || spec.startsWith('node:')) continue
+    // workspace 包名（含子路径，如 dsh-spark-finance/remote）
+    const bare = spec.startsWith('@') ? spec.split('/').slice(0, 2).join('/') : spec.split('/')[0]
+    if (bare === pkg) continue // 自引用（包内想走公开入口）不算跨包依赖
+    const targetRole = roleOf(bare)
+    if (targetRole !== undefined) {
+      const allowed = ALLOWED_EDGES[role]
+      // 跨宿主依赖：type-only 属于编译期契约引用（如 npm 用 GitHubService 类型），放行；
+      // 运行时（value）跨宿主依赖必须显式建模，不能靠 import 偷渡。
+      const typeOnlyHostEdge = entry.typeOnly && role === 'host' && targetRole === 'host'
+      if (allowed !== undefined && !allowed.includes(targetRole) && !typeOnlyHostEdge) {
+        push('edge/' + role + '->' + targetRole, `${pkg} 不允许依赖 ${bare}（${targetRole}）：${spec}`)
+      }
+      // 插件 UI 产物的入口只允许 app 组装；<lib>/client 只允许 client 半边消费。
+      // 只对 workspace 包生效 —— @deepseek-ai/dsh-client-*/client 是平台子路径。
+      if (role !== 'app' && /\/embed$/.test(spec)) {
+        push('embed-outside-app', `只有 app（dock）可以 import 插件 UI 产物：${spec}`)
+      }
+      if (role !== 'app' && role !== 'client' && /\/client$/.test(spec)) {
+        push('client-entry-outside-client', '只有 client 半边可以 import <pkg>/client：' + spec)
+      }
+    }
+    if (half === 'host' && !NO_HOST_HALF.has(role)) {
+      for (const rule of HOST_FORBIDDEN) {
+        if (!rule.valueOnly || !entry.typeOnly) {
+          if (rule.match(spec)) push(rule.code, `宿主半边 import 了客户端专属依赖：${spec}`)
+        }
+      }
+    }
+    if (role === 'ui-kit' && spec.startsWith('@deepseek-ai/')) {
+      push('ui-kit-platform', `ui-kit 必须零平台依赖（零 cordis）：${spec}`)
+    }
+    if (role === 'wire') {
+      for (const rule of WIRE_FORBIDDEN) {
+        if (rule.match(spec)) push(rule.code, `wire 必须保持协议纯净：${spec}`)
+      }
+    }
+  }
+  return violations
+}
+
+/* ──────────────────────────── 文件遍历 ──────────────────────────── */
+
+function walkSource(dir, base = dir, out = []) {
+  if (!existsSync(dir)) return out
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === 'node_modules' || entry.name === 'lib' || entry.name === 'dist') continue
+    const full = join(dir, entry.name)
+    if (entry.isDirectory()) {
+      if (entry.name === 'tests' || entry.name === 'test') continue
+      walkSource(full, base, out)
+    } else if (/\.(ts|tsx|mts)$/.test(entry.name)) {
+      out.push(full)
+    }
+  }
+  return out
+}
+
+/* ──────────────────────────── 1. 孤包 ──────────────────────────── */
+
+/**
+ * 找出既不在 plugin-registry.json、也不在 registry 插件 workspace 依赖闭包里的包。
+ * @param {string} root
+ */
+export function findOrphanPackages(root) {
+  const packages = readWorkspacePackages(root)
+  const { closure } = computeClosure(root, packages)
+  const orphans = []
+  for (const [name, record] of packages) {
+    if (!closure.has(name)) orphans.push({ name, rel: record.rel, reason: '不在 registry 闭包内（既非插件也非其依赖）' })
+  }
+  return { orphans, total: packages.size, closureSize: closure.size }
+}
+
+/* ──────────────────────────── 2. 边界 ──────────────────────────── */
+
+/**
+ * 扫描全部 workspace 包的 src，按角色/半边规则检查 import。
+ * @param {string} root
+ */
+export function findBoundaryViolations(root) {
+  const packages = readWorkspacePackages(root)
+  const roleByName = new Map()
+  for (const [name, record] of packages) roleByName.set(name, inferRole(record.pkg))
+  const roleOf = (name) => roleByName.get(name)
+  const violations = []
+  let files = 0
+  let imports = 0
+  for (const [name, record] of packages) {
+    const role = roleByName.get(name)
+    for (const file of walkSource(join(record.dir, 'src'))) {
+      files += 1
+      const source = readFileSync(file, 'utf8')
+      const specs = collectImports(source)
+      imports += specs.length
+      violations.push(...checkFileBoundaries({
+        pkg: name,
+        role,
+        file: posix(relative(root, file)),
+        imports: specs,
+        roleOf,
+      }))
+    }
+  }
+  return { violations, files, imports, roles: [...roleByName].map(([name, role]) => ({ name, role })) }
+}
+
+/* ──────────────────────────── 3. 契约 ──────────────────────────── */
+
+/**
+ * wire 描述符 → 宿主实现的映射表。新增插件时在这里登记一处即可获得契约闸门。
+ * `twin` 是同一契约的第二份手抄产物（只应存在于手写 manifest 的场景）。
+ */
+export const CONTRACTS = [
+  { id: 'github', wire: 'packages/dsh-github-wire/src/index.ts', host: 'packages/dsh-github/src/github-service.ts' },
+  { id: 'npm', wire: 'packages/dsh-npm-wire/src/index.ts', host: 'packages/dsh-npm/src/npm-service.ts' },
+  { id: 'spark-events', wire: 'packages/dsh-spark-wire/src/index.ts', host: 'packages/dsh-spark/src/events-service.ts' },
+  { id: 'hippomemo-events', wire: 'packages/dsh-hippomemo/src/wire.ts', host: 'packages/dsh-hippomemo/src/events-service.ts' },
+  {
+    id: 'finance',
+    wire: 'packages/dsh-finance/src/typert.host.ts',
+    host: 'packages/dsh-finance/src/index.ts',
+    twin: 'packages/dsh-finance/src/typert.remote-client.ts',
+  },
+]
+
+/**
+ * 从描述符/清单源码里抽出「声明的远端方法」。
+ * 网关取实现名的规则是 `descriptor.implementation ?? descriptor.method`，
+ * 所以这里也按同一规则落 implementation 字段。
+ * @param {string} source
+ * @returns {{method: string, implementation: string}[]}
+ */
+export function extractDeclarations(source) {
+  const out = []
+  const re = /method:\s*'([^']+)'(?:,\s*\n\s*implementation:\s*'([^']+)')?/g
+  for (const match of source.matchAll(re)) out.push({ method: match[1], implementation: match[2] ?? match[1] })
+  return out
+}
+
+/**
+ * 抽出 method → sourceLocation 的映射（窗口匹配，避免跨到下一条描述符）。
+ * @param {string} source
+ * @returns {{method: string, file: string, line: number}[]}
+ */
+export function extractSourceLocations(source) {
+  const out = []
+  const re = /method:\s*'([^']+)'[\s\S]{0,2000}?sourceLocation:\s*\{\s*file:\s*'([^']+)',\s*line:\s*(\d+)/g
+  for (const match of source.matchAll(re)) out.push({ method: match[1], file: match[2], line: Number(match[3]) })
+  return out
+}
+
+/** 抽出 typert manifest 的 `members: [{ name: 'x' }]` 名称集合。 */
+export function extractMembers(source) {
+  const out = []
+  const re = /members:\s*\[([\s\S]*?)\n\s*\]/g
+  for (const block of source.matchAll(re)) {
+    for (const member of block[1].matchAll(/name:\s*'([^']+)'/g)) out.push(member[1])
+  }
+  return out
+}
+
+const escapeRe = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/** 宿主实现里是否存在该方法名（词边界匹配）。 */
+export function implementsMethod(hostSource, name) {
+  return new RegExp('\\b' + escapeRe(name) + '\\b').test(hostSource)
+}
+
+/** 找到方法定义所在行号（1-based，跳过注释行；找不到返回 null）。 */
+export function implementationLine(hostSource, name) {
+  const lines = hostSource.split('\n')
+  const re = new RegExp('^\\s*(?:async\\s+)?' + escapeRe(name) + '\\s*[(<]')
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]
+    const trimmed = line.trim()
+    if (trimmed.startsWith('*') || trimmed.startsWith('//') || trimmed.startsWith('/*')) continue
+    if (re.test(line)) return index + 1
+  }
+  return null
+}
+
+/**
+ * 契约漂移检查。
+ * @param {string} root
+ * @param {{strictLocations?: boolean}} [options]
+ */
+export function findContractDrift(root, options = {}) {
+  const failures = []
+  const warnings = []
+  const results = []
+  for (const contract of CONTRACTS) {
+    const wirePath = join(root, contract.wire)
+    if (!existsSync(wirePath)) {
+      failures.push({ contract: contract.id, code: 'wire-missing', detail: `找不到描述符文件 ${contract.wire}` })
+      continue
+    }
+    const wireSource = readFileSync(wirePath, 'utf8')
+    const hostSource = readFileSync(join(root, contract.host), 'utf8')
+    const declared = extractDeclarations(wireSource)
+    const missing = declared.filter((entry) => !implementsMethod(hostSource, entry.implementation))
+    for (const entry of missing) {
+      failures.push({
+        contract: contract.id,
+        code: 'implementation-missing',
+        detail: `描述符声明 ${entry.method}（实现 ${entry.implementation}），但 ${contract.host} 里找不到该实现`,
+      })
+    }
+    // 两份手抄 manifest 必须一致
+    if (contract.twin !== undefined) {
+      const twinSource = readFileSync(join(root, contract.twin), 'utf8')
+      const twin = extractDeclarations(twinSource).map((entry) => entry.method).sort()
+      const host = declared.map((entry) => entry.method).sort()
+      if (twin.join(',') !== host.join(',')) {
+        failures.push({
+          contract: contract.id,
+          code: 'manifest-twin-drift',
+          detail: `${contract.wire} 与 ${contract.twin} 的方法集合不一致：${host.join(',')} vs ${twin.join(',')}`,
+        })
+      }
+      const members = extractMembers(readFileSync(join(root, contract.wire), 'utf8')).sort()
+      if (members.length > 0 && members.join(',') !== host.join(',')) {
+        failures.push({
+          contract: contract.id,
+          code: 'manifest-member-drift',
+          detail: `manifest 的 members 与 descriptors 不一致：${members.join(',')} vs ${host.join(',')}`,
+        })
+      }
+    }
+    // sourceLocation 行号：默认告警，--strict-locations 升级为失败
+    for (const location of extractSourceLocations(wireSource)) {
+      const targetPath = join(root, location.file)
+      if (!existsSync(targetPath)) {
+        failures.push({ contract: contract.id, code: 'location-file-missing', detail: `sourceLocation 指向不存在的文件 ${location.file}` })
+        continue
+      }
+      const targetSource = readFileSync(targetPath, 'utf8')
+      const actual = implementationLine(targetSource, location.method)
+      const declaredLine = location.line
+      const content = targetSource.split('\n')[declaredLine - 1] ?? ''
+      const ok = content.includes(location.method) || (actual !== null && actual === declaredLine)
+      if (!ok) {
+        const detail = `sourceLocation 行号漂移：${location.method} 声明 ${location.file}:${declaredLine}，实际在第 ${actual ?? '?'} 行`
+        if (options.strictLocations === true) {
+          failures.push({ contract: contract.id, code: 'location-stale', detail })
+        } else {
+          warnings.push({ contract: contract.id, code: 'location-stale', detail })
+        }
+      }
+    }
+    results.push({ contract: contract.id, declared: declared.length, methods: declared.map((entry) => entry.method) })
+  }
+  return { failures, warnings, results }
+}
+
+/* ──────────────────────────── CLI ──────────────────────────── */
+
+function parseArgs(argv) {
+  const options = { only: ['orphans', 'boundaries', 'contracts'], json: false, strictLocations: false }
+  for (const arg of argv) {
+    if (arg === '--json') options.json = true
+    else if (arg === '--strict-locations') options.strictLocations = true
+    else if (arg.startsWith('--only=')) options.only = arg.slice('--only='.length).split(',').filter(Boolean)
+  }
+  return options
+}
+
+export function runChecks(root, options = {}) {
+  const only = options.only ?? ['orphans', 'boundaries', 'contracts']
+  const report = { orphans: null, boundaries: null, contracts: null, failures: 0, warnings: 0 }
+  if (only.includes('orphans')) {
+    const result = findOrphanPackages(root)
+    report.orphans = result
+    report.failures += result.orphans.length
+  }
+  if (only.includes('boundaries')) {
+    const result = findBoundaryViolations(root)
+    report.boundaries = result
+    report.failures += result.violations.length
+  }
+  if (only.includes('contracts')) {
+    const result = findContractDrift(root, { strictLocations: options.strictLocations === true })
+    report.contracts = {
+      ...result,
+      failureCount: result.failures.length,
+      warningCount: result.warnings.length,
+    }
+    report.failures += result.failures.length
+    report.warnings += result.warnings.length
+  }
+  return report
+}
+
+function main(argv) {
+  const options = parseArgs(argv)
+  const report = runChecks(ROOT, options)
+  if (options.json) {
+    console.log(JSON.stringify(report, null, 2))
+    process.exitCode = report.failures > 0 ? 1 : 0
+    return
+  }
+  console.log('══ 架构闸门（孤包 / 边界 / 契约） ══')
+  if (report.orphans !== null) {
+    const { orphans, total, closureSize } = report.orphans
+    if (orphans.length === 0) console.log(`  ok    workspace 孤包        0 个（${total} 个包全在 registry 闭包内，闭包 ${closureSize} 个）`)
+    for (const orphan of orphans) console.log(`  FAIL  孤包                 ${orphan.name}（${orphan.rel}）：${orphan.reason}`)
+  }
+  if (report.boundaries !== null) {
+    const { violations, files, imports } = report.boundaries
+    if (violations.length === 0) console.log(`  ok    依赖边界            0 处违规（扫描 ${files} 个文件 / ${imports} 条 import）`)
+    for (const violation of violations) console.log(`  FAIL  ${violation.code.padEnd(20)} ${violation.detail}`)
+  }
+  if (report.contracts !== null) {
+    const failures = report.contracts.failures ?? []
+    const warnings = report.contracts.warnings ?? []
+    for (const failure of failures) console.log(`  FAIL  契约漂移[${failure.contract}]     ${failure.detail}`)
+    for (const warning of warnings) console.log(`  warn  契约漂移[${warning.contract}]     ${warning.detail}`)
+    const totalDeclared = (report.contracts.results ?? []).reduce((sum, entry) => sum + entry.declared, 0)
+    if (failures.length === 0) {
+      console.log(`  ok    契约漂移            0 处硬漂移（${totalDeclared} 条远端方法声明全部有实现；${warnings.length} 处告警）`)
+    }
+  }
+  const verdict = report.failures > 0 ? 'FAIL' : 'PASS'
+  console.log(`\n合计：硬失败 ${report.failures} 处 · 告警 ${report.warnings} 处\n结果：${verdict}`)
+  if (report.warnings > 0) {
+    console.log('（sourceLocation 行号漂移属于 P5 待清理项：finance 的手抄 manifest 将由声明式 typert.register 取代）')
+  }
+  process.exitCode = report.failures > 0 ? 1 : 0
+}
+
+if (process.argv[1] !== undefined && posix(process.argv[1]).endsWith('scripts/check-architecture.mjs')) main(process.argv.slice(2))

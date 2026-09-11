@@ -72,6 +72,18 @@ sh install.sh --from-source          # 开发路径：clone + pnpm install + bui
 
 npm 连接器 token 优先使用说明（粘贴 token → 测试连接 → 保存 → agent 全权接管）见 [docs/NPM-CONNECTOR.md](docs/NPM-CONNECTOR.md)。
 
+## 工程门禁（CI 全跑，本地用 `pnpm check:all` 一次过）
+
+| 闸门 | 命令 | 挡住什么 |
+| --- | --- | --- |
+| 架构 | `pnpm check:architecture` | ① **孤包**：`packages/*` 里出现既非插件、也不在插件依赖闭包内的包（退役世代就是这么漏的）；② **依赖边界**：宿主半边 import react/ui-kit/客户端入口、插件互相 import、`<pkg>/embed` 被非 app 引用、ui-kit 沾平台依赖、wire 沾 cordis；③ **契约漂移**：wire 描述符声明的方法在宿主实现里不存在、两份手抄 manifest 不一致（`sourceLocation` 行号漂移目前只告警，`--strict-locations` 升级为失败） |
+| 设计系统 | `pnpm check:contrast` | 亮/暗对比度 AA（154 项配对）+ token 完整性 + 文档/设计稿漂移 |
+| 预览保真 | `pnpm preview:verify` | 真 embed 产物 + 假宿主跑通数据流（56 项） |
+| 版本纪律 | `pnpm check:version-bump` | 改了发布输入（`src/**`、构建配置、清单）却没在同一个 commit 里 bump 该包 `version` —— 版本没变，宿主就继续供旧 client 字节。注释/空白改动会剥离后比较，不算发布改动 |
+| dsh 版本体检 | `pnpm check:dsh-upgrade` | 见下节（上游 API 面 diff + 符号存活） |
+
+门禁自身的回归测试在 `scripts/tests/`（契约/边界/版本判定 + 真实仓库结构不变量），随 `pnpm test` 跑。
+
 ## dsh 升级体检（常态化追踪破坏性改动）
 
 - `pnpm check:dsh-upgrade` — 快检：npm 发布产物 API 面 diff + 插件 import 符号/事件存活检查，报告归档 `docs/dsh-upgrade-reports/`
@@ -83,12 +95,15 @@ npm 连接器 token 优先使用说明（粘贴 token → 测试连接 → 保�
 ```bash
 pnpm build        # 构建全部包（各包产出 lib/ 或 dist/）
 pnpm typecheck    # 类型检查全部包
-pnpm test         # 测试全部包：根 vitest 250 + finance 153 + finance-client 131（共 534 用例）
-pnpm check:contrast  # 设计系统亮/暗对比度 + token 完整性闸门（142 项配对，AA）
+pnpm test         # 测试全部包（各包 vitest + 根 vitest：闸门与契约/边界/版本判定）
+pnpm check:all    # 三道闸门一次过：架构 + 对比度 + 版本纪律
+pnpm check:architecture  # 孤包 / 依赖边界 / 契约漂移
+pnpm check:contrast  # 设计系统亮/暗对比度 + token 完整性闸门（154 项配对，AA）
+pnpm check:version-bump  # 改发布输入必须同 commit bump 版本（--since-release 审计整段历史）
 pnpm dev          # 构建全部 + 安装到 web profile
 pnpm dev --run    # 构建 + 安装 + 前台启动 dogfood（dsh --profile web --port 3999）
 pnpm preview      # 零 dsh 组件预览（真 embed 产物 + 假宿主，127.0.0.1:5180）
-pnpm preview:verify  # 预览自检：Node 冒烟 + 服务器/fixture 断言（52 项）
+pnpm preview:verify  # 预览自检：Node 冒烟 + 服务器/fixture 断言（56 项）
 pnpm install:profile  # 仅重新安装到 profile（pack→tarball，与普通用户安装同路径）
 pnpm escape       # 启动「应急逃生」profile（纯官方 web，端口 3998）
 pnpm escape:init  # 仅初始化/刷新逃生 profile（幂等）
@@ -184,7 +199,13 @@ pnpm escape:init   # 只初始化/刷新，不启动；之后手动 dsh --profil
 2. 需要 client UI 时出 `embed` 入口（纯组件 + controller + 字典），并在 `dsh-spark-dock` 的
    `src/client/modules.tsx` 登记一个模块 —— 插件的功能 UI 只走悬浮球 Dock
    （`shell.overlay` 插槽），设置页插槽自 2026-09 起已全部退役。
-3. 在 `plugin-registry.json` 登记，`pnpm dev` 后即可在 3999 验证。
+3. 在 `plugin-registry.json` 登记（**没登记的包会被 `pnpm check:architecture` 判为孤包**），
+   `pnpm dev` 后即可在 3999 验证。
+4. 有 remote 方法时在 `scripts/check-architecture.mjs` 的 `CONTRACTS` 表里登记
+   「描述符文件 → 宿主实现文件」，契约漂移闸门即刻生效。
+5. 依赖方向由角色决定（见 `ALLOWED_EDGES`）：宿主半边只能用 `cordis` + 平台宿主包；
+   `<pkg>/embed` 只允许 dock 引用；ui-kit / wire / plugin-kit 不得反向依赖任何插件。
+   越界会在 `pnpm check:architecture` 当场报出来。
 ## License
 
 [MIT](./LICENSE)
