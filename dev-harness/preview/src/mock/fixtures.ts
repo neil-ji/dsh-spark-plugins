@@ -50,7 +50,7 @@ export const GITHUB_PROXY_TEST: GithubProxyTestValue = {
 /* ──────────────────────────── npm ───────────────────────────── */
 
 const NPM_PACKAGES = [
-  'dsh-spark', 'dsh-spark-dock', 'dsh-spark-ui', 'dsh-spark-wire',
+  'dsh-spark', 'dsh-spark-dock', 'dsh-spark-wire',
   'dsh-spark-finance', 'dsh-spark-finance-bundle', 'dsh-spark-finance-client',
   'dsh-connector-github', 'dsh-connector-github-ui', 'dsh-connector-wire',
   'dsh-connector-npm', 'dsh-connector-npm-ui', 'dsh-connector-npm-wire',
