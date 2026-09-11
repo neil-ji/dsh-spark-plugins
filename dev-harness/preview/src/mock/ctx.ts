@@ -115,6 +115,20 @@ export interface MockCtx {
     register: (namespace: string, lang: string, dictionary: Record<string, string>) => () => void
     bind: (namespace: string) => (key: string, params?: Record<string, unknown>) => string
   }
+  /**
+   * 插槽面（假宿主）。ADR-003 起预览必须真的实现它：dock 在 `shell.overlay` 里声明
+   * `spark.dock.module` 子槽，插件（如 dsh-connector-npm-ui）在自己的 apply 里注册进来。
+   * 语义对齐平台：`inject(name, register)` 返回 register 的 disposer；`register` 收
+   * `{ name, id, order, label, inject }`；ledger 快照引用在两次变更之间保持稳定（uSES 用）。
+   */
+  slots: {
+    inject: (name: string, register: () => unknown) => unknown
+    register: (entry: MockSlotRegistration, component: unknown) => () => void
+    /** 按 order 排序的 ledger 快照（引用稳定，可直接当 uSES getSnapshot）。 */
+    snapshot: (name: string) => readonly MockSlotEntry[]
+    /** ledger 变更订阅（返回取消订阅）。 */
+    subscribe: (listener: () => void) => () => void
+  }
   remote: {
     $mount: (contribution: unknown) => Promise<unknown>
     $on: (event: string, listener: () => void) => () => void
@@ -144,6 +158,24 @@ export interface MockCtx {
   }
 }
 
+/** 一次插槽注册（平台 BaseOptions 的最小可运行子集）。 */
+export interface MockSlotRegistration {
+  name: string
+  id?: string
+  order?: number
+  label?: () => string
+  inject?: () => object
+}
+
+/** ledger 里的一条（组件与注入面按需取用）。 */
+export interface MockSlotEntry {
+  id: string
+  order: number
+  label: (() => string) | undefined
+  inject: () => object
+  component: unknown
+}
+
 /** 替换字典串里的 {name} 占位符（与真宿主 locale 行为对齐）。 */
 function interpolate(template: string, params?: Record<string, unknown>): string {
   if (params === undefined) return template
@@ -160,6 +192,18 @@ export function createMockCtx(options: MockCtxOptions): MockCtx {
   const scopes = new Map<string, MockSettingsScope<object>>()
   const credentialState = new Map<string, MockCredential>(Object.entries(options.credentials ?? {}))
   const disposers: Array<() => void> = []
+
+  // —— 插槽 ledger（假宿主）——
+  const slotRegistrations = new Map<string, MockSlotEntry[]>()
+  const slotSnapshots = new Map<string, readonly MockSlotEntry[]>()
+  const slotListeners = new Set<() => void>()
+
+  /** 变更后重建快照：**引用只在变更时更换**，符合 uSES getSnapshot 的稳定性要求。 */
+  function rebuildSlotSnapshot(name: string): void {
+    const rows = [...(slotRegistrations.get(name) ?? [])].sort((a, b) => a.order - b.order)
+    slotSnapshots.set(name, rows)
+    for (const listener of [...slotListeners]) listener()
+  }
 
   const ctx: MockCtx = {
     effect(fn) {
@@ -181,6 +225,42 @@ export function createMockCtx(options: MockCtxOptions): MockCtx {
           const raw = entry?.[lang]?.[key] ?? entry?.zh?.[key] ?? entry?.en?.[key] ?? String(key)
           return interpolate(raw, params)
         }
+      },
+    },
+    slots: {
+      inject(name, register) {
+        // 平台语义：inject 让注册者挂到「别人声明的槽」上；返回 register 的 disposer。
+        // 假宿主不校验声明归属（真宿主的授权由平台保证），但 ledger 语义一致。
+        try {
+          return register()
+        } catch (error) {
+          console.warn('[preview] slots.inject failed for slot', name, error)
+          return () => {}
+        }
+      },
+      register(entry, component) {
+        const row: MockSlotEntry = {
+          id: entry.id ?? 'anonymous',
+          order: entry.order ?? 0,
+          label: entry.label,
+          inject: entry.inject ?? (() => ({})),
+          component,
+        }
+        const rows = slotRegistrations.get(entry.name) ?? []
+        slotRegistrations.set(entry.name, [...rows, row])
+        rebuildSlotSnapshot(entry.name)
+        return () => {
+          const current = slotRegistrations.get(entry.name) ?? []
+          slotRegistrations.set(entry.name, current.filter((candidate) => candidate !== row))
+          rebuildSlotSnapshot(entry.name)
+        }
+      },
+      snapshot(name) {
+        return slotSnapshots.get(name) ?? []
+      },
+      subscribe(listener) {
+        slotListeners.add(listener)
+        return () => { slotListeners.delete(listener) }
       },
     },
     remote: {

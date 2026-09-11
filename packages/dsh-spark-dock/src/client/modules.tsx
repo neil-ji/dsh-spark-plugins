@@ -1,7 +1,7 @@
 /**
- * Dock 模块注册表：每个插件模块声明 icon/强调色/子页。
- * Phase 2 先落框架与占位内容；Phase 3+ 各模块接入真实数据源
- * （原则：dock 不写业务，只消费各包已导出的 client api / 组件）。
+ * Dock 模块注册表（**过渡态**）：ADR-003 迁移期间 dock 仍自带 spark/hippo/github/finance
+ * 四格的元数据；npm 已改为插件自注册（`dsh-connector-npm-ui` 的 `spark.dock.module`），
+ * 由 DockOverlay 通过 `renderSlot` 渲染。四格陆续迁完后本文件删除。
  */
 import type { ReactNode } from 'react'
 import type { SparkEventChannel } from './spark/remote.ts'
@@ -9,7 +9,6 @@ import { SparksPane, ProposalsPane, ScriptsPane, GraphPane } from './spark/Spark
 import { FinanceEmbedPane } from './finance/FinanceEmbed.tsx'
 import { HippoEmbedPane } from './hippo/HippoEmbed.tsx'
 import { GithubEmbedPane } from './github/GithubEmbed.tsx'
-import { NpmEmbedPane } from './npm/NpmEmbed.tsx'
 
 export interface DockPane {
   id: string
@@ -41,13 +40,12 @@ export interface DockModule {
 
 /* 模块图标：统一走 dsh-ui-kit 图标层（lucide），CSS `.dock-tab svg` 控制渲染尺寸。
  * 强调色经 currentColor 继承（tab active 态 color = --accent）。 */
-import { IconDollar, IconGithub, IconPackage, IconSparkles, IconThink } from 'dsh-ui-kit'
+import { IconDollar, IconGithub, IconSparkles, IconThink } from 'dsh-ui-kit'
 
 const SparkIcon = () => <IconSparkles size={14} />
 const HippoIcon = () => <IconThink size={14} />
 const FinanceIcon = () => <IconDollar size={14} />
 const GithubIcon = () => <IconGithub size={14} />
-const NpmIcon = () => <IconPackage size={14} />
 
 /** 子页占位（后续阶段逐个替换为真实数据渲染）。 */
 const placeholder = (moduleLabel: string, paneLabel: string, phase: string) => () => (
@@ -101,11 +99,5 @@ export const DOCK_MODULES: DockModule[] = [
     sub: '令牌 · 操作权限 · Git 身份与代理',
     accent: 'var(--spk-acc-github, #8b5cf6)', accentFg: 'var(--spk-acc-github-fg, #5b21b6)', icon: <GithubIcon />,
     panes: [{ id: 'main', label: '连接', render: () => <GithubEmbedPane /> }],
-  },
-  {
-    id: 'npm', label: 'npm', name: 'npm',
-    sub: '细粒度 Token · 注册表与套件包状态',
-    accent: 'var(--spk-acc-npm, #cb3837)', accentFg: 'var(--spk-acc-npm-fg, #991b1b)', icon: <NpmIcon />,
-    panes: [{ id: 'main', label: '发布', render: () => <NpmEmbedPane /> }],
   },
 ]

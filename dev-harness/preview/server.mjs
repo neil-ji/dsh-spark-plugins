@@ -51,7 +51,6 @@ const DOCK_MODULES = {
   'dsh-spark-dock/style': 'packages/dsh-spark-dock/src/client/style.ts',
   'dsh-spark-dock/reflect': 'packages/dsh-spark-dock/src/client/reflect.ts',
   'dsh-spark-dock/github': 'packages/dsh-spark-dock/src/client/github/GithubEmbed.tsx',
-  'dsh-spark-dock/npm': 'packages/dsh-spark-dock/src/client/npm/NpmEmbed.tsx',
   'dsh-spark-dock/finance': 'packages/dsh-spark-dock/src/client/finance/FinanceEmbed.tsx',
   'dsh-spark-dock/hippo': 'packages/dsh-spark-dock/src/client/hippo/HippoEmbed.tsx',
   // 事件契约（帧 schema + typert 描述符）：dock 与 mock 都要它，源码口径直接吃 src。
@@ -63,6 +62,9 @@ const BUNDLE_ALIASES = {
   ...DOCK_MODULES,
   'dsh-spark-plugin-kit/client': 'packages/dsh-plugin-kit/lib/client/index.js',
   'dsh-ui-kit': 'packages/dsh-ui-kit/dist/index.js',
+  // ADR-003：dock 的 npm 模块由插件自己的 client 入口注册 —— 真产物口径吃
+  // lib/client.js（带 ModuleLoader 壳，由 clientBundleShim 在预览里剥壳）。
+  'dsh-connector-npm-ui/client': 'packages/dsh-npm-ui/lib/client.js',
   'dsh-connector-github-ui/embed': 'packages/dsh-github-ui/lib/embed.cjs',
   'dsh-connector-npm-ui/embed': 'packages/dsh-npm-ui/lib/embed.cjs',
   'dsh-spark-finance-client/embed': 'packages/dsh-finance-client/lib/embed.cjs',
@@ -75,6 +77,7 @@ const SOURCE_ALIASES = {
   'dsh-spark-plugin-kit/client': 'packages/dsh-plugin-kit/src/client/index.ts',
   // ui-kit 的 src/styles/tokens.mjs 是构建期生成的，源码口径仍指向 dist。
   'dsh-ui-kit': 'packages/dsh-ui-kit/dist/index.js',
+  'dsh-connector-npm-ui/client': 'packages/dsh-npm-ui/src/client/index.ts',
   'dsh-connector-github-ui/embed': 'packages/dsh-github-ui/src/client/embed.ts',
   'dsh-connector-npm-ui/embed': 'packages/dsh-npm-ui/src/client/embed.ts',
   'dsh-spark-finance-client/embed': 'packages/dsh-finance-client/src/client/embed.ts',
@@ -119,6 +122,41 @@ const cssModulesPlugin = () => ({
   },
 })
 
+/**
+ * 需要「剥 ModuleLoader 壳」的入口（ADR-003）：插件 client 半边在真宿主里由
+ * client-modules 加载，产物形如 `window.__ModuleLoader__.load({ id, factory })`。
+ * 预览没有 loader，所以在虚拟模块里执行产物文本、接住 load 调用、用 react 真模块
+ * 喂 factory，再把 exports 转成 ESM 再导出 —— 这样预览吃到的就是**真产物**。
+ */
+const MODULE_LOADER_ENTRIES = new Set(['dsh-connector-npm-ui/client'])
+
+const clientBundleShim = () => ({
+  name: 'client-bundle-shim',
+  setup(build) {
+    build.onLoad({ filter: /.*/, namespace: 'client-bundle' }, (args) => {
+      const text = readFileSync(args.path, 'utf8')
+      return {
+        loader: 'js',
+        contents: [
+          "import * as __react from 'react'",
+          "import * as __jsx from 'react/jsx-runtime'",
+          'const __entries = []',
+          'const __global = globalThis',
+          '__global.window = __global.window ?? __global',
+          '__global.window.__ModuleLoader__ = { load: (entry) => { __entries.push(entry) } }',
+          'const __table = { react: __react, "react/jsx-runtime": __jsx }',
+          '(0, eval)(' + JSON.stringify(text) + ')',
+          'const __entry = __entries[0]',
+          'if (__entry === undefined) throw new Error("client bundle did not register with __ModuleLoader__")',
+          'const __exports = __entry.factory((id) => __table[id])',
+          'export const apply = __exports.apply',
+          'export const inject = __exports.inject',
+        ].join('\n'),
+      }
+    })
+  },
+})
+
 /** 把仓库内工作区包名指到真实文件（根 node_modules 不 link 工作区包）。 */
 const aliasPlugin = (map) => ({
   name: 'workspace-alias',
@@ -126,6 +164,9 @@ const aliasPlugin = (map) => ({
     build.onResolve({ filter: /^[^./]/ }, (args) => {
       const target = map[args.path]
       if (target === undefined) return null
+      if (MODULE_LOADER_ENTRIES.has(args.path)) {
+        return { path: join(REPO_ROOT, target), namespace: 'client-bundle' }
+      }
       return { path: join(REPO_ROOT, target) }
     })
   },
@@ -191,6 +232,7 @@ const buildOptions = {
   },
   plugins: [
     aliasPlugin(MODE === 'source' ? SOURCE_ALIASES : BUNDLE_ALIASES),
+    clientBundleShim(),
     ...(MODE === 'source' ? [cssModulesPlugin()] : []),
     capturePlugin(),
   ],

@@ -6,11 +6,29 @@
  *  - 面板：随球反向弹出 + 视口夹取 + 夹取后若压住球则把球提到面板之上
  *  - shell.overlay 是 click-through 层，本组件根节点自带 pointer-events: auto
  */
-import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { IconSparkles, SegmentedControl } from 'dsh-ui-kit'
+import type { DockModuleOwnerProps } from 'dsh-spark-plugin-kit/client'
 import { DOCK_MODULES } from './modules.tsx'
 import type { SparkEventChannel } from './spark/remote.ts'
 import { useFairy } from './fairy/FairyFace.tsx'
+
+/**
+ * 平台下发的子槽渲染面。dock 在 `shell.overlay` 的 register 里声明了
+ * `children: { 'spark.dock.module': ... }`，平台据此把 renderSlot 作为组件 props
+ * 交给本组件；预览 harness 由假宿主等价注入。
+ */
+export type DockRenderSlot = (
+  key: 'spark.dock.module',
+  owner: DockModuleOwnerProps,
+  opts?: { only?: string; fallback?: ReactNode },
+) => ReactNode
+
+export interface DockOverlayProps {
+  channel?: SparkEventChannel | null
+  /** 见 {@link DockRenderSlot}；缺省时只渲染 dock 自带的模块（过渡态兜底）。 */
+  renderSlot?: DockRenderSlot
+}
 
 const M = 16
 const BALL = 48
@@ -60,16 +78,19 @@ function loadPos(): Pt {
  * Spark Dock overlay 组件。`channel` 由插槽 inject 面下发（平台把 inject 结果合成组件 props），
  * 供模块子页与播报层订阅统一事件流 —— 取代此前「dock apply 里设模块级单例」的做法。
  */
-export function DockOverlay({ channel = null }: { channel?: SparkEventChannel | null }): JSX.Element {
+export function DockOverlay({ channel = null, renderSlot }: DockOverlayProps): JSX.Element {
   const ballRef = useRef<HTMLButtonElement | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
   const posRef = useRef<Pt>(loadPos())
   const [open, setOpen] = useState(() => localStorage.getItem(OPEN_KEY) === '1')
   const [activeId, setActiveId] = useState(() => {
     const saved = localStorage.getItem(ACTIVE_KEY)
-    return DOCK_MODULES.some((m) => m.id === saved) ? saved! : DOCK_MODULES[0].id
+    if (saved !== null) return saved // 自注册模块（如 npm）不在表格里，不能按表格校验
+    return DOCK_MODULES[0].id
   })
-  const activeModule = DOCK_MODULES.find((m) => m.id === activeId) ?? DOCK_MODULES[0]
+  // dock 自带的四格仍走表格；其余 id 视为插件自注册模块（ADR-003），走子槽渲染位。
+  const ownedModule = DOCK_MODULES.find((m) => m.id === activeId)
+  const activeModule = ownedModule ?? DOCK_MODULES[0]
   const [paneId, setPaneId] = useState(activeModule.panes[0].id)
   // 切模块时子页回落到第一个
   useEffect(() => { setPaneId(activeModule.panes[0].id) }, [activeModule])
@@ -84,14 +105,35 @@ export function DockOverlay({ channel = null }: { channel?: SparkEventChannel | 
     localStorage.setItem(ACTIVE_KEY, id)
   }, [])
 
-  // rail 纵向方向键导航（roving tabindex：只有激活 tab 在 Tab 序列里）
+  /**
+   * 渲染子槽里的自注册模块。`only` 让它只渲染当前激活那一条；`fallback` 覆盖
+   * 「记着这个 id、但对应插件没加载」的情形（例如插件被卸载后 localStorage 残留）。
+   */
+  const slotNode = useCallback((variant: DockModuleOwnerProps['variant']): ReactNode => {
+    if (renderSlot === undefined) return null
+    return renderSlot(
+      'spark.dock.module',
+      { variant, activeId, onSelect: selectModule },
+      {
+        only: activeId,
+        fallback: <div className="dock-empty">模块 {activeId} 未加载：对应插件的 client 半边未激活。</div>,
+      },
+    )
+  }, [renderSlot, activeId, selectModule])
+
+  // rail 纵向方向键导航（roving tabindex：只有激活 tab 在 Tab 序列里）。
+  // 按 DOM 顺序走而不是查模块表 —— 自注册模块（npm）不在表里，也必须可达。
   const railRef = useRef<HTMLDivElement | null>(null)
   const onRailKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
     e.preventDefault()
-    const idx = DOCK_MODULES.findIndex((m) => m.id === activeModule.id)
-    const next = DOCK_MODULES[(idx + (e.key === 'ArrowDown' ? 1 : -1) + DOCK_MODULES.length) % DOCK_MODULES.length]
-    selectModule(next.id)
+    const tabs = [...(railRef.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]') ?? [])]
+    if (tabs.length === 0) return
+    const current = tabs.findIndex((tab) => tab.getAttribute('aria-selected') === 'true')
+    const step = e.key === 'ArrowDown' ? 1 : -1
+    const next = tabs[((current < 0 ? 0 : current) + step + tabs.length) % tabs.length]
+    const id = next.dataset.moduleId
+    if (id !== undefined) selectModule(id)
     requestAnimationFrame(() => {
       railRef.current?.querySelector<HTMLButtonElement>('[aria-selected="true"]')?.focus()
     })
@@ -304,6 +346,7 @@ export function DockOverlay({ channel = null }: { channel?: SparkEventChannel | 
               key={m.id}
               type="button"
               role="tab"
+              data-module-id={m.id}
               aria-selected={m.id === activeModule.id}
               aria-label={m.label}
               title={m.label}
@@ -315,13 +358,19 @@ export function DockOverlay({ channel = null }: { channel?: SparkEventChannel | 
               {m.icon}
             </button>
           ))}
+          {/* ADR-003：插件自注册的模块（平台按 order 排序渲染） */}
+          {renderSlot !== undefined && renderSlot('spark.dock.module', { variant: 'rail', activeId, onSelect: selectModule })}
         </div>
         <div className="dock-main">
           <div className="dock-head">
-            <div className="titles">
-              <div className="name">{activeModule.name}</div>
-              <div className="sub">{activeModule.sub}</div>
-            </div>
+            {ownedModule !== undefined
+              ? (
+                <div className="titles">
+                  <div className="name">{activeModule.name}</div>
+                  <div className="sub">{activeModule.sub}</div>
+                </div>
+                )
+              : <div className="titles">{slotNode('header')}</div>}
             <div className="spacer" />
             <button
               type="button"
@@ -335,7 +384,7 @@ export function DockOverlay({ channel = null }: { channel?: SparkEventChannel | 
             </button>
           </div>
           <div className="dock-body">
-          {activeModule.panes.length > 1 && (
+          {ownedModule !== undefined && activeModule.panes.length > 1 && (
             <SegmentedControl
               fullWidth
               ariaLabel={`${activeModule.name} 子页`}
@@ -344,7 +393,7 @@ export function DockOverlay({ channel = null }: { channel?: SparkEventChannel | 
               onChange={setPaneId}
             />
           )}
-          {activePane.render({ channel })}
+          {ownedModule !== undefined ? activePane.render({ channel }) : slotNode('pane')}
           </div>
         </div>
       </div>

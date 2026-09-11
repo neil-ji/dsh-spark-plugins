@@ -25,8 +25,11 @@ const ALIASES = {
   'dsh-spark-wire': 'packages/dsh-spark-wire/src/index.ts',
   'dsh-spark-dock/DockOverlay': 'packages/dsh-spark-dock/src/client/DockOverlay.tsx',
   'dsh-spark-dock/style': 'packages/dsh-spark-dock/src/client/style.ts',
-  'dsh-connector-github-ui/embed': 'packages/dsh-github-ui/lib/embed.cjs',
+  // ADR-003：docker 里的 npm 走真插件路径（自己的 client apply 自注册 dock 模块）；
+  // 组件级单渲染画布与 Node 冒烟仍用 embed 产物（迁移完成后一起删）。
+  'dsh-connector-npm-ui/client': 'packages/dsh-npm-ui/src/client/index.ts',
   'dsh-connector-npm-ui/embed': 'packages/dsh-npm-ui/lib/embed.cjs',
+  'dsh-connector-github-ui/embed': 'packages/dsh-github-ui/lib/embed.cjs',
   'dsh-spark-finance-client/embed': 'packages/dsh-finance-client/lib/embed.cjs',
   'dsh-hippomemo/embed': 'packages/dsh-hippomemo/lib/embed.cjs',
 }

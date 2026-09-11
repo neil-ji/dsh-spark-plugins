@@ -9,13 +9,11 @@ import { injectPluginStyle } from 'dsh-spark-plugin-kit/client'
 import { SPARK_REMOTE_CONTRIBUTION } from 'dsh-spark-wire'
 import { sparkChannelOf, type SparkEventChannel } from './spark/remote.ts'
 import { en as ghEn, zh as ghZh } from 'dsh-connector-github-ui/embed'
-import { en as npmEn, zh as npmZh } from 'dsh-connector-npm-ui/embed'
 import { en as finEn, zh as finZh } from 'dsh-spark-finance-client/embed'
 import { en, HIPPOMEMO_CSS, startHippomemoEvents, zh } from 'dsh-hippomemo/embed'
 import { DockOverlay } from './DockOverlay.tsx'
 import { setHippoT } from './hippo/HippoEmbed.tsx'
 import { startGithubEmbed } from './github/GithubEmbed.tsx'
-import { startNpmEmbed } from './npm/NpmEmbed.tsx'
 import { startFinanceEmbed } from './finance/FinanceEmbed.tsx'
 import { DOCK_CSS } from './style.ts'
 import { setReflectGetter } from './reflect.ts'
@@ -78,11 +76,6 @@ export async function apply(ctx: ClientContext): Promise<void> {
     try { anyCtx.locale.register('settings.github', lang, dict) } catch { /* already registered */ }
   }
   startGithubEmbed(ctx)
-  // npm 内嵌：同 github 模式（字典重复容忍 + 异步装配）。
-  for (const [lang, dict] of [['zh', npmZh], ['en', npmEn]] as const) {
-    try { anyCtx.locale.register('settings.npm', lang, dict) } catch { /* already registered */ }
-  }
-  startNpmEmbed(ctx)
   // finance 内嵌：字典重复容忍 + 异步装配（remote.finance + settingsScope）。
   for (const [lang, dict] of [['zh', finZh], ['en', finEn]] as const) {
     try { anyCtx.locale.register('settings.finance', lang, dict) } catch { /* already registered */ }
@@ -101,6 +94,11 @@ export async function apply(ctx: ClientContext): Promise<void> {
     name: 'shell.overlay',
     id: 'spark-dock',
     order: 10,
+    // ADR-003：dock 只声明自己的子槽；插件 UI 在自己的 apply 里注册进
+    // `spark.dock.module`（契约类型在 dsh-spark-plugin-kit/client），
+    // dock 不再静态 import 任何插件 UI 产物。平台会把 renderSlot 作为
+    // 组件 props 下发给 DockOverlay（指向下面声明的子槽）。
+    children: { 'spark.dock.module': { kind: 'list', scope: 'root' } },
     // 通过插槽 inject 面把事件通道交给组件（取代模块级单例）。
     inject: () => injected,
   }, DockOverlay))

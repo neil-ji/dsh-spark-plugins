@@ -28,6 +28,16 @@ export function injectPluginStyle(css: string, tag: string, plugin: string): voi
 
 export { bindSnapshotSelector } from './snapshot.ts'
 export type { SnapshotSelectorHook } from './snapshot.ts'
+export {
+  DockModuleHeader,
+  DockModuleTab,
+  registerDockModule,
+} from './dock-module.ts'
+export type {
+  DockModuleLedgerRow,
+  DockModuleOwnerProps,
+  DockModuleSpec,
+} from './dock-module.ts'
 export { subscribeFrames, useFrames, openStreamNames } from './events.ts'
 export type {
   FramedEvent,

@@ -1,27 +1,27 @@
 /**
  * Dock 悬浮球画布：模拟真实 dsh web 端 —— 底下是仿真的会话外壳，右下角是**真的**
- * dsh-spark-dock 悬浮球，点一下展开真面板（模块栏 / 子页 / 四个插件的完整 UI）。
+ * dsh-spark-dock 悬浮球，点一下展开真面板（模块栏 / 子页 / 插件的完整 UI）。
  *
  * 装配方式镜像 packages/dsh-spark-dock/src/client/index.ts 的 apply()：
- *   locale 字典注册 → 插件 CSS 注入 → setHippoT → 三个 embed starter
+ *   locale 字典注册 → 插件 CSS 注入 → setHippoT → 两个 embed starter
  *   → setReflectGetter → 渲染 <DockOverlay />（真组件，非复刻稿）。
  *
- * 与真宿主的唯一差别：ctx 是假宿主（src/mock/ctx.ts），不注册 shell.overlay 槽位
- * ——预览直接把 DockOverlay 挂在页面里，它的根节点自带 pointer-events: auto。
+ * ADR-003 起 npm 走**真插件路径**：预览调 dsh-connector-npm-ui 的 client `apply()`，
+ * 由它自己 mount remote + 注册 `spark.dock.module` 子槽；假宿主的 `ctx.slots`
+ * 提供 ledger 与订阅，DockOverlay 通过 renderSlot 渲染。其余三格仍在迁移中
+ * （过渡态），走 embed 产物。
  */
-import type { ReactNode } from 'react'
-import { DockOverlay } from 'dsh-spark-dock/DockOverlay'
+import { useCallback, useEffect, useState, useSyncExternalStore, type ComponentType, type ReactNode } from 'react'
+import { DockOverlay, type DockRenderSlot } from 'dsh-spark-dock/DockOverlay'
 import { DOCK_CSS } from 'dsh-spark-dock/style'
 import { setReflectGetter } from 'dsh-spark-dock/reflect'
 import { startGithubEmbed } from 'dsh-spark-dock/github'
-import { startNpmEmbed } from 'dsh-spark-dock/npm'
 import { startFinanceEmbed } from 'dsh-spark-dock/finance'
 import { setHippoT } from 'dsh-spark-dock/hippo'
 import { HIPPOMEMO_CSS, en as hippoEn, startHippomemoEvents, zh as hippoZh } from 'dsh-hippomemo/embed'
 import { en as githubEn, zh as githubZh } from 'dsh-connector-github-ui/embed'
-import { en as npmEn, zh as npmZh } from 'dsh-connector-npm-ui/embed'
 import { en as financeEn, zh as financeZh } from 'dsh-spark-finance-client/embed'
-import { createMockCtx, type Lang, type Scenario } from '../mock/ctx.ts'
+import { createMockCtx, type Lang, type MockCtx, type Scenario } from '../mock/ctx.ts'
 import { buildFinanceInjected, buildGithubInjected, buildNpmInjected } from '../mock/plugins.ts'
 
 /** 幂等注入插件级 CSS（等价 plugin-kit 的 injectPluginStyle）。 */
@@ -41,7 +41,6 @@ function bootstrapDock(lang: Lang, scenario: Scenario): ReturnType<typeof create
   const dictionaries: Array<[string, Record<string, string>, Record<string, string>]> = [
     ['hippomemo.settings', hippoZh, hippoEn],
     ['settings.github', githubZh, githubEn],
-    ['settings.npm', npmZh, npmEn],
     ['settings.finance', financeZh, financeEn],
   ]
   for (const [namespace, zh, en] of dictionaries) {
@@ -58,9 +57,8 @@ function bootstrapDock(lang: Lang, scenario: Scenario): ReturnType<typeof create
   buildNpmInjected(ctx, scenario)
   buildFinanceInjected(ctx, scenario)
 
-  // 三个 embed starter 是模块级单飞：首次调用后注入面常驻，重挂画布不会重跑。
+  // 两个 embed starter 是模块级单飞：首次调用后注入面常驻，重挂画布不会重跑。
   startGithubEmbed(ctx)
-  startNpmEmbed(ctx)
   startFinanceEmbed(ctx)
   // 记忆面板的事件通道（ADR-001）：真 dock 的 apply 也走这一条；
   // mount 是异步的，通道注入发生在下一个微任务（面板挂载时已就绪）。
@@ -68,6 +66,28 @@ function bootstrapDock(lang: Lang, scenario: Scenario): ReturnType<typeof create
 
   setReflectGetter((id) => ctx.reflect.get(id))
   return ctx
+}
+
+/** 已经跑过真插件 apply 的假 ctx（apply 是异步且非幂等，单飞）。 */
+const npmApplied = new WeakSet<MockCtx>()
+
+/**
+ * 假宿主的子槽渲染面：订阅 ledger（引用稳定的快照），把每个注册项渲染成
+ * `{...inject(), ...owner}`。`only` 过滤、`fallback` 兜底与平台 `RenderOpts` 同义。
+ */
+function useDockRenderSlot(ctx: MockCtx): DockRenderSlot {
+  const entries = useSyncExternalStore(
+    useCallback((listener: () => void) => ctx.slots.subscribe(listener), [ctx]),
+    useCallback(() => ctx.slots.snapshot('spark.dock.module'), [ctx]),
+  )
+  return useCallback((_key, owner, opts) => {
+    const rows = opts?.only === undefined ? entries : entries.filter((entry) => entry.id === opts.only)
+    if (rows.length === 0) return opts?.fallback ?? null
+    return rows.map((row) => {
+      const Component = row.component as ComponentType<Record<string, unknown>>
+      return <Component key={row.id} {...row.inject()} {...owner} />
+    })
+  }, [entries])
 }
 
 /** 仿真的 dsh web 会话外壳（只为给悬浮球一个真实的背景与层级）。 */
@@ -136,12 +156,23 @@ function ensureBooted(lang: Lang, scenario: Scenario): Booted {
 }
 
 export function DockPane({ lang, scenario }: { lang: Lang; scenario: Scenario }): JSX.Element {
-  const { channel } = ensureBooted(lang, scenario)
+  const { ctx, channel } = ensureBooted(lang, scenario)
+  const renderSlot = useDockRenderSlot(ctx)
+  // ADR-003：npm 的 dock 模块由插件自己的 client 入口注册（真宿主由 client-modules
+  // 加载同一个 apply）。异步且非幂等 → 单飞。
+  useEffect(() => {
+    if (npmApplied.has(ctx)) return
+    npmApplied.add(ctx)
+    void (async () => {
+      const npmUi = await import('dsh-connector-npm-ui/client')
+      await npmUi.apply(ctx)
+    })()
+  }, [ctx])
   return (
     <MockDshShell>
       {/* 真宿主由槽位 inject 面下发事件通道（`$stream` + reflect 取回的命名空间）；
           预览在这里等价地显式组装（且引用稳定，与真宿主一致）。 */}
-      <DockOverlay channel={channel} />
+      <DockOverlay channel={channel} renderSlot={renderSlot} />
     </MockDshShell>
   )
 }

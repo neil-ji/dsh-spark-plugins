@@ -75,13 +75,48 @@ export async function run(): Promise<{ checks: Check[] }> {
     check('dock: 渲染出悬浮球', hasBall, hasBall ? '' : '未找到 .dock-ball')
     const hasPanel = html.includes('dock-panel') && html.includes('dock-rail')
     check('dock: 渲染出面板骨架', hasPanel, hasPanel ? '' : '未找到面板/模块栏')
-    const railLabels = ['火花', '记忆', '财务', 'GitHub', 'npm']
+    // ADR-003 后的不变量：dock 自带的是四格（spark/hippo/finance/github），
+    // npm 必须由插件通过 `spark.dock.module` 子槽自注册。
+    const railLabels = ['火花', '记忆', '财务', 'GitHub']
     const missing = railLabels.filter((label) => !html.includes('aria-label="' + label + '"'))
-    check('dock: 五个模块 tab 都在', missing.length === 0, missing.length === 0 ? '' : '缺少 ' + missing.join('、'))
+    check('dock: 四个自带模块 tab 都在', missing.length === 0, missing.length === 0 ? '' : '缺少 ' + missing.join('、'))
+    check(
+      'dock: 不再自带 npm 模块（ADR-003 自注册）',
+      !html.includes('aria-label="npm"'),
+      html.includes('aria-label="npm"') ? 'dock 仍然自带 npm tab' : '',
+    )
     const activeName = html.includes('火花 Spark')
     check('dock: 默认模块是火花 Spark', activeName, activeName ? '' : '未找到默认模块标题')
     const hasCss = typeof DOCK_CSS === 'string' && DOCK_CSS.includes('.dock-ball')
     check('dock: DOCK_CSS 非空', hasCss, hasCss ? '' : 'DOCK_CSS 异常')
+
+    // 子槽渲染位：给 dock 一个等价于平台的 renderSlot，自注册模块的 tab / 标题 / 内容
+    // 必须出现在对应渲染位上（这正是 npm 在真宿主里的路径）。
+    const seen: string[] = []
+    const fakeSlot = (_key: string, owner: { variant: string }, opts?: { only?: string }) => {
+      seen.push(owner.variant)
+      if (opts?.only !== undefined && opts.only !== 'npm') return null
+      if (owner.variant === 'rail') {
+        return <button type="button" role="tab" aria-label="npm" data-module-id="npm" aria-selected={false} />
+      }
+      return <div className={'slot-' + owner.variant}>slot content</div>
+    }
+    const slotHtml = renderToString(<DockOverlay renderSlot={fakeSlot} /> as ReactElement)
+    check('dock: 子槽模块出现在模块栏', slotHtml.includes('aria-label="npm"'), slotHtml.includes('aria-label="npm"') ? '' : '模块栏没有 npm')
+    check('dock: 子槽渲染面被调用', seen.includes('rail'), 'variants=' + seen.join(','))
+
+    // 激活的是自注册模块（localStorage 记着 npm）时，标题行与内容都必须走子槽渲染位。
+    const scope = globalThis as unknown as { localStorage: unknown }
+    const original = scope.localStorage
+    scope.localStorage = {
+      getItem: (key: string) => (key === 'dsh.spark-dock:active' ? 'npm' : null),
+      setItem: () => {},
+      removeItem: () => {},
+    }
+    const activeSlotHtml = renderToString(<DockOverlay renderSlot={fakeSlot} /> as ReactElement)
+    scope.localStorage = original
+    check('dock: 激活自注册模块时内容走子槽 pane 位', activeSlotHtml.includes('slot content') || activeSlotHtml.includes('模块 npm 未加载'), activeSlotHtml.includes('slot content') ? '' : '未渲染 slot 内容')
+    check('dock: 激活自注册模块时标题行走子槽 header 位', seen.includes('header'), 'variants=' + seen.join(','))
   }
 
   /* ── github ── */

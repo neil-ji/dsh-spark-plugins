@@ -187,6 +187,22 @@ try {
       check('hippomemo 事件通道无告警（订阅真的建立了）', channelWarnings.length === 0, JSON.stringify(channelWarnings.slice(0, 2)))
     }
 
+    // 5) ADR-003：npm 模块由插件自注册（dock 不再静态 import 它）——
+    //    真宿主里必须出现 npm tab，且点开后渲染的是插件自己的 NpmSection。
+    const npmIndex = Array.isArray(tabs) ? tabs.indexOf('npm') : -1
+    check('模块栏含自注册的 npm 模块（ADR-003）', npmIndex >= 0, JSON.stringify(tabs))
+    if (npmIndex >= 0) {
+      await evalJs(`document.querySelectorAll('.dock-tab')[${npmIndex}].click()`)
+      await sleep(1500)
+      const npmPane = await evalJs(`(() => {
+        const head = document.querySelector('.dock-head .name')?.textContent ?? ''
+        const body = (document.querySelector('.dock-body')?.textContent ?? '').replace(/\\s+/g, ' ')
+        return { head, len: body.length, sample: body.slice(0, 240), failed: body.includes('装配失败') }
+      })()`)
+      check('npm 模块标题行走子槽 header 位', String(npmPane.head).includes('npm'), JSON.stringify(npmPane.head))
+      check('npm 内容走子槽 pane 位且未失败', npmPane.len > 40 && npmPane.failed !== true, JSON.stringify(npmPane).slice(0, 300))
+    }
+
     // 4) 诊断：控制台里与事件通道/remote 相关的线索
     const interesting = console_.filter((line) => /spark|dock|remote|stream|mux|event|Error|error|warn/.test(line))
     console.log('\n--- 控制台（过滤后 ' + interesting.length + '/' + console_.length + ' 条）---')

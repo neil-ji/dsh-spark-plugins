@@ -16,7 +16,7 @@ import type {
 } from 'dsh-connector-npm-wire'
 
 /** The mounted npm Remote namespace (created by ctx.remote.$mount). */
-type NpmNamespace = TypertRemoteNamespaceMap['npm']
+export type NpmNamespace = TypertRemoteNamespaceMap['npm']
 
 /** Credential-seam facts for one reference (0.1.2 远端 wire 视图，不含值本身）。 */
 export interface CredentialView {
