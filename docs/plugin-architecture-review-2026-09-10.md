@@ -32,6 +32,15 @@
 > `check:architecture` 新增第 ⑤ 查「单产物」不变量（`./embed` 导出 / embed 构建入口 /
 > files 里的 embed 产物一律判失败），防止第二产物回潮。F6 因此关闭。
 >
+> **状态（2026-09-12）**：**F13 的 connector store 部分落地** —— github-ui 与 npm-ui
+> 两份逐字重复的凭据/加载实现上收 `dsh-spark-plugin-kit/client`：
+> `credentials.ts`（`CredentialView` + `credentials` 声明合并 + `CredentialToken`）
+> 与 `page.ts`（`PageLoader`：generation 竞态守卫 + status/error 迁移 +
+> `refreshIfLoaded`），并补 11 项单测（含「慢的旧请求不得覆盖新请求」两条竞态断言）。
+> 两家 store 158/152 行 → **106/100 行**（−139/+64）。kit 因此新增 peer
+> `@deepseek-ai/dsh-typert-protocol`（凭据 seam 的平台类型单处声明，
+> 不再由两个插件各抄一份声明合并）。
+>
 > **评审范围**：`packages/*` 全 17 包的 host/client 数据面与事件面，重点是「事件如何从宿主到浏览器」
 > 与「dock 如何组合五个插件」。结论基于**逐文件核对**，每条发现都带 `文件:行` 证据；
 > 未能证实的一律标注 **UNVERIFIED**。
@@ -59,7 +68,7 @@
 | F10 | **同一件事三套宿主注册风格**：spark/hippomemo 手写 HTTP 路由；github/npm 用声明式 `ctx.typert.register(HOST_CONTRIBUTION)`；**finance 完全没有 register**，改为手抄 `typert.host.ts` / `typert.remote-client.ts` 两份「像生成器产物」的 manifest —— 且 `sourceLocation` 行号**已经漂移**（写成 `index.ts:96`，实际 `:333`；`listProviders`/`refreshBalance` 都写 `:999`） | P1 | `dsh-github/src/index.ts:39`、`dsh-npm/src/index.ts:40`、`dsh-finance/src/index.ts`（无 `typert.register`，grep 零命中）、`dsh-finance/src/typert.host.ts:95` |
 | F11 | **刷新策略四套并存**：SSE 推送（spark/hippomemo）、平台转发事件（`credentials/reference-updated`、`settings/document-updated`）、**600ms 轮询**（finance backfill）+ 30min 定时器、以及**页内 `window` 自定义事件**当变更总线（`dsh-finance-dsh-override-changed`） | P1 | `dsh-finance-client/src/client/controller.ts:117`、`FinanceAuditSection.tsx:468,478-481` |
 | F12 | **错误语义三套**：github 把失败抛成 `status:'error'`；npm 在成功值里再嵌一层 `ok:false`，且 `token.status` 失败被静默吞掉（UI 显示「未配置」而非错误）；finance 同时用 envelope、slot `status`、结果 `ok:false` 三种表达 | P2 | `github-ui/src/client/store.ts:77-92`、`npm-ui/src/client/store.ts:99-103,120-123`、`dsh-finance/src/typert.host.ts:51,72` |
-| F13 | **connector 三家约 60% 同构，契约靠手抄**：两份 ~150 行凭据/加载 store 有 ~90 行逐字相同；三个 wire 各自手写 ~80 行 descriptor/contribution 样板；finance 把同一份 8 方法 manifest 维护两份（各 ~145 行）；plugin-kit 在 connector 半边**只被当作类型**使用 | P2 | `github-ui/src/client/store.ts:16-30,45-47,63-93,110-131` vs `npm-ui/src/client/store.ts:22-36,55-57,74-112,130-151`；`dsh-finance/src/typert.host.ts:81-225` vs `typert.remote-client.ts:68-212` |
+| F13 | **connector 三家约 60% 同构，契约靠手抄**（**部分关闭**：2026-09-12 F13-1 —— github-ui 与 npm-ui 两份凭据/加载 store 的逐字重复已上收 `dsh-spark-plugin-kit/client`（`credentials.ts` 的 `CredentialToken` + `page.ts` 的 `PageLoader`，含竞态守卫单测 11 项），两家 store 158/152 行 → 106/100 行；**P5 待做**：finance 手抄 manifest）：两份 ~150 行凭据/加载 store 有 ~90 行逐字相同；三个 wire 各自手写 ~80 行 descriptor/contribution 样板；finance 把同一份 8 方法 manifest 维护两份（各 ~145 行）；plugin-kit 在 connector 半边**只被当作类型**使用 | P2 | `github-ui/src/client/store.ts:16-30,45-47,63-93,110-131` vs `npm-ui/src/client/store.ts:22-36,55-57,74-112,130-151`；`dsh-finance/src/typert.host.ts:81-225` vs `typert.remote-client.ts:68-212` |
 | F14 | **zero-dsh 预览比真宿主更宽松**（**已关闭**：2026-09-11 W4 落地 —— 假宿主加 inject 门 + 动态命名空间必须走 reflect，预览侧写入路径按 wire schema 单源校验并返回 400，mock ctx 增加 teardown 生命周期，Node 冒烟跑五个插件真 `apply()` 断言自注册顺序与注销）：mock ctx 没有 cordis 的 inject 门（直接给 `remote.spark`），fixture 又给 `sourceSessionId` 兜默认值（真宿主 schema 必填 → 400）。于是「访问规则 / schema 必填 / 服务生命周期」三类回归预览测不出来 | P1 | `dev-harness/preview/src/mock/ctx.ts:168-176`、`fixtures/sparks.mjs:112-129` vs `dsh-spark/src/http.ts` 的 zod 校验；实测记录见 §7 |
 
 **判断**：不是「没实现」，而是**实现方向选错了层**。宿主侧做对了（领域服务 → cordis 事件），
@@ -239,7 +248,7 @@ export interface InvocationDescriptor {
 | **P2** | hippomemo 迁到同一条通道（含它的两处订阅点收敛为一处） | 记忆面板实时刷新正常；连接数从 N+ 降到 1 WS(+1 平台 SSE) | 低 |
 | **P3** | ~~dock 贡献点化（ADR-003）：先让**一个**插件（github）自注册，其余照旧；再加第二个；最后删 `modules.tsx` 与 4 个静态 import~~ **已完成（2026-09-11）**：五个模块全部自注册，`modules.tsx` + 三处 dock 侧 embed pane 删除，真宿主 22/22 | 新增第 6 个插件不改 dock 源码即可出现模块栏；dock bundle 不再依赖 4 个 UI 包（3.3MB → 664KB） | 中（加载顺序/懒加载语义） |
 | **P4** | 治理：~~退役 `dsh-spark-ui`~~ **已做**；~~取消 `embed.cjs` 双产物~~ **已做（2026-09-11）**：四包删除 embed 构建步骤 / `./embed` 导出 / files 条目，闸门新增「单产物」不变量；`src/client/embed.ts` 降级为组件级预览的源码 barrel。文案映射归模块待做 | `pnpm -r build` 包数下降；页面里不再有两份同名插件代码 | 低 |
-| **P5** | connector 收敛：凭据/加载 store 上收 kit（一份 ~90 行样板替三家）、descriptor 单处声明、finance 改回 `ctx.typert.register`、错误语义统一 | 三个 UI 包净减代码；finance manifest 不再手抄（`sourceLocation` 漂移消失） | 低（纯内部重构，契约不变） |
+| **P5** | connector 收敛：~~凭据/加载 store 上收 kit（一份 ~90 行样板替三家）~~ **已做两家（2026-09-12）**：`CredentialToken` + `PageLoader` 落在 `dsh-spark-plugin-kit/client`；descriptor 单处声明、finance 改回 `ctx.typert.register`、错误语义统一待做 | 三个 UI 包净减代码（本轮 −139/+64 行）；finance manifest 不再手抄（`sourceLocation` 漂移消失） | 低（纯内部重构，契约不变） |
 
 **为什么不一次性大重写**：P0 是全案的唯一技术赌注（stream 可用性），必须先用最小切片证伪；
 P1–P4 都是机械收敛，且每步都能保持产品可用（旧 SSE 与新通道可短暂并存，

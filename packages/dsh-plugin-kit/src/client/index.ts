@@ -10,7 +10,9 @@
  * - `events.ts`：**插件共享的事件订阅运行时**（ADR-001/004）—— 平台 `$stream`
  *   之上补扇出 / 引用计数 / 基线重同步。此前唯一正确的实现（refcount 注册表）
  *   长在 dsh-spark-dock 这个 app 包里，插件复不到，于是 hippomemo 只能自己
- *   `new EventSource`。
+ *   `new EventSource`；
+ * - `credentials.ts` / `page.ts`：连接器设置页的公共层（凭据 seam 门面 +
+ *   带竞态守卫的加载骨架）—— github-ui 与 npm-ui 曾各抄一份逐字相同的实现。
  */
 import type { ClientContext } from './context.ts'
 
@@ -28,6 +30,10 @@ export function injectPluginStyle(css: string, tag: string, plugin: string): voi
 
 export { bindSnapshotSelector } from './snapshot.ts'
 export type { SnapshotSelectorHook } from './snapshot.ts'
+export { CredentialToken, messageOf } from './credentials.ts'
+export type { CredentialView, CredentialsSeam } from './credentials.ts'
+export { PageLoader } from './page.ts'
+export type { PageState } from './page.ts'
 export {
   DockModuleHeader,
   DockModuleTab,

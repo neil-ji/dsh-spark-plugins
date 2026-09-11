@@ -1,6 +1,6 @@
 {
   "name": "dsh-spark-plugin-kit",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "DSH 第三方插件公共层：事件订阅运行时（$stream 扇出 / 引用计数 / 基线重同步）· 插件 CSS 注入 · Snapshot 绑定",
   "type": "module",
   "main": "./lib/index.mjs",
@@ -27,16 +27,18 @@
     "@deepseek-ai/dsh-client-store": "^0.1.2-rc.1",
     "@deepseek-ai/dsh-client-ui-settings": "^0.1.2-rc.1",
     "@deepseek-ai/dsh-client-ui-slots": "^0.1.2-rc.1",
+    "@deepseek-ai/dsh-typert-protocol": "^0.1.2-rc.1",
     "react": "*"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "@types/react": "~18.3.1",
     "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/dsh-client-locale": "0.1.2-rc.1",
     "@deepseek-ai/dsh-client-store": "0.1.2-rc.1",
     "@deepseek-ai/dsh-client-ui-settings": "0.1.2-rc.1",
     "@deepseek-ai/dsh-client-ui-slots": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-typert-protocol": "0.1.2-rc.1",
+    "@types/node": "^22.0.0",
+    "@types/react": "~18.3.1",
     "react": "^18.2.0",
     "tsdown": "^0.22.2",
     "typescript": "^5.6.0"

@@ -56,7 +56,7 @@ sh install.sh --from-source          # 开发路径：clone + pnpm install + bui
 | 包 | 目录 | 说明 |
 | --- | --- | --- |
 | dsh-hippomemo | packages/dsh-hippomemo | 跨会话/跨工作区共享记忆插件 |
-| dsh-spark-plugin-kit | packages/dsh-plugin-kit | 公共层：事件订阅运行时（$stream 扇出/引用计数）· 插件 CSS 注入 · Snapshot 绑定 |
+| dsh-spark-plugin-kit | packages/dsh-plugin-kit | 公共层：事件订阅运行时（$stream 扇出/引用计数）· 连接器页面公共层（凭据 seam 门面 + 带竞态守卫的加载骨架）· 插件 CSS 注入 · Snapshot 绑定 · dock 模块契约 |
 | dsh-ui-kit | packages/dsh-ui-kit | 本地 React 组件库（复刻 DSH 设计系统，零 cordis） |
 | dsh-spark-finance | packages/dsh-finance | 成本统计插件 host（remote/typert + 计算核心） |
 | dsh-spark-finance-client | packages/dsh-finance-client | 成本统计插件 client（设置页 UI） |

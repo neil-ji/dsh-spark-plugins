@@ -1,16 +1,18 @@
 /**
  * npm release page store: joins the credential state (credentials.describe),
  * the npm Remote namespace (status.get, token.status, token.test) into one
- * page snapshot. Token
- * writes go through the standard credentials API (set/unset) — the value is
- * stored host-side in the credential seam, never in the plugin UI. The draft
- * token used for the connection test travels over the Remote one way and is
- * never persisted by the connector.
+ * page snapshot. Token writes go through the standard credentials API
+ * (set/unset) — the value is stored host-side in the credential seam, never in
+ * the plugin UI. The draft token used for the connection test travels over the
+ * Remote one way and is never persisted by the connector.
+ *
+ * 凭据门面与加载骨架来自 `dsh-spark-plugin-kit/client`（评审 F13：两家连接器
+ * 设置页曾各抄一份逐字相同的实现）。
  */
-import type { Context } from '@deepseek-ai/cordis'
+import { CredentialToken, PageLoader, type ClientContext, type CredentialView } from 'dsh-spark-plugin-kit/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
-import type { RemoteResult, TypertRemoteNamespaceMap } from '@deepseek-ai/dsh-typert-protocol'
+import type { TypertRemoteNamespaceMap } from '@deepseek-ai/dsh-typert-protocol'
 import type {
   NpmStatusView, NpmTokenStatusView, NpmTokenTestView,
 } from 'dsh-connector-npm-wire'
@@ -18,22 +20,7 @@ import type {
 /** The mounted npm Remote namespace (created by ctx.remote.$mount). */
 export type NpmNamespace = TypertRemoteNamespaceMap['npm']
 
-/** Credential-seam facts for one reference (0.1.2 远端 wire 视图，不含值本身）。 */
-export interface CredentialView {
-  configured: boolean
-  source?: string
-  writable: boolean
-}
-
-declare module '@deepseek-ai/dsh-typert-protocol' {
-  interface TypertRemoteNamespaceMap {
-    credentials: {
-      describe(refs: readonly string[]): Promise<RemoteResult<Record<string, CredentialView>>>
-      set(ref: string, value: string): Promise<RemoteResult<unknown>>
-      unset(ref: string): Promise<RemoteResult<unknown>>
-    }
-  }
-}
+export type { CredentialView } from 'dsh-spark-plugin-kit/client'
 
 /** Conventional credential reference for the npm granular token. */
 export const NPM_TOKEN_REF = 'NPM_TOKEN'
@@ -51,11 +38,6 @@ export interface NpmUiState {
   test: NpmTokenTestView | undefined
 }
 
-/** Human text for a rejected wire/remote call. */
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
-
 /** Page controller (one per settings surface). */
 export class NpmUiStore {
   readonly store: SnapshotStore<NpmUiState> = createSnapshotStore<NpmUiState>({
@@ -63,37 +45,31 @@ export class NpmUiStore {
     credential: undefined, token: undefined, test: undefined,
   })
 
-  private generation = 0
+  private readonly loader: PageLoader<NpmUiState>
+  private readonly token: CredentialToken
 
   constructor(
-    private readonly ctx: Context,
+    ctx: ClientContext,
     private readonly npm: NpmNamespace,
-  ) {}
+  ) {
+    this.loader = new PageLoader<NpmUiState>(this.store)
+    this.token = new CredentialToken(ctx, NPM_TOKEN_REF)
+  }
 
   /** Refetch only after the page has loaded once. */
   refreshIfLoaded(): void {
-    if (this.store.getSnapshot().status === 'idle') return
-    void this.load()
+    this.loader.refreshIfLoaded(() => this.load())
   }
 
   /** Load the registry + kit package status panel and the credential state. */
   async load(): Promise<void> {
-    const generation = ++this.generation
-    this.store.update((s) => { s.status = 'loading'; s.error = null })
-    try {
-      const [result, credentialResult] = await Promise.all([
+    await this.loader.run(async () => {
+      const [result, credential] = await Promise.all([
         this.npm['status.get'](),
-        this.ctx.remote.credentials.describe([NPM_TOKEN_REF]),
+        this.token.read(),
       ])
       if (!result.ok) throw new Error(result.error.message)
-      if (!credentialResult.ok) throw new Error(credentialResult.error.message)
-      if (generation !== this.generation) return
-      this.store.update((s) => {
-        s.status = 'ready'
-        s.error = null
-        s.statusView = result.value
-        s.credential = credentialResult.value[NPM_TOKEN_REF]
-      })
+      // token.status 是次要信息：失败时保持 undefined，不把整页拖进错误态。
       let token: NpmTokenStatusView | undefined
       try {
         const tokenResult = await this.npm['token.status']()
@@ -101,14 +77,8 @@ export class NpmUiStore {
       } catch {
         token = undefined
       }
-      if (generation === this.generation) this.store.update((s) => { s.token = token })
-    } catch (error) {
-      if (generation !== this.generation) return
-      this.store.update((s) => {
-        s.status = 'error'
-        s.error = messageOf(error)
-      })
-    }
+      return { statusView: result.value, credential, token }
+    })
   }
 
   /**
@@ -122,31 +92,23 @@ export class NpmUiStore {
       this.store.update((s) => { s.test = result.value })
       return result.value.ok ? undefined : (result.value.detail ?? 'connection test failed')
     } catch (error) {
-      return messageOf(error)
+      return error instanceof Error ? error.message : String(error)
     }
   }
 
   /** Persist the token value into the credential seam (write-only). */
   async saveToken(value: string): Promise<string | undefined> {
-    try {
-      const response = await this.ctx.remote.credentials.set(NPM_TOKEN_REF, value)
-      if (!response.ok) return response.error.message
-      await this.load()
-      return undefined
-    } catch (error) {
-      return messageOf(error)
-    }
+    const failure = await this.token.save(value)
+    if (failure !== undefined) return failure
+    await this.load()
+    return undefined
   }
 
   /** Remove the stored token. */
   async removeToken(): Promise<string | undefined> {
-    try {
-      const response = await this.ctx.remote.credentials.unset(NPM_TOKEN_REF)
-      if (!response.ok) return response.error.message
-      await this.load()
-      return undefined
-    } catch (error) {
-      return messageOf(error)
-    }
+    const failure = await this.token.remove()
+    if (failure !== undefined) return failure
+    await this.load()
+    return undefined
   }
 }
