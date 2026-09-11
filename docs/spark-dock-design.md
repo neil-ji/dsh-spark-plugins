@@ -75,11 +75,13 @@
 ## 5. 架构
 
 > **落地现状（2026-09-11 核对）**：悬浮球 + 指挥舱面板、拖拽吸附、Fairy 心情状态机均已实现
-> （`packages/dsh-spark-dock`，注册到 `shell.overlay`）。但本节 §5.2/§5.3 的
-> `registerDockModule()` **没有落地** —— dock 至今在 `modules.tsx` 编译期硬编码 5 个模块
-> （评审 F4 / P3 未做），插件侧也没有自注册路径。另一方面「彻底移除 `settings.section`」
-> 已经完成：`settings.section` 注册能力与退役包 `dsh-spark-ui` 一并删除，
-> `settings.plugin.item` 配置卡也同日移除（评审 F8/P4 的一部分）。
+> （`packages/dsh-spark-dock`，注册到 `shell.overlay`）。本节 §5.2/§5.3 的 `registerDockModule()`
+> **已按 ADR-003 全量落地**：dock 声明 `spark.dock.module` 子槽（`children`）并用平台下发的
+> `renderSlot` 渲染 rail / header / pane 三个位；五个模块（火花 / 记忆 / 财务 / GitHub / npm）
+> 全部由**各自的 client 入口自注册**，dock 不再静态 import 任何插件 UI —— `modules.tsx`
+> 与三处 dock 侧 embed pane 已删除。`docs/spark-dock-design.md` 原稿里「dock 硬编码模块表」
+> 的描述属于历史（评审 F4 已关闭）。设置页插槽 `settings.section` 与 `settings.plugin.item`
+> 同日移除。
 
 ### 5.1 新包 `packages/dsh-spark-dock`（client overlay + 自 patch）
 

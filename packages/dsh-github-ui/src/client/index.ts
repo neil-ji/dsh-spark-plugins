@@ -1,10 +1,9 @@
 /**
- * dsh-github-ui client half: registers the github dictionaries and mounts the
- * github Remote namespace into the web client shell.
+ * dsh-github-ui client half: registers the github dictionaries, mounts the github
+ * Remote namespace and contributes its dock module.
  *
- * 入口退位（2026-09）：完整设置页已由 dsh-spark-dock 悬浮球内嵌
- * （dock import 本包 ./embed 的 GithubSection 并自行 mount remote）——
- * 本入口只负责注册字典 + 把 remote 命名空间挂进 shell，不注册任何插槽。
+ * ADR-003（2026-09-11）：功能 UI 不再由 dock 静态 import 本包的 embed 产物，
+ * 而是本入口自己装配好注入面后注册进 dock 声明的 `spark.dock.module` 子槽。
  */
 import type { ClientContext } from 'dsh-spark-plugin-kit/client'
 // Type-only: pulls ctx.locale.
@@ -14,9 +13,11 @@ import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import { GITHUB_REMOTE_CONTRIBUTION } from 'dsh-connector-wire'
 import { en, zh, type GithubKey } from './locales.ts'
+import { startGithubDockModule, type GithubDockInject } from './GithubDockModule.tsx'
 
 export type { GithubSectionInjected, GithubSectionProps } from './GithubSection.tsx'
 export type { GithubConfigView, GithubWhoamiValue } from 'dsh-connector-wire'
+export type { GithubDockInject } from './GithubDockModule.tsx'
 export type { GithubKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -28,11 +29,11 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** Dictionary namespace owned by this plugin. */
 const NS = 'settings.github'
 
-/** Required client services. */
-export const inject = ['locale', 'remote']
+/** Required client services（ADR-003 后含 slots 与 remote.credentials）。 */
+export const inject = ['locale', 'remote', 'remote.credentials', 'slots']
 
 /**
- * Mount the github Remote namespace and register dictionaries.
+ * Mount the github Remote namespace, register dictionaries, contribute the dock module.
  * @param ctx - client root context.
  */
 export async function apply(ctx: ClientContext): Promise<void> {
@@ -43,7 +44,8 @@ export async function apply(ctx: ClientContext): Promise<void> {
     return () => { offZh(); offEn() }
   }, 'github-ui: copy')
 
-  // Keep the github Remote namespace mounted in the shell; the dock embed
-  // mounts its own, duplicate $mount of the same contribution is tolerated.
+  // Keep the github Remote namespace mounted in the shell, then contribute the module.
   await ctx.remote.$mount(GITHUB_REMOTE_CONTRIBUTION)
+  const injected: GithubDockInject = startGithubDockModule(ctx)
+  if ('failed' in injected) console.warn('[dsh-connector-github-ui] dock 模块以失败态注册（remote.github 不可用）')
 }

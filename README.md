@@ -76,7 +76,7 @@ npm 连接器 token 优先使用说明（粘贴 token → 测试连接 → 保�
 
 | 闸门 | 命令 | 挡住什么 |
 | --- | --- | --- |
-| 架构 | `pnpm check:architecture` | ① **孤包**：`packages/*` 里出现既非插件、也不在插件依赖闭包内的包（退役世代就是这么漏的）；② **依赖边界**：宿主半边 import react/ui-kit/客户端入口、插件互相 import、`<pkg>/embed` 被非 app 引用、ui-kit 沾平台依赖、wire 沾 cordis；③ **契约漂移**：wire 描述符声明的方法在宿主实现里不存在、两份手抄 manifest 不一致（`sourceLocation` 行号漂移目前只告警，`--strict-locations` 升级为失败） |
+| 架构 | `pnpm check:architecture` | ① **孤包**：`packages/*` 里出现既非插件、也不在插件依赖闭包内的包（退役世代就是这么漏的）；② **依赖边界**：宿主半边 import react/ui-kit/客户端入口、插件互相 import、`<pkg>/embed` 被非 app 引用、ui-kit 沾平台依赖、wire 沾 cordis；③ **契约漂移**：wire 描述符声明的方法在宿主实现里不存在、两份手抄 manifest 不一致（`sourceLocation` 行号漂移目前只告警，`--strict-locations` 升级为失败）；④ **inject 面覆盖**：client 半边用到 `ctx.slots` / `ctx.remote.credentials` 等服务却没写进该包 `inject` —— 真宿主会因此让整条 loader entry 失败 |
 | 设计系统 | `pnpm check:contrast` | 亮/暗对比度 AA（154 项配对）+ token 完整性 + 文档/设计稿漂移 |
 | 预览保真 | `pnpm preview:verify` | 真 embed 产物 + 假宿主跑通数据流（56 项） |
 | 版本纪律 | `pnpm check:version-bump` | 改了发布输入（`src/**`、构建配置、清单）却没在同一个 commit 里 bump 该包 `version` —— 版本没变，宿主就继续供旧 client 字节。注释/空白改动会剥离后比较，不算发布改动 |
@@ -196,16 +196,17 @@ pnpm escape:init   # 只初始化/刷新，不启动；之后手动 dsh --profil
 ## 新增一个插件
 
 1. `packages/<name>` 下建包（host 出 `lib/index.js`，client 出 `lib/client.js`，参考 dsh-hippomemo）。
-2. 需要 client UI 时出 `embed` 入口（纯组件 + controller + 字典），并在 `dsh-spark-dock` 的
-   `src/client/modules.tsx` 登记一个模块 —— 插件的功能 UI 只走悬浮球 Dock
-   （`shell.overlay` 插槽），设置页插槽自 2026-09 起已全部退役。
+2. 需要 client UI 时**在自己的 client `apply()` 里自注册一个 dock 模块**：
+   `registerDockModule(ctx, { id, order, label, name, sub, icon, accent, inject, Content })`
+   （契约与 chrome 组件在 `dsh-spark-plugin-kit/client`）—— dock 声明 `spark.dock.module`
+   子槽并渲染三个位（模块栏 / 标题行 / 内容），**新增插件不需要改 dock 任何代码**（ADR-003）。
+   记得把 `'slots'`（以及 `ctx.remote.credentials` 之类真正用到的服务）写进该包的 `inject`。
 3. 在 `plugin-registry.json` 登记（**没登记的包会被 `pnpm check:architecture` 判为孤包**），
    `pnpm dev` 后即可在 3999 验证。
 4. 有 remote 方法时在 `scripts/check-architecture.mjs` 的 `CONTRACTS` 表里登记
    「描述符文件 → 宿主实现文件」，契约漂移闸门即刻生效。
 5. 依赖方向由角色决定（见 `ALLOWED_EDGES`）：宿主半边只能用 `cordis` + 平台宿主包；
-   `<pkg>/embed` 只允许 dock 引用；ui-kit / wire / plugin-kit 不得反向依赖任何插件。
-   越界会在 `pnpm check:architecture` 当场报出来。
+   ui-kit / wire / plugin-kit 不得反向依赖任何插件。越界会在 `pnpm check:architecture` 当场报出来。
 ## License
 
 [MIT](./LICENSE)

@@ -1,9 +1,9 @@
 /**
- * dsh-hippomemo client entry: dictionary + plugin CSS injection only.
+ * dsh-hippomemo client entry: dictionary + plugin CSS injection + dock module.
  *
- * 入口退位（2026-09）：完整设置页已由 dsh-spark-dock 悬浮球内嵌
- * （dock import 本包 ./embed 的 MemorySection）——本入口只保留字典 + CSS
- * 注入（dock 内嵌也用同一份，幂等），不注册任何插槽。
+ * ADR-003（2026-09-11）：功能 UI 不再由 dock 静态 import 本包的 embed 产物，
+ * 而是本入口注册字典 / 注入 CSS（幂等）后，把模块注册进 dock 声明的
+ * `spark.dock.module` 子槽。
  */
 import type { ClientContext } from 'dsh-spark-plugin-kit/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
@@ -15,6 +15,7 @@ import { injectPluginStyle } from 'dsh-spark-plugin-kit/client'
 import { sparkTokenCss } from 'dsh-ui-kit'
 import { HIPPOMEMO_CSS } from './style.ts'
 import { startHippomemoEvents } from './start.ts'
+import { registerHippoDockModule } from './HippoDockModule.tsx'
 import { en, zh, type HippomemoLocaleKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -25,7 +26,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 
 const NS = 'hippomemo.settings'
 
-export const inject = ['locale', 'remote'] as const
+/** Required client services（ADR-003 后含 slots）。 */
+export const inject = ['locale', 'remote', 'slots'] as const
 
 export async function apply(ctx: ClientContext): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -42,4 +44,6 @@ export async function apply(ctx: ClientContext): Promise<void> {
   injectPluginStyle(sparkTokenCss, 'dsh-ui-kit/tokens', 'dsh-ui-kit')
   // 统一事件通道（ADR-001）：standalone 路径也要装配，否则记忆面板失去实时刷新。
   await startHippomemoEvents(ctx)
+  // ADR-003：注册 dock 模块（面板 UI 归插件自己）。
+  registerHippoDockModule(ctx)
 }

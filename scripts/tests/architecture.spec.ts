@@ -15,10 +15,12 @@ import {
   checkFileBoundaries,
   collectImports,
   extractDeclarations,
+  extractInjectList,
   extractMembers,
   extractSourceLocations,
   findBoundaryViolations,
   findContractDrift,
+  findInjectGaps,
   findOrphanPackages,
   halfOf,
   implementationLine,
@@ -226,6 +228,21 @@ describe('契约抽取', () => {
     expect(implementsMethod(host, 'listProviders')).toBe(true)
     expect(implementsMethod(host, 'refreshBalance')).toBe(false)
     expect(implementationLine(host, 'refreshBalance')).toBeNull()
+  })
+})
+
+describe('inject 面覆盖', () => {
+  it('从 client 入口读出 inject 列表', () => {
+    expect(extractInjectList("export const inject = ['locale', 'remote'] as const")).toEqual(['locale', 'remote'])
+    expect(extractInjectList("export const inject = ['locale', 'remote', 'remote.credentials', 'slots']")).toEqual(['locale', 'remote', 'remote.credentials', 'slots'])
+    expect(extractInjectList('const x = 1')).toBeNull()
+  })
+
+  it('真实仓库：client 插件用到的平台服务都写进了 inject', () => {
+    const { violations, checked } = findInjectGaps(ROOT)
+    expect(violations).toEqual([])
+    // 五个出 web 客户端产物的插件（dock + github / npm / finance / hippomemo）
+    expect(checked).toBeGreaterThanOrEqual(5)
   })
 })
 

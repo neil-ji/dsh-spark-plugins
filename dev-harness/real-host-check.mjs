@@ -187,20 +187,22 @@ try {
       check('hippomemo 事件通道无告警（订阅真的建立了）', channelWarnings.length === 0, JSON.stringify(channelWarnings.slice(0, 2)))
     }
 
-    // 5) ADR-003：npm 模块由插件自注册（dock 不再静态 import 它）——
-    //    真宿主里必须出现 npm tab，且点开后渲染的是插件自己的 NpmSection。
-    const npmIndex = Array.isArray(tabs) ? tabs.indexOf('npm') : -1
-    check('模块栏含自注册的 npm 模块（ADR-003）', npmIndex >= 0, JSON.stringify(tabs))
-    if (npmIndex >= 0) {
-      await evalJs(`document.querySelectorAll('.dock-tab')[${npmIndex}].click()`)
+    // 5) ADR-003：五个模块全部由插件自注册（dock 不再静态 import 任何插件 UI）——
+    //    真宿主里必须五个 tab 都在，且每个模块点开后渲染出内容而不是失败态。
+    const expectedTabs = ['火花', '记忆', '财务', 'GitHub', 'npm']
+    check('模块栏含全部自注册模块（ADR-003）', expectedTabs.every((label) => Array.isArray(tabs) && tabs.includes(label)), JSON.stringify(tabs))
+    for (const label of expectedTabs) {
+      const index = Array.isArray(tabs) ? tabs.indexOf(label) : -1
+      if (index < 0) continue
+      await evalJs(`document.querySelectorAll('.dock-tab')[${index}].click()`)
       await sleep(1500)
-      const npmPane = await evalJs(`(() => {
+      const paneState = await evalJs(`(() => {
         const head = document.querySelector('.dock-head .name')?.textContent ?? ''
         const body = (document.querySelector('.dock-body')?.textContent ?? '').replace(/\\s+/g, ' ')
-        return { head, len: body.length, sample: body.slice(0, 240), failed: body.includes('装配失败') }
+        return { head, len: body.length, failed: /装配失败|未加载/.test(body), sample: body.slice(0, 120) }
       })()`)
-      check('npm 模块标题行走子槽 header 位', String(npmPane.head).includes('npm'), JSON.stringify(npmPane.head))
-      check('npm 内容走子槽 pane 位且未失败', npmPane.len > 40 && npmPane.failed !== true, JSON.stringify(npmPane).slice(0, 300))
+      check(`模块「${label}」标题行走子槽 header 位`, String(paneState.head).trim().length > 0 && !paneState.failed, JSON.stringify(paneState.head))
+      check(`模块「${label}」内容走子槽 pane 位且未失败`, paneState.len > 30 && paneState.failed !== true, JSON.stringify(paneState).slice(0, 240))
     }
 
     // 4) 诊断：控制台里与事件通道/remote 相关的线索

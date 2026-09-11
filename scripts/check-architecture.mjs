@@ -380,10 +380,74 @@ export function findContractDrift(root, options = {}) {
   return { failures, warnings, results }
 }
 
+/* ──────────────────────────── 4. inject 面覆盖 ──────────────────────────── */
+
+/**
+ * 客户端半边用到的平台服务 → 必须写进该包 `export const inject`。
+ *
+ * 为什么单列一道：真宿主实测，插件用到 `ctx.slots` 而 inject 里没写，宿主会以
+ * `cannot get property "slots" without inject` 让**整条 loader entry** 失败
+ * （不是只丢那个模块）；`remote.credentials` 同理（面板渲染成加载失败）。
+ * ADR-003 之前这些服务由 dock 代持，搬回插件后容易漏。
+ */
+const CLIENT_SERVICE_USES = [
+  { service: 'slots', re: /\b(?:any)?[Cc]tx\.slots\b|\.slots\.inject\(/ },
+  { service: 'locale', re: /\b(?:any)?[Cc]tx\.locale\b/ },
+  { service: 'settingsScope', re: /\b(?:any)?[Cc]tx\.settingsScope\b|this\.ctx\.settingsScope\b/ },
+  { service: 'remote.credentials', re: /\bremote\.credentials\./ },
+  { service: 'remote', re: /\bremote\.\$mount\b|\bremote\.\$on\b|\bremote\.\$stream\b|\bremote\.[a-z]/ },
+]
+
+/** 从 client 入口源码里读出 `export const inject = [...]` 的成员。 */
+export function extractInjectList(source) {
+  const match = /export\s+const\s+inject\s*=\s*\[([^\]]*)\]/.exec(source)
+  if (match === null) return null
+  return [...match[1].matchAll(/['"]([^'"]+)['"]/g)].map((entry) => entry[1])
+}
+
+/**
+ * 检查每个带 `dsh.client` 的包：client 半边用到的服务是否都在 inject 里声明。
+ * @param {string} root
+ */
+export function findInjectGaps(root) {
+  const packages = readWorkspacePackages(root)
+  const violations = []
+  let checked = 0
+  for (const [name, record] of packages) {
+    if (record.pkg.dsh?.client?.platform === undefined) continue
+    const entryPath = join(record.dir, 'src/client/index.ts')
+    if (!existsSync(entryPath)) continue
+    const declared = extractInjectList(readFileSync(entryPath, 'utf8'))
+    if (declared === null) {
+      violations.push({ pkg: name, code: 'inject-missing', detail: `${name} 的 client 入口没有 export const inject` })
+      continue
+    }
+    const used = new Set()
+    for (const file of walkSource(join(record.dir, 'src/client'))) {
+      const source = stripComments(readFileSync(file, 'utf8'))
+      for (const use of CLIENT_SERVICE_USES) {
+        if (use.re.test(source)) used.add(use.service)
+      }
+    }
+    checked += 1
+    for (const service of used) {
+      // `remote.credentials` 同时要求 `remote`（平台按服务分别授权）。
+      if (!declared.includes(service)) {
+        violations.push({
+          pkg: name,
+          code: 'inject-gap',
+          detail: `${name} 的 client 半边用到 ctx.${service}，但 inject=[${declared.join(', ')}] 里没有它`,
+        })
+      }
+    }
+  }
+  return { violations, checked }
+}
+
 /* ──────────────────────────── CLI ──────────────────────────── */
 
 function parseArgs(argv) {
-  const options = { only: ['orphans', 'boundaries', 'contracts'], json: false, strictLocations: false }
+  const options = { only: ['orphans', 'boundaries', 'contracts', 'injects'], json: false, strictLocations: false }
   for (const arg of argv) {
     if (arg === '--json') options.json = true
     else if (arg === '--strict-locations') options.strictLocations = true
@@ -393,8 +457,8 @@ function parseArgs(argv) {
 }
 
 export function runChecks(root, options = {}) {
-  const only = options.only ?? ['orphans', 'boundaries', 'contracts']
-  const report = { orphans: null, boundaries: null, contracts: null, failures: 0, warnings: 0 }
+  const only = options.only ?? ['orphans', 'boundaries', 'contracts', 'injects']
+  const report = { orphans: null, boundaries: null, contracts: null, injects: null, failures: 0, warnings: 0 }
   if (only.includes('orphans')) {
     const result = findOrphanPackages(root)
     report.orphans = result
@@ -415,6 +479,11 @@ export function runChecks(root, options = {}) {
     report.failures += result.failures.length
     report.warnings += result.warnings.length
   }
+  if (only.includes('injects')) {
+    const result = findInjectGaps(root)
+    report.injects = result
+    report.failures += result.violations.length
+  }
   return report
 }
 
@@ -426,7 +495,7 @@ function main(argv) {
     process.exitCode = report.failures > 0 ? 1 : 0
     return
   }
-  console.log('══ 架构闸门（孤包 / 边界 / 契约） ══')
+  console.log('══ 架构闸门（孤包 / 边界 / 契约 / 注入面） ══')
   if (report.orphans !== null) {
     const { orphans, total, closureSize } = report.orphans
     if (orphans.length === 0) console.log(`  ok    workspace 孤包        0 个（${total} 个包全在 registry 闭包内，闭包 ${closureSize} 个）`)
@@ -446,6 +515,11 @@ function main(argv) {
     if (failures.length === 0) {
       console.log(`  ok    契约漂移            0 处硬漂移（${totalDeclared} 条远端方法声明全部有实现；${warnings.length} 处告警）`)
     }
+  }
+  if (report.injects !== null) {
+    const { violations, checked } = report.injects
+    if (violations.length === 0) console.log(`  ok    inject 面覆盖        ${checked} 个 client 插件用到的服务都写进了 inject`)
+    for (const violation of violations) console.log(`  FAIL  ${violation.code.padEnd(20)} ${violation.detail}`)
   }
   const verdict = report.failures > 0 ? 'FAIL' : 'PASS'
   console.log(`\n合计：硬失败 ${report.failures} 处 · 告警 ${report.warnings} 处\n结果：${verdict}`)

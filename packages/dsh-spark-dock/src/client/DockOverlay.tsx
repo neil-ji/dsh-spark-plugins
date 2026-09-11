@@ -7,9 +7,8 @@
  *  - shell.overlay 是 click-through 层，本组件根节点自带 pointer-events: auto
  */
 import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
-import { IconSparkles, SegmentedControl } from 'dsh-ui-kit'
+import { IconSparkles } from 'dsh-ui-kit'
 import type { DockModuleOwnerProps } from 'dsh-spark-plugin-kit/client'
-import { DOCK_MODULES } from './modules.tsx'
 import type { SparkEventChannel } from './spark/remote.ts'
 import { useFairy } from './fairy/FairyFace.tsx'
 
@@ -26,7 +25,7 @@ export type DockRenderSlot = (
 
 export interface DockOverlayProps {
   channel?: SparkEventChannel | null
-  /** 见 {@link DockRenderSlot}；缺省时只渲染 dock 自带的模块（过渡态兜底）。 */
+  /** 见 {@link DockRenderSlot}；ADR-003 起 dock 的所有模块都从它来。 */
   renderSlot?: DockRenderSlot
 }
 
@@ -83,18 +82,7 @@ export function DockOverlay({ channel = null, renderSlot }: DockOverlayProps): J
   const panelRef = useRef<HTMLDivElement | null>(null)
   const posRef = useRef<Pt>(loadPos())
   const [open, setOpen] = useState(() => localStorage.getItem(OPEN_KEY) === '1')
-  const [activeId, setActiveId] = useState(() => {
-    const saved = localStorage.getItem(ACTIVE_KEY)
-    if (saved !== null) return saved // 自注册模块（如 npm）不在表格里，不能按表格校验
-    return DOCK_MODULES[0].id
-  })
-  // dock 自带的四格仍走表格；其余 id 视为插件自注册模块（ADR-003），走子槽渲染位。
-  const ownedModule = DOCK_MODULES.find((m) => m.id === activeId)
-  const activeModule = ownedModule ?? DOCK_MODULES[0]
-  const [paneId, setPaneId] = useState(activeModule.panes[0].id)
-  // 切模块时子页回落到第一个
-  useEffect(() => { setPaneId(activeModule.panes[0].id) }, [activeModule])
-  const activePane = activeModule.panes.find((p) => p.id === paneId) ?? activeModule.panes[0]
+  const [activeId, setActiveId] = useState(() => localStorage.getItem(ACTIVE_KEY) ?? 'spark')
   // 订阅只需一层开着；mood 只服务球的表情层，气泡只取文本（互不牵连）
   const fairy = useFairy(channel, BALL_FACE_ENABLED || BALL_BUBBLE_ENABLED)
   const mood = BALL_FACE_ENABLED ? fairy.mood : null
@@ -122,7 +110,7 @@ export function DockOverlay({ channel = null, renderSlot }: DockOverlayProps): J
   }, [renderSlot, activeId, selectModule])
 
   // rail 纵向方向键导航（roving tabindex：只有激活 tab 在 Tab 序列里）。
-  // 按 DOM 顺序走而不是查模块表 —— 自注册模块（npm）不在表里，也必须可达。
+  // 按 DOM 顺序走：模块全部来自子槽，dock 侧没有可查询的模块表。
   const railRef = useRef<HTMLDivElement | null>(null)
   const onRailKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
@@ -137,7 +125,7 @@ export function DockOverlay({ channel = null, renderSlot }: DockOverlayProps): J
     requestAnimationFrame(() => {
       railRef.current?.querySelector<HTMLButtonElement>('[aria-selected="true"]')?.focus()
     })
-  }, [activeModule.id, selectModule])
+  }, [selectModule])
 
   const layoutBall = useCallback(() => {
     const ball = ballRef.current
@@ -186,7 +174,7 @@ export function DockOverlay({ channel = null, renderSlot }: DockOverlayProps): J
   useEffect(() => {
     localStorage.setItem(OPEN_KEY, open ? '1' : '0')
     layoutPanel(open)
-  }, [open, activeModule.id, layoutPanel])
+  }, [open, activeId, layoutPanel])
 
   // 初始定位 + resize（resize 时把球夹回视口）
   useEffect(() => {
@@ -333,44 +321,27 @@ export function DockOverlay({ channel = null, renderSlot }: DockOverlayProps): J
         role="dialog"
         aria-label="Spark Dock"
         style={{
-          '--accent': activeModule.accent,
-          '--accent-fg': activeModule.accentFg,
+          // 模块自己的东西（图标/强调色/标题/子页）全在模块条目里；面板级 accent
+          // 只作缺省值（模块头/标签各自带自己的 accent）。
+          '--accent': 'var(--spk-brand, #3d5af0)',
+          '--accent-fg': 'var(--spk-on-brand, #ffffff)',
           // 面板宽度固定，切换模块不改变尺寸（内容区自适应）
           '--dock-panel-w': '616px',
         } as React.CSSProperties}
       >
-        {/* 结构重构：左侧图标模块栏 + 右侧主列（模块头/子页/内容） */}
+        {/* 左：图标模块栏；右：主列（模块头 / 内容）。两处都由子槽条目渲染（ADR-003）。 */}
         <div ref={railRef} className="dock-rail" role="tablist" aria-label="插件模块" aria-orientation="vertical" onKeyDown={onRailKeyDown}>
-          {DOCK_MODULES.map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              role="tab"
-              data-module-id={m.id}
-              aria-selected={m.id === activeModule.id}
-              aria-label={m.label}
-              title={m.label}
-              tabIndex={m.id === activeModule.id ? 0 : -1}
-              className={m.id === activeModule.id ? 'dock-tab active' : 'dock-tab'}
-              style={{ '--accent': m.accent, '--accent-fg': m.accentFg } as React.CSSProperties}
-              onClick={() => selectModule(m.id)}
-            >
-              {m.icon}
-            </button>
-          ))}
-          {/* ADR-003：插件自注册的模块（平台按 order 排序渲染） */}
-          {renderSlot !== undefined && renderSlot('spark.dock.module', { variant: 'rail', activeId, onSelect: selectModule })}
+          {renderSlot !== undefined
+            ? renderSlot(
+              'spark.dock.module',
+              { variant: 'rail', activeId, onSelect: selectModule },
+              { fallback: <div className="dock-empty dock-rail-empty">没有已加载的插件模块</div> },
+            )
+            : null}
         </div>
         <div className="dock-main">
           <div className="dock-head">
-            {ownedModule !== undefined
-              ? (
-                <div className="titles">
-                  <div className="name">{activeModule.name}</div>
-                  <div className="sub">{activeModule.sub}</div>
-                </div>
-                )
-              : <div className="titles">{slotNode('header')}</div>}
+            <div className="titles">{slotNode('header')}</div>
             <div className="spacer" />
             <button
               type="button"
@@ -384,16 +355,7 @@ export function DockOverlay({ channel = null, renderSlot }: DockOverlayProps): J
             </button>
           </div>
           <div className="dock-body">
-          {ownedModule !== undefined && activeModule.panes.length > 1 && (
-            <SegmentedControl
-              fullWidth
-              ariaLabel={`${activeModule.name} 子页`}
-              options={activeModule.panes.map((p) => ({ value: p.id, label: p.label }))}
-              value={activePane.id}
-              onChange={setPaneId}
-            />
-          )}
-          {ownedModule !== undefined ? activePane.render({ channel }) : slotNode('pane')}
+          {slotNode('pane')}
           </div>
         </div>
       </div>

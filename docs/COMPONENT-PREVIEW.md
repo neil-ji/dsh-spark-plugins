@@ -15,25 +15,27 @@ pnpm preview:layout   # 真渲染盒模型走查：重叠 / 横向溢出 / 折�
 pnpm preview:titles   # 子页标题层级走查：重复的 Title/Label（V1/V2/V3）必须为 0
 ```
 
-前置：仓库已 `pnpm install`，且各包**已构建**（`pnpm build`，或至少 `packages/*/lib/embed.cjs`、
-`packages/dsh-plugin-kit/lib/client/`、`packages/dsh-ui-kit/dist/` 存在）。不需要 dsh。
+前置：仓库已 `pnpm install`，且各包**已构建**（`pnpm build`，或至少
+`packages/*/lib/client.js`、`packages/*/lib/embed.cjs`、`packages/dsh-plugin-kit/lib/client/`、
+`packages/dsh-ui-kit/dist/` 存在）。不需要 dsh。
 
 ## 默认画布：Dock 悬浮球（模拟真实 dsh web）
 
 左栏第一项 **Dock 悬浮球**：画布是仿真的 dsh web 会话界面（侧栏 + 会话流 + 输入框），
 右下角是**真的** `dsh-spark-dock` 悬浮球。
 
-- 点一下 → 展开真面板：左侧模块栏（火花 / 记忆 / 成本 / GitHub / npm）+ 模块头 + 子页 + 各插件的**完整设置 UI**。
+- 点一下 → 展开真面板：左侧模块栏（火花 / 记忆 / 财务 / GitHub / npm）+ 模块头 + 各插件的**完整 UI**。
 - 拖动悬浮球 → 4px 阈值起拖、松手吸附最近角；位置与开合状态记在 `localStorage`。
 - 「复位悬浮球」清掉 `dsh.spark-dock:*` 并重载；Esc 或再点球可收起面板。
 - 面板按球的位置反向弹出并夹在视口内，压住球时自动把球提到面板之上。
 
-装配方式**镜像 `packages/dsh-spark-dock/src/client/index.ts` 的 `apply()`**（见 `src/panes/dock.tsx`）：
-注册四个插件的 locale 字典 → 注入 `DOCK_CSS` 与 `HIPPOMEMO_CSS` → `setHippoT` →
-`startGithubEmbed / startNpmEmbed / startFinanceEmbed` → `setReflectGetter` → 渲染 `<DockOverlay />`。
-唯一差别是 ctx 是假宿主，且不注册 `shell.overlay` 槽位（预览直接把 `DockOverlay` 挂在页面里）。
+装配方式 = **真插件路径**（ADR-003，见 `src/panes/dock.tsx`）：预览依次调用 dock 与四个插件
+**各自 client 入口的 `apply()`**（真宿主里由 client-modules 加载同一份 `lib/client.js`，
+预览服务器剥掉 ModuleLoader 壳），由它们自己 mount remote / 注册字典 / 注册
+`spark.dock.module` 子槽；假宿主提供 `ctx.slots` 的 ledger 与订阅，`DockOverlay` 通过
+`renderSlot` 渲染三个位。**预览不再复刻任何装配逻辑**（旧版 starters 已随 `modules.tsx` 删除）。
 
-> dock 的 embed starter 是**模块级单飞**，所以切语言/场景会**整页重载**（等价于宿主重载插件）；
+> `apply()` 是模块级单飞，所以切语言/场景会**整页重载**（等价于宿主重载插件）；
 > 只切主题不用重载。
 
 ## 其余画布：组件级单渲染
@@ -60,19 +62,22 @@ pnpm preview:titles   # 子页标题层级走查：重复的 Title/Label（V1/V2
 
 ## 为什么"不装 dsh"能成立
 
-1. 四个插件包都导出 **`./embed` 库形态入口**（`lib/embed.cjs`），产物里唯一的 `require` 只有
-   react / react-dom——`dsh-ui-kit`、`dsh-spark-plugin-kit`、`dsh-*-wire`、`dsh-client-store`
-   在构建时已内联，**没有 `@deepseek-ai/*` 运行时依赖**。
-2. 预览只需要补上宿主那一半：`ctx.effect / locale.register|bind / remote.$mount|$on|credentials /
-   reflect.get / settingsScope.bind`（见 `src/mock/ctx.ts`，形状来自 `docs/LOCAL-DEV-HARNESS.md` §1.6 实测）。
+1. **Dock 画布**吃各包的 `lib/client.js`（ADR-003 起插件自注册，预览剥掉
+   `window.__ModuleLoader__` 壳再调 `apply()`）；**组件级画布**吃 `lib/embed.cjs`
+   （库形态入口，产物里唯一的 `require` 只有 react / react-dom —— `dsh-ui-kit`、
+   `dsh-spark-plugin-kit`、`dsh-*-wire`、`dsh-client-store` 构建时已内联，
+   **没有 `@deepseek-ai/*` 运行时依赖**）。
+2. 预览只需要补上宿主那一半：`effect / locale.register|bind / remote.$mount|$on|credentials /
+   reflect.get / settingsScope.bind / slots.inject|register|snapshot|subscribe`
+   （见 `src/mock/ctx.ts`，形状来自 `docs/LOCAL-DEV-HARNESS.md` §1.6 实测）。
 3. 根 `node_modules` 不 link 工作区包，所以用 esbuild 的 resolve 插件把包名指到真实文件。
 
 ## 与真宿主的一致性边界
 
 | 一致 | 不一致（需线 2 才能覆盖） |
 | --- | --- |
-| 悬浮球/面板组件、四个插件设置页、controller、字典、CSS Modules、`dsh-ui-kit` 组件与令牌 | 槽位注册（`shell.overlay`）与真 shell 布局 |
-| dock 的装配顺序（字典 → CSS → embed starter → reflect） | cordis 生命周期、`clientModules` 的 boot 图与 `rev` 缓存 |
+| 悬浮球/面板组件、五个插件模块（真 `apply()` + 真子槽 ledger）、controller、字典、CSS Modules、`dsh-ui-kit` 组件与令牌 | 平台槽位授权（`shell.overlay` 的 children 声明、stale-authorization 探针）与真 shell 布局 |
+| 模块注册顺序与 ledger 语义（`inject` → `register` → 订阅重渲染） | cordis 生命周期、`clientModules` 的 boot 图与 `rev` 缓存 |
 | remote 调用形状（`RemoteResult` 信封、参数、错误分支） | 真 RPC / SSE 传输、`__DSH_TRANSPORT__`、并发与重连 |
 | `settingsScope` 的 set/unset/user 层语义 | 真 settings 文档持久化与 revision 竞争 |
 | spark / hippomemo 的真 fetch 路径与 SSE | 真宿主下的会话数据、凭据落盘 |
@@ -80,9 +85,10 @@ pnpm preview:titles   # 子页标题层级走查：重复的 Title/Label（V1/V2
 ## 自检覆盖（`pnpm preview:verify`）
 
 - Node 冒烟（`tests/smoke.tsx`，真产物 + 假宿主，无 DOM）：
-  **dock** `DockOverlay` 渲染出球/面板/五个模块 tab + `DOCK_CSS` 非空；
-  github `load`/`testConnection`/`saveToken` + 渲染；npm `load`/`testConnection` + 渲染；
-  finance `load`（ledger + providerList）、scope set/unset、渲染；error / empty 两档场景。
+  **dock** `DockOverlay` 渲染出球/面板 + 「没有子槽就没有模块」+ 三个渲染位（rail/header/pane）
+  在假 renderSlot 下全部被调用；github `load`/`testConnection`/`saveToken` + 渲染；
+  npm `load`/`testConnection` + 渲染；finance `load`（ledger + providerList）、scope set/unset、渲染；
+  error / empty 两档场景。
 - 服务器断言：`/`、`/preview.js`（含 CSS 内联证据、无裸 require 外链）、`/tokens.css`
   （`--spk-*` 与 `--dsw-*` 桥接）、`/__preview/probe`、场景切换接口。
 - fixture 断言：`/hippomemo/*` 与 `/sparks|/proposals|/scripts` 的信封形状、条目数、
@@ -90,12 +96,13 @@ pnpm preview:titles   # 子页标题层级走查：重复的 Title/Label（V1/V2
 
 ## 已知限制
 
-- 预览渲染的是 **dock 的源码组件**（`src/client/DockOverlay.tsx` + 复刻 `apply()` 的装配），
-  插件侧则是 `lib/embed.cjs`（或源码口径的 `src/client/embed.ts`）；**都不是**
-  `window.__ModuleLoader__` 包装的 `lib/client.js`。因此它验证不了 dsh 的 boot 图、
-  `dsh.client.external` 外部化与 `rev` 缓存——那部分口径由线 2 沙箱（`pnpm sandbox:verify`）承担。
+- 预览渲染的是 **dock 的源码组件**（`src/client/DockOverlay.tsx`），插件侧是真
+  `lib/client.js`（剥壳后调用 `apply()`）；组件级画布仍吃 `lib/embed.cjs`。
+  假 slots 不校验平台授权，`clientModules` 的 boot 图 / `external` 外部化 / `rev` 缓存
+  也验不了——那部分口径由线 2 沙箱（`pnpm sandbox:verify`）与
+  `dev-harness/real-host-check.mjs` 承担。
 - 假 remote 是**页面内对象**，不走 HTTP；只有 hippomemo 与 spark 是真 fetch（它们本来就是 fetch）。
-- dock 的 embed starter 是模块级单飞：切语言/场景靠整页重载，不能只重挂画布。
+- 插件的 `apply()` 是模块级单飞：切语言/场景靠整页重载，不能只重挂画布。
 - 没有 React Fast Refresh：改码后 esbuild 重建 → 整页刷新（会话状态会丢）。
 - `dev-harness/preview/**` 不参与 `tsc`（esbuild 直接吃 TSX），它的门是 `preview:verify`。
 

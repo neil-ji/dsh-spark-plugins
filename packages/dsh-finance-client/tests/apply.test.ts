@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { apply } from '../src/client/index.ts'
 import financeRemote from 'dsh-spark-finance/remote'
 import type { FinanceCommunitySyncResult } from 'dsh-spark-finance/types'
@@ -26,8 +26,12 @@ vi.mock('@deepseek-ai/dsh-client-runtime/client', () => ({
     set: () => {},
   }),
 }))
+// ADR-003：本包的 apply 会把 dock 模块注册进 `spark.dock.module` 子槽，
+// 这里用 spy 替掉 kit 的注册器（真实现要平台槽位）。
+const spies = vi.hoisted(() => ({ registerDockModule: vi.fn((_ctx: unknown, _spec: unknown) => () => {}) }))
 vi.mock('dsh-spark-plugin-kit/client', () => ({
   bindSnapshotSelector: (source: { getSnapshot: () => object }) => () => source.getSnapshot(),
+  registerDockModule: spies.registerDockModule,
 }))
 
 function fakeCtx() {
@@ -83,6 +87,8 @@ function fakeCtx() {
 }
 
 describe('dsh-spark-finance-client apply', () => {
+  beforeEach(() => { spies.registerDockModule.mockClear() })
+
   it('mounts the finance Remote contribution', async () => {
     const { ctx } = fakeCtx()
     await apply(ctx)
@@ -98,15 +104,19 @@ describe('dsh-spark-finance-client apply', () => {
     expect(getRegistrar('settings.section')).toBeUndefined()
   })
 
-  // 入口退位（2026-09）：设置页入口已完全由 dsh-spark-dock 悬浮球内嵌承担
-  // （dock import 本包 ./embed 的 FinanceCard，并自行 mount remote + bind settingsScope），
-  // 本入口不再注册 settings.plugin.item、不 bind settingsScope、也不 reflect.get。
-  it('does not register the retired settings.plugin.item entry', async () => {
+  // ADR-003：功能 UI 归插件自己 —— apply 必须 mount remote、reflect 取命名空间、
+  // bind settingsScope（财务卡的配置面）、并把模块注册进 dock 的子槽。
+  it('contributes its dock module via registerDockModule (ADR-003)', async () => {
     const { ctx } = fakeCtx()
     await apply(ctx)
     expect(ctx.slots.inject).not.toHaveBeenCalledWith('settings.plugin.item', expect.any(Function))
-    expect(ctx.settingsScope.bind).not.toHaveBeenCalled()
-    expect(ctx.reflect.get).not.toHaveBeenCalled()
+    expect(ctx.reflect.get).toHaveBeenCalledWith('remote.finance')
+    expect(ctx.settingsScope.bind).toHaveBeenCalledWith({ namespace: 'finance' })
+    expect(spies.registerDockModule).toHaveBeenCalledTimes(1)
+    const spec = spies.registerDockModule.mock.calls[0][1] as { id: string, order: number, inject: () => object }
+    expect(spec.id).toBe('finance')
+    expect(spec.order).toBe(30)
+    expect(typeof spec.inject).toBe('function')
   })
 
   it('registers locale dictionaries for settings.finance', async () => {

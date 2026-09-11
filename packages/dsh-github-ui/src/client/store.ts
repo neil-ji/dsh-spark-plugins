@@ -10,7 +10,7 @@ import type { RemoteResult, TypertRemoteNamespaceMap } from '@deepseek-ai/dsh-ty
 import type { GithubConfigView, GithubProxyTestValue, GithubWhoamiValue } from 'dsh-connector-wire'
 
 /** The mounted github Remote namespace (created by ctx.remote.$mount). */
-type GithubNamespace = TypertRemoteNamespaceMap['github']
+export type GithubNamespace = TypertRemoteNamespaceMap['github']
 
 /** Credential-seam facts for one reference (0.1.2 远端 wire 视图，不含值本身）。 */
 export interface CredentialView {

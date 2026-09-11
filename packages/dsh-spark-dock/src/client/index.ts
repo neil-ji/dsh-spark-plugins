@@ -3,27 +3,29 @@
  * web client's frame-wide `shell.overlay` slot (list kind, root scope,
  * click-through layer — the overlay root opts back into pointer events).
  * Registration mirrors dsh-client-ui-commands' popup entry.
+ *
+ * ADR-003（2026-09-11）：dock 不再静态 import 任何插件 UI。它只做三件事：
+ *   1. 声明自己的子槽 `spark.dock.module`（`children`），并把平台的 `renderSlot`
+ *      渲染面交给 `DockOverlay`（rail / header / pane 三个位）；
+ *   2. 装配自己的 spark 模块（spark 的功能 UI 一直住在本包）并经同一个
+ *      `registerDockModule` 注册 —— 与其它插件走完全同一条路径；
+ *   3. 注入悬浮球/面板的样式。
+ * 插件（github / npm / finance / hippomemo）在各自的 client `apply()` 里自注册。
  */
 import type { ClientContext } from 'dsh-spark-plugin-kit/client'
 import { injectPluginStyle } from 'dsh-spark-plugin-kit/client'
 import { SPARK_REMOTE_CONTRIBUTION } from 'dsh-spark-wire'
 import { sparkChannelOf, type SparkEventChannel } from './spark/remote.ts'
-import { en as ghEn, zh as ghZh } from 'dsh-connector-github-ui/embed'
-import { en as finEn, zh as finZh } from 'dsh-spark-finance-client/embed'
-import { en, HIPPOMEMO_CSS, startHippomemoEvents, zh } from 'dsh-hippomemo/embed'
+import { registerSparkDockModule } from './spark/SparkDockModule.tsx'
 import { DockOverlay } from './DockOverlay.tsx'
-import { setHippoT } from './hippo/HippoEmbed.tsx'
-import { startGithubEmbed } from './github/GithubEmbed.tsx'
-import { startFinanceEmbed } from './finance/FinanceEmbed.tsx'
 import { DOCK_CSS } from './style.ts'
-import { setReflectGetter } from './reflect.ts'
 
 /**
  * 客户端服务依赖。**注意不要把 `remote.spark` 写进来**：该服务由下面的
  * `$mount(SPARK_REMOTE_CONTRIBUTION)` 才提供，注入它会死锁（fiber 永远等不到，
  * 悬浮球整个不挂载）。动态命名空间一律走 `ctx.reflect.get('remote.spark')`。
  */
-export const inject = ['slots', 'locale', 'remote', 'remote.credentials', 'settingsScope'] as const
+export const inject = ['slots', 'locale', 'remote'] as const
 
 /** 幂等注入插件级 CSS（与 plugin-kit 的 injectPluginStyle 同形，此处自带一份
  *  以便在 kit CSS 注入之前就能落样式）。 */
@@ -43,7 +45,8 @@ function injectDockStyle(): () => void {
  * @param ctx - client root context.
  */
 export async function apply(ctx: ClientContext): Promise<void> {
-  const removeStyle = injectDockStyle()
+  injectDockStyle()
+  injectPluginStyle(DOCK_CSS, 'dsh-spark-dock', 'dsh-spark-dock')
   // 统一事件通道（ADR-001）：先 mount spark 的 stream 描述符并**等它完成**，
   // 再经 reflect 取回动态命名空间组装通道（`remote.spark` 不能写进 inject，见上）。
   let channel: SparkEventChannel | null = null
@@ -54,34 +57,9 @@ export async function apply(ctx: ClientContext): Promise<void> {
   } catch (error) {
     console.warn('[dsh-spark-dock] spark 事件流描述符 mount 失败，实时刷新将不可用：', error)
   }
-  // hippomemo 全功能内嵌：注册其 locale 字典 + 注入其插件 CSS（幂等 tag 同
-  // 原插件，重复加载时良性跳过），再绑定 t 交给 HippoEmbedPane。
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const anyCtx = ctx as any
-  // hippomemo 插件同场加载时已注册过同一命名空间；register 对重复会抛错，
-  // 字典内容一致，静默容忍即可（dock 单飞时由我们注册）。
-  for (const [lang, dict] of [['zh', zh], ['en', en]] as const) {
-    try { anyCtx.locale.register('hippomemo.settings', lang, dict) } catch { /* already registered */ }
-  }
-  // tsdown 产物里 HIPPOMEMO_CSS 已被折叠为 join 好的字符串；源码形态是
-  // string[]，两种都兼容。
-  const hippoCss = Array.isArray(HIPPOMEMO_CSS) ? HIPPOMEMO_CSS.join('\n') : HIPPOMEMO_CSS
-  const removeHippoCss = injectPluginStyle(hippoCss, 'hippomemo', 'dsh-hippomemo')
-  void removeHippoCss
-  setHippoT(anyCtx.locale.bind('hippomemo.settings'))
-  // 记忆面板的事件通道（ADR-001）：与 spark 同法装配（mount → reflect → 注入通道）。
-  await startHippomemoEvents(ctx)
-  // github 内嵌：注册其字典（重复容忍）+ 异步装配 remote/controller 注入面。
-  for (const [lang, dict] of [['zh', ghZh], ['en', ghEn]] as const) {
-    try { anyCtx.locale.register('settings.github', lang, dict) } catch { /* already registered */ }
-  }
-  startGithubEmbed(ctx)
-  // finance 内嵌：字典重复容忍 + 异步装配（remote.finance + settingsScope）。
-  for (const [lang, dict] of [['zh', finZh], ['en', finEn]] as const) {
-    try { anyCtx.locale.register('settings.finance', lang, dict) } catch { /* already registered */ }
-  }
-  startFinanceEmbed(ctx)
-  setReflectGetter((id) => (ctx as unknown as { reflect: { get(id: string): unknown } }).reflect.get(id))
+  // 1) 自己的模块走同一条自注册路径（spark 的 UI 住在本包）。
+  registerSparkDockModule(ctx, { channel })
+  // 2) 声明 shell.overlay 里的悬浮球，并声明 dock 的子槽 —— 插件据此自注册。
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const slots = (ctx as any).slots as {
     inject(name: string, register: () => unknown): unknown
@@ -96,11 +74,9 @@ export async function apply(ctx: ClientContext): Promise<void> {
     order: 10,
     // ADR-003：dock 只声明自己的子槽；插件 UI 在自己的 apply 里注册进
     // `spark.dock.module`（契约类型在 dsh-spark-plugin-kit/client），
-    // dock 不再静态 import 任何插件 UI 产物。平台会把 renderSlot 作为
-    // 组件 props 下发给 DockOverlay（指向下面声明的子槽）。
+    // 平台会把 renderSlot 作为组件 props 下发给 DockOverlay。
     children: { 'spark.dock.module': { kind: 'list', scope: 'root' } },
     // 通过插槽 inject 面把事件通道交给组件（取代模块级单例）。
     inject: () => injected,
   }, DockOverlay))
-  ctx.effect(() => () => removeStyle())
 }

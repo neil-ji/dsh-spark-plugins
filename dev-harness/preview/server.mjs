@@ -49,10 +49,6 @@ const OPEN = has('open')
 const DOCK_MODULES = {
   'dsh-spark-dock/DockOverlay': 'packages/dsh-spark-dock/src/client/DockOverlay.tsx',
   'dsh-spark-dock/style': 'packages/dsh-spark-dock/src/client/style.ts',
-  'dsh-spark-dock/reflect': 'packages/dsh-spark-dock/src/client/reflect.ts',
-  'dsh-spark-dock/github': 'packages/dsh-spark-dock/src/client/github/GithubEmbed.tsx',
-  'dsh-spark-dock/finance': 'packages/dsh-spark-dock/src/client/finance/FinanceEmbed.tsx',
-  'dsh-spark-dock/hippo': 'packages/dsh-spark-dock/src/client/hippo/HippoEmbed.tsx',
   // 事件契约（帧 schema + typert 描述符）：dock 与 mock 都要它，源码口径直接吃 src。
   'dsh-spark-wire': 'packages/dsh-spark-wire/src/index.ts',
 }
@@ -62,9 +58,13 @@ const BUNDLE_ALIASES = {
   ...DOCK_MODULES,
   'dsh-spark-plugin-kit/client': 'packages/dsh-plugin-kit/lib/client/index.js',
   'dsh-ui-kit': 'packages/dsh-ui-kit/dist/index.js',
-  // ADR-003：dock 的 npm 模块由插件自己的 client 入口注册 —— 真产物口径吃
+  // ADR-003：dock 与五个模块都由各自的 client 入口注册 —— 真产物口径吃
   // lib/client.js（带 ModuleLoader 壳，由 clientBundleShim 在预览里剥壳）。
+  'dsh-spark-dock/client': 'packages/dsh-spark-dock/lib/client.js',
+  'dsh-connector-github-ui/client': 'packages/dsh-github-ui/lib/client.js',
   'dsh-connector-npm-ui/client': 'packages/dsh-npm-ui/lib/client.js',
+  'dsh-spark-finance-client/client': 'packages/dsh-finance-client/lib/client.js',
+  'dsh-hippomemo/client': 'packages/dsh-hippomemo/lib/client.js',
   'dsh-connector-github-ui/embed': 'packages/dsh-github-ui/lib/embed.cjs',
   'dsh-connector-npm-ui/embed': 'packages/dsh-npm-ui/lib/embed.cjs',
   'dsh-spark-finance-client/embed': 'packages/dsh-finance-client/lib/embed.cjs',
@@ -77,7 +77,12 @@ const SOURCE_ALIASES = {
   'dsh-spark-plugin-kit/client': 'packages/dsh-plugin-kit/src/client/index.ts',
   // ui-kit 的 src/styles/tokens.mjs 是构建期生成的，源码口径仍指向 dist。
   'dsh-ui-kit': 'packages/dsh-ui-kit/dist/index.js',
+  // 源码口径下 client 入口直接吃 src（无需 ModuleLoader 壳）。
+  'dsh-spark-dock/client': 'packages/dsh-spark-dock/src/client/index.ts',
   'dsh-connector-npm-ui/client': 'packages/dsh-npm-ui/src/client/index.ts',
+  'dsh-connector-github-ui/client': 'packages/dsh-github-ui/src/client/index.ts',
+  'dsh-spark-finance-client/client': 'packages/dsh-finance-client/src/client/index.ts',
+  'dsh-hippomemo/client': 'packages/dsh-hippomemo/src/client/index.ts',
   'dsh-connector-github-ui/embed': 'packages/dsh-github-ui/src/client/embed.ts',
   'dsh-connector-npm-ui/embed': 'packages/dsh-npm-ui/src/client/embed.ts',
   'dsh-spark-finance-client/embed': 'packages/dsh-finance-client/src/client/embed.ts',
@@ -127,8 +132,15 @@ const cssModulesPlugin = () => ({
  * client-modules 加载，产物形如 `window.__ModuleLoader__.load({ id, factory })`。
  * 预览没有 loader，所以在虚拟模块里执行产物文本、接住 load 调用、用 react 真模块
  * 喂 factory，再把 exports 转成 ESM 再导出 —— 这样预览吃到的就是**真产物**。
+ * dock 也走同一条路径（它自己的 client 入口在预览里被真 apply）。
  */
-const MODULE_LOADER_ENTRIES = new Set(['dsh-connector-npm-ui/client'])
+const MODULE_LOADER_ENTRIES = new Set([
+  'dsh-spark-dock/client',
+  'dsh-connector-github-ui/client',
+  'dsh-connector-npm-ui/client',
+  'dsh-spark-finance-client/client',
+  'dsh-hippomemo/client',
+])
 
 const clientBundleShim = () => ({
   name: 'client-bundle-shim',

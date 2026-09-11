@@ -25,8 +25,8 @@ const ALIASES = {
   'dsh-spark-wire': 'packages/dsh-spark-wire/src/index.ts',
   'dsh-spark-dock/DockOverlay': 'packages/dsh-spark-dock/src/client/DockOverlay.tsx',
   'dsh-spark-dock/style': 'packages/dsh-spark-dock/src/client/style.ts',
-  // ADR-003：docker 里的 npm 走真插件路径（自己的 client apply 自注册 dock 模块）；
-  // 组件级单渲染画布与 Node 冒烟仍用 embed 产物（迁移完成后一起删）。
+  // Node 冒烟只编译 mock/plugins.ts + DockOverlay + embed 库形态（组件级单渲染画布同源）；
+  // Dock 画布的真 client `apply()` 路径由预览服务器（server.mjs 的 alias + 剥壳）承担。
   'dsh-connector-npm-ui/client': 'packages/dsh-npm-ui/src/client/index.ts',
   'dsh-connector-npm-ui/embed': 'packages/dsh-npm-ui/lib/embed.cjs',
   'dsh-connector-github-ui/embed': 'packages/dsh-github-ui/lib/embed.cjs',

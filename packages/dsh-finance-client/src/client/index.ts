@@ -1,11 +1,9 @@
 /**
- * Finance audit plugin, browser half. Registers the finance dictionaries and
- * mounts the generated finance Remote into the web client shell.
+ * Finance audit plugin, browser half: dictionaries + finance Remote + dock module.
  *
- * 入口退位（2026-09）：设置页入口（dashboard + 连接/同步/provider 配置卡）
- * 已完全由 dsh-spark-dock 悬浮球内嵌（dock import 本包 ./embed 的
- * FinanceCard 并自行 mount remote + bind settingsScope）——本入口只负责注册
- * 字典 + 把 remote 命名空间挂进 shell，不注册任何插槽。
+ * ADR-003（2026-09-11）：功能 UI 不再由 dock 静态 import 本包的 embed 产物，
+ * 而是本入口自己装配注入面（`settingsScope('finance')` + 两个 controller）后
+ * 注册进 dock 声明的 `spark.dock.module` 子槽。
  */
 
 import type { ClientContext } from 'dsh-spark-plugin-kit/client'
@@ -15,6 +13,7 @@ import type {} from 'dsh-spark-finance/remote'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import { en, zh, type FinanceKey } from './locales.ts'
+import { startFinanceDockModule, type FinanceDockInject } from './FinanceDockModule.tsx'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -25,11 +24,11 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** Dictionary namespace owned by this plugin. */
 const NS = 'settings.finance'
 
-/** Required client services: locale dictionaries + remote $mount. */
-export const inject = ['locale', 'remote'] as const
+/** Required client services: locale dictionaries + remote + settingsScope + slots. */
+export const inject = ['locale', 'remote', 'settingsScope', 'slots'] as const
 
 /**
- * Mount the finance Remote and register dictionaries.
+ * Mount the finance Remote, register dictionaries, contribute the dock module.
  */
 export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   // 0.1.2 locale.register 按语言逐条注册。
@@ -39,9 +38,10 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
     return () => { offZh(); offEn() }
   }, 'ui-finance: dictionaries')
 
-  // Keep the finance Remote namespace mounted in the shell; the dock embed
-  // mounts its own, duplicate $mount of the same contribution is tolerated.
+  // Keep the finance Remote namespace mounted in the shell (once), then register.
   const disposeRemote = await ctx.remote.$mount(financeRemote)
+  const injected: FinanceDockInject = startFinanceDockModule(ctx)
+  if ('failed' in injected) console.warn('[dsh-spark-finance-client] dock 模块以失败态注册（remote.finance 不可用）')
 
   return async () => {
     await disposeRemote()
