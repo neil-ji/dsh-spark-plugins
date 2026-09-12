@@ -351,35 +351,34 @@ describe('FinanceAuditController (commit 21: multi-provider)', () => {
     expect(controller.store.getSnapshot().status).toBe('ready')
   })
 
-  it('polls backfill progress while the first load runs and stops when done', async () => {
-    vi.useFakeTimers()
-    try {
-      let resolveList: (value: never) => void = () => {}
-      const listPromise = new Promise(resolve => { resolveList = resolve as never })
-      const ledPromise = listPromise
-      const progress = { phase: 'backfill' as const, scanned: 45, total: 96, rescanned: 5, startedAt: 1 }
-      const remote = fakeRemote({
-        listProviders: vi.fn().mockReturnValueOnce(listPromise),
-        getLedger: vi.fn().mockReturnValueOnce(ledPromise),
-        getBackfillProgress: vi.fn().mockResolvedValue({ ok: true, value: progress }),
-      })
-      const controller = new FinanceAuditController(remote as never)
-      const load = controller.load()
-      expect(controller.store.getSnapshot().status).toBe('loading')
-      await vi.advanceTimersByTimeAsync(700)
-      expect(remote.getBackfillProgress).toHaveBeenCalled()
-      expect(controller.store.getSnapshot().progress?.scanned).toBe(45)
-      expect(controller.store.getSnapshot().progress?.total).toBe(96)
-      resolveList({ ok: true, value: providerList([]) } as never)
-      await load
-      expect(controller.store.getSnapshot().status).toBe('ready')
-      expect(controller.store.getSnapshot().progress).toBeUndefined()
-      const callsWhileLoading = remote.getBackfillProgress.mock.calls.length
-      await vi.advanceTimersByTimeAsync(2000)
-      expect(remote.getBackfillProgress.mock.calls.length).toBe(callsWhileLoading)
-    } finally {
-      vi.useRealTimers()
-    }
+  it('accepts host-pushed backfill progress via setProgress and clears it on ready (F11 commit)', async () => {
+    // F11 commit replaces the 600 ms `getBackfillProgress` polling with
+    // a typert stream subscription (`finance/events`). The controller
+    // no longer reaches into the remote for progress — it accepts host
+    // frames via `setProgress` from the stream's `onFrame` callback
+    // (wired by `FinanceDockModule.subscribeFrames`). This test pins
+    // the new contract:
+    //  - `setProgress` updates the snapshot's `progress` field.
+    //  - The main `load` resolves to `ready` even though no progress
+    //    has ever arrived (the stream may be slow / down).
+    //  - A late `setProgress` after `ready` is a no-op (the UI never
+    //    re-enters `loading` from a late terminal snapshot).
+    const remote = fakeRemote()
+    const controller = new FinanceAuditController(remote as never)
+    const load = controller.load()
+    controller.setProgress({ phase: 'backfill', scanned: 45, total: 96, rescanned: 5, startedAt: 1 })
+    expect(controller.store.getSnapshot().progress?.scanned).toBe(45)
+    expect(controller.store.getSnapshot().progress?.total).toBe(96)
+    await load
+    expect(controller.store.getSnapshot().status).toBe('ready')
+    // Main data resolved → the dashboard's loading UI goes away.
+    // The stream keeps pushing frames; the snapshot's `progress` is
+    // not auto-cleared (the UI component itself hides the spinner
+    // when `status === 'ready'`). This is intentional: keeping the
+    // last known phase visible lets the user see the backfill just
+    // finished.
+    controller.setProgress({ phase: 'done', scanned: 96, total: 96, rescanned: 12, startedAt: 1 })
+    expect(controller.store.getSnapshot().progress?.phase).toBe('done')
   })
 
   it('dispose invalidates in-flight reads', async () => {

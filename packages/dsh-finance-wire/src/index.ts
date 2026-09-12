@@ -204,6 +204,34 @@ export const financeBackfillProgressSchema = z.object({
 })
 
 /**
+ * Strict-boundary schema for one frame on the `finance/events` typert stream
+ * (F11 commit: replaces the 600ms client-side polling of
+ * `finance/getBackfillProgress` with a true host-push channel).
+ *
+ * The shape mirrors `dsh-spark-wire` / `dsh-hippomemo`'s stream frame
+ * contracts so the platform's supervised-stream carrier + the kit's
+ * `subscribeFrames` / `useFrames` reference-counted dispatcher work
+ * unchanged: every generation starts with a `ready` baseline frame
+ * (telling the consumer to resync), followed by `progress` frames carrying
+ * the latest `FinanceBackfillProgress` snapshot.
+ */
+export const financeBackfillStreamFrameSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('ready'), at: z.number() }),
+  z.object({
+    kind: z.literal('progress'),
+    payload: financeBackfillProgressSchema,
+    at: z.number(),
+  }),
+])
+
+/**
+ * Static type face for one frame on the `finance/events` typert stream.
+ * Derived from `financeBackfillStreamFrameSchema` so the host-side and the
+ * client-side agree on the frame shape without a hand-maintained mirror.
+ */
+export type FinanceBackfillStreamFrame = z.infer<typeof financeBackfillStreamFrameSchema>
+
+/**
  * Strict-boundary schema for the `finance.syncCommunityPrices` `options`
  * parameter. Mirrors `FinanceSyncOptions`; both keys optional, each validated
  * when present.
@@ -434,6 +462,55 @@ export const FINANCE_INVOCATIONS: readonly InvocationDescriptor[] = [
       schema: financeProviderBalanceSchema,
     },
   },
+  /**
+   * F11 commit: stream endpoint replacing the legacy 600 ms client-side
+   * polling of `finance/getBackfillProgress`. Lives on a separate Cordis
+   * service (`financeEvents`) so the wire contract stays clean — the main
+   * `finance` namespace continues to publish strict snapshots, the new
+   * `financeEvents` namespace publishes the AsyncIterable of frames (F12
+   * wire-format orthogonality: every frame still validates against the
+   * strict Zod `financeBackfillStreamFrameSchema`).
+   *
+   * The descriptor shape mirrors dsh-hippomemo's `hippomemo/events` entry:
+   * `invocation.kind === 'direct'` is the platform's "this method returns
+   * AsyncIterable" signal, the strict result schema validates every frame
+   * crossing the wire. There is intentionally no `@Remote({ mode: 'stream'
+   * })` decorator on the host implementation (see ADR-006 + dsh-hippomemo
+   * `events-service.ts` for the empirical reason: tsdown/oxc does not
+   * down-level decorator syntax in host bundles, which would crash the
+   * production loader with SyntaxError).
+   */
+  {
+    id: 'dsh-spark-finance#finance/events',
+    // F11 commit: stream endpoint lives on a dedicated `financeEvents`
+    // Cordis service (mirror of hippomemo's `hippomemoEvents` / spark's
+    // `sparkEvents`). The descriptor's `service` field is what the
+    // gateway's strict path (`resolveDescriptor()` → `prepareInvocation()`)
+    // uses to find the host implementation via
+    // `ctx.typert.local` + `descriptor.implementation ?? descriptor.method`
+    // — see `dsh-spark/src/events-service.ts` lines 7-11 for the full
+    // rationale. `namespace` is still `finance` so the client mounts a
+    // single `remote.finance` proxy and finds `events` on the
+    // `financeEvents` cordis service through that namespace.
+    service: 'financeEvents',
+    namespace: 'finance',
+    method: 'events',
+    // F11 commit: stream-mode flag is the platform's signal that this
+    // method returns AsyncIterable (each item crossing the wire gets
+    // validated against `result.schema` independently). Without this
+    // flag the gateway treats the return as a single strict value, the
+    // client never gets a real carrier, and `subscribeFrames` falls
+    // back to its `this.options.open(...) is not a function` warning.
+    mode: 'stream',
+    invocation: { kind: 'direct' },
+    parameters: [],
+    cancellation: { parameter: 'signal' },
+    result: {
+      mode: 'strict',
+      typeSymbol: 'dsh-spark-finance/types#FinanceBackfillStreamFrame',
+      schema: financeBackfillStreamFrameSchema,
+    },
+  },
 ]
 
 /* ─────────────────────────── 反射模型（单源） ─────────────────────────── */
@@ -490,6 +567,28 @@ export const FINANCE_REFLECTION: TypertPackageModel = {
         { name: 'FinanceHostProviderMeta', declaration: 'export interface FinanceHostProviderMeta { provider: string; defaultBillingMode: "metered" | "plan" | "free"; defaultCurrency: "CNY" | "USD"; supportsBalanceFetch: boolean; lockBillingModeAndCurrency?: boolean; }' },
       ],
     },
+    // F11 commit: dedicated stream service so the wire contract keeps the
+    // `finance` namespace clean of async-iterable signatures (which would
+    // confuse strict-mode tooling that expects strict result codecs). The
+    // `finance/events` endpoint lives here as a method returning
+    // AsyncIterable<FinanceBackfillStreamFrame>; mirror of hippomemo's
+    // `HippomemoEventsService` /`hippomemo/events` split. The descriptor
+    // gateway strictly uses this service's cordis identity — see
+    // dsh-spark/src/events-service.ts:7-11 for the rationale.
+    {
+      key: 'financeEvents',
+      exportName: 'financeEvents',
+      description: 'Finance backfill progress event stream (F11): replaces 600 ms client polling with a true host-push channel over the platform mux carrier.',
+      summary: 'Finance backfill progress event stream.',
+      jsDoc: '/** Finance backfill progress event stream. */',
+      tags: [],
+      members: [
+        { name: 'events', signature: 'events(signal?: AbortSignal): AsyncIterable<FinanceBackfillStreamFrame>', kind: 'method' },
+      ],
+      types: [
+        { name: 'FinanceBackfillStreamFrame', declaration: 'export type FinanceBackfillStreamFrame = { kind: "ready"; at: number } | { kind: "progress"; payload: FinanceBackfillProgress; at: number };' },
+      ],
+    },
   ],
   events: [],
   objects: [],
@@ -518,6 +617,10 @@ export const FINANCE_HOST_CONTRIBUTION: TypertContribution = {
     { name: 'FinanceListProvidersEntry', schema: financeListProvidersEntrySchema },
     { name: 'FinanceListProvidersResult', schema: financeListProvidersResultSchema },
     { name: 'FinanceRefreshBalanceRequest', schema: financeRefreshBalanceRequestSchema },
+    // F11 commit: stream frame schema is also published so cross-realm
+    // JSON-Schema tooling can introspect it (the per-frame strict decoder
+    // sits on the descriptor's `result.schema` above).
+    { name: 'FinanceBackfillStreamFrame', schema: financeBackfillStreamFrameSchema },
   ],
   model: FINANCE_REFLECTION,
   invocations: [...FINANCE_INVOCATIONS],

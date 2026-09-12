@@ -12,14 +12,17 @@ import type { ClientContext } from 'dsh-spark-plugin-kit/client'
 import {
   bindSnapshotSelector,
   registerDockModule,
+  subscribeFrames,
   type DockModuleOwnerProps,
   type SnapshotSelectorHook,
+  type StreamRemote,
 } from 'dsh-spark-plugin-kit/client'
 import { IconDollar } from 'dsh-ui-kit'
 import { FinanceCard, type FinanceCardInjected } from './FinanceCard.tsx'
 import { FinanceAuditController, type FinanceAuditState } from './controller.ts'
 import type { FinanceAuditInjected } from './FinanceAuditSection.tsx'
 import type { ClientRemote } from '@deepseek-ai/dsh-api-remotes/client'
+import type { FinanceBackfillStreamFrame } from 'dsh-spark-finance/types'
 import { FinanceCardController, type FinanceRemote } from './FinanceCardController.ts'
 import type { FinanceKey } from './locales.ts'
 
@@ -34,6 +37,37 @@ export interface FinanceInjectedFailed {
 export type FinanceDockInject = FinanceInjected | FinanceInjectedFailed
 
 const isReady = (injected: FinanceDockInject): injected is FinanceInjected => (injected as FinanceInjectedFailed).failed !== true
+
+/**
+ * 客户端侧的 finance 事件通道（`remote.finance.events()` 的客户端面）。
+ *
+ * 平台的两条规则（真宿主验收实测，与 dsh-hippomemo / dsh-spark 完全一致）：
+ *
+ *  1. `remote.finance` 是本包 `$mount` 之后才存在的命名空间服务，**不能写
+ *     进 inject**（会死锁），只能 `ctx.reflect.get('remote.finance')`。
+ *  2. `$stream` 在 `ctx.remote` 上，不需要命名空间。
+ *
+ * 所以下方的 `financeChannelOf` 一次组装 `{ $stream 拥有者 + 命名空间 }`
+ * 两件东西，再交给 `subscribeFrames` 引用计数订阅 —— 同一个逻辑流名
+ * `finance/events` 只占一条物理载波。
+ */
+interface FinanceEventsFace {
+  events(signal?: AbortSignal): AsyncIterable<FinanceBackfillStreamFrame>
+}
+interface FinanceEventChannel {
+  readonly remote: StreamRemote
+  readonly events: FinanceEventsFace
+}
+/** 逻辑流名：与宿主方法同名，kit 内部用它做引用计数复用键。 */
+export const FINANCE_EVENTS_STREAM = 'finance/events'
+function financeChannelOf(
+  remote: StreamRemote,
+  reflect: { get(id: string): unknown },
+): FinanceEventChannel | null {
+  const namespace = reflect.get('remote.finance') as FinanceEventsFace | undefined
+  if (namespace === undefined || namespace === null || typeof namespace.events !== 'function') return null
+  return { remote, events: namespace }
+}
 
 /** 模块内容：dock 只在 variant === 'pane' 且本模块激活时渲染它。 */
 export function FinanceDockModule(props: FinanceDockInject & DockModuleOwnerProps): ReactNode {
@@ -53,6 +87,7 @@ export function FinanceDockModule(props: FinanceDockInject & DockModuleOwnerProp
  */
 export function startFinanceDockModule(ctx: ClientContext): FinanceDockInject {
   let injected: FinanceDockInject
+  let disposeStream: (() => void) | undefined
   try {
     const finance = ctx.reflect.get('remote.finance')
     if (finance === undefined) {
@@ -78,6 +113,26 @@ export function startFinanceDockModule(ctx: ClientContext): FinanceDockInject {
         useSnapshot,
       }
       injected = { card: { ...cardInjected, useSnapshot, t, refresh, refreshProvider } }
+
+      // F11 commit: subscribe to the `finance/events` typert stream so the
+      // dashboard's loading UI gets live backfill progress instead of
+      // polling `finance/getBackfillProgress` every 600 ms. The stream's
+      // `subscribeFrames` is reference-counted on the kit side, so even
+      // though we only have one consumer today, future panes that want
+      // the same notifications share the same physical carrier.
+      const channel = financeChannelOf(ctx.remote, ctx.reflect)
+      if (channel !== null) {
+        disposeStream = subscribeFrames<FinanceBackfillStreamFrame>(channel.remote, {
+          name: FINANCE_EVENTS_STREAM,
+          open: (signal) => channel.events.events(signal),
+          kinds: ['progress'],
+          onFrame: (frame) => {
+            if (frame.kind === 'progress') controller.setProgress(frame.payload)
+          },
+        })
+      } else {
+        console.warn('[dsh-spark-finance-client] finance 事件通道不可用，dashboard 将失去实时 backfill 进度')
+      }
     }
   } catch (error) {
     console.warn('[dsh-spark-finance-client] finance remote 装配失败:', error)
@@ -96,6 +151,9 @@ export function startFinanceDockModule(ctx: ClientContext): FinanceDockInject {
     inject: () => ready,
     Content: FinanceDockModule,
   })
-  ctx.effect(() => dispose, 'finance-client: dock module')
+  ctx.effect(() => () => {
+    disposeStream?.()
+    dispose()
+  }, 'finance-client: dock module + finance/events stream')
   return injected
 }

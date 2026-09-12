@@ -141,6 +141,9 @@ importers:
       dsh-spark-finance-wire:
         specifier: workspace:*
         version: link:../dsh-finance-wire
+      dsh-spark-plugin-kit:
+        specifier: workspace:*
+        version: link:../dsh-plugin-kit
       zod:
         specifier: ^4.4.3
         version: 4.4.3

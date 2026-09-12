@@ -305,6 +305,29 @@ function broadcastHippo(change) {
   }
 }
 
+// F11 commit: `/finance/events` SSE 通道对应客户端
+// `ctx.remote.finance.events()` 的物理载波。预览里没有真实 backfill，
+// 连接建立后立即推一条 `phase: 'done'` 的 progress 帧，模拟"首次打开
+// 且没有历史 session"的最简路径；产品契约要求客户端拿到 ready 基线帧
+// 之后能继续读到 progress 帧，所以即便空跑也要按格式 emit。
+const financeStreamClients = new Set()
+
+function subscribeFinanceStream(req, res) {
+  res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-store', connection: 'keep-alive' })
+  res.write(': connected\n\n')
+  financeStreamClients.add(res)
+  // 即时推一条 done 帧（无需 keepalive：客户端 ready 基线之后立刻收到）
+  const startedAt = Date.now()
+  try {
+    res.write('data: ' + JSON.stringify({
+      kind: 'progress',
+      payload: { phase: 'done', scanned: 0, total: 0, rescanned: 0, startedAt },
+      at: Date.now(),
+    }) + '\n\n')
+  } catch { /* closed before flush */ }
+  req.on('close', () => { financeStreamClients.delete(res) })
+}
+
 async function handleHippomemo(req, res, url) {
   const path = url.pathname
   const method = req.method ?? 'GET'
@@ -320,6 +343,9 @@ async function handleHippomemo(req, res, url) {
 
   if (path === '/hippomemo/events') {
     return subscribeHippoStream(req, res)
+  }
+  if (path === '/finance/events') {
+    return subscribeFinanceStream(req, res)
   }
   if (path === '/hippomemo/records' && method === 'GET') return envelope(hippo.list(url.searchParams))
   if (path === '/hippomemo/records' && method === 'POST') {

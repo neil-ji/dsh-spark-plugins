@@ -12,8 +12,10 @@ import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type { SparkStreamFrame } from 'dsh-spark-wire'
 import {
   createSupervisedStream,
+  financeEventsGeneration,
   hippomemoEventsGeneration,
   sparkEventsGeneration,
+  type FinanceBackfillStreamFrame,
   type HippomemoStreamFrame,
   type StreamOptions,
   type SupervisedStream,
@@ -140,6 +142,9 @@ export interface MockCtx {
     }
     hippomemo: {
       events: (signal?: AbortSignal) => AsyncIterable<HippomemoStreamFrame>
+    }
+    finance: {
+      events: (signal?: AbortSignal) => AsyncIterable<FinanceBackfillStreamFrame>
     }
     credentials: {
       describe: (refs: readonly string[]) => Promise<RemoteResult<Record<string, MockCredential>>>
@@ -320,6 +325,9 @@ export function createMockCtx(options: MockCtxOptions): MockCtx {
       },
       hippomemo: {
         events: (signal?: AbortSignal) => hippomemoEventsGeneration(signal ?? new AbortController().signal),
+      },
+      finance: {
+        events: (signal?: AbortSignal) => financeEventsGeneration(signal ?? new AbortController().signal),
       },
       credentials: {
         describe: async (refs) => {

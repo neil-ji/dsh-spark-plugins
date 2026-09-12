@@ -18,6 +18,7 @@ import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type {} from '@deepseek-ai/dsh-typert-registry'
 import { FINANCE_HOST_CONTRIBUTION } from 'dsh-spark-finance-wire'
+import { FinanceEventsService } from './events-service.ts'
 import { fetchFinanceBalance, FinanceBalanceError } from './balance.ts'
 import { backfillFinanceHourly, buildFinanceLedger } from './ledger.ts'
 import { financeUsageHourlyProjectionDefinition, financeUsageProjectionDefinition } from './projection.ts'
@@ -33,6 +34,7 @@ import { hostProviderMeta } from './provider-meta.ts'
 import { HOST_KNOWN_PROVIDER_META } from './provider-meta.ts'
 import type {
   FinanceBackfillProgress,
+  FinanceBackfillSink,
   FinanceBalanceView,
   FinanceCommunitySyncResult,
   FinanceConfig,
@@ -230,6 +232,8 @@ export class FinanceService extends TypertRemoteService {
   private hourlyBackfill: Promise<void> | undefined
   /** Live progress of the running backfill, polled by the loading UI. */
   private backfillProgress: FinanceBackfillProgress | undefined
+  /** F11 commit: dedicated stream service for `finance.events()`. */
+  private readonly eventsService: FinanceEventsService | undefined
   /**
    * Composition-layer `prices` captured at registration: the cordis.patch.yml
    * defaults the host installed (`FinanceService.Config`'s `entry`). Read by
@@ -294,6 +298,13 @@ export class FinanceService extends TypertRemoteService {
       projectionCtx.sessionProjections.register(financeUsageProjectionDefinition)
       projectionCtx.sessionProjections.register(financeUsageHourlyProjectionDefinition)
     })
+
+    // F11 commit: dedicated stream service for `finance.events()`. Cordis
+    // key `financeEvents`, typert namespace `finance` (so client mounts a
+    // single `remote.finance` proxy and the gateway can find `events` on
+    // the `financeEvents` cordis identity — see dsh-spark / dsh-hippomemo
+    // `events-service.ts` for the empirical pattern).
+    this.eventsService = new FinanceEventsService(ctx, () => this.backfillProgress)
   }
 
   /**
@@ -693,14 +704,36 @@ export class FinanceService extends TypertRemoteService {
   private ensureHourlyBackfilled(signal?: AbortSignal): Promise<void> {
     let pending = this.hourlyBackfill
     if (pending === undefined) {
-      const progress: FinanceBackfillProgress = { phase: 'backfill', scanned: 0, total: 0, rescanned: 0, startedAt: Date.now() }
+      // F11 commit: type the progress variable as the sink. The host
+      // mutates `phase` and the four counters in place, then `onProgress`
+      // projects the sink onto `FinanceBackfillProgress` (no `onProgress`
+      // ever crosses the wire) and emits it on the host bus.
+      const progress: FinanceBackfillSink = { phase: 'backfill', scanned: 0, total: 0, rescanned: 0, startedAt: Date.now() }
+      // F11 commit: every mutation of `progress` triggers `onProgress`,
+      // which re-emits the latest snapshot on the host bus.
+      // `events.ts` / `finance.events()` consumes this bus and bridges
+      // it into the client-side stream — replacing the previous 600 ms
+      // poll of `getBackfillProgress` with a true host-push channel.
+      progress.onProgress = (snapshot) => {
+        this.backfillProgress = snapshot
+        this.ctx.emit('finance/backfillProgress', snapshot)
+      }
+      // Emit the initial snapshot synchronously so any subscriber that
+      // registers AFTER `ensureHourlyBackfilled` already ran still sees
+      // the current state (the backfill may have completed during the
+      // 600 ms gap the old polling design had to live with).
       this.backfillProgress = progress
+      this.ctx.emit('finance/backfillProgress', progress)
       pending = backfillFinanceHourly(this.ctx, signal, progress)
         .then(
-          () => { progress.phase = 'done' },
+          () => {
+            progress.phase = 'done'
+            progress.onProgress?.(progress)
+          },
           (error: unknown) => {
             this.ctx.logger?.warn?.('finance: hourly backfill failed, sessions stay estimated', error)
             progress.phase = 'done'
+            progress.onProgress?.(progress)
           },
         )
         .finally(() => { this.hourlyBackfill = undefined })
@@ -709,10 +742,23 @@ export class FinanceService extends TypertRemoteService {
     return pending
   }
 
-  /** Live progress of the one-time hourly backfill for the loading UI. */
-  @Remote
-  async getBackfillProgress(): Promise<FinanceBackfillProgress> {
-    return this.backfillProgress ?? { phase: 'idle', scanned: 0, total: 0, rescanned: 0, startedAt: Date.now() }
+  /**
+   * Read-only accessor for the latest cached backfill snapshot. Consumed by
+   * the `finance/events` stream bridge (`events.ts`) so a subscriber that
+   * connects after the backfill has already settled still receives the
+   * terminal state in its first frame, instead of waiting for the next
+   * mutation that will never come.
+   *
+   * The legacy `getBackfillProgress` Remote endpoint is removed (F11
+   * commit): the 600 ms client-side polling loop that depended on it is
+   * replaced by `subscribeFrames(remote, { name: 'finance/events' })`
+   * driven by the host push channel above. Old client builds keep working
+   * against the new host for one minor — they just stop receiving live
+   * progress after the backfill finishes (the dashboard's `loading` state
+   * resolves via the ledger fetch itself).
+   */
+  currentBackfillProgress(): FinanceBackfillProgress | undefined {
+    return this.backfillProgress
   }
 
   /** Cold aggregate of every persisted session, cached for a short TTL. */

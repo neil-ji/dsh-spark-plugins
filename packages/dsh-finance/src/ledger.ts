@@ -541,13 +541,19 @@ export async function backfillFinanceHourly(
   progress?: FinanceBackfillSink,
 ): Promise<FinanceRescanResult> {
   const snapshots = await listPersistenceSnapshots(ctx, signal)
-  if (progress !== undefined) progress.total = snapshots.length
+  if (progress !== undefined) {
+    progress.total = snapshots.length
+    progress.onProgress?.(progress)
+  }
   let scanned = 0
   let rescanned = 0
   for (const snapshot of snapshots) {
     if (signal?.aborted) break
     scanned += 1
-    if (progress !== undefined) progress.scanned = scanned
+    if (progress !== undefined) {
+      progress.scanned = scanned
+      progress.onProgress?.(progress)
+    }
     const header = snapshot.header
     try {
       const inspection = await inspectPersistenceSession(ctx, String(header.id), signal)
@@ -555,7 +561,10 @@ export async function backfillFinanceHourly(
       if (cached === undefined || cached.values.financeUsageHourly === undefined) {
         ctx.sessionProjectionCache.coldSnapshot(inspection.meta, inspection.inheritedEventCount, inspection.events)
         rescanned += 1
-        if (progress !== undefined) progress.rescanned = rescanned
+        if (progress !== undefined) {
+          progress.rescanned = rescanned
+          progress.onProgress?.(progress)
+        }
       }
     } catch (error) {
       ctx.logger?.warn?.(`finance rescan: session ${String(header.id)} replay failed`, error)

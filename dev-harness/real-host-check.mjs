@@ -208,6 +208,23 @@ try {
       check(`模块「${label}」内容走子槽 pane 位且未失败`, paneState.len > 30 && paneState.failed !== true, JSON.stringify(paneState).slice(0, 240))
     }
 
+    // F11 commit: `finance/events` typert stream 端到端断言。F11‑① 把
+    // client 端 600ms 轮询改成 stream，平台机制是 `subscribeFrames(remote,
+    // { name: 'finance/events' })`，所以必须验证：
+    //  1. 财务 tab 已激活（subscribeFrames 已经被注册了）
+    //  2. console 无「finance 事件通道不可用」告警（订阅真的建立了）
+    //  3. 宿主注册面里 finance/events 端点存在（descriptor 没漏注册）
+    const tabsAfter = await evalJs(`Array.from(document.querySelectorAll('.dock-tab')).map((b) => b.getAttribute('aria-label'))`)
+    const financeIndex = Array.isArray(tabsAfter) ? tabsAfter.indexOf('财务') : -1
+    check('finance tab 在 dock 模块栏', financeIndex >= 0, JSON.stringify(tabsAfter))
+    if (financeIndex >= 0) {
+      await evalJs(`document.querySelectorAll('.dock-tab')[${financeIndex}].click()`)
+      await sleep(2000)
+      const financeWarnings = console_.filter((line) => /finance 事件通道不可用|finance.*already mounted/.test(line))
+      check('finance 事件通道无告警（subscribeFrames 真的建立了）', financeWarnings.length === 0, JSON.stringify(financeWarnings.slice(0, 2)))
+      // 强断言移到下面 typert 探针之后（`registered` 在那里才被赋值）。
+    }
+
     // 4) Typert 契约注册面：P5 之后 finance 用 `ctx.typert.register` 显式注册
     //    （包不再导出 `./typert`，平台 loader 不会替它注册）。网关在「没注册」时
     //    会退回 SRC 标记兜底，**面板照样渲染** —— 所以「功能没坏」证明不了注册发生。
@@ -225,8 +242,8 @@ try {
       const endpoints = registered.endpoints ?? []
       const financeEndpoints = endpoints.filter((endpoint) => endpoint.startsWith('finance/'))
       check(
-        'finance 的 8 条 Remote 定义由 ctx.typert.register 落地（非 SRC 兜底）',
-        financeEndpoints.length === 8,
+        'finance 的 9 条 Remote 定义由 ctx.typert.register 落地（非 SRC 兜底；F11-① 新增 finance/events）',
+        financeEndpoints.length === 9,
         JSON.stringify(financeEndpoints),
       )
       check(
@@ -241,10 +258,10 @@ try {
       // 就是「注册真的生效」的判据 —— 面板能渲染证明不了这一点。
       const descriptors = registered.descriptors ?? []
       const financeDescriptors = descriptors.filter((entry) => entry.endpoint.startsWith('finance/'))
-      const allStrict = financeDescriptors.length === 8
+      const allStrict = financeDescriptors.length === 9
         && financeDescriptors.every((entry) => entry.resultMode === 'strict')
       check(
-        'finance 的 8 条描述符都是 strict 模式（未退化到 SRC 的 src-json 兜底）',
+        'finance 的 9 条描述符都是 strict 模式（未退化到 SRC 的 src-json 兜底）',
         allStrict,
         JSON.stringify(financeDescriptors.map((entry) => entry.endpoint + ':' + entry.resultMode)),
       )
@@ -255,6 +272,17 @@ try {
         'descriptor.implementation 被按字面采用（≠ method 的实例存在，证明非仅诊断）',
         renamed !== undefined,
         renamed === undefined ? '(没有 implementation ≠ method 的描述符)' : JSON.stringify(renamed),
+      )
+      // F11 commit：finance/events 流端点要严格注册到 typert 注册面。
+      // 「面板能渲染」证明不了这一点（漏 register / SRC 兜底都会渲染）；
+      // 只有 descriptors 里有这条 strict 描述符才算落实。
+      const financeEvents = descriptors.find(
+        (entry) => entry.endpoint === 'finance/events',
+      )
+      check(
+        'finance/events 流端点已注册到 typert 注册面（非 SRC 兜底）',
+        financeEvents !== undefined && financeEvents.resultMode === 'strict',
+        financeEvents === undefined ? '(finance/events 缺失)' : JSON.stringify(financeEvents),
       )
     }
 

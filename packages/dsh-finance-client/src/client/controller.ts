@@ -98,34 +98,25 @@ export class FinanceAuditController {
     peaks: {},
   })
   private generation = 0
-  /** Polls getBackfillProgress while the first (backfilling) load runs. */
-  private progressTimer: ReturnType<typeof setInterval> | undefined
-
   constructor(private readonly remote: FinanceRemote) {}
 
-  private stopProgressPolling(): void {
-    if (this.progressTimer !== undefined) {
-      clearInterval(this.progressTimer)
-      this.progressTimer = undefined
-    }
-  }
-
-  private startProgressPolling(): void {
-    this.stopProgressPolling()
-    this.progressTimer = setInterval(() => { void this.pollBackfillProgress() }, 600)
-  }
-
-  private async pollBackfillProgress(): Promise<void> {
-    const generation = this.generation
-    try {
-      const result = await this.remote.getBackfillProgress()
-      if (generation !== this.generation) { this.stopProgressPolling(); return }
-      if (!result.ok) return
-      this.store.update(state => { state.progress = result.value })
-      if (result.value.phase === 'done' || result.value.phase === 'idle') this.stopProgressPolling()
-    } catch {
-      // Best-effort: a failed tick just skips until the next one.
-    }
+  /**
+   * Push the latest backfill progress snapshot into the store. F11 commit:
+   * the dashboard no longer polls `finance/getBackfillProgress` every 600 ms
+   * — instead, the dock module subscribes to the `finance/events` typert
+   * stream (via `subscribeFrames`) and calls this method on every
+   * `progress` frame. The store update is intentionally lenient: a frame
+   * that arrives AFTER the dashboard has already resolved its `loading`
+   * state (e.g. the backfill finished during the network gap) still lands
+   * harmlessly — the controller will overwrite the snapshot on the next
+   * legitimate state transition.
+   *
+   * `progress.phase === 'done'` is a one-shot transition; callers don't
+   * have to unsubscribe explicitly (the stream's `dispose()` is what
+   * really matters, owned by `FinanceDockModule`).
+   */
+  setProgress(progress: FinanceBackfillProgress): void {
+    this.store.update(state => { state.progress = progress })
   }
 
   /**
@@ -141,7 +132,13 @@ export class FinanceAuditController {
       state.error = null
       if (firstLoad) state.progress = undefined
     })
-    if (firstLoad) this.startProgressPolling()
+    // F11 commit: the legacy 600 ms `finance/getBackfillProgress` polling
+    // is gone. `FinanceDockModule` opens a `subscribeFrames` on the
+    // `finance/events` typert stream before invoking `load`, and calls
+    // `this.setProgress` on every `progress` frame. The first frame may
+    // already carry a terminal snapshot (the backfill may have finished
+    // while the client was offline), so we only `clear` it once the main
+    // data has resolved.
     try {
       const [listResult, ledgerResult] = await Promise.all([
         this.remote.listProviders(),
@@ -156,7 +153,6 @@ export class FinanceAuditController {
           state.status = 'error'
           state.error = listFailure ?? 'listProviders failed'
         })
-        this.stopProgressPolling()
         return
       }
       const ledgerFailure = remoteFailureOf(ledgerResult)
@@ -165,7 +161,6 @@ export class FinanceAuditController {
           state.status = 'error'
           state.error = ledgerFailure ?? 'getLedger failed'
         })
-        this.stopProgressPolling()
         return
       }
       this.store.update(state => {
@@ -182,7 +177,6 @@ export class FinanceAuditController {
         }
         state.peaks = peaks
       })
-      this.stopProgressPolling()
       this.autoFetchFlaggedProviders(listResult.value)
       this.refreshSyncStatus(generation)
     } catch (error) {
@@ -191,7 +185,6 @@ export class FinanceAuditController {
         state.status = 'error'
         state.error = messageOf(error)
       })
-      this.stopProgressPolling()
     }
   }
 
@@ -312,10 +305,13 @@ export class FinanceAuditController {
     }
   }
 
-  /** Invalidate in-flight reads and stop progress polling. */
+  /**
+   * Invalidate in-flight reads. F11 commit: there is no progress timer to
+   * stop anymore — the `finance/events` stream subscription is owned by
+   * `FinanceDockModule` and disposed alongside the dock registration.
+   */
   dispose(): void {
     this.generation += 1
-    this.stopProgressPolling()
   }
 
   /**

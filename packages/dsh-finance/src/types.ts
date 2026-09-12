@@ -7,6 +7,20 @@
  */
 
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
+import type { FinanceBackfillStreamFrame } from 'dsh-spark-finance-wire'
+// Re-export so the public `dsh-spark-finance/types` surface still carries
+// the wire-published frame type (downstream embedders don't have to know
+// about the wire package).
+export type { FinanceBackfillStreamFrame }
+// F11 commit: extend cordis Events so `ctx.emit('finance/backfillProgress', …)`
+// and `ctx.on('finance/backfillProgress', …)` are statically typed. Same
+// declaration shape as dsh-spark (`sparks/changed`), dsh-hippomemo
+// (`hippomemo/changed`), dsh-github and dsh-npm.
+declare module '@deepseek-ai/cordis' {
+  interface Events {
+    'finance/backfillProgress'(progress: FinanceBackfillProgress): void
+  }
+}
 
 /**
  * The finance Remote namespace, declared once for the whole plugin.
@@ -18,6 +32,11 @@ import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
  * cannot live in the dependency-free wire package.
  */
 declare module '@deepseek-ai/dsh-typert-protocol' {
+  // F11 commit: stream endpoint that replaces the 600 ms client polling of
+  // `finance/getBackfillProgress`. Lives on the `financeEvents` Cordis service
+  // (see dsh-spark-finance-wire / FINANCE_HOST_CONTRIBUTION); the descriptor
+  // declares it under the `finance` namespace so a consumer mounts one Remote
+  // and gets both snapshot RPCs and the live event stream from it.
   interface TypertRemoteNamespace$66696e616e6365 {
     getBalance: () => Promise<RemoteResult<FinanceBalanceView>>
     getLedger: () => Promise<RemoteResult<FinanceLedger>>
@@ -27,6 +46,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     getSyncStatus: () => Promise<RemoteResult<FinanceSyncStatus | null>>
     listProviders: () => Promise<RemoteResult<FinanceListProvidersResult>>
     refreshBalance: (request: FinanceRefreshBalanceRequest) => Promise<RemoteResult<FinanceProviderBalance>>
+    events: (signal?: AbortSignal) => AsyncIterable<FinanceBackfillStreamFrame>
   }
   interface TypertRemoteMap {
     'finance/getBalance': () => Promise<RemoteResult<FinanceBalanceView>>
@@ -37,6 +57,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'finance/getSyncStatus': () => Promise<RemoteResult<FinanceSyncStatus | null>>
     'finance/listProviders': () => Promise<RemoteResult<FinanceListProvidersResult>>
     'finance/refreshBalance': (request: FinanceRefreshBalanceRequest) => Promise<RemoteResult<FinanceProviderBalance>>
+    'finance/events': (signal?: AbortSignal) => AsyncIterable<FinanceBackfillStreamFrame>
   }
   interface TypertRemoteNamespaceMap {
     finance: TypertRemoteNamespace$66696e616e6365
@@ -638,18 +659,19 @@ export interface FinanceRescanResult {
   rescanned: number
 }
 
-/** Mutable progress sink updated while backfillFinanceHourly runs. */
-export interface FinanceBackfillSink {
-  total: number
-  scanned: number
-  rescanned: number
-}
-
 /**
- * Live progress of the first-open hourly backfill, polled by the dashboard's
- * loading state so the user sees how far the one-time replay has got.
+ * Mutable progress sink updated while backfillFinanceHourly runs. The host
+ * service constructs one with `phase: 'backfill'` and the four counters at
+ * zero, hands it to `backfillFinanceHourly(ctx, signal, sink)`, and listens
+ * to `onProgress` to re-emit the latest snapshot on the cordis bus.
+ *
+ * The `phase` and `startedAt` fields live on the sink too (not just the
+ * counters) because the host wants to mutate them atomically alongside the
+ * counters — a snapshot returned over the wire is the whole sink minus
+ * `onProgress`. `FinanceBackfillProgress` (the wire face) is therefore a
+ * `Pick<FinanceBackfillSink, ...>` over the published keys.
  */
-export interface FinanceBackfillProgress {
+export interface FinanceBackfillSink {
   /** idle: no backfill started; backfill: replaying logs; done: finished. */
   phase: 'idle' | 'backfill' | 'done'
   /** Sessions considered so far. */
@@ -659,7 +681,32 @@ export interface FinanceBackfillProgress {
   /** Sessions whose logs were replayed. */
   rescanned: number
   startedAt: number
+  /**
+   * Optional push hook fired after every mutation of the counters / phase.
+   * Wired by the host service so the live progress crosses the wire on
+   * the `finance/events` typert stream (F11 commit). The host function
+   * `ensureHourlyBackfilled` assigns an `onProgress` that re-emits the
+   * latest snapshot on the cordis bus — keeping `backfillFinanceHourly`
+   * itself pure (no `Context` plumbing inside a per-session replay loop).
+   * Mutating the fields still triggers the hook synchronously; consumers
+   * should not rely on relative ordering of the fields, only on the
+   * post-mutation snapshot being current.
+   */
+  onProgress?: (snapshot: FinanceBackfillProgress) => void
 }
+
+/**
+ * Live progress of the first-open hourly backfill, polled by the dashboard's
+ * loading state so the user sees how far the one-time replay has got.
+ *
+ * Strict wire face: `Pick<FinanceBackfillSink, ...>` over the four
+ * counters plus `phase` + `startedAt` (no `onProgress` ever crosses the
+ * wire). The host projects the sink onto this shape before emitting.
+ */
+export type FinanceBackfillProgress = Pick<
+  FinanceBackfillSink,
+  'phase' | 'scanned' | 'total' | 'rescanned' | 'startedAt'
+>
 
 /**
  * Optional inputs to `finance.syncCommunityPrices`: a provider allow-list and

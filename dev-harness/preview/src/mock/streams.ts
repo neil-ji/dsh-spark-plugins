@@ -17,11 +17,25 @@ import type { SparkStreamFrame } from 'dsh-spark-wire'
 
 /**
  * hippomemo 帧的结构镜像（该包不导出 wire 子路径；harness 只需要「能产出合规帧」，
- * 类型以插件侧 `dsh-hippomemo/src/wire.ts` 为真源）。
+ * 类型以插件侧 dsh-hippomemo/src/wire.ts 为真源）。
  */
 export type HippomemoStreamFrame =
   | { kind: 'ready'; at: number }
   | { kind: 'memory'; payload: { operation: 'put' | 'deleted'; id: string } }
+
+/**
+ * finance 帧的结构镜像（F11 commit）：契约在 dsh-spark-finance-wire 的
+ * financeBackfillStreamFrameSchema。harness 只需要产出符合 strict Zod
+ * 解码要求的帧（消费侧 subscribeFrames 会按 schema 校验），形状与
+ * 真宿主 events.ts / FinanceEventsService.events() 完全同形。
+ */
+export type FinanceBackfillStreamFrame =
+  | { kind: 'ready'; at: number }
+  | {
+      kind: 'progress'
+      payload: { phase: 'idle' | 'backfill' | 'done'; scanned: number; total: number; rescanned: number; startedAt: number }
+      at: number
+    }
 
 /** 一帧的监督包装（与平台 RemoteStreamItem 同形：value + accept）。 */
 export interface SupervisedItem<Item> {
@@ -157,11 +171,26 @@ export function sparkEventsGeneration(signal: AbortSignal): AsyncIterable<SparkS
 }
 
 /**
- * 一代 hippomemo 事件流（harness 的 `/hippomemo/events` 当载波）。
+ * 一代 hippomemo 事件流（harness 的 /hippomemo/events 当载波）。
  * @param signal - 世代取消。
  */
 export function hippomemoEventsGeneration(signal: AbortSignal): AsyncIterable<HippomemoStreamFrame> {
   return framesFromHarnessStreams<HippomemoStreamFrame>(signal, [
     { url: '/hippomemo/events', kind: 'memory' },
+  ])
+}
+
+/**
+ * 一代 finance 事件流（F11 commit）：harness 的 /finance/events 当载波。
+ *
+ * 预览里 finance backfill 不会真正重放历史日志，所以 server 端可以
+ * 在 SSE 通道建立后即时 emit 一条 done 帧（让消费方的 ready 基线帧
+ * 之后立即拿到 phase='done'，与真宿主「首次打开无 session」时的
+ * 实际行为一致）。
+ * @param signal - 世代取消。
+ */
+export function financeEventsGeneration(signal: AbortSignal): AsyncIterable<FinanceBackfillStreamFrame> {
+  return framesFromHarnessStreams<FinanceBackfillStreamFrame>(signal, [
+    { url: '/finance/events', kind: 'progress' },
   ])
 }
