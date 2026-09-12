@@ -26,6 +26,7 @@ import {
   findInjectGaps,
   findOrphanPackages,
   findSecondProducts,
+  findWindowBusUsage,
   halfOf,
   implementationLine,
   implementsMethod,
@@ -267,6 +268,32 @@ describe('单产物（P4）', () => {
     const { violations, checked } = findSecondProducts(ROOT)
     expect(violations).toEqual([])
     expect(checked).toBeGreaterThanOrEqual(15)
+  })
+})
+
+describe('window 事件当页内总线（F11）', () => {
+  it('识别 dsh-* 自定义事件的发送与订阅', () => {
+    const source = [
+      "window.dispatchEvent(new CustomEvent('dsh-finance-open-config'))",
+      "window.addEventListener('dsh-finance-dsh-override-changed', handler)",
+      "window.removeEventListener('dsh-finance-dsh-override-changed', handler)",
+      // 浏览器原生事件不在管辖范围
+      "window.addEventListener('resize', onResize)",
+      "document.addEventListener('keydown', onKey)",
+      // 注释里的示例不算（stripComments 先剥掉）
+      "// window.dispatchEvent(new CustomEvent('dsh-not-real'))",
+    ].join('\n')
+    const stripped = stripComments(source)
+    const names = [...stripped.matchAll(/new CustomEvent\(\s*['"](dsh-[^'"]+)['"]/g)].map((m) => m[1])
+    expect(names).toEqual(['dsh-finance-open-config'])
+    const subscribed = [...stripped.matchAll(/(?:add|remove)EventListener\(\s*['"](dsh-[^'"]+)['"]/g)].map((m) => m[1])
+    expect(subscribed).toEqual(['dsh-finance-dsh-override-changed', 'dsh-finance-dsh-override-changed'])
+  })
+
+  it('真实仓库：没有包用 window 自定义事件当页内总线', () => {
+    const { violations, files } = findWindowBusUsage(ROOT)
+    expect(violations).toEqual([])
+    expect(files).toBeGreaterThan(50)
   })
 })
 

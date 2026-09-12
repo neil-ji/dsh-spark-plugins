@@ -39,6 +39,11 @@ export interface FinanceAuditInjected {
 
 export interface FinanceAuditSectionProps extends SettingsSectionOwnerProps, FinanceAuditInjected {
   /**
+   * Jump to the provider-config tab (F11: a prop, not a `window` event — the
+   * tab state lives in an ancestor, `FinanceCard`).
+   */
+  onOpenProviderConfig: () => void
+  /**
    * 嵌进别的宿主（dock 面板）时置 true：**不渲染面板自己的大标题 + 副标题**。
    *
    * dock 模块头已经给出「财务 Finance / 余额、Token 用量与成本总览」，这里再画一遍就是
@@ -478,18 +483,6 @@ export function FinanceAuditSection(props: FinanceAuditSectionProps) {
     return () => clearInterval(timer)
   }, [refresh])
 
-  // Cross-controller signal from the plugin config card's Provider list
-  // (ProviderListView dispatches `dsh-finance-dsh-override-changed` on save/
-  // clear). Refreshing here closes the loop so toggling autoFetch on a
-  // previously-unfetchable provider immediately turns the row green and the
-  // balance re-fetches, instead of waiting for the next 30-min timer or a
-  // manual 刷新 click.
-  useEffect(() => {
-    const handler = (): void => { refresh() }
-    window.addEventListener('dsh-finance-dsh-override-changed', handler)
-    return () => window.removeEventListener('dsh-finance-dsh-override-changed', handler)
-  }, [refresh])
-
   // Surface a stale community price table as a header hint so a silent
   // auto-sync failure doesn't go unnoticed. We only render the hint when
   // the host reports an appliedAt timestamp older than 24h (the auto-sync
@@ -554,11 +547,12 @@ export function FinanceAuditSection(props: FinanceAuditSectionProps) {
       refresh={refresh}
       refreshProvider={refreshProvider}
       generatedAt={state.ledger?.generatedAt}
+      onOpenProviderConfig={props.onOpenProviderConfig}
     />
   )
 }
 
-function FinanceReady({ providerList, ledger, peaks, staleSync, embedded, t, refresh, refreshProvider, generatedAt }: {
+function FinanceReady({ providerList, ledger, peaks, staleSync, embedded, t, refresh, refreshProvider, generatedAt, onOpenProviderConfig }: {
   providerList: FinanceListProvidersResult
   ledger: FinanceLedger
   peaks: Readonly<Record<string, StoredBalancePeak>>
@@ -570,6 +564,8 @@ function FinanceReady({ providerList, ledger, peaks, staleSync, embedded, t, ref
   refreshProvider: (provider: string) => Promise<void>
   /** Last ledger build time (ms epoch); passed down for the head's "last updated N min ago" hint. */
   generatedAt: number | undefined
+  /** Jump to the provider-config tab (F11: prop, not a `window` event). */
+  onOpenProviderConfig: () => void
 }) {
   const [refreshingProviders, setRefreshingProviders] = useState<Record<string, boolean>>({})
   const handleRefreshProvider = useCallback((provider: string) => {
@@ -848,7 +844,12 @@ function FinanceReady({ providerList, ledger, peaks, staleSync, embedded, t, ref
                 <span>{ledger.byModel.length} {t('modelCountUnit')}</span>
                 <span>{t('trendTotal')} {formatMicros(ledger.totalCostMicros, ledger.currency)}</span>
               </div>
-              <ByModelTable rows={ledger.byModel} currency={ledger.currency} t={t} />
+              <ByModelTable
+                rows={ledger.byModel}
+                currency={ledger.currency}
+                t={t}
+                onOpenConfig={onOpenProviderConfig}
+              />
             </section>
           ) : null}
           {charts.byWorkspace ? (

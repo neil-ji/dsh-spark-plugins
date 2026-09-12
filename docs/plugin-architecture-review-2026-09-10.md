@@ -91,9 +91,9 @@
 | F6 | **一个插件两份客户端产物、两次挂载**（**已关闭**：2026-09-11 P4 —— `embed.cjs` 第二产物与 `./embed` 导出/构建已删除，每包只剩 `lib/client.js`；各包自己的 `apply()` 单次 `$mount`，重复挂载错误消失；`src/client/embed.ts` 仅作组件级预览画布的源码 barrel）：`client.js`（平台 loader）与 `embed.cjs`（给 dock 用）并存；同一 remote 命名空间被两个 bundle 各 `$mount` 一次，「容忍」而非归属 | P1 | `dock/src/client/index.ts:9-17`、`GithubEmbed.tsx:39` vs `dsh-github-ui/src/client/index.ts:48` |
 | F7 | **播报/文案策略写在壳里**（**已关闭**：2026-09-12 —— 播报总线上收 `dsh-spark-plugin-kit/client` 的 `announcements.ts`，文案与情绪由模块自己 `publishAnnouncement`；dock 的 fairy 层退化为纯消费者（只订阅总线画气泡），并有静态闸门禁止 fairy 层 import 领域契约 / 插件 UI）：`fairyEvents.ts` 用字符串匹配把 spark 的业务事件翻成文案与情绪，且有 4s 文案级去重 | P1 | `dock/src/client/fairy/fairyEvents.ts:32-51` |
 | F8 | **退役世代仍参与构建**（**已关闭**：2026-09-11 包连同 kit 死代码一并删除）：`dsh-spark-ui@0.1.4` 还在 workspace（自带 3 条 EventSource + 完整 spark 面板），已从 `plugin-registry.json` 摘除但仍是 `packages/*` 成员 | P2 | `pnpm-workspace.yaml:1-2`、`plugin-registry.json`（无此项） |
-| F9 | **连接预算被当成局部问题**（**部分关闭**：P0/P1 把 refcount 订阅运行时从 app 包上收 `dsh-spark-plugin-kit/client`，连接数收敛到 1 条 WS；**遗留**：`dev-harness/preview/src/mock/snapshot.ts` 仍是 `bindSnapshotSelector` 的副本，kit 改实现它不跟）：6 条 HTTP/1.1 长连接上限是全局约束，却由一个 app 包内的注册表局部缓解；harness 还复制了客户端逻辑（`bindSnapshotSelector` 8 行副本） | P2 | `docs/LOCAL-DEV-HARNESS.md:286-289`、`streams.ts` 注释 |
+| F9 | **连接预算被当成局部问题**（**已关闭**：P0/P1 把 refcount 订阅运行时从 app 包上收 `dsh-spark-plugin-kit/client`，连接数收敛到 1 条 WS；2026-09-13 删掉 harness 里那份 `bindSnapshotSelector` 副本 —— `dev-harness/preview/src/mock/snapshot.ts` 改为从 kit 再导出，副本赖以存在的两条理由（embed.cjs 第二产物、预览没 alias kit）在 P4 与预览别名落地后都已失效）：6 条 HTTP/1.1 长连接上限是全局约束，却由一个 app 包内的注册表局部缓解；harness 还复制了客户端逻辑（`bindSnapshotSelector` 8 行副本） | P2 | `docs/LOCAL-DEV-HARNESS.md:286-289`、`streams.ts` 注释 |
 | F10 | **同一件事三套宿主注册风格**（**已关闭**：2026-09-13 P5 —— finance 改为新建 `dsh-spark-finance-wire` 单源 + `ctx.typert.register(FINANCE_HOST_CONTRIBUTION)`，与 github/npm 同形；两份手抄 manifest 与它们漂移的 `sourceLocation` 一并删除）：spark/hippomemo 手写 HTTP 路由；github/npm 用声明式 `ctx.typert.register(HOST_CONTRIBUTION)`；**finance 完全没有 register**，改为手抄 `typert.host.ts` / `typert.remote-client.ts` 两份「像生成器产物」的 manifest —— 且 `sourceLocation` 行号**已经漂移**（写成 `index.ts:96`，实际 `:333`；`listProviders`/`refreshBalance` 都写 `:999`） | P1 | `dsh-github/src/index.ts:39`、`dsh-npm/src/index.ts:40`、`dsh-finance/src/index.ts`（无 `typert.register`，grep 零命中）、`dsh-finance/src/typert.host.ts:95` |
-| F11 | **刷新策略四套并存**（**部分关闭**：P0/P1 已移除 SSE 推送腿，四条里少了最重的一条；**遗留**：600ms 轮询 `controller.ts:115` + 30min 定时器 `FinanceAuditSection.tsx:477` + 页内 `window` 自定义事件 `dsh-finance-dsh-override-changed` / `dsh-finance-open-config` —— 平台侧 `$stream` 已可用，前两条可改推送，第三条属页内组件通信、可下沉 kit 的 SnapshotStore）：SSE 推送（spark/hippomemo）、平台转发事件（`credentials/reference-updated`、`settings/document-updated`）、**600ms 轮询**（finance backfill）+ 30min 定时器、以及**页内 `window` 自定义事件**当变更总线（`dsh-finance-dsh-override-changed`） | P1 | `dsh-finance-client/src/client/controller.ts:117`、`FinanceAuditSection.tsx:468,478-481` |
+| F11 | **刷新策略四套并存**（**部分关闭**：① SSE 推送腿已由 P0/P1 移除；② **页内 `window` 自定义事件总线已消除**（2026-09-13：`dsh-finance-dsh-override-changed` / `dsh-finance-open-config` 换成 props 直连，并加闸门第 ⑦ 查禁止回潮）；**遗留两条定时器**：600ms 轮询 `controller.ts:115`、30min 定时器 `FinanceAuditSection.tsx:477` —— 前者计划改成 `finance/backfillProgress` typert stream 端点（宿主 `FinanceBackfillSink` 加 `onProgress` 通知 → `ctx.emit` → 客户端走 kit `subscribeFrames`），后者是「滚动 24h 窗口自己会过期」的兜底，改完前者的收益更明确）：SSE 推送（spark/hippomemo）、平台转发事件（`credentials/reference-updated`、`settings/document-updated`）、**600ms 轮询**（finance backfill）+ 30min 定时器、以及**页内 `window` 自定义事件**当变更总线（`dsh-finance-dsh-override-changed`） | P1 | `dsh-finance-client/src/client/controller.ts:117`、`FinanceAuditSection.tsx:468,478-481` |
 | F12 | **错误语义三套**（**已关闭**：2026-09-13 —— 约定与实现单处化到 `dsh-spark-plugin-kit/client` 的 `remote-result.ts`（`messageOf`/`remoteFailureOf`/`unwrapRemote` + 五条约定）；三家 store 改吃同一处实现；npm `token.status` 的**静默吞**修掉，失败落 `tokenError` 并在页面提示）：github 把失败抛成 `status:'error'`；npm 在成功值里再嵌一层 `ok:false`，且 `token.status` 失败被静默吞掉（UI 显示「未配置」而非错误）；finance 同时用 envelope、slot `status`、结果 `ok:false` 三种表达 | P2 | `github-ui/src/client/store.ts:77-92`、`npm-ui/src/client/store.ts:99-103,120-123`、`dsh-finance/src/typert.host.ts:51,72` |
 | F13 | **connector 三家约 60% 同构，契约靠手抄**（**已关闭**：2026-09-12 F13-1 —— github-ui 与 npm-ui 两份凭据/加载 store 的逐字重复已上收 `dsh-spark-plugin-kit/client`（`credentials.ts` 的 `CredentialToken` + `page.ts` 的 `PageLoader`，含竞态守卫单测 11 项），两家 store 158/152 行 → 106/100 行；2026-09-13 P5 —— finance 的 8 方法 manifest 收进 `dsh-spark-finance-wire` 单源，host 改用 `ctx.typert.register`，三块 wire 的 descriptor/contribution 样板从此每份只存在一处）：两份 ~150 行凭据/加载 store 有 ~90 行逐字相同；三个 wire 各自手写 ~80 行 descriptor/contribution 样板；finance 把同一份 8 方法 manifest 维护两份（各 ~145 行）；plugin-kit 在 connector 半边**只被当作类型**使用 | P2 | `github-ui/src/client/store.ts:16-30,45-47,63-93,110-131` vs `npm-ui/src/client/store.ts:22-36,55-57,74-112,130-151`；`dsh-finance/src/typert.host.ts:81-225` vs `typert.remote-client.ts:68-212` |
 | F14 | **zero-dsh 预览比真宿主更宽松**（**已关闭**：2026-09-11 W4 落地 —— 假宿主加 inject 门 + 动态命名空间必须走 reflect，预览侧写入路径按 wire schema 单源校验并返回 400，mock ctx 增加 teardown 生命周期，Node 冒烟跑五个插件真 `apply()` 断言自注册顺序与注销）：mock ctx 没有 cordis 的 inject 门（直接给 `remote.spark`），fixture 又给 `sourceSessionId` 兜默认值（真宿主 schema 必填 → 400）。于是「访问规则 / schema 必填 / 服务生命周期」三类回归预览测不出来 | P1 | `dev-harness/preview/src/mock/ctx.ts:168-176`、`fixtures/sparks.mjs:112-129` vs `dsh-spark/src/http.ts` 的 zod 校验；实测记录见 §7 |
@@ -304,9 +304,29 @@ P1–P4 都是机械收敛，且每步都能保持产品可用（旧 SSE 与新�
    并据此决定 kit 订阅器是否要自己补重连。
 3. 未来若平台把「第三方事件转发」纳入 `$on`（白名单可扩展），ADR-001 可以进一步简化
    （连 stream 都不用写，直接 `$on('sparks/changed')`）。当前不可用，属**已知平台缺口**。
-4. github/npm 的 `@Remote` 标记与 descriptor 里的 `implementation:` 名字，运行时由网关解析还是
-   回落到 SRC 标记？仓库里只有注释声明（`github-service.ts:3-4`「SRC fallback」）→ **UNVERIFIED**，
-   迁移前应实测（它决定 descriptor 是唯一真源还是仅诊断用）。
+4. ~~github/npm 的 `@Remote` 标记与 descriptor 里的 `implementation:` 名字，运行时由网关解析还是
+   回落到 SRC 标记？~~ → **已实测确认（2026-09-13）**：**描述符是唯一真源，SRC 标记只是兜底**。
+   网关 `resolveDescriptor()`（`dsh-api-gateway/lib/index.js:758`）三段式：
+
+   1. `typert.local.get(endpoint)` 命中 → 用该描述符；
+      实现名取 `descriptor.implementation ?? descriptor.method`，再 `Reflect.get(receiver, name)`
+      （`:747`）—— **完全不看 `@Remote` 原型标记**；取不到函数就报
+      `gateway/method-unavailable`。
+   2. 没命中但 `local.hasSeen(endpoint)` → **硬失败** `gateway/definition-unavailable`
+      （`:761`，注释原文「its strict definition was withdrawn and SRC fallback is forbidden」）
+      —— 即**撤下已注册的契约不会静默降级**。
+   3. 从未注册过 → `resolveSrcDescriptor()` 从 `@Remote` 标记现场合成描述符，但 codec 是
+      `{ mode: 'src-json' }`（`:799,805,820`）→ **没有 zod 校验**。
+
+   **实测证据**（`/__dev/probe.typert.descriptors`，真宿主 3997）：
+   `finance/*` 8 条全为 `resultMode: 'strict'`；而 `github/whoami`→`whoamiRemote`、
+   `npm/token.test`→`tokenTestRemote` 等 7 条 `implementation` 与 method 名不同 ——
+   证明该字段被**按字面采用**，不是诊断元数据。
+
+   **两个推论**：① `check:architecture` 的「描述符声明的方法必须在宿主实现里存在」守的是
+   **运行时硬约束**，不是文档洁癖；② 「注册了又撤下」比「从未注册」安全 —— 后者会把
+   严格校验静默降级成无校验，这正是 P5 那类改动最容易踩的坑（故
+   `real-host-check.mjs` 现在断言 `strict` 模式，而不只是断言面板能渲染）。
 5. `model.events` 字段（`TypertPackageModel.events`）是**反射/文档元数据**，不是订阅通道；
    若平台计划用它做事件暴露，ADR-001 的实现方式需重新评估。
 

@@ -131,6 +131,17 @@ export function apply(ctx) {
         // 端点 = `namespace/method`（网关寻址用的就是这个形状）。
         endpoints: local.map((entry) => entry.namespace + '/' + entry.method).sort(),
         schemaKeys: schemas.map((entry) => entry.key).sort(),
+        // 评审 §6 #4 的可观测面：网关在**严格描述符**路径下
+        // （`dsh-api-gateway/lib/index.js:747`）用 `descriptor.implementation ?? method`
+        // 作 `Reflect.get` 的名字 —— 描述符不是「仅诊断」，它就是绑定的唯一真源。
+        // `resultMode` 为 `strict` 即证明走的是注册的描述符（zod 校验在位）；
+        // 若退化成 SRC 兜底，网关会现场合成 `src-json` 描述符（无 schema 校验）。
+        descriptors: local.map((entry) => ({
+          endpoint: entry.namespace + '/' + entry.method,
+          implementation: entry.implementation ?? entry.method,
+          resultMode: entry.result?.mode ?? null,
+          paramModes: (entry.parameters ?? []).map((parameter) => parameter.codec?.mode ?? null),
+        })),
       }
     } catch (error) {
       return { error: String(error) }

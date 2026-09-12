@@ -1,24 +1,16 @@
 /**
- * bindSnapshotSelector 的预览副本（与 dsh-spark-plugin-kit/client 的实现同形）。
+ * 预览侧的 bindSnapshotSelector：**直接复用 kit 的实现**，不再复制一份。
  *
- * 为什么不直接 import 真实现：根 node_modules 不 link 工作区包，而各插件的
- * `lib/embed.cjs` 已经把 plugin-kit 内联进去了——预览侧只需要这一个 8 行函数，
- * 复制比再加一条 alias 更稳。真实现见 packages/dsh-plugin-kit/src/client/snapshot.ts。
+ * 这里原先是 8 行逐字副本（评审 F9：「harness 复制了客户端逻辑」），理由是
+ * 「根 node_modules 不 link 工作区包，而各插件的 lib/embed.cjs 已经把 plugin-kit
+ * 内联进去了，复制比再加一条 alias 更稳」。该理由的两条现在都已失效：
+ *
+ *  - P4（2026-09-11）删掉了 `lib/embed.cjs` 这个第二产物；
+ *  - 预览服务器早就显式 alias 了 `dsh-spark-plugin-kit/client`（bundle 与 source
+ *    两种口径各一条，见 `dev-harness/preview/server.mjs` 的 `*_ALIASES`）。
+ *
+ * 而副本的代价是真的：kit 改了实现它不会跟着改 —— 这正是 W4/F9 点名的
+ * 「预览比真宿主宽松」那一类漂移。真实现见 `packages/dsh-plugin-kit/src/client/snapshot.ts`。
  */
-import { useSyncExternalStore } from 'react'
-
-export type SnapshotSelectorHook<T> = <S>(
-  selector: (snapshot: T) => S,
-  equality?: (a: S, b: S) => boolean,
-) => S
-
-interface ObservableSnapshot<T> {
-  getSnapshot(): T
-  subscribe(onChange: () => void): () => void
-}
-
-export function bindSnapshotSelector<T>(source: ObservableSnapshot<T>): SnapshotSelectorHook<T> {
-  const subscribe = (onChange: () => void): (() => void) => source.subscribe(onChange)
-  const getSnapshot = (): T => source.getSnapshot()
-  return (selector) => selector(useSyncExternalStore(subscribe, getSnapshot, getSnapshot))
-}
+export { bindSnapshotSelector } from 'dsh-spark-plugin-kit/client'
+export type { SnapshotSelectorHook } from 'dsh-spark-plugin-kit/client'

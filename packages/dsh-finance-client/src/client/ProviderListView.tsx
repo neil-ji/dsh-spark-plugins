@@ -173,14 +173,9 @@ function ProviderRowView({ row, disabled, t, onSave, onClear }: ProviderRowViewP
       ...end !== undefined ? { validityEndMs: end } : {},
     })
     setEditing(false)
-    // Cross-controller signal: the dashboard is mounted independently and
-    // would otherwise wait for its next load() (auto-refresh, manual 刷新)
-    // to pick up the new autoFetch flag. Emitting a window event lets it
-    // pull a fresh `listProviders` immediately when the user just enabled
-    // auto-fetch on a previously unsupported provider.
-    window.dispatchEvent(new CustomEvent('dsh-finance-dsh-override-changed', {
-      detail: { provider: row.provider, kind: 'save' },
-    }))
+    // No dashboard notification here: F11 moved that responsibility to the
+    // owner of both the write and the audit controller (FinanceCardBody calls
+    // `dashboardRefresh()` right after `onSave`), so this stays a dumb form.
   }
 
   return (
@@ -210,14 +205,7 @@ function ProviderRowView({ row, disabled, t, onSave, onClear }: ProviderRowViewP
               <Button
                 variant="secondary"
                 disabled={disabled}
-                onClick={() => {
-                  onClear(row.provider)
-                  // Mirror the commit() side: dashboard refreshes so the
-                  // gauge/balance updates after a reset.
-                  window.dispatchEvent(new CustomEvent('dsh-finance-dsh-override-changed', {
-                    detail: { provider: row.provider, kind: 'clear' },
-                  }))
-                }}
+                onClick={() => { onClear(row.provider) }}
                 data-testid={`finance-provider-reset-${row.provider}`}
               >
                 {t('reset')}

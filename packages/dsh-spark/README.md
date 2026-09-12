@@ -8,15 +8,24 @@ This package is the host half: it owns the in-memory `ctx.spark` service, persis
 
 - **`SparkService`** extends cordis `Service`; declared on `ctx.spark` via the cordis module merge.
 - **`JsonlSparkStorage`** — append-only JSONL backend with atomic read-modify-write for patches and removes. Phase 2 exposes `writeAll` (system use) for crystallize + enforceLimit.
-- **`/sparks` HTTP routes** — same-origin JSON envelope, list/get/capture/patch/delete + Phase 2 `POST /sparks/:id/crystallize` + `GET /sparks/events` SSE stream.
+- **`/sparks` HTTP routes** — same-origin JSON envelope, list/get/capture/patch/delete + Phase 2 `POST /sparks/:id/crystallize`. (The former `GET /sparks/events` SSE stream is **gone** — see the event surface below.)
 - **`spark_capture` tool** (Phase 1) — agent-callable; persists one spark with title + content + optional tags + scope.
 - **`spark_crystallize` tool** (Phase 2) — promotes one spark into a HippoMemo `MemoryRecord`. Idempotent (returns existing `hippoId` on second call). Throws `SPARK_HIPPO_UNAVAILABLE` if `dsh-hippomemo` is not loaded — sparks still capture/archive/delete fine without hippomemo, just can't bridge.
 - **`spark_reflect` tool + EmergeService** (Phase 4) — runs rule-based emergence over the active spark set, generates link/cluster/prune proposals, persists to `proposals.jsonl`, dedup'd against pending ones. Manual trigger only (auto-scheduler is Phase 4.5). LLM-backed proposals (semantic similarity, contradict detection) are also Phase 4.5+.
-- **`/proposals` HTTP routes** (Phase 4) — `GET /proposals` list with status/type filters, `POST /proposals/reflect` trigger, `POST /proposals/:id/resolve` accept/dismiss, `GET /proposals/events` SSE.
+- **`/proposals` HTTP routes** (Phase 4) — `GET /proposals` list with status/type filters, `POST /proposals/reflect` trigger, `POST /proposals/:id/resolve` accept/dismiss.
 - **`proposals/changed` cordis event** — emitted on new proposals + on resolve. Accepting a prune proposal archives the target spark as a side-effect (the rest are user-manual follow-ups).
 - **`spark_to_script` / `spark_invoke_script` / `spark_record_script_result` tools** (Phase 5) — agent crystallizes a multi-step procedure into a named, ordered-step Script (`script_to_script`); invokes return the steps for the agent to execute (`script_invoke_script`); the agent reports success/failure to keep the catalog's successRate accurate (`script_record_script_result`). Scripts persist at `$DSH_HOME/storages/sparks/scripts.jsonl`.
 - **`ScriptService` (cordis `ctx.script`)** (Phase 5) — create/list/get/invoke/recordResult/delete + emits `scripts/changed`. Success/failure counters per script drive `successRate = successCount / invocationCount`.
-- **`/scripts` HTTP routes** (Phase 5) — GET list (scope + q search), GET :id, POST create, POST :id/invoke, POST :id/result (record success/failure), DELETE, GET /scripts/events SSE.
+- **`/scripts` HTTP routes** (Phase 5) — GET list (scope + q search), GET :id, POST create, POST :id/invoke, POST :id/result (record success/failure), DELETE.
+
+### Event surface (ADR-001, 2026-09)
+
+There is **no SSE**. Three cordis domain events (`sparks/changed`, `proposals/changed`,
+`scripts/changed`) are folded into **one** Typert stream endpoint, `spark/events`
+(`mode: 'stream'`, per-item codec, carried over the platform's shared remote mux).
+The frame union lives in `dsh-spark-wire` so host and client cannot drift; the browser
+half subscribes through `dsh-spark-plugin-kit/client`'s `$stream` runtime
+(fan-out + refcount + generation resync), never with a raw `EventSource`.
 - **`sparks/changed` cordis event** — emitted after every mutation (operation ∈ capture/patch/archive/delete/crystallize); future subsystems hook in here.
 - **`ValenceService` (cordis `ctx.valence`)** (Phase 6) — amygdala-style emotional signal mining. Subscribes to `session/event` for user messages; when `detectIntensity` crosses the threshold (default 0.4), `extractPreferences` parses latent preferences ("don't touch X" / "总是 X" / "always Y" / "never Z" in zh/en) and persists them as HippoMemo `kind='preference'` records via `ctx.memory.put`. `decayImportance` (Phase 6.5+) ages them with a 30-day decay that never drops below 40% to avoid the failure mode "懂用户 → 误读用户".
 

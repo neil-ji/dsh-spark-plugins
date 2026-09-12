@@ -17,7 +17,7 @@ DSH Web 宿主的全局悬浮球 + 插件统一面板（Spark Dock）。设计�
 | 开关 | 现值 | 管什么 |
 | --- | --- | --- |
 | `BALL_FACE_ENABLED` | `false` | Fairy 表情、情绪染光、球体动画（浮动/呆毛/张嘴闪烁/hover 缩放） |
-| `BALL_BUBBLE_ENABLED` | `true` | **发言**：真实事件播报气泡（`/sparks/events` → `capture`/`crystallize`），纯文本、零动画、4.2s 自动消失、`role=status` |
+| `BALL_BUBBLE_ENABLED` | `true` | **发言**：模块自己发布的播报气泡（`publishAnnouncement` → kit 播报总线；文案与情绪由 spark 的 `SparkDockModule` 映射，壳只呈现），纯文本、零动画、4.2s 自动消失、`role=status` |
 
 - 两个都置 `true` 即恢复整套角色层；球身样式不用动（`mood-alert` / `mood-sad` 染光档与整套
   fairy CSS 都保留着）。角色层的设计资产留档在 `docs/spark-dock-preview/`（fairy.css / fairy.js）。
@@ -26,7 +26,7 @@ DSH Web 宿主的全局悬浮球 + 插件统一面板（Spark Dock）。设计�
   校验、可取消），客户端由 `dsh-spark-plugin-kit/client` 的订阅运行时统一消费
   （扇出 / 引用计数 / `ready` 基线重同步）。原先的 `streams.ts` 已删除，三条
   `/sparks|/proposals|/scripts/events` 端点已从产品移除；记忆模块同理走 `hippomemo.events()`。
-  验收脚本：`node dev-harness/real-host-check.mjs`（真宿主，10 项）。
+  验收脚本：`node dev-harness/real-host-check.mjs`（真宿主，24 项，含模块子槽与 typert 注册面断言）。
 - 唯一保留的「运动」是**拖拽释放后的四角吸附位移**（JS 设的 left/top 240ms 过渡）——
   它是位置反馈而非装饰，去掉会让球瞬移；面板开合过渡同理（属于面板，不属于球）。
 - 发言的事件覆盖目前只有火花流两种 op；proposals / hippomemo / github / npm 的播报尚未实现。

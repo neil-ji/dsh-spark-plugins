@@ -24,6 +24,13 @@ interface ByModelTableProps {
   /** Currency used to format the cost column. */
   currency: string
   t: (key: FinanceKey) => string
+  /**
+   * Jump to the provider-config tab. Passed down as a prop (F11): this used to
+   * be a `window` CustomEvent so the button could reach the tab state several
+   * components up — but the owner is an ancestor in the same tree, so a plain
+   * callback is both shorter and typed.
+   */
+  onOpenConfig: () => void
 }
 
 /**
@@ -31,7 +38,7 @@ interface ByModelTableProps {
  * (`max-height` + `overflow: auto`) so the whole table stays visible
  * without pagination.
  */
-export function ByModelTable({ rows, currency, t }: ByModelTableProps): JSX.Element {
+export function ByModelTable({ rows, currency, t, onOpenConfig }: ByModelTableProps): JSX.Element {
   const [sort, setSort] = useState<SortKey>('cost')
   const [dir, setDir] = useState<'asc' | 'desc'>('desc')
   const sorted = useMemo(() => sortRows(rows, sort, dir), [rows, sort, dir])
@@ -72,7 +79,7 @@ export function ByModelTable({ rows, currency, t }: ByModelTableProps): JSX.Elem
                   <button
                     type="button"
                     className={css.balanceEmptyAction}
-                    onClick={() => window.dispatchEvent(new CustomEvent('dsh-finance-open-config'))}
+                    onClick={onOpenConfig}
                   >
                     {t('openConfig')}
                   </button>

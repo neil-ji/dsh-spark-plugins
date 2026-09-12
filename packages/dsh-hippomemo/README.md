@@ -75,7 +75,7 @@ Use a second process on the same profile and data, with a separate port:
 
 - 3080 stays as the working service; do not kill or restart it during plugin iteration.
 - 3999 shares the same profile package set, settings, sessions, workspace registry, and DSH_HOME storage.
-- After changing the bundle: remove and re-add with `file:`, restart only 3999, then smoke-test `/hippomemo/stats`, `/hippomemo/events`, and the settings page.
+- After changing the bundle: remove and re-add with `file:`, restart only 3999, then smoke-test `/hippomemo/stats`, the settings page, and the `hippomemo/events` Typert stream (live refresh no longer has an HTTP route).
 
 ## Test
 
@@ -101,9 +101,11 @@ For coverage:
 
 ## HTTP API
 
-All routes are same-origin JSON:
+All routes are same-origin JSON. Live refresh is **not** here: the former
+`GET /hippomemo/events` SSE route is gone (ADR-001) — changes arrive on the
+`hippomemo/events` Typert stream endpoint instead, subscribed through
+`dsh-spark-plugin-kit/client`.
 
-    GET    /hippomemo/events
     GET    /hippomemo/stats
     GET    /hippomemo/usage
     GET    /hippomemo/citations

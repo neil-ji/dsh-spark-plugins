@@ -17,7 +17,7 @@
  * 不吸底、不浮动 —— 它属于页面内容，不属于面板外壳。
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { SnapshotSelectorHook } from 'dsh-spark-plugin-kit/client'
 import { Button, Card, Input, Pill, SegmentedControl, Textarea } from 'dsh-ui-kit'
 import { ProviderDefaultsEditor, PriceTableEditor, RateFields } from './PriceEditors.tsx'
@@ -229,6 +229,7 @@ function SaveRow({ t, state, blocked, onDiscard, onSave }: {
 
 export function FinanceCardBody({
   t, state, tab, onTabChange, embedded,
+  onOpenProviderConfig,
   useSnapshot, dashboardRefresh, refreshProvider,
   onEdit, onReset, onSave, onDiscard,
   onSetDefaultPrice, onSetProviderDefaults, onSetPriceTable,
@@ -261,6 +262,8 @@ export function FinanceCardBody({
   onSyncNow: () => Promise<unknown>
   onSetAutoSync: (next: boolean) => void
   /** Persist one provider's business fields (localStorage; never touches dsh). */
+  /** Jump to the 供应商 tab (F11: prop from `FinanceCard`, not a `window` event). */
+  onOpenProviderConfig: () => void
   onSetDshProviderOverride: (provider: string, override: DshProviderOverride) => void
   /** Drop one provider's business fields, reverting to the dsh snapshot defaults. */
   onClearDshProviderOverride: (provider: string) => void
@@ -271,18 +274,19 @@ export function FinanceCardBody({
   const blocked = !state.dirty || state.invalid || state.saving
   const prefs = state.prefs
 
-  // Cross-controller signal from ProviderListView (dispatched on save/clear of a
-  // provider's business fields). While the 总览 tab is active the dashboard
-  // listens for it itself; on any other tab the dashboard is unmounted, so the
-  // body forwards the signal to the audit controller — otherwise editing
-  // autoFetch on the 供应商 tab would leave the balance rows stale until the
-  // dashboard's own 30-minute timer or a manual refresh.
-  useEffect(() => {
-    if (tab === 'overview') return
-    const handler = (): void => { dashboardRefresh() }
-    window.addEventListener('dsh-finance-dsh-override-changed', handler)
-    return () => { window.removeEventListener('dsh-finance-dsh-override-changed', handler) }
-  }, [tab, dashboardRefresh])
+  // Provider business fields are client-side (localStorage) while the balance
+  // rows come from the host, so persisting one has to invalidate the dashboard's
+  // host snapshot. Done here — at the single call site that owns both the write
+  // and `dashboardRefresh` — instead of over a `window` event bus (F11).
+  // Calling it while the 总览 tab is unmounted is fine: it only updates the store.
+  const saveProviderOverride = (provider: string, override: DshProviderOverride): void => {
+    onSetDshProviderOverride(provider, override)
+    dashboardRefresh()
+  }
+  const clearProviderOverride = (provider: string): void => {
+    onClearDshProviderOverride(provider)
+    dashboardRefresh()
+  }
 
   const chartToggles: Array<[keyof FinanceChartPrefs, string]> = [
     ['gauge', t('chartGauge')],
@@ -333,6 +337,7 @@ export function FinanceCardBody({
               embedded={embedded}
               refresh={dashboardRefresh}
               refreshProvider={refreshProvider}
+              onOpenProviderConfig={onOpenProviderConfig}
               // No-op close: the dashboard is no longer a sibling section, so
               // there's no parent to close. The section's own header renders a
               // refresh button instead.
@@ -428,8 +433,8 @@ export function FinanceCardBody({
               loadError={state.providerListError}
               disabled={disabled}
               t={t}
-              onSave={onSetDshProviderOverride}
-              onClear={onClearDshProviderOverride}
+              onSave={saveProviderOverride}
+              onClear={clearProviderOverride}
               onRetry={onRetryListProviders}
             />
           </Card>
@@ -511,21 +516,18 @@ export function FinanceCard(props: FinanceCardProps) {
   const state = props.useFinanceCard(snapshot => snapshot)
   const [tab, setTab] = useState<FinanceTab>('overview')
   const rootRef = useRef<HTMLDivElement | null>(null)
-  // The dashboard's empty-state "open provider config" action (ByModelTable)
-  // dispatches this window event. We jump to the 供应商 tab and scroll the
-  // panel into view so the user lands on the provider forms — no expansion
-  // step exists any more (the panel has no collapsed state).
-  useEffect(() => {
-    const handler = (): void => {
-      setTab('providers')
-      // rAF defers one frame so the newly active pane has a layout to scroll
-      // into (otherwise scrollIntoView measures the previous tab).
-      requestAnimationFrame(() => {
-        rootRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      })
-    }
-    window.addEventListener('dsh-finance-open-config', handler)
-    return () => { window.removeEventListener('dsh-finance-open-config', handler) }
+  // The dashboard's empty-state "open provider config" action (ByModelTable) is
+  // several components down, so it arrives as a callback rather than a `window`
+  // event (F11). Jump to the 供应商 tab and scroll the panel into view so the
+  // user lands on the provider forms — no expansion step exists (the panel has
+  // no collapsed state).
+  const openProviderConfig = useCallback((): void => {
+    setTab('providers')
+    // rAF defers one frame so the newly active pane has a layout to scroll
+    // into (otherwise scrollIntoView measures the previous tab).
+    requestAnimationFrame(() => {
+      rootRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
   }, [])
   if (!state.available) return null
 
@@ -537,6 +539,7 @@ export function FinanceCard(props: FinanceCardProps) {
         tab={tab}
         onTabChange={setTab}
         embedded={props.embedded === true}
+        onOpenProviderConfig={openProviderConfig}
         useSnapshot={props.useSnapshot}
         dashboardRefresh={props.dashboardRefresh}
         refreshProvider={props.refreshProvider}

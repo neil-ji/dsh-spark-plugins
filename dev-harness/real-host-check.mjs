@@ -234,6 +234,28 @@ try {
         (registered.packages ?? []).includes('dsh-spark-finance:host'),
         JSON.stringify(registered.packages ?? []),
       )
+
+      // 评审 §6 #4：网关在严格路径下用 `descriptor.implementation ?? method` 做
+      // `Reflect.get`（dsh-api-gateway/lib/index.js:747），SRC 标记只在**没有**严格
+      // 描述符时兜底（兜底描述符是 `src-json`，无 zod 校验）。所以 `resultMode`
+      // 就是「注册真的生效」的判据 —— 面板能渲染证明不了这一点。
+      const descriptors = registered.descriptors ?? []
+      const financeDescriptors = descriptors.filter((entry) => entry.endpoint.startsWith('finance/'))
+      const allStrict = financeDescriptors.length === 8
+        && financeDescriptors.every((entry) => entry.resultMode === 'strict')
+      check(
+        'finance 的 8 条描述符都是 strict 模式（未退化到 SRC 的 src-json 兜底）',
+        allStrict,
+        JSON.stringify(financeDescriptors.map((entry) => entry.endpoint + ':' + entry.resultMode)),
+      )
+      // implementation ≠ method 的实例证明该字段确实来自描述符本身
+      // （finance 全部省略 implementation，故取 method；github 显式给了别的名字）。
+      const renamed = descriptors.find((entry) => entry.implementation !== entry.endpoint.split('/')[1])
+      check(
+        'descriptor.implementation 被按字面采用（≠ method 的实例存在，证明非仅诊断）',
+        renamed !== undefined,
+        renamed === undefined ? '(没有 implementation ≠ method 的描述符)' : JSON.stringify(renamed),
+      )
     }
 
     // 5) 诊断：控制台里与事件通道/remote 相关的线索

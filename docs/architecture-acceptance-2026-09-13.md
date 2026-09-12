@@ -14,7 +14,8 @@
 | ⑤ 解除 P5 阻塞（在途 finance 批次落盘） | **达成**（commit `2cfe036`） |
 | ⑥ P5 契约单源（`dsh-finance-wire` + `ctx.typert.register`） | **达成**（两份手抄 manifest 删除，8 条 `sourceLocation` 告警归零） |
 | ⑦ F12 错误语义统一 | **达成**（`remote-result.ts` 单处约定；npm `token.status` 静默吞修掉） |
-| ⑧ 评审发现关闭清点 | **F1–F8 / F10 / F12–F14 关闭；F9 / F11 仍开放**（见 §5 —— 只解决了它们各自的一条腿，剩余项列在 §5.1） |
+| ⑧ 评审发现关闭清点 | **F1–F10 / F12–F14 关闭；F11 部分关闭**（见 §5 —— 两条定时器仍未收敛，列在 §5.1） |
+| ⑨ 评审 §6 开放问题 #4（descriptor vs SRC） | **结案**（实测：描述符是唯一真源，见 §3.1） |
 
 ## 1. 验收命令与实测结果
 
@@ -109,6 +110,27 @@ const disposeRemote = await ctx.remote.$mount(FINANCE_REMOTE_CONTRIBUTION)
 （`FinanceLedger` 等）仍在 `dsh-spark-finance/types` 里单处声明 —— 它们**本来就只有一份**
 （host 与 client 都 import 它），P5 要收的是**被抄了两遍的 manifest**。
 
+### 3.1 同批顺带：评审 §6 开放问题 #4 已实测结案
+
+网关 `resolveDescriptor()`（`dsh-api-gateway/lib/index.js:758`）是三段式，**描述符是唯一真源**：
+
+1. `typert.local.get(endpoint)` 命中 → 用该描述符；实现名取
+   `descriptor.implementation ?? descriptor.method` 再 `Reflect.get`（`:747`），
+   **完全不看 `@Remote` 原型标记**；取不到函数即 `gateway/method-unavailable`。
+2. 没命中但 `local.hasSeen(endpoint)` → **硬失败** `gateway/definition-unavailable`
+   （`:761`，注释原文「its strict definition was withdrawn and SRC fallback is forbidden」）。
+3. 从未注册 → `resolveSrcDescriptor()` 从 `@Remote` 标记现场合成，codec 为
+   `{ mode: 'src-json' }`（`:799,805,820`）→ **没有 zod 校验**。
+
+**实测**（`/__dev/probe.typert.descriptors`）：`finance/*` 8 条全为 `strict`；
+`github/whoami`→`whoamiRemote`、`npm/token.test`→`tokenTestRemote` 等 7 条
+`implementation` ≠ method，证明该字段被按字面采用。
+
+**两个推论**：① `check:architecture` 的「描述符方法必须在宿主实现里存在」守的是**运行时硬约束**；
+② 「注册了又撤下」比「从未注册」安全 —— 后者会把严格校验**静默降级成无校验**，
+这正是 P5 那类改动最容易踩的坑。故 `real-host-check.mjs` 现在断言 `strict` 模式，
+而不只是断言面板能渲染（`ok` 从「面板未失败」升级为「校验在位」）。
+
 ## 4. F12：错误语义统一（ADR-005 ⑤）
 
 **约定与实现单处化**到 kit 新模块 `packages/dsh-plugin-kit/src/client/remote-result.ts`，
@@ -164,49 +186,53 @@ try { const r = await this.npm['token.status'](); if (r.ok) token = r.value } ca
 | F6 | 一个插件两份客户端产物 | **关闭** | 2026-09-11 P4（单产物闸门防回潮） |
 | F7 | 播报文案策略写在壳里 | **关闭** | 2026-09-12 F7（播报总线 + `fairy-domain-import` 闸门） |
 | F8 | 退役世代 `dsh-spark-ui` 仍参与构建 | **关闭** | 2026-09-11 清理 |
-| **F9** | 连接预算被当局部问题（harness 仍在复制客户端逻辑） | **部分关闭** | 平台侧连接复用已上收 kit；`dev-harness/preview/src/mock/snapshot.ts` **仍是 `bindSnapshotSelector` 的副本** |
+| **F9** | 连接预算被当局部问题（harness 仍在复制客户端逻辑） | **关闭** | 平台侧连接复用上收 kit（P0/P1）+ **2026-09-13 删掉 harness 副本**（`mock/snapshot.ts` 改为从 kit 再导出） |
 | **F10** | 三套宿主注册风格（finance 无 register） | **关闭** | **2026-09-13 P5** |
-| **F11** | 刷新策略四套并存 | **部分关闭** | SSE 腿已随 P0/P1 移除；**600ms 轮询 + 30min 定时器 + 两条页内 `window` 自定义事件仍在**（见 §5.1） |
+| **F11** | 刷新策略四套并存 | **部分关闭** | SSE 腿随 P0/P1 移除；**页内 `window` 事件总线已消除**（2026-09-13，并加闸门第 ⑦ 查）；**遗留 600ms 轮询 + 30min 定时器**（见 §5.1） |
 | F12 | 错误语义三套 + npm 静默吞 | **关闭** | **2026-09-13 F12** |
 | F13 | connector 三家 60% 同构、契约靠手抄 | **关闭** | 2026-09-12 F13-1（store 上收）+ **2026-09-13 P5**（manifest 单源） |
 | F14 | zero-dsh 预览比真宿主宽松 | **关闭** | 2026-09-11 W4 |
 
-### 5.1 仍未关闭的两条（本轮只解决了它们的一条腿）
+### 5.1 F9 已关闭 · F11 只剩两条定时器
 
-**F11 —— 刷新策略仍有三套在跑**（评审要求「收敛为一条通道」）：
+**F9 —— 预览 harness 的客户端逻辑副本已删除**。`dev-harness/preview/src/mock/snapshot.ts`
+原先文件头自己写着「bindSnapshotSelector 的预览副本」，理由有两条，现在都已失效：
+P4 删掉了 `lib/embed.cjs` 第二产物，预览服务器也早就显式 alias 了
+`dsh-spark-plugin-kit/client`（bundle / source 两种口径各一条）。改为从 kit 再导出后，
+预览与产品共用同一份实现 —— 这正是 W4 抓到的「预览比真宿主宽松」那类漂移的根因。
 
-| 现场 | 位置 |
-| --- | --- |
-| 600ms 轮询 backfill 进度 | `dsh-finance-client/src/client/controller.ts:115` |
-| 30min 定时器刷新 | `dsh-finance-client/src/client/FinanceAuditSection.tsx:477` |
-| 页内 `window` 事件当变更总线 | `dsh-finance-dsh-override-changed`（`ProviderListView.tsx:181,217` 发；`FinanceCard.tsx:283`、`FinanceAuditSection.tsx:489` 听）、`dsh-finance-open-config`（`ByModelTable.tsx:75` 发 / `FinanceCard.tsx:527` 听） |
+**F11 —— `window` 事件总线已消除，剩两条定时器**：
 
-现在平台侧已有 `ctx.remote.$stream`（P0 落地）与 `credentials/reference-updated` 这类平台转发事件，
-前两项都能改走推送；第三条属**同一页内两个组件之间**的通信，可换成 kit 的 SnapshotStore 或
-共享 controller，而不是绕 window。
-
-**F9 —— 预览 harness 仍在复制客户端逻辑**：`dev-harness/preview/src/mock/snapshot.ts`
-文件头自己写着「bindSnapshotSelector 的预览副本」。副本的害处是 kit 改了实现它不会跟着改
-（与 W4 抓到的那类「预览比真宿主宽松」是同一类问题）。
-
-### 5.2 顺带发现的文档漂移（评审外，未修）
-
-P0–P2 删掉 SSE 端点后，三份 README 仍在把已移除的端点当作产品能力描述：
-
-| 文件 | 行 | 内容 |
+| 现场 | 位置 | 状态 |
 | --- | --- | --- |
-| `packages/dsh-spark/README.md` | 11 / 15 / 19 | `GET /sparks/events` SSE stream、`GET /proposals/events` SSE、`GET /scripts/events` SSE |
-| `packages/dsh-hippomemo/README.md` | 78 / 106 | 冒烟测试与路由表里的 `/hippomemo/events` |
-| `packages/dsh-spark-dock/README.md` | 20 | 气泡来源写成 `/sparks/events`（与同文件第 28 行「端点已从产品移除」自相矛盾） |
+| SSE 推送 | — | 已由 P0/P1 移除 |
+| 页内 `window` 事件当变更总线 | `dsh-finance-dsh-override-changed`、`dsh-finance-open-config` | **已消除**：前者改成 `FinanceCardBody` 在 save/clear 后直呼 `dashboardRefresh()`，后者改成 `onOpenProviderConfig` 一路 props 传下去 |
+| 600ms 轮询 backfill 进度 | `controller.ts:115` | **遗留**（计划：`finance/backfillProgress` typert stream；宿主 `FinanceBackfillSink` 加 `onProgress` 通知 → `ctx.emit` → 客户端走 kit `subscribeFrames`） |
+| 30min 定时器刷新 | `FinanceAuditSection.tsx:477` | **遗留**（滚动 24h 窗口自己会过期，属真·时间驱动；改完上一条后再定去留） |
+
+并新增**闸门第 ⑦ 查**防回潮：`packages/*/src` 里出现 `new CustomEvent('dsh-*')` 或
+`addEventListener('dsh-*')` 即判失败（浏览器原生事件如 `resize`/`keydown` 不在管辖内）。
+
+### 5.2 顺带清掉的文档漂移（已修）
+
+P0–P2 删掉 SSE 端点后，三份 README 仍在把已移除的端点当产品能力描述，本轮一并修正：
+
+| 文件 | 行 | 处理 |
+| --- | --- | --- |
+| `packages/dsh-spark/README.md` | 11 / 15 / 19 | 三条 SSE 描述改为「已移除」，并新增一节说明统一事件面（`spark/events` typert stream） |
+| `packages/dsh-hippomemo/README.md` | 78 / 106 | 冒烟与路由表去掉 `/hippomemo/events`，注明实时刷新走 stream |
+| `packages/dsh-spark-dock/README.md` | 20 / 29 | 气泡来源改为「模块经 kit 播报总线发布」（不再写 `/sparks/events`）；验收脚本项数 10 → 24 |
 
 ## 6. 交付清单
 
 | commit | 主题 | 规模 |
 | --- | --- | --- |
 | `2cfe036` | fix(finance)：单条会话日志不可读时降级跳过并在仪表盘告警（**解除 P5 阻塞**） | 12 文件 +188/−3 |
-| 本次 P5 + F12 提交 | 契约单源 + 错误语义统一（含沙箱探针与验收脚本加固） | 45 文件 +1242/−839 |
+| `6150951` | P5 契约单源 + F12 错误语义统一（含沙箱探针与验收脚本加固） | 45 文件 +1242/−839 |
+| `244ea96` | docs：修正 F9/F11 的关闭口径 | 2 文件 |
+| 本批（F11 第一阶段 + F9 + 文档漂移 + §6#4） | window 事件总线消除 + 闸门第 ⑦ 查 + harness 去副本 + 三份 README + descriptor 实测结案 | 16 文件 +293/−128 |
 
-包版本（本次重构后）：`dsh-spark-finance@0.3.0` · `dsh-spark-finance-client@0.3.0` ·
+包版本（本次重构后）：`dsh-spark-finance@0.3.0` · `dsh-spark-finance-client@0.3.1` ·
 **`dsh-spark-finance-wire@0.1.0`（新）** · `dsh-spark-plugin-kit@0.4.0` ·
 `dsh-connector-github-ui@0.2.7` · `dsh-connector-npm-ui@0.2.9`；其余包未动。
 

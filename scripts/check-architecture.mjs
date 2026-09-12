@@ -481,10 +481,57 @@ export function findSecondProducts(root) {
   return { violations, checked }
 }
 
+/* ──────────────── 7. 禁止把 window 自定义事件当页内总线（F11） ──────────────── */
+
+/**
+ * 插件代码不得用 `window` 自定义事件当**页内总线**（评审 F11）。
+ *
+ * 为什么单列一道：`window` 事件是全局的、无类型的、且不随组件卸载自动撤销。
+ * finance 曾用 `dsh-finance-dsh-override-changed` / `dsh-finance-open-config`
+ * 在同一棵 React 树里传信号 —— 发送方与接收方都是 `FinanceCard` 的后代或它自己，
+ * 于是「谁该刷新」变成靠全局广播约定，而不是靠 props 或共享 controller。
+ * ADR-005 要求刷新策略收敛，所以把这条路封掉：
+ *   - 跨插件/跨模块 → kit 的播报总线、SnapshotStore，或 typert stream；
+ *   - 同一棵树内   → props / 共享 controller。
+ *
+ * 只认 `dsh-*` 前缀的自定义事件名：`resize` / `keydown` / `pointerdown` / `abort`
+ * 这些浏览器原生事件不在管辖范围。
+ *
+ * @param {string} root
+ */
+export function findWindowBusUsage(root) {
+  const packages = readWorkspacePackages(root)
+  const violations = []
+  let files = 0
+  for (const [name, record] of packages) {
+    for (const file of walkSource(join(record.dir, 'src'))) {
+      files += 1
+      const source = stripComments(readFileSync(file, 'utf8'))
+      for (const match of source.matchAll(/new CustomEvent\(\s*['"](dsh-[^'"]+)['"]/g)) {
+        violations.push({
+          pkg: name,
+          file: posix(relative(root, file)),
+          code: 'window-bus',
+          detail: `${name} 用 window 自定义事件当页内总线：new CustomEvent('${match[1]}')`,
+        })
+      }
+      for (const match of source.matchAll(/(?:add|remove)EventListener\(\s*['"](dsh-[^'"]+)['"]/g)) {
+        violations.push({
+          pkg: name,
+          file: posix(relative(root, file)),
+          code: 'window-bus',
+          detail: `${name} 订阅 window 自定义事件当页内总线：'${match[1]}'`,
+        })
+      }
+    }
+  }
+  return { violations, files }
+}
+
 /* ──────────────────────────── CLI ──────────────────────────── */
 
 function parseArgs(argv) {
-  const options = { only: ['orphans', 'boundaries', 'contracts', 'injects', 'products'], json: false, strictLocations: false }
+  const options = { only: ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus'], json: false, strictLocations: false }
   for (const arg of argv) {
     if (arg === '--json') options.json = true
     else if (arg === '--strict-locations') options.strictLocations = true
@@ -494,8 +541,8 @@ function parseArgs(argv) {
 }
 
 export function runChecks(root, options = {}) {
-  const only = options.only ?? ['orphans', 'boundaries', 'contracts', 'injects', 'products']
-  const report = { orphans: null, boundaries: null, contracts: null, injects: null, products: null, failures: 0, warnings: 0 }
+  const only = options.only ?? ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus']
+  const report = { orphans: null, boundaries: null, contracts: null, injects: null, products: null, windowbus: null, failures: 0, warnings: 0 }
   if (only.includes('orphans')) {
     const result = findOrphanPackages(root)
     report.orphans = result
@@ -526,6 +573,11 @@ export function runChecks(root, options = {}) {
     report.products = result
     report.failures += result.violations.length
   }
+  if (only.includes('windowbus')) {
+    const result = findWindowBusUsage(root)
+    report.windowbus = result
+    report.failures += result.violations.length
+  }
   return report
 }
 
@@ -537,7 +589,7 @@ function main(argv) {
     process.exitCode = report.failures > 0 ? 1 : 0
     return
   }
-  console.log('══ 架构闸门（孤包 / 边界 / 契约 / 注入面 / 单产物） ══')
+  console.log('══ 架构闸门（孤包 / 边界 / 契约 / 注入面 / 单产物 / 页内总线） ══')
   if (report.orphans !== null) {
     const { orphans, total, closureSize } = report.orphans
     if (orphans.length === 0) console.log(`  ok    workspace 孤包        0 个（${total} 个包全在 registry 闭包内，闭包 ${closureSize} 个）`)
@@ -568,10 +620,15 @@ function main(argv) {
     if (violations.length === 0) console.log(`  ok    单产物（P4）         ${checked} 个包都只有一份客户端产物（无 ./embed 导出 / 构建 / files）`)
     for (const violation of violations) console.log(`  FAIL  ${violation.code.padEnd(20)} ${violation.detail}`)
   }
+  if (report.windowbus !== null) {
+    const { violations, files } = report.windowbus
+    if (violations.length === 0) console.log(`  ok    window 事件总线     0 处（扫描 ${files} 个源文件，无 dsh-* 自定义事件）`)
+    for (const violation of violations) console.log(`  FAIL  ${violation.code.padEnd(20)} ${violation.detail}（${violation.file}）`)
+  }
   const verdict = report.failures > 0 ? 'FAIL' : 'PASS'
   console.log(`\n合计：硬失败 ${report.failures} 处 · 告警 ${report.warnings} 处\n结果：${verdict}`)
   if (report.warnings > 0) {
-    console.log('（sourceLocation 行号漂移属于 P5 待清理项：finance 的手抄 manifest 将由声明式 typert.register 取代）')
+    console.log('（sourceLocation 行号漂移：描述符里的行号是生成器产物，手抄必然漂；单源 wire 不该带它）')
   }
   process.exitCode = report.failures > 0 ? 1 : 0
 }
