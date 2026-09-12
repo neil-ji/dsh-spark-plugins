@@ -14,7 +14,7 @@
 | ⑤ 解除 P5 阻塞（在途 finance 批次落盘） | **达成**（commit `2cfe036`） |
 | ⑥ P5 契约单源（`dsh-finance-wire` + `ctx.typert.register`） | **达成**（两份手抄 manifest 删除，8 条 `sourceLocation` 告警归零） |
 | ⑦ F12 错误语义统一 | **达成**（`remote-result.ts` 单处约定；npm `token.status` 静默吞修掉） |
-| ⑧ 评审发现 F1–F14 全部关闭 | **达成**（见 §5） |
+| ⑧ 评审发现关闭清点 | **F1–F8 / F10 / F12–F14 关闭；F9 / F11 仍开放**（见 §5 —— 只解决了它们各自的一条腿，剩余项列在 §5.1） |
 
 ## 1. 验收命令与实测结果
 
@@ -154,16 +154,50 @@ try { const r = await this.npm['token.status'](); if (r.ok) token = r.value } ca
 
 | # | 发现 | 关闭于 |
 | --- | --- | --- |
-| F1–F3 | 无统一事件层 / 契约不跨线 / 平台 stream 通道未用 | 2026-09-10 P0+P1 |
-| F4–F6 | dock 是编译期聚合器 / 共享设施长在 app 包 / 一个插件两份产物 | 2026-09-11 P3（ADR-003）+ P4 |
-| F7 | 播报文案策略写在壳里 | 2026-09-12 F7 |
-| F8 | 退役世代 `dsh-spark-ui` 仍参与构建 | 2026-09-11 清理 |
-| F9 | 连接预算被当局部问题 | P0/P1 的连接复用 + P2 收敛到 1 条 WS |
-| **F10** | 三套宿主注册风格（finance 无 register） | **2026-09-13 P5** |
-| F11 | 刷新策略四套并存 | P0–P2（SSE 移除、统一 stream 通道） |
-| **F12** | 错误语义三套 + npm 静默吞 | **2026-09-13 F12** |
-| **F13** | connector 三家 60% 同构、契约靠手抄 | 2026-09-12 F13-1（store 上收）+ **2026-09-13 P5**（manifest 单源） |
-| F14 | zero-dsh 预览比真宿主宽松 | 2026-09-11 W4 |
+| # | 发现 | 状态 | 证据 / 关闭于 |
+| --- | --- | --- | --- |
+| F1 | 浏览器侧没有统一事件层 | **关闭** | P0+P1；`dock/src/client/streams.ts` 已删，`/sparks\|/proposals\|/scripts/events` 真宿主 404 |
+| F2 | 事件契约不跨线 | **关闭** | P0+P1；帧 schema 进 `dsh-spark-wire` / `dsh-hippomemo/src/wire.ts` |
+| F3 | 平台 `mode:'stream'` 通道未被采用 | **关闭** | P0+P1；`spark/events` + `hippomemo/events` 两条 stream 端点已在真宿主注册 |
+| F4 | dock 是编译期聚合器 | **关闭** | 2026-09-11 P3（ADR-003） |
+| F5 | 共享基础设施长在 app 包里 | **关闭** | P0/P1 订阅运行时上收 kit（refcount 注册表） |
+| F6 | 一个插件两份客户端产物 | **关闭** | 2026-09-11 P4（单产物闸门防回潮） |
+| F7 | 播报文案策略写在壳里 | **关闭** | 2026-09-12 F7（播报总线 + `fairy-domain-import` 闸门） |
+| F8 | 退役世代 `dsh-spark-ui` 仍参与构建 | **关闭** | 2026-09-11 清理 |
+| **F9** | 连接预算被当局部问题（harness 仍在复制客户端逻辑） | **部分关闭** | 平台侧连接复用已上收 kit；`dev-harness/preview/src/mock/snapshot.ts` **仍是 `bindSnapshotSelector` 的副本** |
+| **F10** | 三套宿主注册风格（finance 无 register） | **关闭** | **2026-09-13 P5** |
+| **F11** | 刷新策略四套并存 | **部分关闭** | SSE 腿已随 P0/P1 移除；**600ms 轮询 + 30min 定时器 + 两条页内 `window` 自定义事件仍在**（见 §5.1） |
+| F12 | 错误语义三套 + npm 静默吞 | **关闭** | **2026-09-13 F12** |
+| F13 | connector 三家 60% 同构、契约靠手抄 | **关闭** | 2026-09-12 F13-1（store 上收）+ **2026-09-13 P5**（manifest 单源） |
+| F14 | zero-dsh 预览比真宿主宽松 | **关闭** | 2026-09-11 W4 |
+
+### 5.1 仍未关闭的两条（本轮只解决了它们的一条腿）
+
+**F11 —— 刷新策略仍有三套在跑**（评审要求「收敛为一条通道」）：
+
+| 现场 | 位置 |
+| --- | --- |
+| 600ms 轮询 backfill 进度 | `dsh-finance-client/src/client/controller.ts:115` |
+| 30min 定时器刷新 | `dsh-finance-client/src/client/FinanceAuditSection.tsx:477` |
+| 页内 `window` 事件当变更总线 | `dsh-finance-dsh-override-changed`（`ProviderListView.tsx:181,217` 发；`FinanceCard.tsx:283`、`FinanceAuditSection.tsx:489` 听）、`dsh-finance-open-config`（`ByModelTable.tsx:75` 发 / `FinanceCard.tsx:527` 听） |
+
+现在平台侧已有 `ctx.remote.$stream`（P0 落地）与 `credentials/reference-updated` 这类平台转发事件，
+前两项都能改走推送；第三条属**同一页内两个组件之间**的通信，可换成 kit 的 SnapshotStore 或
+共享 controller，而不是绕 window。
+
+**F9 —— 预览 harness 仍在复制客户端逻辑**：`dev-harness/preview/src/mock/snapshot.ts`
+文件头自己写着「bindSnapshotSelector 的预览副本」。副本的害处是 kit 改了实现它不会跟着改
+（与 W4 抓到的那类「预览比真宿主宽松」是同一类问题）。
+
+### 5.2 顺带发现的文档漂移（评审外，未修）
+
+P0–P2 删掉 SSE 端点后，三份 README 仍在把已移除的端点当作产品能力描述：
+
+| 文件 | 行 | 内容 |
+| --- | --- | --- |
+| `packages/dsh-spark/README.md` | 11 / 15 / 19 | `GET /sparks/events` SSE stream、`GET /proposals/events` SSE、`GET /scripts/events` SSE |
+| `packages/dsh-hippomemo/README.md` | 78 / 106 | 冒烟测试与路由表里的 `/hippomemo/events` |
+| `packages/dsh-spark-dock/README.md` | 20 | 气泡来源写成 `/sparks/events`（与同文件第 28 行「端点已从产品移除」自相矛盾） |
 
 ## 6. 交付清单
 
