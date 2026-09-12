@@ -31,29 +31,29 @@ export const DOCK_CSS = [
   '[data-plugin="dsh-spark-dock"] .dock-ball:focus-visible { outline: 2px solid var(--spk-focus-ring); outline-offset: 3px; }',
   '@media (prefers-reduced-motion: reduce) { [data-plugin="dsh-spark-dock"] .fairy-face, [data-plugin="dsh-spark-dock"] .fairy-face .ahoge { animation: none; } }',
   /* badge 环色 = 球面（v4.1 起球身是 surface-float 玻璃球，不再是平台底色） */
-  '[data-plugin="dsh-spark-dock"] .dock-badge { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; border-radius: 9px; padding: 0 5px; background: var(--dsw-alias-state-error-primary); color: var(--dsw-alias-label-primary-foreground, #fff); font: 700 11px/18px var(--dsw-font-family, inherit); text-align: center; box-shadow: 0 0 0 2px var(--spk-surface-float); }',
+  '[data-plugin="dsh-spark-dock"] .dock-badge { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; border-radius: 9px; padding: 0 4px; background: var(--dsw-alias-state-error-primary); color: var(--dsw-alias-label-primary-foreground, #fff); font: 700 var(--spk-text-xs)/18px var(--dsw-font-family, inherit); text-align: center; box-shadow: 0 0 0 2px var(--spk-surface-float); }',
 
   /* 面板 —— 结构：flex row = 左 rail(56px) + 右主列 */
-  '[data-plugin="dsh-spark-dock"] .dock-panel { position: fixed; z-index: 9100; width: var(--dock-panel-w, 616px); max-width: calc(100vw - 32px); height: var(--dock-panel-h, 680px); max-height: calc(100vh - 32px); display: flex; flex-direction: row; background: var(--dsw-alias-bg-module-platform); border: 1px solid var(--dsw-alias-border-l1); border-radius: 20px; box-shadow: var(--dsw-shadow-lv3, 0 16px 48px rgba(10,18,38,.28)); overflow: hidden; color: var(--dsw-alias-label-primary, #fff); opacity: 0; transform: scale(.94); pointer-events: none; transition: transform 220ms cubic-bezier(.34,1.56,.64,1), opacity 220ms ease; }',
+  '[data-plugin="dsh-spark-dock"] .dock-panel { position: fixed; z-index: 9100; width: var(--dock-panel-w, 616px); max-width: calc(100vw - 32px); height: var(--dock-panel-h, 680px); max-height: calc(100vh - 32px); display: flex; flex-direction: row; background: var(--dsw-alias-bg-module-platform); border: 1px solid var(--dsw-alias-border-l1); border-radius: var(--spk-radius-xl); box-shadow: var(--dsw-shadow-lv3, 0 16px 48px rgba(10,18,38,.28)); overflow: hidden; color: var(--dsw-alias-label-primary, #fff); opacity: 0; transform: scale(.94); pointer-events: none; transition: transform 220ms cubic-bezier(.34,1.56,.64,1), opacity 220ms ease; }',
   '[data-plugin="dsh-spark-dock"] .dock-panel.open { opacity: 1; transform: scale(1); pointer-events: auto; }',
 
   /* 左侧图标模块栏（activity rail）——用抬起面而非 layer-2：
      layer-2 是「凹陷/轨道」色，亮色下与面板 platform 几乎同色，且模块 accent 文字压上去只有 1.9-3.7:1。 */
-  '[data-plugin="dsh-spark-dock"] .dock-rail { width: 56px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 0; background: var(--dsw-alias-surface-l1); border-right: 1px solid var(--dsw-alias-border-l1); }',
-  '[data-plugin="dsh-spark-dock"] .dock-tab { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; position: relative; border: none; background: transparent; color: var(--dsw-alias-label-tertiary); cursor: pointer; transition: background 160ms ease, color 160ms ease; }',
+  '[data-plugin="dsh-spark-dock"] .dock-rail { width: 56px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px 0; background: var(--dsw-alias-surface-l1); border-right: 1px solid var(--dsw-alias-border-l1); }',
+  '[data-plugin="dsh-spark-dock"] .dock-tab { width: 40px; height: 40px; border-radius: var(--spk-radius-card); display: grid; place-items: center; position: relative; border: none; background: transparent; color: var(--dsw-alias-label-tertiary); cursor: pointer; transition: background 160ms ease, color 160ms ease; }',
   '[data-plugin="dsh-spark-dock"] .dock-tab svg { width: 19px; height: 19px; }',
   '[data-plugin="dsh-spark-dock"] .dock-tab:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }',
   /* 激活项：文字/图标走 accent 的文字态档，指示条走实色档 */
   '[data-plugin="dsh-spark-dock"] .dock-tab.active { color: var(--accent-fg, var(--dsw-alias-brand-foreground)); background: color-mix(in srgb, var(--accent-fg, var(--dsw-alias-brand-foreground)) 12%, transparent); }',
-  '[data-plugin="dsh-spark-dock"] .dock-tab.active::before { content: ""; position: absolute; left: -8px; top: 50%; transform: translateY(-50%); width: 3px; height: 20px; border-radius: 0 3px 3px 0; background: var(--accent); }',
+  '[data-plugin="dsh-spark-dock"] .dock-tab.active::before { content: ""; position: absolute; left: -8px; top: 50%; transform: translateY(-50%); width: 3px; height: var(--spk-radius-xl); border-radius: 0 3px 3px 0; background: var(--accent); }',
   '[data-plugin="dsh-spark-dock"] .dock-tab:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 2px; }',
 
   /* 右侧主列：模块头 / 子页 / 内容 */
   '[data-plugin="dsh-spark-dock"] .dock-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }',
   '[data-plugin="dsh-spark-dock"] .dock-head { display: flex; align-items: center; gap: 8px; padding: 12px 16px 8px; }',
   '[data-plugin="dsh-spark-dock"] .dock-head .titles { min-width: 0; }',
-  '[data-plugin="dsh-spark-dock"] .dock-head .name { font-size: 15px; font-weight: 700; line-height: 1.3; color: var(--dsw-alias-label-primary); }',
-  '[data-plugin="dsh-spark-dock"] .dock-head .sub { font-size: 12px; color: var(--dsw-alias-label-tertiary); }',
+  '[data-plugin="dsh-spark-dock"] .dock-head .name { font-size: var(--spk-text-lg); font-weight: 700; line-height: 1.3; color: var(--dsw-alias-label-primary); }',
+  '[data-plugin="dsh-spark-dock"] .dock-head .sub { font-size: var(--spk-text-sm); color: var(--dsw-alias-label-tertiary); }',
   '[data-plugin="dsh-spark-dock"] .dock-head .spacer { flex: 1; }',
   '[data-plugin="dsh-spark-dock"] .dock-iconbtn { position: relative; width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: transparent; border: none; color: var(--dsw-alias-label-secondary); cursor: pointer; }',
   '[data-plugin="dsh-spark-dock"] .dock-iconbtn::before { content: ""; position: absolute; inset: -5px; }',
@@ -74,24 +74,24 @@ export const DOCK_CSS = [
   /* Card 里的列表：行自带内距，所以卡身收紧到 4px、把 card gap 归零（行间距由行内距给） */
   '[data-plugin="dsh-spark-dock"] .dock-body .dock-list { display: flex; flex-direction: column; gap: 0; margin: calc(var(--spk-space-2, 8px) * -1) calc(var(--spk-space-1, 4px) * -1) calc(var(--spk-space-1, 4px) * -1); }',
   /* Card 头里的胶囊按钮：与字段同一档视觉（Card 头的 actions 槽位默认是图标/胶囊尺度） */
-  '[data-plugin="dsh-spark-dock"] .dock-body button.dock-pill { font-size: 12px; padding: 4px 10px; }',
-  '[data-plugin="dsh-spark-dock"] .dock-row { display: flex; align-items: center; gap: var(--spk-gap-card, 8px); padding: 10px 12px; border-radius: 10px; }',
+  '[data-plugin="dsh-spark-dock"] .dock-body button.dock-pill { font-size: var(--spk-text-sm); padding: 4px 8px; }',
+  '[data-plugin="dsh-spark-dock"] .dock-row { display: flex; align-items: center; gap: var(--spk-gap-card, 8px); padding: var(--spk-radius-md) var(--spk-radius-card); border-radius: var(--spk-radius-md); }',
   '[data-plugin="dsh-spark-dock"] .dock-row:hover { background: var(--dsw-alias-interactive-bg-hover); }',
   '[data-plugin="dsh-spark-dock"] .dock-row .grow { flex: 1; min-width: 0; }',
-  '[data-plugin="dsh-spark-dock"] .dock-row .ttl { font-size: 13px; font-weight: 600; color: var(--dsw-alias-label-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }',
-  '[data-plugin="dsh-spark-dock"] .dock-row .meta { font-size: 11px; color: var(--dsw-alias-label-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }',
+  '[data-plugin="dsh-spark-dock"] .dock-row .ttl { font-size: var(--spk-text-md); font-weight: 600; color: var(--dsw-alias-label-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }',
+  '[data-plugin="dsh-spark-dock"] .dock-row .meta { font-size: var(--spk-text-xs); color: var(--dsw-alias-label-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }',
   '[data-plugin="dsh-spark-dock"] .dock-row.off .ttl { text-decoration: line-through; color: var(--dsw-alias-label-tertiary); }',
   '[data-plugin="dsh-spark-dock"] .cryst { color: var(--dsw-alias-state-success-primary); font-weight: 600; }',
-  '[data-plugin="dsh-spark-dock"] .dock-pill { position: relative; display: inline-flex; align-items: center; gap: var(--spk-space-1, 4px); font-size: 11px; padding: 3px 9px; border-radius: 999px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); cursor: pointer; }',
+  '[data-plugin="dsh-spark-dock"] .dock-pill { position: relative; display: inline-flex; align-items: center; gap: var(--spk-space-1, 4px); font-size: var(--spk-text-xs); padding: 4px 8px; border-radius: var(--spk-radius-full); background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); cursor: pointer; }',
   /* 热区扩容：pill 视觉小，命中区向外扩 4px（≥ 触控下限的兜底） */
-  '[data-plugin="dsh-spark-dock"] .dock-pill::before { content: ""; position: absolute; inset: -4px; border-radius: 999px; }',
+  '[data-plugin="dsh-spark-dock"] .dock-pill::before { content: ""; position: absolute; inset: -4px; border-radius: var(--spk-radius-full); }',
   '[data-plugin="dsh-spark-dock"] .dock-pill:disabled { opacity: .55; cursor: default; }',
   '[data-plugin="dsh-spark-dock"] .dock-pill.on { background: var(--accent-fg, var(--dsw-alias-brand-foreground)); border-color: transparent; color: var(--dsw-alias-label-primary-foreground, #fff); }',
   '[data-plugin="dsh-spark-dock"] .dock-modbar { display: flex; align-items: center; gap: var(--spk-space-1, 4px); flex-wrap: wrap; }',
-  '[data-plugin="dsh-spark-dock"] .dock-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px; border-radius: 16px; border: none; background: var(--dsw-alias-button-primary-fill, var(--dsw-alias-brand-primary)); color: var(--dsw-alias-label-primary-foreground, #fff); font: 600 13px/1 var(--dsw-font-family, inherit); cursor: pointer; }',
+  '[data-plugin="dsh-spark-dock"] .dock-btn { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 var(--spk-radius-lg); border-radius: 16px; border: none; background: var(--dsw-alias-button-primary-fill, var(--dsw-alias-brand-primary)); color: var(--dsw-alias-label-primary-foreground, #fff); font: 600 var(--spk-text-md)/1 var(--dsw-font-family, inherit); cursor: pointer; }',
   '[data-plugin="dsh-spark-dock"] .dock-btn:hover { filter: brightness(1.08); }',
   '[data-plugin="dsh-spark-dock"] .dock-btn:disabled { opacity: .55; cursor: default; }',
-  '[data-plugin="dsh-spark-dock"] .dock-field { width: 100%; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; color: var(--dsw-alias-label-primary); font: 400 13px/1.4 var(--dsw-font-family, inherit); padding: 8px 10px; margin-bottom: var(--spk-gap-card, 8px); }',
+  '[data-plugin="dsh-spark-dock"] .dock-field { width: 100%; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: var(--spk-radius-md); color: var(--dsw-alias-label-primary); font: 400 var(--spk-text-md)/1.4 var(--dsw-font-family, inherit); padding: 8px var(--spk-radius-md); margin-bottom: var(--spk-gap-card, 8px); }',
   '[data-plugin="dsh-spark-dock"] .dock-field:focus-visible { outline: 2px solid var(--accent, var(--dsw-alias-brand-primary)); outline-offset: 1px; }',
   '[data-plugin="dsh-spark-dock"] .dock-field::placeholder { color: var(--dsw-alias-label-tertiary); }',
   '[data-plugin="dsh-spark-dock"] textarea.dock-field { resize: vertical; }',
@@ -99,19 +99,19 @@ export const DOCK_CSS = [
   '[data-plugin="dsh-spark-dock"] .dock-fieldrow .grow { flex: 1; min-width: 0; }',
   '[data-plugin="dsh-spark-dock"] .dock-fieldrow .dock-field { margin-bottom: 0; }',
   '[data-plugin="dsh-spark-dock"] select.dock-field.sel { width: auto; }',
-  '[data-plugin="dsh-spark-dock"] .dock-error { padding: 8px 10px; border: 1px solid var(--dsw-alias-state-error-primary); border-radius: 8px; color: var(--dsw-alias-state-error-primary); font-size: 12px; }',
-  '[data-plugin="dsh-spark-dock"] .dock-ok { padding: 8px 10px; border: 1px solid var(--dsw-alias-state-success-primary); border-radius: 8px; color: var(--dsw-alias-state-success-primary); font-size: 12px; }',
+  '[data-plugin="dsh-spark-dock"] .dock-error { padding: 8px var(--spk-radius-md); border: 1px solid var(--dsw-alias-state-error-primary); border-radius: 8px; color: var(--dsw-alias-state-error-primary); font-size: var(--spk-radius-card); }',
+  '[data-plugin="dsh-spark-dock"] .dock-ok { padding: 8px var(--spk-radius-md); border: 1px solid var(--dsw-alias-state-success-primary); border-radius: 8px; color: var(--dsw-alias-state-success-primary); font-size: var(--spk-radius-card); }',
   '[data-plugin="dsh-spark-dock"] .dock-sdot { width: 9px; height: 9px; border-radius: 50%; background: var(--dsw-alias-label-tertiary); display: inline-block; flex: none; }',
   '[data-plugin="dsh-spark-dock"] .dock-sdot.done { background: var(--dsw-alias-state-success-primary); }',
   '[data-plugin="dsh-spark-dock"] .dock-sdot.warn { background: var(--dsw-alias-state-warn-primary); }',
   '[data-plugin="dsh-spark-dock"] .dock-sdot.error { background: var(--dsw-alias-state-error-primary); }',
-  '[data-plugin="dsh-spark-dock"] .dock-row .amount { font-size: 13px; color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; }',
-  '[data-plugin="dsh-spark-dock"] .dock-hint { font-size: 11px; color: var(--dsw-alias-label-tertiary); }',
+  '[data-plugin="dsh-spark-dock"] .dock-row .amount { font-size: var(--spk-text-md); color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; }',
+  '[data-plugin="dsh-spark-dock"] .dock-hint { font-size: var(--spk-text-xs); color: var(--dsw-alias-label-tertiary); }',
   '[data-plugin="dsh-spark-dock"] .dock-btn.ghost { background: transparent; border: 1px solid var(--dsw-alias-border-l2); color: var(--dsw-alias-label-secondary); }',
   '[data-plugin="dsh-spark-dock"] .dock-btn.ghost:hover { color: var(--dsw-alias-label-primary); }',
-  '[data-plugin="dsh-spark-dock"] .dock-scopes { font-size: 11px; color: var(--dsw-alias-label-tertiary); margin: 6px 0 8px; }',
-  '[data-plugin="dsh-spark-dock"] .dock-hline { display: flex; align-items: center; justify-content: space-between; gap: var(--spk-gap-card, 8px); margin: 6px 0 2px; }',
-  '[data-plugin="dsh-spark-dock"] .dock-hline b { font-size: 12px; font-weight: 700; color: var(--dsw-alias-label-primary); }',
+  '[data-plugin="dsh-spark-dock"] .dock-scopes { font-size: var(--spk-text-xs); color: var(--dsw-alias-label-tertiary); margin: 8px 0 8px; }',
+  '[data-plugin="dsh-spark-dock"] .dock-hline { display: flex; align-items: center; justify-content: space-between; gap: var(--spk-gap-card, 8px); margin: 8px 0 2px; }',
+  '[data-plugin="dsh-spark-dock"] .dock-hline b { font-size: var(--spk-text-sm); font-weight: 700; color: var(--dsw-alias-label-primary); }',
 
   /* ── Fairy 表情层（docs/spark-dock-preview fairy.css 子集）──
    * 当前 **dormant**：角色层由 DockOverlay 的 FAIRY_LAYER_ENABLED 关闭，球内不再渲染
@@ -150,28 +150,28 @@ export const DOCK_CSS = [
    * 「静态位置」在浮层容器里可能贴着视口右侧，可用宽度只剩几十像素 —— 文案会被折成五行的
    * 竖条（定位 JS 量到的 offsetWidth 也随之偏小，最终 left 再被错误夹取）。显式 max-content
    * 让宽度只由文案与 max-width 决定，与容器布局彻底解耦。 */
-  '[data-plugin="dsh-spark-dock"] .dock-bubble { position: fixed; z-index: 9300; width: max-content; max-width: min(250px, calc(100vw - 24px)); padding: 9px 12px; border-radius: 12px; background: var(--spk-surface-float); border: 1px solid var(--spk-border); border-left: 3px solid var(--spk-brand); box-shadow: var(--spk-shadow-2); color: var(--spk-label); font: 500 var(--spk-text-sm, 12px)/1.5 var(--spk-font, inherit); pointer-events: auto; }',
+  '[data-plugin="dsh-spark-dock"] .dock-bubble { position: fixed; z-index: 9300; width: max-content; max-width: min(250px, calc(100vw - 24px)); padding: 8px var(--spk-radius-card); border-radius: var(--spk-radius-card); background: var(--spk-surface-float); border: 1px solid var(--spk-border); border-left: 3px solid var(--spk-brand); box-shadow: var(--spk-shadow-2); color: var(--spk-label); font: 500 var(--spk-text-sm, var(--spk-radius-card))/1.5 var(--spk-font, inherit); pointer-events: auto; }',
   '[data-plugin="dsh-spark-dock"] .dock-bubble .src { display: block; margin-top: 2px; font-size: var(--spk-text-xs, 11px); font-weight: 400; color: var(--spk-label-2); }',
   '[data-plugin="dsh-spark-dock"] .dock-bubble.mood-alert { border-left-color: var(--spk-warn); }',
   '[data-plugin="dsh-spark-dock"] .grow-spacer { flex: 1; }',
   '[data-plugin="dsh-spark-dock"] .dock-statrow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }',
-  '[data-plugin="dsh-spark-dock"] .dock-stat .k { font-size: 11px; color: var(--dsw-alias-label-tertiary); }',
-  '[data-plugin="dsh-spark-dock"] .dock-stat .v { font-size: 17px; font-weight: 700; margin-top: 2px; color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; }',
-  '[data-plugin="dsh-spark-dock"] .dock-narr { display: flex; gap: 8px; margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--dsw-alias-border-l1); font-size: 11px; color: var(--dsw-alias-label-secondary); }',
+  '[data-plugin="dsh-spark-dock"] .dock-stat .k { font-size: var(--spk-text-xs); color: var(--dsw-alias-label-tertiary); }',
+  '[data-plugin="dsh-spark-dock"] .dock-stat .v { font-size: var(--spk-text-xl); font-weight: 700; margin-top: 2px; color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; }',
+  '[data-plugin="dsh-spark-dock"] .dock-narr { display: flex; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--dsw-alias-border-l1); font-size: var(--spk-text-xs); color: var(--dsw-alias-label-secondary); }',
   '[data-plugin="dsh-spark-dock"] .dock-narr .lab { flex: none; color: var(--dsw-alias-label-tertiary); }',
-  '[data-plugin="dsh-spark-dock"] .dock-pill.mini { padding: 1px 7px; font-size: 10px; cursor: default; }',
+  '[data-plugin="dsh-spark-dock"] .dock-pill.mini { padding: 1px 8px; font-size: var(--spk-text-xs); cursor: default; }',
   '[data-plugin="dsh-spark-dock"] .dock-pill.mini.accent { background: color-mix(in srgb, var(--accent-fg, var(--dsw-alias-brand-foreground)) 14%, transparent); border-color: transparent; color: var(--accent-fg, var(--dsw-alias-brand-foreground)); }',
-  '[data-plugin="dsh-spark-dock"] .dock-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 14px 16px; font-size: 14px; line-height: 1.5; }',
+  '[data-plugin="dsh-spark-dock"] .dock-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 14px 16px; font-size: var(--spk-text-title); line-height: 1.5; }',
   '[data-plugin="dsh-spark-dock"] .dock-empty { padding: 28px 12px; text-align: center; color: var(--dsw-alias-label-tertiary); }',
-  '[data-plugin="dsh-spark-dock"] .dock-empty .empty-ico { width: 26px; height: 26px; opacity: .55; margin-bottom: 6px; }',
-  '[data-plugin="dsh-spark-dock"] .dock-empty .empty-txt { font-size: 13px; color: var(--dsw-alias-label-secondary); }',
-  '[data-plugin="dsh-spark-dock"] .dock-empty .empty-hint { font-size: 11px; margin-top: 4px; color: var(--dsw-alias-label-tertiary); }',
+  '[data-plugin="dsh-spark-dock"] .dock-empty .empty-ico { width: 26px; height: 26px; opacity: .55; margin-bottom: 8px; }',
+  '[data-plugin="dsh-spark-dock"] .dock-empty .empty-txt { font-size: var(--spk-text-md); color: var(--dsw-alias-label-secondary); }',
+  '[data-plugin="dsh-spark-dock"] .dock-empty .empty-hint { font-size: var(--spk-text-xs); margin-top: 4px; color: var(--dsw-alias-label-tertiary); }',
   '[data-plugin="dsh-spark-dock"] .dock-empty.loading .empty-ico { animation: dock-empty-pulse 1.4s ease-in-out infinite; }',
   '@keyframes dock-empty-pulse { 0%,100% { opacity: .25; } 50% { opacity: .7; } }',
   /* 连接器模块：加载 spinner 与明确的失败态 */
-  '[data-plugin="dsh-spark-dock"] .dock-spin { display: inline-block; width: 14px; height: 14px; margin-right: 8px; vertical-align: -2px; border-radius: 50%; border: 2px solid var(--dsw-alias-border-l1); border-top-color: var(--accent, var(--dsw-alias-brand-primary)); animation: dock-spin .8s linear infinite; }',
+  '[data-plugin="dsh-spark-dock"] .dock-spin { display: inline-block; width: var(--spk-radius-lg); height: var(--spk-radius-lg); margin-right: 8px; vertical-align: -2px; border-radius: 50%; border: 2px solid var(--dsw-alias-border-l1); border-top-color: var(--accent, var(--dsw-alias-brand-primary)); animation: dock-spin .8s linear infinite; }',
   '@keyframes dock-spin { to { transform: rotate(360deg); } }',
-  '[data-plugin="dsh-spark-dock"] .dock-embed-failed { color: var(--dsw-alias-state-error-content, #f87171); font-size: 13px; line-height: 1.6; padding: 40px 24px; }',
+  '[data-plugin="dsh-spark-dock"] .dock-embed-failed { color: var(--dsw-alias-state-error-content, #f87171); font-size: var(--spk-text-md); line-height: 1.6; padding: 40px 24px; }',
   /* 面板内滚动条：细圆角深色，替代系统箭头滚动条 */
   '[data-plugin="dsh-spark-dock"] .dock-body::-webkit-scrollbar, [data-plugin="dsh-spark-dock"] .dock-embed ::-webkit-scrollbar { width: 8px; height: 8px; }',
   '[data-plugin="dsh-spark-dock"] .dock-body::-webkit-scrollbar-thumb, [data-plugin="dsh-spark-dock"] .dock-embed ::-webkit-scrollbar-thumb { background: var(--dsw-alias-border-l1, rgba(255,255,255,.14)); border-radius: 4px; }',
@@ -179,7 +179,7 @@ export const DOCK_CSS = [
   '[data-plugin="dsh-spark-dock"] .dock-body::-webkit-scrollbar-track, [data-plugin="dsh-spark-dock"] .dock-embed ::-webkit-scrollbar-track { background: transparent; }',
   '[data-plugin="dsh-spark-dock"] .dock-body, [data-plugin="dsh-spark-dock"] .dock-embed { scrollbar-width: thin; scrollbar-color: var(--dsw-alias-border-l1, rgba(255,255,255,.14)) transparent; }',
   /* 可见表单标签（替代 placeholder-only） */
-  '[data-plugin="dsh-spark-dock"] .dock-lab { display: block; font-size: 11px; font-weight: 600; color: var(--dsw-alias-label-secondary); margin: 0 2px 4px; }',
+  '[data-plugin="dsh-spark-dock"] .dock-lab { display: block; font-size: var(--spk-text-xs); font-weight: 600; color: var(--dsw-alias-label-secondary); margin: 0 2px 4px; }',
   '[data-plugin="dsh-spark-dock"] .dock-btn .btn-ico { width: 13px; height: 13px; flex: none; }',
 
   /* ── 深度重做：spark 模块 ── */
@@ -188,7 +188,7 @@ export const DOCK_CSS = [
   '[data-plugin="dsh-spark-dock"] .dock-capture .dock-field { margin-bottom: 0; }',
   '[data-plugin="dsh-spark-dock"] .dock-capture-bar { display: flex; align-items: center; gap: var(--spk-gap-card, 8px); margin-top: var(--spk-gap-card, 8px); }',
   '[data-plugin="dsh-spark-dock"] .dock-details { margin-top: var(--spk-gap-card, 8px); }',
-  '[data-plugin="dsh-spark-dock"] .dock-details summary { cursor: pointer; font-size: 12px; color: var(--dsw-alias-label-tertiary); user-select: none; width: fit-content; padding: 3px 0; list-style: none; }',
+  '[data-plugin="dsh-spark-dock"] .dock-details summary { cursor: pointer; font-size: var(--spk-text-sm); color: var(--dsw-alias-label-tertiary); user-select: none; width: fit-content; padding: 4px 0; list-style: none; }',
   '[data-plugin="dsh-spark-dock"] .dock-details summary::-webkit-details-marker { display: none; }',
   '[data-plugin="dsh-spark-dock"] .dock-details summary::before { content: "＋ "; }',
   '[data-plugin="dsh-spark-dock"] .dock-details[open] summary::before { content: "－ "; }',
@@ -200,20 +200,20 @@ export const DOCK_CSS = [
   '[data-plugin="dsh-spark-dock"] .dock-meter-fill { display: block; height: 100%; border-radius: 2px; background: var(--accent, var(--dsw-alias-brand-primary)); transition: width 300ms cubic-bezier(.2,.8,.2,1); }',
   '[data-plugin="dsh-spark-dock"] .dock-meter.tone-good .dock-meter-fill { background: var(--dsw-alias-state-success-primary); }',
   '[data-plugin="dsh-spark-dock"] .dock-meter.tone-warn .dock-meter-fill { background: var(--dsw-alias-state-warn-primary); }',
-  '[data-plugin="dsh-spark-dock"] .dock-row-meter, [data-plugin="dsh-spark-dock"] .dock-prop-meter { display: flex; align-items: center; gap: 8px; margin-top: 5px; }',
+  '[data-plugin="dsh-spark-dock"] .dock-row-meter, [data-plugin="dsh-spark-dock"] .dock-prop-meter { display: flex; align-items: center; gap: 8px; margin-top: 4px; }',
   /* 结晶行首圆点（除文字外再给一个颜色通道） */
-  '[data-plugin="dsh-spark-dock"] .dock-row-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }',
+  '[data-plugin="dsh-spark-dock"] .dock-row-dot { width: var(--spk-radius-sm); height: var(--spk-radius-sm); border-radius: 50%; flex: none; }',
   '[data-plugin="dsh-spark-dock"] .dock-row-dot.cryst { background: var(--dsw-alias-state-success-primary); }',
   /* 提案行：Card 内部的**行**（一个提议一行），不是卡片 —— 卡片归组，
    * 组内的条目靠 1px 分隔线分层，免得卡里再套一层卡。 */
-  '[data-plugin="dsh-spark-dock"] .dock-prop { display: flex; flex-direction: column; gap: 7px; padding: 10px 0; border-top: 1px solid var(--dsw-alias-border-l1); }',
+  '[data-plugin="dsh-spark-dock"] .dock-prop { display: flex; flex-direction: column; gap: 8px; padding: 8px 0; border-top: 1px solid var(--dsw-alias-border-l1); }',
   '[data-plugin="dsh-spark-dock"] .dock-prop:first-child { padding-top: 0; border-top: 0; }',
   '[data-plugin="dsh-spark-dock"] .dock-prop + .dock-prop { margin-top: 0; }',
   '[data-plugin="dsh-spark-dock"] .dock-prop-head { display: flex; align-items: center; gap: 8px; }',
-  '[data-plugin="dsh-spark-dock"] .dock-prop-type { font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 2px 8px; border-radius: 6px; background: color-mix(in srgb, var(--accent-fg, var(--dsw-alias-brand-foreground)) 14%, transparent); color: var(--accent-fg, var(--dsw-alias-brand-foreground)); }',
-  '[data-plugin="dsh-spark-dock"] .dock-prop-text { font-size: 13px; line-height: 1.5; color: var(--dsw-alias-label-primary); }',
-  '[data-plugin="dsh-spark-dock"] .dock-prop-actions { display: flex; gap: 6px; margin-top: 2px; }',
-  '[data-plugin="dsh-spark-dock"] .dock-prop-actions .dock-btn { height: 28px; padding: 0 14px; font-size: 12px; }',
+  '[data-plugin="dsh-spark-dock"] .dock-prop-type { font-size: var(--spk-radius-md); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 2px 8px; border-radius: 6px; background: color-mix(in srgb, var(--accent-fg, var(--dsw-alias-brand-foreground)) 14%, transparent); color: var(--accent-fg, var(--dsw-alias-brand-foreground)); }',
+  '[data-plugin="dsh-spark-dock"] .dock-prop-text { font-size: var(--spk-text-md); line-height: 1.5; color: var(--dsw-alias-label-primary); }',
+  '[data-plugin="dsh-spark-dock"] .dock-prop-actions { display: flex; gap: 8px; margin-top: 2px; }',
+  '[data-plugin="dsh-spark-dock"] .dock-prop-actions .dock-btn { height: 28px; padding: 0 14px; font-size: var(--spk-text-sm); }',
 
   /* ── 内嵌页 compat 层（2026-09 UIUX 收敛 / 2026-09 重构二轮）────────────
    * 原则：**重复的标题在结构上不该存在**，不是渲染完再用 CSS 擦掉。
@@ -221,10 +221,10 @@ export const DOCK_CSS = [
    * `h2 + p` —— 那两处已由组件自己的 `embedded` 属性接管（MemorySection /
    * FinanceAuditSection 直接不渲染；github/npm 的 section 早已无页级标题）。
    * 这里只保留**密度**：设置页 16px 基准 → overlay 13px，不碰组件内部业务样式。 */
-  '.dock-embed { font-size: 13px; line-height: 1.45; }',
-  '.dock-embed :is(h1, h2) { font-size: 15px; line-height: 1.35; margin: 0 0 8px; }',
-  '.dock-embed :is(h3) { font-size: 13px; margin: 0 0 6px; }',
-  '.dock-embed p { font-size: 13px; }',
+  '.dock-embed { font-size: var(--spk-text-md); line-height: 1.45; }',
+  '.dock-embed :is(h1, h2) { font-size: var(--spk-text-lg); line-height: 1.35; margin: 0 0 8px; }',
+  '.dock-embed :is(h3) { font-size: var(--spk-text-md); margin: 0 0 8px; }',
+  '.dock-embed p { font-size: var(--spk-text-md); }',
   /* hippomemo 分段控件通栏（与 dock subtabbar 同宽对齐） */
   '[data-plugin="dsh-spark-dock"] .hippomemo-tabs { align-self: stretch; }',
   /* connector 按钮不被 flex column 拉伸成全宽白胶囊，回落紧凑尺寸。

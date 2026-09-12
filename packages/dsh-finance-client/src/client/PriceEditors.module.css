@@ -62,9 +62,9 @@
   color: var(--spk-label-3);
   cursor: pointer;
   flex: none;
-  font-size: 16px;
+  font-size: var(--spk-text-lg);
   line-height: 1;
-  padding: 4px 6px;
+  padding: 4px 8px;
 }
 
 .remove:disabled,
@@ -83,13 +83,13 @@
   color: var(--spk-label-2);
   cursor: pointer;
   font-size: var(--spk-text-sm, 12px);
-  padding: 4px 10px;
+  padding: 4px 8px;
 }
 
 /* 一个模型 = 一块功能分组（分组标题由外层 Card 承担）。 */
 .modelBlock {
   border: 1px solid var(--spk-border);
-  border-radius: 10px;
+  border-radius: var(--spk-radius-md);
   display: flex;
   flex-direction: column;
   gap: var(--spk-gap-card, 8px);

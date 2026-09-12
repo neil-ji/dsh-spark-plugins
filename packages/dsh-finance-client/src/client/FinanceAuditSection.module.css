@@ -12,6 +12,7 @@
   --fin-kpi-pad: 12px 14px;
   --fin-kpi-min: 78px;
   --fin-kpi-value: 20px;
+  --fin-hero-num: 27px;
   --fin-kpi-value-lh: 28px;
   --fin-gauge-pad: 14px 16px;
   --fin-stats-gap: 4px 16px;
@@ -48,14 +49,14 @@
 
 .title {
   color: var(--dsw-alias-label-primary);
-  font-size: 18px;
+  font-size: var(--spk-text-xl);
   line-height: 26px;
   font-weight: 600;
 }
 
 .subtitle {
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
-  font-size: 13px;
+  font-size: var(--spk-text-md);
   line-height: 20px;
 }
 
@@ -65,7 +66,7 @@
   flex-direction: column;
   gap: 2px;
   color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
-  font-size: 12px;
+  font-size: var(--spk-text-sm);
   line-height: 16px;
 }
 
@@ -80,9 +81,9 @@
   background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-primary);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--spk-text-md);
   line-height: 20px;
-  padding: 6px 10px;
+  padding: 8px 8px;
   cursor: pointer;
 }
 
@@ -97,19 +98,21 @@
   align-items: end;
   padding: 14px 16px;
   border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 12px;
+  border-radius: var(--spk-radius-card);
   background:
     radial-gradient(140% 160% at 8% 0%, color-mix(in srgb, var(--spk-acc-finance, #16a34a) 9%, transparent) 0%, transparent 55%),
     var(--dsw-alias-surface-l1, var(--dsw-alias-bg-layer-2));
 }
 
 .heroLabel {
-  font-size: 12px;
+  font-size: var(--spk-text-sm);
   color: var(--dsw-alias-label-tertiary);
 }
 
 .heroValue {
-  font-size: 27px;
+  /* 密度 token：Hero 大数字的展示档（介于 text-2xl 22 与 text-3xl 30 之间，
+     属组件级密度值 —— 见 docs/UI-UX-SPEC.md §2.7 密度变体模式） */
+  font-size: var(--fin-hero-num, 27px);
   font-weight: 700;
   line-height: 1.15;
   color: var(--dsw-alias-label-primary);
@@ -118,14 +121,14 @@
 
 .heroSub {
   margin-top: 2px;
-  font-size: 11px;
+  font-size: var(--spk-text-xs);
   color: var(--dsw-alias-label-tertiary);
 }
 
 .heroStats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 .heroStat {
@@ -136,14 +139,14 @@
 }
 
 .heroStatValue {
-  font-size: 16px;
+  font-size: var(--spk-text-lg);
   font-weight: 700;
   color: var(--dsw-alias-label-primary);
   font-variant-numeric: tabular-nums;
 }
 
 .heroStatLabel {
-  font-size: 11px;
+  font-size: var(--spk-text-xs);
   color: var(--dsw-alias-label-tertiary);
 }
 
@@ -162,10 +165,10 @@
   display: flex;
   flex-direction: column;
   border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 10px;
+  border-radius: var(--spk-radius-md);
   background: var(--dsw-alias-bg-layer-1, var(--dsw-alias-bg-layer-2));
   overflow: hidden;
-  margin-top: 6px;
+  margin-top: 8px;
 }
 
 .balanceRow {
@@ -175,9 +178,9 @@
      "deepseek-of..." on a wide-enough container. The trailing auto columns
      keep their intrinsic size; the stat column wins the remaining space. */
   grid-template-columns: minmax(160px, 1.4fr) minmax(0, 1fr) auto auto;
-  column-gap: 10px;
+  column-gap: 8px;
   align-items: center;
-  padding: 5px 10px;
+  padding: 4px 8px;
   min-width: 0;
 }
 
@@ -189,13 +192,13 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 4px 6px;
+  gap: 4px 8px;
   min-width: 0;
 }
 
 .balanceRowName {
   color: var(--dsw-alias-label-primary);
-  font-size: 12px;
+  font-size: var(--spk-text-sm);
   line-height: 18px;
   font-weight: 600;
   font-family: var(--dsw-alias-font-mono, ui-monospace, SFMono-Regular, monospace);
@@ -210,12 +213,12 @@
 .balanceRowSource {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  padding: 1px 7px;
-  border-radius: 999px;
+  gap: 4px;
+  padding: 1px 8px;
+  border-radius: var(--spk-radius-full);
   background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
-  font-size: 10px;
+  font-size: var(--spk-text-xs);
   line-height: 14px;
   font-weight: 500;
   letter-spacing: 0.02em;
@@ -284,7 +287,7 @@
   flex: none;
   width: 64px;
   height: 4px;
-  border-radius: 999px;
+  border-radius: var(--spk-radius-full);
   background: var(--dsw-alias-interactive-bg-hover);
   overflow: hidden;
 }
@@ -307,7 +310,7 @@
 }
 
 .balanceRowStatText {
-  font-size: 11px;
+  font-size: var(--spk-text-xs);
   line-height: 16px;
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
   font-variant-numeric: tabular-nums;
@@ -322,7 +325,7 @@
   min-width: 0;
   max-width: 420px;
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
-  font-size: 12px;
+  font-size: var(--spk-text-sm);
   line-height: 18px;
   overflow-wrap: anywhere;
 }
@@ -336,7 +339,7 @@
 
 .balanceRowAmount {
   color: var(--dsw-alias-label-primary);
-  font-size: 14px;
+  font-size: var(--spk-text-title);
   line-height: 20px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -345,7 +348,7 @@
 
 .balanceRowCurrency {
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
-  font-size: 10px;
+  font-size: var(--spk-text-xs);
   line-height: 14px;
   font-weight: 500;
   letter-spacing: 0.04em;
@@ -356,7 +359,7 @@
   border: 1px solid var(--dsw-alias-border-l1);
   background: transparent;
   color: var(--dsw-alias-label-primary);
-  font-size: 11px;
+  font-size: var(--spk-text-xs);
   line-height: 16px;
   padding: 2px 8px;
   border-radius: 6px;
@@ -380,7 +383,7 @@
   max-height: 360px;
   overflow: auto;
   border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 12px;
+  border-radius: var(--spk-radius-card);
   /* 卡面用抬起面；斑马纹用凹陷面 layer-2 —— 之前两者都是 layer-1，条纹 1.00:1 完全看不见 */
   background: var(--dsw-alias-surface-l1, var(--dsw-alias-bg-layer-2));
 }
@@ -388,7 +391,7 @@
 .byModelTable {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: var(--spk-text-sm);
   line-height: 18px;
 }
 
@@ -454,7 +457,7 @@
 }
 
 .byModelTableEmptyHint {
-  font-size: 11px;
+  font-size: var(--spk-text-xs);
   color: var(--dsw-alias-label-tertiary);
   margin-top: 2px;
   margin-bottom: 4px;
@@ -469,9 +472,9 @@
   border: 1px solid var(--dsw-alias-border-l1);
   background: transparent;
   color: var(--dsw-alias-label-primary);
-  font-size: 12px;
+  font-size: var(--spk-text-sm);
   line-height: 18px;
-  padding: 6px 12px;
+  padding: 8px 12px;
   border-radius: 8px;
   cursor: pointer;
   margin-top: 8px;
@@ -484,14 +487,14 @@
 .kpi {
   min-height: var(--fin-kpi-min, 78px);
   border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 12px;
+  border-radius: var(--spk-radius-card);
   background: var(--dsw-alias-surface-l1, var(--dsw-alias-bg-layer-2));
   padding: var(--fin-kpi-pad, 12px 14px);
 }
 
 .kpiLabel {
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
-  font-size: 12px;
+  font-size: var(--spk-text-sm);
   line-height: 18px;
 }
 
@@ -508,7 +511,7 @@
 
 .kpiSub {
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+  font-size: var(--spk-text-sm);
   line-height: 18px;
 }
 
@@ -527,9 +530,9 @@
 .cardWide {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 12px;
+  border-radius: var(--spk-radius-card);
   background: var(--dsw-alias-surface-l1, var(--dsw-alias-bg-layer-2));
   padding: var(--fin-card-pad, 12px 14px);
   min-width: 0;
@@ -541,7 +544,7 @@
 
 .cardTitle {
   color: var(--dsw-alias-label-primary);
-  font-size: 13px;
+  font-size: var(--spk-text-md);
   line-height: 20px;
   font-weight: 600;
 }
@@ -550,14 +553,14 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--fin-stats-gap, 4px 16px);
-  font-size: 12px;
+  font-size: var(--spk-text-sm);
   line-height: 18px;
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
 }
 
 .empty {
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
-  font-size: 12px;
+  font-size: var(--spk-text-sm);
   line-height: 18px;
   padding: 12px 0;
 }
@@ -566,9 +569,9 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 10px;
+  gap: 8px;
   color: var(--dsw-alias-label-primary);
-  font-size: 14px;
+  font-size: var(--spk-text-title);
   line-height: 22px;
   padding: 24px 4px;
 }
@@ -598,7 +601,7 @@
 
 .statusTitle {
   color: var(--dsw-alias-label-primary);
-  font-size: 14px;
+  font-size: var(--spk-text-title);
   line-height: 22px;
   font-weight: 600;
 }
@@ -607,7 +610,7 @@
   width: 100%;
   max-width: 320px;
   height: 6px;
-  border-radius: 999px;
+  border-radius: var(--spk-radius-full);
   background: var(--dsw-alias-interactive-bg-hover);
   overflow: hidden;
 }
@@ -621,7 +624,7 @@
 
 .statusDetail {
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+  font-size: var(--spk-text-sm);
   line-height: 18px;
 }
 
@@ -676,15 +679,15 @@
 
 .hodDayLabel {
   fill: var(--dsw-alias-label-tertiary);
-  font-size: 10px;
+  font-size: var(--spk-text-xs);
   line-height: 14px;
 }
 
 .hodLegend {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 14px;
-  font-size: 11px;
+  gap: 8px 14px;
+  font-size: var(--spk-text-xs);
   line-height: 16px;
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
 }
@@ -692,20 +695,20 @@
 .hodLegendItem {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
 }
 
 .trendWrap {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .trendStats {
   display: flex;
   flex-wrap: wrap;
   gap: var(--fin-stats-gap, 4px 16px);
-  font-size: 12px;
+  font-size: var(--spk-text-sm);
   line-height: 18px;
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
 }
@@ -736,7 +739,7 @@
 
 .trendAxis {
   fill: var(--dsw-alias-label-tertiary);
-  font-size: 10px;
+  font-size: var(--spk-text-xs);
   line-height: 14px;
   font-variant-numeric: tabular-nums;
 }
@@ -758,13 +761,13 @@
    so text on the plate must use fixed light neutrals instead. */
 .trendTipDate {
   fill: var(--dsw-static-neutral-bluish-300);
-  font-size: 10px;
+  font-size: var(--spk-text-xs);
   line-height: 14px;
 }
 
 .trendTipCost {
   fill: var(--dsw-static-neutral-bluish-00);
-  font-size: 12px;
+  font-size: var(--spk-text-sm);
   line-height: 16px;
   font-weight: 600;
 }
@@ -786,10 +789,10 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 18px;
-  padding: 7px 10px;
+  gap: 8px 16px;
+  padding: 8px 8px;
   border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 10px;
+  border-radius: var(--spk-radius-md);
   background: var(--dsw-alias-bg-layer-1, var(--dsw-alias-bg-layer-2));
 }
 
@@ -802,7 +805,7 @@
 
 .prefsLabel {
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
-  font-size: 11px;
+  font-size: var(--spk-text-xs);
   line-height: 16px;
   margin-right: 2px;
 }
@@ -814,9 +817,9 @@
   border: 1px solid transparent;
   border-radius: 6px;
   font: inherit;
-  font-size: 11px;
+  font-size: var(--spk-text-xs);
   line-height: 16px;
-  padding: 3px 8px;
+  padding: 4px 8px;
   cursor: pointer;
   color: var(--dsw-alias-label-primary);
 }
@@ -858,9 +861,9 @@
   color: var(--dsw-alias-feedback-warning-fg, var(--spk-warn, #9a3412));
   background: var(--dsw-alias-feedback-warning-bg, color-mix(in srgb, var(--spk-warn, #9a3412) 14%, transparent));
   border: 1px solid color-mix(in srgb, var(--spk-warn, #9a3412) 30%, transparent);
-  border-radius: 10px;
+  border-radius: var(--spk-radius-md);
   padding: 8px 12px;
-  font-size: 12px;
+  font-size: var(--spk-text-sm);
   line-height: 18px;
 }
 
@@ -872,9 +875,9 @@
   color: var(--dsw-alias-feedback-warning-fg, var(--spk-warn, #9a3412));
   background: var(--dsw-alias-feedback-warning-bg, color-mix(in srgb, var(--spk-warn, #9a3412) 14%, transparent));
   border: 1px solid color-mix(in srgb, var(--spk-warn, #9a3412) 30%, transparent);
-  border-radius: 10px;
+  border-radius: var(--spk-radius-md);
   padding: 8px 12px;
-  font-size: 12px;
+  font-size: var(--spk-text-sm);
   line-height: 18px;
   white-space: pre-line;
 }
@@ -884,8 +887,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 2px 6px;
-  font-size: 11px;
+  gap: 2px 8px;
+  font-size: var(--spk-text-xs);
   line-height: 16px;
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
   padding-top: 8px;
@@ -909,7 +912,7 @@
 }
 .sparklineEmpty {
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--spk-text-xs);
   line-height: 16px;
   margin-left: 8px;
   font-variant-numeric: tabular-nums;
@@ -930,7 +933,7 @@
    it's the first thing the user reads on a stale dashboard. */
 .lastUpdated {
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--spk-text-xs);
   line-height: 16px;
   margin-top: 4px;
   font-variant-numeric: tabular-nums;

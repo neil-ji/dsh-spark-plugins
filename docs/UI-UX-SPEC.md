@@ -54,11 +54,11 @@
 | 语义 | 值 | token / 来源 |
 |---|---|---|
 | 输入类控件、行、Disclosure | 10 | `--spk-radius-md` |
-| 卡片、Menu | 12 | ⚠️ 现为字面量；**决策：新增 `--spk-radius-card: 12px`**（backlog：迁移后废弃字面量） |
-| Button | 高度一半（md 32→16，sm 26→13） | pill 形制推导，合法，不进 token |
+| 卡片、Menu | 12 | `--spk-radius-card`（v4.1 新增，已全量迁移） |
+| Button | 高度一半（md 32→16，sm 26→13） | pill 形制推导，合法白名单，不进 token |
 | tag / Pill / 状态点 | 999 或 50% | `--spk-radius-full` |
-| 图表微元素（legend 点 3、bar 4） | 3–4 | 允许字面量（非控件语义） |
-| `--spk-radius-sm 7 / lg 14 / xl 20` | — | 保留给浮层与大容器；⚠️ 头注释"卡片 12"与 lg=14 的矛盾以本表为准 |
+| 图表微元素 / 嵌套内层推导 | 3–4 / 6–8 / 9 | 允许字面量（非控件语义；内层 = 外层半径 − 内边距） |
+| `--spk-radius-sm 7 / lg 14 / xl 20` | — | 保留给浮层与大容器 |
 
 ### 2.4 字号排版
 
@@ -67,9 +67,9 @@
 | meta / tag | `--spk-text-xs` | 11px | Pill、辅助说明、字段 label |
 | body-minor | `--spk-text-sm` | 12px | 次要正文、表格次列、sm 按钮 |
 | body | `--spk-text-md` | 13px | 正文默认、输入框、md 按钮 |
-| 卡片题 | ⚠️ 现硬编码 `600 14px/22px` | 14px | Card title、区块标题。**决策：新增 `--spk-text-title: 14px`** |
+| 卡片题 | `--spk-text-title` | 14px | Card title、区块标题（v4.1 新增并收编硬编码） |
 | 强调正文 | `--spk-text-lg` | 15px | KPI 标签行、重要行文 |
-| 页面题 | `--spk-text-xl` | 17px | 页内大标题（dock header 已有模块名时省略，见 4.3） |
+| 页面题 | `--spk-text-xl` | 18px | 页内大标题（dock header 已有模块名时省略，见 4.3；v4.1 由 17 修订为 18，与五面板现实对齐） |
 | Hero 数字 | `--spk-text-2xl/3xl` | 22/30 | 总成本大数字等 |
 
 行高：密排（Pill/label）1.2–1.6；正文 1.4；大标题 22px 固定。字重仅 400 / 500 / 600 三档；数字列优先 `--spk-font-mono`。
@@ -191,9 +191,9 @@
 
 1. 命名：组件 PascalCase + 同名 `module.css`；client 包目录形制遵 AGENTS.md。
 2. 验收：新 UI 必须 `pnpm preview` 对照设计稿 + `check:contrast` + `preview:verify`；进真宿主链路的加 real-host-check 断言。
-3. **Backlog（由本规范确立，落地时 bump ui-kit）**：
-   - [ ] 新增 `--spk-radius-card: 12px`，Card/Menu 迁移，废弃字面量 12px；
-   - [ ] 新增 `--spk-text-title: 14px`，Card.title 迁移；
-   - [ ] Button pill 半径注释化（16/13 = h/2 推导，标进 css 注释）；
-   - [ ] `audit-contrast` → `audit-tokens`：间距/圆角/字号字面量检查（豁免：图表微元素、局部密度 token）；
-   - [ ] `prefers-reduced-motion` 统一 media query 进 ui-kit base。
+3. **已落地（ui-kit 0.5.0 + 四包形制迁移，audit-tokens 闸门已入 check:all）**：
+   - [x] 新增 `--spk-radius-card: 12px` 与 `--spk-text-title: 14px`；面板层 29 处 radius、
+     155 处字号字面量全量迁移；291→0 过闸；
+   - [x] `audit-tokens` 闸门（间距/圆角/字号字面量检查；豁免：ui-kit 组件定义源、
+     图表微元素 3/4、嵌套推导 6/8/9、胶囊推导 13/16、密度 token 定义行）；
+   - [ ] `prefers-reduced-motion` 统一 media query 进 ui-kit base（待办）。
