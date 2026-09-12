@@ -32,8 +32,9 @@
     "check:dsh-upgrade": "node scripts/check-dsh-upgrade.mjs --write-report",
     "check:contrast": "node scripts/audit-contrast.mjs",
     "check:architecture": "node scripts/check-architecture.mjs --strict-locations",
+    "audit-tokens": "node scripts/audit-tokens.mjs",
     "check:version-bump": "node scripts/check-version-bump.mjs",
-    "check:all": "pnpm check:architecture && pnpm check:contrast && pnpm check:version-bump",
+    "check:all": "pnpm check:architecture && pnpm check:contrast && pnpm audit-tokens && pnpm check:version-bump",
     "dryrun:dsh-upgrade": "node scripts/dryrun-upgrade.mjs",
     "finance:sync-prices": "node scripts/sync-finance-prices.mjs",
     "publish:all": "node scripts/publish-all.mjs"
