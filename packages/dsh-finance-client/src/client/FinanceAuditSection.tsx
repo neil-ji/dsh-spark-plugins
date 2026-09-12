@@ -478,6 +478,12 @@ export function FinanceAuditSection(props: FinanceAuditSectionProps) {
   // The hour-of-day chart is a rolling 24h window: while the panel stays open,
   // quietly refresh so the window does not go stale (server rebuilds the ledger
   // with the current now; the refresh patches the snapshot without flashing).
+  //
+  // F11 豁免说明（评审结项时定去留）：这是有意保留的真·时间驱动定时器，不是
+  // 「用轮询模拟事件」的反模式。滚动窗口的过期由墙钟时间决定，宿主侧不存在
+  // 可订阅的对应事件源；面板打开期间 30min 一次的 refresh 与「用户每半小时
+  // 重新点开面板」语义等价。与已移除的 600ms 进度轮询（F11-①，改
+  // finance/events stream 推送）性质不同，不适用事件化改造。
   useEffect(() => {
     const timer = setInterval(() => { refresh() }, 30 * 60_000)
     return () => clearInterval(timer)
