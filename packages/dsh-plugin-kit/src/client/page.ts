@@ -6,7 +6,7 @@
  * 写漏的表现是慢请求覆盖快请求、页面闪回旧数据。
  */
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
-import { messageOf } from './credentials.ts'
+import { messageOf } from './remote-result.ts'
 
 /** 页面快照必须携带的加载状态字段。 */
 export interface PageState {

@@ -51,6 +51,9 @@ const DOCK_MODULES = {
   'dsh-spark-dock/style': 'packages/dsh-spark-dock/src/client/style.ts',
   // 事件契约（帧 schema + typert 描述符）：dock 与 mock 都要它，源码口径直接吃 src。
   'dsh-spark-wire': 'packages/dsh-spark-wire/src/index.ts',
+  // 财务 remote 契约（P5 单源）：host 注册与 client $mount 共用同一份描述符 +
+  // Zod 边界 schema，两种口径都吃源码（wire 是主源码，无构建期生成物）。
+  'dsh-spark-finance-wire': 'packages/dsh-finance-wire/src/index.ts',
 }
 
 /** 组件级画布用的 `…/embed` 源码 barrel（P4：不再是构建产物，两种口径同一份）。 */
@@ -91,8 +94,6 @@ const SOURCE_ALIASES = {
   'dsh-spark-finance-client/client': 'packages/dsh-finance-client/src/client/index.ts',
   'dsh-hippomemo/client': 'packages/dsh-hippomemo/src/client/index.ts',
   ...EMBED_BARRELS,
-  // finance 客户端只做类型引用，唯一的值引用是 remote 协议对象（已构建产物）。
-  'dsh-spark-finance/remote': 'packages/dsh-finance/lib/typert.remote-client.js',
 }
 
 const PACKAGE_NAME = 'preview'

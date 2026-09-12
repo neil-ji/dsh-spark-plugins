@@ -108,6 +108,35 @@ export function apply(ctx) {
     return Object.fromEntries(names.map((service) => [service, root.get(service) !== undefined]))
   }
 
+  /**
+   * Typert 注册面：**「宿主到底注册了什么契约」的唯一可观测口径**。
+   *
+   * 为什么单列一节：P5 之后 host 用 `ctx.typert.register(CONTRIBUTION)` 显式注册，
+   * 而不是靠平台 typert-loader 读包的 `./typert` 导出。两种方式**都能让面板正常
+   * 渲染**（网关还有 SRC 标记兜底），所以「功能没坏」证明不了注册真的发生 ——
+   * 漏了 inject、注册写错包名这类问题会静默退回兜底路径。这里把 registry 的
+   * 实际内容读出来，验收脚本才能断言 `dsh-spark-finance:host` 在里面。
+   */
+  const typert = () => {
+    try {
+      const registry = root.get('typert')
+      if (registry === undefined) return null
+      // `local` 是**宿主侧**调用定义（网关寻址用它）；`remotes` 是消费侧选择，
+      // 宿主进程里恒为空。
+      const local = registry.local?.list?.() ?? []
+      const packages = registry.listPackages?.() ?? []
+      const schemas = registry.list?.() ?? []
+      return {
+        packages: packages.map((entry) => entry.package + ':' + entry.face).sort(),
+        // 端点 = `namespace/method`（网关寻址用的就是这个形状）。
+        endpoints: local.map((entry) => entry.namespace + '/' + entry.method).sort(),
+        schemaKeys: schemas.map((entry) => entry.key).sort(),
+      }
+    } catch (error) {
+      return { error: String(error) }
+    }
+  }
+
   const clientGraph = () => {
     const modules = root.get('clientModules')
     if (modules === undefined) return null
@@ -124,6 +153,7 @@ export function apply(ctx) {
     cwd: process.cwd(),
     repoRoot: REPO_ROOT,
     services: services(),
+    typert: typert(),
     entries: entries(),
     clientGraph: clientGraph(),
     events: {

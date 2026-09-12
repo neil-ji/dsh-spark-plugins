@@ -119,12 +119,15 @@ packages/dsh-finance/
   src/sync/community-prices.ts        ← host 共享同步核心（costToRate / collectRows / fetchCommunityPrices）
   src/pricing.ts                      ← mergePriceLayers（原 pricing.ts 末尾，纯函数）
   src/types.ts                        ← FinanceCommunitySyncResult / FinanceSyncStatus / sync-community-prices 模块导出
-  src/typert.schemas.ts               ← financeCommunitySyncResultSchema / financeSyncStatusSchema
   src/index.ts                        ← FinanceService.syncCommunityPrices / getSyncStatus / setCommunityPrices
-  src/typert.host.ts                  ← 同步方法的 invocation descriptor（wire=options / source=json / codec=src-json）
-  src/typert.remote-client.ts         ← 客户端 Remote 描述
   tests/sync-service.test.ts          ← service-level 集成（5 个 test）
   tests/community-prices.test.ts      ← 共享层测试
+
+packages/dsh-finance-wire/
+  src/index.ts                        ← 单源契约（P5）：同步方法的 invocation descriptor
+                                        （wire=options / source=json / codec=strict）、边界 schema
+                                        与反射模型；host 用 ctx.typert.register 注册，
+                                        client 用 ctx.remote.$mount 挂同一份描述符
 
 packages/dsh-finance-client/
   src/client/persist.ts               ← FinancePrefs.autoSync / lastSync / 持久化

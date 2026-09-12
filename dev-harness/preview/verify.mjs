@@ -34,7 +34,7 @@ const ALIASES = {
   'dsh-hippomemo/client': 'packages/dsh-hippomemo/src/client/index.ts',
   'dsh-connector-wire': 'packages/dsh-github-wire/src/index.ts',
   'dsh-connector-npm-wire': 'packages/dsh-npm-wire/src/index.ts',
-  'dsh-spark-finance/remote': 'packages/dsh-finance/lib/typert.remote-client.js',
+  'dsh-spark-finance-wire': 'packages/dsh-finance-wire/src/index.ts',
   'dsh-connector-npm-ui/client': 'packages/dsh-npm-ui/src/client/index.ts',
   // 组件级画布 / 冒烟吃 `*/embed`，P4 之后它只是源码 barrel（无构建产物）。
   'dsh-connector-npm-ui/embed': 'packages/dsh-npm-ui/src/client/embed.ts',

@@ -2,8 +2,8 @@
  * dsh-spark-finance-client build:
  *  - tsc emits declarations to lib/types
  *  - esbuild bundles the browser half (src/client) into lib/client.js in the
- *    vendored __ModuleLoader__ factory format, inlining dsh-spark-finance/remote and
- *    its zod codecs, externalizing shell-provided modules, and turning CSS
+ *    vendored __ModuleLoader__ factory format, inlining the dsh-spark-finance-wire
+ *    Remote contribution and its zod codecs, externalizing shell-provided modules, and turning CSS
  *    modules into hashed class-name modules with style injection
  *  - esbuild emits the trivial node half (src/index) as lib/index.js
  */

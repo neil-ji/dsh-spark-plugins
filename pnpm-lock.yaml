@@ -138,6 +138,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: ^3.18.1
         version: 3.18.1
+      dsh-spark-finance-wire:
+        specifier: workspace:*
+        version: link:../dsh-finance-wire
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -172,6 +175,9 @@ importers:
       '@deepseek-ai/dsh-typert-protocol':
         specifier: 0.1.2-rc.1
         version: 0.1.2-rc.1(@deepseek-ai/cordis@4.0.1)
+      '@deepseek-ai/dsh-typert-registry':
+        specifier: 0.1.2-rc.1
+        version: 0.1.2-rc.1(@deepseek-ai/cordis@4.0.1)
       '@deepseek-ai/dsh-workspace':
         specifier: 0.1.2-rc.1
         version: 0.1.2-rc.1(91cd4104e92bcec137cc719c5c2687e7)
@@ -186,6 +192,9 @@ importers:
       dsh-spark-finance:
         specifier: workspace:*
         version: link:../dsh-finance
+      dsh-spark-finance-wire:
+        specifier: workspace:*
+        version: link:../dsh-finance-wire
       dsh-spark-plugin-kit:
         specifier: workspace:*
         version: link:../dsh-plugin-kit
@@ -223,6 +232,24 @@ importers:
       react:
         specifier: ^18.2.0
         version: 18.3.1
+
+  packages/dsh-finance-wire:
+    devDependencies:
+      '@deepseek-ai/dsh-typert-protocol':
+        specifier: 0.1.2-rc.1
+        version: 0.1.2-rc.1(@deepseek-ai/cordis@4.0.1)
+      '@deepseek-ai/dsh-typert-registry':
+        specifier: 0.1.2-rc.1
+        version: 0.1.2-rc.1(@deepseek-ai/cordis@4.0.1)
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.12
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      zod:
+        specifier: ^4.0.0
+        version: 4.4.3
 
   packages/dsh-github:
     dependencies:

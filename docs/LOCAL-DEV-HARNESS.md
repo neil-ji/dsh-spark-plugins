@@ -114,6 +114,12 @@ profile 的 `dsh.profile.patchReload: "live"` 只会拉起一个 `root: []` 的�
 curl.exe -s http://127.0.0.1:3997/__dev/probe   # 看 services.hmr / entries[].fiberState / hmrEvents
 ```
 
+探针还带一节 `typert`（`packages` / `endpoints` / `schemaKeys`）—— **「宿主到底注册了什么契约」
+的唯一可观测口径**。为什么需要它：插件可以用 `ctx.typert.register(CONTRIBUTION)` 显式注册，
+也可以只导出 `./typert` 让平台 loader 代注册，而网关在两者都缺席时还有 SRC 标记兜底 ——
+三条路都让面板**正常渲染**，所以「功能没坏」证明不了注册真的发生。`real-host-check.mjs`
+因此断言 `finance/*` 的 8 条端点出现在 `typert.endpoints` 里（P5 之后 finance 走显式注册）。
+
 ### 1.5 保真安装路径（tarball）在隔离 home 下同样成立（已实测）
 
 - `pnpm pack` 闭包 → 写 profile `dependencies: file:<tgz>` + `pnpm-workspace.yaml` `overrides` →
@@ -277,7 +283,7 @@ pnpm preview:verify   # 自检：Node 冒烟 + 服务器/fixture 断言，退出
 - 根 `node_modules` **不 link 工作区包**，所以预览侧用 esbuild 的 resolve 插件把
   `dsh-connector-*/embed`、`dsh-spark-finance-client/embed`、`dsh-hippomemo/embed`、
   `dsh-ui-kit`、`dsh-spark-plugin-kit/client` 与 dock 的 `dsh-spark-dock/*` 指到真实文件
-  （源码口径额外指 `dsh-spark-finance/remote`）。
+  （P5 之后 finance 的 remote 契约是 `dsh-spark-finance-wire` 单源，两种口径都指它的 src）。
 - **esbuild 的 context API 忽略 `write: false` 的路径语义**：产物 path 会是 `<stdout>`，
   必须显式给 `outfile` 才能从 `outputFiles` 取回字节（否则 `/preview.js` 永远 503）。
 - 插件 CSS 变量 `--dsw-*` / `--spk-*` 由 `dsh-ui-kit` 的令牌层提供：

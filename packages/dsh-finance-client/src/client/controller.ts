@@ -12,8 +12,10 @@
 import type { ClientRemote } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
-// Type-only: augments ClientRemote with the generated finance namespace.
-import type {} from 'dsh-spark-finance/remote'
+// F12：失败文案与信封拆解只从 kit 取一处实现（不再各包自带 messageOf）。
+import { messageOf, remoteFailureOf, unwrapRemote } from 'dsh-spark-plugin-kit/client'
+// Type-only: augments ClientRemote with the finance Remote namespace (the
+// augmentation itself is declared in dsh-spark-finance/types).
 import type {
   FinanceBackfillProgress,
   FinanceLedger,
@@ -51,10 +53,6 @@ export interface FinanceAuditState {
 }
 
 type FinanceRemote = ClientRemote['finance']
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
 
 /**
 
@@ -150,18 +148,22 @@ export class FinanceAuditController {
         this.remote.getLedger(),
       ])
       if (generation !== this.generation) return
-      if (!listResult.ok) {
+      // 主数据失败 → 错误态 + 重试（F12 约定 2；这里保留上一次快照而不是清空，
+      // 所以不走 PageLoader 的 blanket 状态迁移）。失败文案一律来自信封。
+      const listFailure = remoteFailureOf(listResult)
+      if (listFailure !== undefined || !listResult.ok) {
         this.store.update(state => {
           state.status = 'error'
-          state.error = listResult.error.message
+          state.error = listFailure ?? 'listProviders failed'
         })
         this.stopProgressPolling()
         return
       }
-      if (!ledgerResult.ok) {
+      const ledgerFailure = remoteFailureOf(ledgerResult)
+      if (ledgerFailure !== undefined || !ledgerResult.ok) {
         this.store.update(state => {
           state.status = 'error'
-          state.error = ledgerResult.error.message
+          state.error = ledgerFailure ?? 'getLedger failed'
         })
         this.stopProgressPolling()
         return

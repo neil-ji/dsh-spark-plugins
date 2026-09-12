@@ -10,7 +10,7 @@
  * `ANNOUNCE_DEDUPE_MS` 内**同一文案**不重复播报，避免事件风暴把气泡打成连击。
  * 文案纪律（MASTER §5.5）：纯文本、无 emoji、无装饰字符；气泡本身零动画。
  */
-import { messageOf } from './credentials.ts'
+import { messageOf } from './remote-result.ts'
 
 /** 情绪档：驱动球的表情层（`prefers-reduced-motion` 与静默形态下只被丢弃）。 */
 export type AnnounceMood = 'happy' | 'alert' | 'think' | 'sad' | 'cheer'

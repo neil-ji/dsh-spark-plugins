@@ -126,7 +126,7 @@ export function checkFileBoundaries({ pkg, role, file, imports, roleOf }) {
   for (const entry of imports) {
     const spec = entry.spec
     if (spec.startsWith('.') || spec.startsWith('node:')) continue
-    // workspace 包名（含子路径，如 dsh-spark-finance/remote）
+    // workspace 包名（含子路径，如 dsh-spark-plugin-kit/client）
     const bare = spec.startsWith('@') ? spec.split('/').slice(0, 2).join('/') : spec.split('/')[0]
     if (bare === pkg) continue // 自引用（包内想走公开入口）不算跨包依赖
     const targetRole = roleOf(bare)
@@ -244,19 +244,18 @@ export function findBoundaryViolations(root) {
 
 /**
  * wire 描述符 → 宿主实现的映射表。新增插件时在这里登记一处即可获得契约闸门。
- * `twin` 是同一契约的第二份手抄产物（只应存在于手写 manifest 的场景）。
+ *
+ * ADR-005 / P5 之后**每份契约只有一个源文件**（`dsh-*-wire` 或插件自带的
+ * `src/wire.ts`）：host 与 client 两侧都从它 import，不再有「第二份手抄产物」
+ * 可以漂移。闸门因此改为校验「同一份 wire 文件内部自洽」——
+ * 描述符方法集必须与 `model.services[].members` 一致。
  */
 export const CONTRACTS = [
   { id: 'github', wire: 'packages/dsh-github-wire/src/index.ts', host: 'packages/dsh-github/src/github-service.ts' },
   { id: 'npm', wire: 'packages/dsh-npm-wire/src/index.ts', host: 'packages/dsh-npm/src/npm-service.ts' },
   { id: 'spark-events', wire: 'packages/dsh-spark-wire/src/index.ts', host: 'packages/dsh-spark/src/events-service.ts' },
   { id: 'hippomemo-events', wire: 'packages/dsh-hippomemo/src/wire.ts', host: 'packages/dsh-hippomemo/src/events-service.ts' },
-  {
-    id: 'finance',
-    wire: 'packages/dsh-finance/src/typert.host.ts',
-    host: 'packages/dsh-finance/src/index.ts',
-    twin: 'packages/dsh-finance/src/typert.remote-client.ts',
-  },
+  { id: 'finance', wire: 'packages/dsh-finance-wire/src/index.ts', host: 'packages/dsh-finance/src/index.ts' },
 ]
 
 /**
@@ -341,26 +340,16 @@ export function findContractDrift(root, options = {}) {
         detail: `描述符声明 ${entry.method}（实现 ${entry.implementation}），但 ${contract.host} 里找不到该实现`,
       })
     }
-    // 两份手抄 manifest 必须一致
-    if (contract.twin !== undefined) {
-      const twinSource = readFileSync(join(root, contract.twin), 'utf8')
-      const twin = extractDeclarations(twinSource).map((entry) => entry.method).sort()
-      const host = declared.map((entry) => entry.method).sort()
-      if (twin.join(',') !== host.join(',')) {
-        failures.push({
-          contract: contract.id,
-          code: 'manifest-twin-drift',
-          detail: `${contract.wire} 与 ${contract.twin} 的方法集合不一致：${host.join(',')} vs ${twin.join(',')}`,
-        })
-      }
-      const members = extractMembers(readFileSync(join(root, contract.wire), 'utf8')).sort()
-      if (members.length > 0 && members.join(',') !== host.join(',')) {
-        failures.push({
-          contract: contract.id,
-          code: 'manifest-member-drift',
-          detail: `manifest 的 members 与 descriptors 不一致：${members.join(',')} vs ${host.join(',')}`,
-        })
-      }
+    // 单源内部自洽：同一份 wire 文件里声明了反射 members 时，它必须与
+    // descriptors 的方法集完全一致（手写的 declaration 块最容易在这里脱节）。
+    const methods = declared.map((entry) => entry.method).sort()
+    const members = extractMembers(wireSource).sort()
+    if (members.length > 0 && members.join(',') !== methods.join(',')) {
+      failures.push({
+        contract: contract.id,
+        code: 'manifest-member-drift',
+        detail: `${contract.wire} 的 members 与 descriptors 不一致：${members.join(',')} vs ${methods.join(',')}`,
+      })
     }
     // sourceLocation 行号：默认告警，--strict-locations 升级为失败
     for (const location of extractSourceLocations(wireSource)) {

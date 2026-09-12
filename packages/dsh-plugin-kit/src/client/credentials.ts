@@ -10,6 +10,11 @@
  */
 import type { RemoteResult, TypertRemoteNamespaceMap } from '@deepseek-ai/dsh-typert-protocol'
 import type { ClientContext } from './context.ts'
+import { messageOf, unwrapRemote } from './remote-result.ts'
+
+// 凭据门面历史上是 `messageOf` 的家；F12 之后它搬去 remote-result.ts（Remote 结果
+// 语义的唯一定义处）。这里保持再导出，避免按文件路径 import 的调用方被迫改。
+export { messageOf } from './remote-result.ts'
 
 /** Credential-seam facts for one reference（0.1.2 远端 wire 视图，不含值本身）。 */
 export interface CredentialView {
@@ -35,11 +40,6 @@ export interface CredentialsSeam {
   unset(ref: string): Promise<RemoteResult<unknown>>
 }
 
-/** Human text for a rejected wire/remote call. */
-export function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
-
 /**
  * 一个凭据 ref 的读写门面（连接器设置页共用）。
  *
@@ -61,9 +61,7 @@ export class CredentialToken {
 
   /** 读凭据状态；失败抛错（调用方的加载骨架负责转错误态）。 */
   async read(): Promise<CredentialView | undefined> {
-    const result = await this.seam.describe([this.ref])
-    if (!result.ok) throw new Error(result.error.message)
-    return result.value[this.ref]
+    return unwrapRemote(await this.seam.describe([this.ref]))[this.ref]
   }
 
   /** 写入凭据值（写-only）。返回失败文案，`undefined` 表示成功。 */

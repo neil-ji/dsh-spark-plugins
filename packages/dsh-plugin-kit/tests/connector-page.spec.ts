@@ -8,7 +8,8 @@
  */
 import { describe, expect, it, vi } from 'vitest'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
-import { CredentialToken, messageOf } from '../src/client/credentials.ts'
+import { CredentialToken } from '../src/client/credentials.ts'
+import { messageOf, remoteFailureOf, unwrapRemote } from '../src/client/remote-result.ts'
 import { PageLoader, type PageState } from '../src/client/page.ts'
 
 interface FakeState extends PageState {
@@ -140,5 +141,18 @@ describe('messageOf', () => {
     expect(messageOf(new Error('x'))).toBe('x')
     expect(messageOf('y')).toBe('y')
     expect(messageOf(42)).toBe('42')
+  })
+})
+
+// F12：传输信封的拆解只在这一处实现，三家连接器共用。
+describe('Remote 结果信封（F12）', () => {
+  it('remoteFailureOf 只在失败时给文案', () => {
+    expect(remoteFailureOf({ ok: true, value: 1 })).toBeUndefined()
+    expect(remoteFailureOf({ ok: false, error: { code: 'x', message: 'boom' } })).toBe('boom')
+  })
+
+  it('unwrapRemote 成功取值、失败抛 Error(error.message)', () => {
+    expect(unwrapRemote({ ok: true, value: { a: 1 } })).toEqual({ a: 1 })
+    expect(() => unwrapRemote({ ok: false, error: { code: 'x', message: 'boom' } })).toThrow('boom')
   })
 })

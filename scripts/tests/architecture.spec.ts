@@ -9,9 +9,12 @@
  * 因为闸门本身写错会静默放过违规。
  */
 import { describe, expect, it } from 'vitest'
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   ALLOWED_EDGES,
+  CONTRACTS,
   checkFileBoundaries,
   collectImports,
   extractDeclarations,
@@ -280,11 +283,34 @@ describe('真实仓库不变量', () => {
     expect(files).toBeGreaterThan(50)
   })
 
-  it('契约零硬漂移（sourceLocation 行号只告警）', () => {
+  it('契约零漂移：实现存在、单源自洽、无 sourceLocation 告警', () => {
     const { failures, warnings, results } = findContractDrift(ROOT)
     expect(failures).toEqual([])
-    expect(results.length).toBeGreaterThanOrEqual(4)
-    // 行号告警目前来自 finance 手抄 manifest，属 P5 待清理项；这里只要求它不变成硬失败。
-    expect(Array.isArray(warnings)).toBe(true)
+    expect(results.length).toBeGreaterThanOrEqual(5)
+    // P5 之后 finance 也吃 wire 单源，描述符不再手抄 sourceLocation —— 告警必须为 0。
+    expect(warnings).toEqual([])
+  })
+
+  it('契约单源：finance 的两份手抄 manifest 已删除，wire 成为唯一源', () => {
+    const finance = CONTRACTS.find((entry) => entry.id === 'finance')
+    expect(finance?.wire).toBe('packages/dsh-finance-wire/src/index.ts')
+    expect(finance !== undefined && 'twin' in finance).toBe(false)
+    for (const gone of [
+      'packages/dsh-finance/src/typert.host.ts',
+      'packages/dsh-finance/src/typert.remote-client.ts',
+    ]) {
+      expect(existsSync(join(ROOT, gone))).toBe(false)
+    }
+    // host 用 ctx.typert.register 显式注册，client $mount 同一份描述符。
+    const host = readFileSync(join(ROOT, 'packages/dsh-finance/src/index.ts'), 'utf8')
+    expect(host).toContain("ctx.inject(['typert']")
+    expect(host).toContain('typertCtx.typert.register(FINANCE_HOST_CONTRIBUTION)')
+    const client = readFileSync(join(ROOT, 'packages/dsh-finance-client/src/client/index.ts'), 'utf8')
+    expect(client).toContain('FINANCE_REMOTE_CONTRIBUTION')
+  })
+
+  it('--strict-locations 在真实仓库上不再有可升级项', () => {
+    const { failures } = findContractDrift(ROOT, { strictLocations: true })
+    expect(failures).toEqual([])
   })
 })

@@ -9,7 +9,10 @@
  * 凭据门面与加载骨架来自 `dsh-spark-plugin-kit/client`（评审 F13：两家连接器
  * 设置页曾各抄一份逐字相同的实现）。
  */
-import { CredentialToken, PageLoader, type ClientContext, type CredentialView } from 'dsh-spark-plugin-kit/client'
+import {
+  CredentialToken, PageLoader, messageOf, remoteFailureOf, unwrapRemote,
+  type ClientContext, type CredentialView,
+} from 'dsh-spark-plugin-kit/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { TypertRemoteNamespaceMap } from '@deepseek-ai/dsh-typert-protocol'
@@ -34,6 +37,14 @@ export interface NpmUiState {
   credential: CredentialView | undefined
   /** Granular access token status (credential ref). */
   token: NpmTokenStatusView | undefined
+  /**
+   * 次要信息 `token.status` 的失败文案（F12）。
+   *
+   * 它是**次要数据**：拿不到时页面照常可用，但**不许静默**——以前失败被吞成
+   * `token === undefined`，界面读起来像「未配置」，用户会照着提示去配一个其实
+   * 已经配好的令牌。现在单独记在这里，页面显示降级提示。
+   */
+  tokenError: string | null
   /** Last connection-test result (draft token or stored token). */
   test: NpmTokenTestView | undefined
 }
@@ -42,7 +53,7 @@ export interface NpmUiState {
 export class NpmUiStore {
   readonly store: SnapshotStore<NpmUiState> = createSnapshotStore<NpmUiState>({
     status: 'idle', error: null, statusView: undefined,
-    credential: undefined, token: undefined, test: undefined,
+    credential: undefined, token: undefined, tokenError: null, test: undefined,
   })
 
   private readonly loader: PageLoader<NpmUiState>
@@ -68,16 +79,20 @@ export class NpmUiStore {
         this.npm['status.get'](),
         this.token.read(),
       ])
-      if (!result.ok) throw new Error(result.error.message)
-      // token.status 是次要信息：失败时保持 undefined，不把整页拖进错误态。
+      // 主数据：失败抛错，由 PageLoader 统一转 status:'error' + 重试（F12 约定 2）。
+      const statusView = unwrapRemote(result)
+      // 次要数据 token.status：失败**不静默吞**（F12 约定 4）—— 记文案、不失能整页。
       let token: NpmTokenStatusView | undefined
+      let tokenError: string | null = null
       try {
         const tokenResult = await this.npm['token.status']()
-        if (tokenResult.ok) token = tokenResult.value
-      } catch {
-        token = undefined
+        const failure = remoteFailureOf(tokenResult)
+        if (failure !== undefined) tokenError = failure
+        else if (tokenResult.ok) token = tokenResult.value
+      } catch (error) {
+        tokenError = messageOf(error)
       }
-      return { statusView: result.value, credential, token }
+      return { statusView, credential, token, tokenError }
     })
   }
 
@@ -88,11 +103,16 @@ export class NpmUiStore {
   async testConnection(draftToken?: string): Promise<string | undefined> {
     try {
       const result = await this.npm['token.test'](draftToken === undefined ? {} : { draftToken })
-      if (!result.ok) return result.error.message
+      // 传输失败：返回文案就地显示（F12 约定 3）。
+      const failure = remoteFailureOf(result)
+      if (failure !== undefined) return failure
+      if (!result.ok) return 'connection test failed'
       this.store.update((s) => { s.test = result.value })
+      // 传输成功但令牌无效：`value.ok` 是**领域结论**（F12 约定 5），与信封的 ok
+      // 正交，必须显示成业务失败而不是「未配置」。
       return result.value.ok ? undefined : (result.value.detail ?? 'connection test failed')
     } catch (error) {
-      return error instanceof Error ? error.message : String(error)
+      return messageOf(error)
     }
   }
 

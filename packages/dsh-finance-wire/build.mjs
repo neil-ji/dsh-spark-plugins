@@ -1,7 +1,7 @@
 /**
- * dsh-spark-finance build: emit declarations with tsc, bundle each entry with
- * esbuild (relative modules inlined, @deepseek-ai/* / zod left as bare
- * imports for the host runtime).
+ * dsh-finance-wire build: pure ESM bundle consumed by both the finance host
+ * bundle and the browser client bundle. @deepseek-ai/* and zod stay bare
+ * imports; the host/client bundlers inline this package as needed.
  */
 import { build } from 'esbuild'
 import { execSync } from 'node:child_process'
@@ -11,15 +11,11 @@ rmSync('lib', { recursive: true, force: true })
 execSync('npx --no-install tsc -p tsconfig.json', { stdio: 'inherit' })
 
 await build({
-  entryPoints: {
-    'index': 'src/index.ts',
-    'types/types': 'src/types.ts',
-    'sync/community-prices': 'src/sync/community-prices.ts',
-  },
+  entryPoints: { 'index': 'src/index.ts' },
   outdir: 'lib',
   bundle: true,
   format: 'esm',
-  platform: 'node',
+  platform: 'neutral',
   target: 'es2022',
   external: ['@deepseek-ai/*', 'zod'],
   logLevel: 'info',

@@ -43,6 +43,9 @@ const check = (name, ok, detail = '') => {
   console.log((ok ? '  ok   ' : '  FAIL ') + name + (detail === '' ? '' : '   ' + detail))
 }
 
+/** CDP WebSocket：提到 try 外，退出前显式 close —— 见文件尾注释。 */
+let ws = null
+
 try {
   let target = null
   for (let i = 0; i < 40; i += 1) {
@@ -55,7 +58,7 @@ try {
   }
   if (!target) throw new Error('no CDP page target')
 
-  const ws = new WebSocket(target.webSocketDebuggerUrl)
+  ws = new WebSocket(target.webSocketDebuggerUrl)
   await new Promise((resolve, reject) => { ws.onopen = resolve; ws.onerror = reject })
   let id = 0
   const pending = new Map()
@@ -205,7 +208,35 @@ try {
       check(`模块「${label}」内容走子槽 pane 位且未失败`, paneState.len > 30 && paneState.failed !== true, JSON.stringify(paneState).slice(0, 240))
     }
 
-    // 4) 诊断：控制台里与事件通道/remote 相关的线索
+    // 4) Typert 契约注册面：P5 之后 finance 用 `ctx.typert.register` 显式注册
+    //    （包不再导出 `./typert`，平台 loader 不会替它注册）。网关在「没注册」时
+    //    会退回 SRC 标记兜底，**面板照样渲染** —— 所以「功能没坏」证明不了注册发生。
+    //    这里直接读宿主的 local 调用定义，断言 8 条 finance 端点真的在里面。
+    // `connection: close` 是必须的：这条请求紧挨着 process.exit，若 undici 的
+    // keep-alive socket 还在收尾，Windows 上会在退出时触发 libuv 断言
+    // (STATUS_STACK_BUFFER_OVERRUN)，把「全绿」变成非零退出码。
+    const typertProbe = await fetch('http://127.0.0.1:3997/__dev/probe', { headers: { connection: 'close' } })
+      .then((r) => r.json())
+      .catch(() => null)
+    const registered = typertProbe?.typert
+    if (registered === null || registered === undefined) {
+      check('typert 注册面可读（/__dev/probe.typert）', false, '探针没有 typert 段（宿主版本过旧？）')
+    } else {
+      const endpoints = registered.endpoints ?? []
+      const financeEndpoints = endpoints.filter((endpoint) => endpoint.startsWith('finance/'))
+      check(
+        'finance 的 8 条 Remote 定义由 ctx.typert.register 落地（非 SRC 兜底）',
+        financeEndpoints.length === 8,
+        JSON.stringify(financeEndpoints),
+      )
+      check(
+        'typert 注册面含 dsh-spark-finance:host（契约单源 P5）',
+        (registered.packages ?? []).includes('dsh-spark-finance:host'),
+        JSON.stringify(registered.packages ?? []),
+      )
+    }
+
+    // 5) 诊断：控制台里与事件通道/remote 相关的线索
     const interesting = console_.filter((line) => /spark|dock|remote|stream|mux|event|Error|error|warn/.test(line))
     console.log('\n--- 控制台（过滤后 ' + interesting.length + '/' + console_.length + ' 条）---')
     for (const line of interesting.slice(0, 20)) console.log('    ' + line.slice(0, 300))
@@ -217,8 +248,13 @@ try {
   for (const line of allInteresting.slice(0, 24)) console.log('    ' + line.slice(0, 300))
 } finally {
   edge.kill()
+  // 显式关掉 CDP 连接：Windows 上若在 socket/handle 还在收尾时调 process.exit()，
+  // libuv 会触发 `!(handle->flags & UV_HANDLE_CLOSING)` 断言并以
+  // STATUS_STACK_BUFFER_OVERRUN (0xC0000409) 结束进程 —— 全绿也会变成非零退出码。
+  // 因此这里只设置 exitCode，让事件循环自然排空。
+  try { ws?.close() } catch { /* 已关闭 */ }
 }
 
 const failed = checks.filter((item) => !item.ok).length
 console.log('\n' + (checks.length - failed) + '/' + checks.length + ' 项通过')
-process.exit(failed === 0 ? 0 : 1)
+process.exitCode = failed === 0 ? 0 : 1

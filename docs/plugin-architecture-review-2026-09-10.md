@@ -51,6 +51,23 @@
 > `@deepseek-ai/dsh-typert-protocol`（凭据 seam 的平台类型单处声明，
 > 不再由两个插件各抄一份声明合并）。
 >
+> **状态（2026-09-13）**：**P5 + F12 落地，评审发现全部关闭**。
+> - **P5 契约单源**：新建 `packages/dsh-finance-wire`（`dsh-spark-finance-wire`）承载
+>   finance 的 8 条 Remote 描述符、Zod 边界 schema 与反射模型；host 改为
+>   `ctx.typert.register(FINANCE_HOST_CONTRIBUTION)`（与 github/npm 同形），client
+>   `$mount(FINANCE_REMOTE_CONTRIBUTION)` 吃同一份对象。`typert.host.ts` /
+>   `typert.remote-client.ts` / `typert.schemas.ts` 三份手抄文件删除，
+>   `sourceLocation` 行号漂移随之消失 —— `check:architecture` 的
+>   `--strict-locations` 变成默认值（0 告警）并进 CI。闸门的 `twin`（第二份手抄产物
+>   比对）删除，改为校验**同一份 wire 文件内部自洽**（descriptors ↔ 反射 `members`）。
+> - **F12 错误语义统一**：`dsh-spark-plugin-kit/client` 新增 `remote-result.ts` ——
+>   Remote 结果语义的唯一定义处（`messageOf` / `remoteFailureOf` / `unwrapRemote`）
+>   与写在文件头的五条约定。github/npm/finance 三家 store 不再各自手写
+>   `if (!result.ok) result.error.message`；npm `token.status` 的**静默吞**修掉，
+>   失败文案落到新状态字段 `tokenError` 并在页面显示降级提示（不再伪装成「未配置」）。
+>   值内领域结论（`NpmTokenTestView.ok` / `GithubProxyTestValue.ok` /
+>   `FinanceCommunitySyncResult.ok`）与信封 `ok` 明确分离，作为约定的第 5 条。
+>
 > **评审范围**：`packages/*` 全 17 包的 host/client 数据面与事件面，重点是「事件如何从宿主到浏览器」
 > 与「dock 如何组合五个插件」。结论基于**逐文件核对**，每条发现都带 `文件:行` 证据；
 > 未能证实的一律标注 **UNVERIFIED**。
@@ -75,10 +92,10 @@
 | F7 | **播报/文案策略写在壳里**（**已关闭**：2026-09-12 —— 播报总线上收 `dsh-spark-plugin-kit/client` 的 `announcements.ts`，文案与情绪由模块自己 `publishAnnouncement`；dock 的 fairy 层退化为纯消费者（只订阅总线画气泡），并有静态闸门禁止 fairy 层 import 领域契约 / 插件 UI）：`fairyEvents.ts` 用字符串匹配把 spark 的业务事件翻成文案与情绪，且有 4s 文案级去重 | P1 | `dock/src/client/fairy/fairyEvents.ts:32-51` |
 | F8 | **退役世代仍参与构建**（**已关闭**：2026-09-11 包连同 kit 死代码一并删除）：`dsh-spark-ui@0.1.4` 还在 workspace（自带 3 条 EventSource + 完整 spark 面板），已从 `plugin-registry.json` 摘除但仍是 `packages/*` 成员 | P2 | `pnpm-workspace.yaml:1-2`、`plugin-registry.json`（无此项） |
 | F9 | **连接预算被当成局部问题**：6 条 HTTP/1.1 长连接上限是全局约束，却由一个 app 包内的注册表局部缓解；harness 还复制了客户端逻辑（`bindSnapshotSelector` 8 行副本） | P2 | `docs/LOCAL-DEV-HARNESS.md:286-289`、`streams.ts` 注释 |
-| F10 | **同一件事三套宿主注册风格**：spark/hippomemo 手写 HTTP 路由；github/npm 用声明式 `ctx.typert.register(HOST_CONTRIBUTION)`；**finance 完全没有 register**，改为手抄 `typert.host.ts` / `typert.remote-client.ts` 两份「像生成器产物」的 manifest —— 且 `sourceLocation` 行号**已经漂移**（写成 `index.ts:96`，实际 `:333`；`listProviders`/`refreshBalance` 都写 `:999`） | P1 | `dsh-github/src/index.ts:39`、`dsh-npm/src/index.ts:40`、`dsh-finance/src/index.ts`（无 `typert.register`，grep 零命中）、`dsh-finance/src/typert.host.ts:95` |
+| F10 | **同一件事三套宿主注册风格**（**已关闭**：2026-09-13 P5 —— finance 改为新建 `dsh-spark-finance-wire` 单源 + `ctx.typert.register(FINANCE_HOST_CONTRIBUTION)`，与 github/npm 同形；两份手抄 manifest 与它们漂移的 `sourceLocation` 一并删除）：spark/hippomemo 手写 HTTP 路由；github/npm 用声明式 `ctx.typert.register(HOST_CONTRIBUTION)`；**finance 完全没有 register**，改为手抄 `typert.host.ts` / `typert.remote-client.ts` 两份「像生成器产物」的 manifest —— 且 `sourceLocation` 行号**已经漂移**（写成 `index.ts:96`，实际 `:333`；`listProviders`/`refreshBalance` 都写 `:999`） | P1 | `dsh-github/src/index.ts:39`、`dsh-npm/src/index.ts:40`、`dsh-finance/src/index.ts`（无 `typert.register`，grep 零命中）、`dsh-finance/src/typert.host.ts:95` |
 | F11 | **刷新策略四套并存**：SSE 推送（spark/hippomemo）、平台转发事件（`credentials/reference-updated`、`settings/document-updated`）、**600ms 轮询**（finance backfill）+ 30min 定时器、以及**页内 `window` 自定义事件**当变更总线（`dsh-finance-dsh-override-changed`） | P1 | `dsh-finance-client/src/client/controller.ts:117`、`FinanceAuditSection.tsx:468,478-481` |
-| F12 | **错误语义三套**：github 把失败抛成 `status:'error'`；npm 在成功值里再嵌一层 `ok:false`，且 `token.status` 失败被静默吞掉（UI 显示「未配置」而非错误）；finance 同时用 envelope、slot `status`、结果 `ok:false` 三种表达 | P2 | `github-ui/src/client/store.ts:77-92`、`npm-ui/src/client/store.ts:99-103,120-123`、`dsh-finance/src/typert.host.ts:51,72` |
-| F13 | **connector 三家约 60% 同构，契约靠手抄**（**部分关闭**：2026-09-12 F13-1 —— github-ui 与 npm-ui 两份凭据/加载 store 的逐字重复已上收 `dsh-spark-plugin-kit/client`（`credentials.ts` 的 `CredentialToken` + `page.ts` 的 `PageLoader`，含竞态守卫单测 11 项），两家 store 158/152 行 → 106/100 行；**P5 待做**：finance 手抄 manifest）：两份 ~150 行凭据/加载 store 有 ~90 行逐字相同；三个 wire 各自手写 ~80 行 descriptor/contribution 样板；finance 把同一份 8 方法 manifest 维护两份（各 ~145 行）；plugin-kit 在 connector 半边**只被当作类型**使用 | P2 | `github-ui/src/client/store.ts:16-30,45-47,63-93,110-131` vs `npm-ui/src/client/store.ts:22-36,55-57,74-112,130-151`；`dsh-finance/src/typert.host.ts:81-225` vs `typert.remote-client.ts:68-212` |
+| F12 | **错误语义三套**（**已关闭**：2026-09-13 —— 约定与实现单处化到 `dsh-spark-plugin-kit/client` 的 `remote-result.ts`（`messageOf`/`remoteFailureOf`/`unwrapRemote` + 五条约定）；三家 store 改吃同一处实现；npm `token.status` 的**静默吞**修掉，失败落 `tokenError` 并在页面提示）：github 把失败抛成 `status:'error'`；npm 在成功值里再嵌一层 `ok:false`，且 `token.status` 失败被静默吞掉（UI 显示「未配置」而非错误）；finance 同时用 envelope、slot `status`、结果 `ok:false` 三种表达 | P2 | `github-ui/src/client/store.ts:77-92`、`npm-ui/src/client/store.ts:99-103,120-123`、`dsh-finance/src/typert.host.ts:51,72` |
+| F13 | **connector 三家约 60% 同构，契约靠手抄**（**已关闭**：2026-09-12 F13-1 —— github-ui 与 npm-ui 两份凭据/加载 store 的逐字重复已上收 `dsh-spark-plugin-kit/client`（`credentials.ts` 的 `CredentialToken` + `page.ts` 的 `PageLoader`，含竞态守卫单测 11 项），两家 store 158/152 行 → 106/100 行；2026-09-13 P5 —— finance 的 8 方法 manifest 收进 `dsh-spark-finance-wire` 单源，host 改用 `ctx.typert.register`，三块 wire 的 descriptor/contribution 样板从此每份只存在一处）：两份 ~150 行凭据/加载 store 有 ~90 行逐字相同；三个 wire 各自手写 ~80 行 descriptor/contribution 样板；finance 把同一份 8 方法 manifest 维护两份（各 ~145 行）；plugin-kit 在 connector 半边**只被当作类型**使用 | P2 | `github-ui/src/client/store.ts:16-30,45-47,63-93,110-131` vs `npm-ui/src/client/store.ts:22-36,55-57,74-112,130-151`；`dsh-finance/src/typert.host.ts:81-225` vs `typert.remote-client.ts:68-212` |
 | F14 | **zero-dsh 预览比真宿主更宽松**（**已关闭**：2026-09-11 W4 落地 —— 假宿主加 inject 门 + 动态命名空间必须走 reflect，预览侧写入路径按 wire schema 单源校验并返回 400，mock ctx 增加 teardown 生命周期，Node 冒烟跑五个插件真 `apply()` 断言自注册顺序与注销）：mock ctx 没有 cordis 的 inject 门（直接给 `remote.spark`），fixture 又给 `sourceSessionId` 兜默认值（真宿主 schema 必填 → 400）。于是「访问规则 / schema 必填 / 服务生命周期」三类回归预览测不出来 | P1 | `dev-harness/preview/src/mock/ctx.ts:168-176`、`fixtures/sparks.mjs:112-129` vs `dsh-spark/src/http.ts` 的 zod 校验；实测记录见 §7 |
 
 **判断**：不是「没实现」，而是**实现方向选错了层**。宿主侧做对了（领域服务 → cordis 事件），
@@ -258,7 +275,7 @@ export interface InvocationDescriptor {
 | **P2** | hippomemo 迁到同一条通道（含它的两处订阅点收敛为一处） | 记忆面板实时刷新正常；连接数从 N+ 降到 1 WS(+1 平台 SSE) | 低 |
 | **P3** | ~~dock 贡献点化（ADR-003）：先让**一个**插件（github）自注册，其余照旧；再加第二个；最后删 `modules.tsx` 与 4 个静态 import~~ **已完成（2026-09-11）**：五个模块全部自注册，`modules.tsx` + 三处 dock 侧 embed pane 删除，真宿主 22/22 | 新增第 6 个插件不改 dock 源码即可出现模块栏；dock bundle 不再依赖 4 个 UI 包（3.3MB → 664KB） | 中（加载顺序/懒加载语义） |
 | **P4** | 治理：~~退役 `dsh-spark-ui`~~ **已做**；~~取消 `embed.cjs` 双产物~~ **已做（2026-09-11）**：四包删除 embed 构建步骤 / `./embed` 导出 / files 条目，闸门新增「单产物」不变量；`src/client/embed.ts` 降级为组件级预览的源码 barrel。文案映射归模块待做 | `pnpm -r build` 包数下降；页面里不再有两份同名插件代码 | 低 |
-| **P5** | connector 收敛：~~凭据/加载 store 上收 kit（一份 ~90 行样板替三家）~~ **已做两家（2026-09-12）**：`CredentialToken` + `PageLoader` 落在 `dsh-spark-plugin-kit/client`；descriptor 单处声明、finance 改回 `ctx.typert.register`、错误语义统一待做 | 三个 UI 包净减代码（本轮 −139/+64 行）；finance manifest 不再手抄（`sourceLocation` 漂移消失） | 低（纯内部重构，契约不变） |
+| **P5** | connector 收敛：~~凭据/加载 store 上收 kit（一份 ~90 行样板替三家）~~ **已做两家（2026-09-12）**；~~descriptor 单处声明 / finance 改回 `ctx.typert.register` / 错误语义统一~~ **已完成（2026-09-13）**：新建 `dsh-spark-finance-wire` 单源（描述符 + Zod schema + 反射模型），host `ctx.typert.register`、client `$mount` 同一份；`remote-result.ts` 收口错误语义，npm `token.status` 静默吞修掉；`--strict-locations` 变默认 | 三家 store / 三块 wire 的样板各只剩一份；finance 的 8 条 `sourceLocation` 告警归零 | 低（纯内部重构，契约不变） |
 
 **为什么不一次性大重写**：P0 是全案的唯一技术赌注（stream 可用性），必须先用最小切片证伪；
 P1–P4 都是机械收敛，且每步都能保持产品可用（旧 SSE 与新通道可短暂并存，
@@ -297,9 +314,11 @@ P1–P4 都是机械收敛，且每步都能保持产品可用（旧 SSE 与新�
 
 ## 7. 实施记录
 
-> **状态**：P0 + P1 + P2 全部落地并**在真宿主验收通过**（见下）；四个手写 SSE 端点
-> （`/sparks|/proposals|/scripts|/hippomemo /events`）已从产品移除；P4 的退役包清理已做
-> （2026-09-11）；P3、P5 与 P4 剩余两项（embed 双产物、文案映射）未做。
+> **状态**：**P0–P5 全部落地**。P0 + P1 + P2 在真宿主验收通过（见下）；四个手写 SSE 端点
+> （`/sparks|/proposals|/scripts|/hippomemo /events`）已从产品移除；P4 的退役包清理与
+> 双产物删除已做（2026-09-11）；P3（ADR-003 自注册）已做（2026-09-11）；F7（播报总线上收）
+> 已做（2026-09-12）；**P5（契约单源 + 错误语义统一）已做（2026-09-13）**。
+> 新鲜验收证据见 `docs/architecture-acceptance-2026-09-13.md`。
 
 ### P0+P1 已完成（2026-09-10）
 

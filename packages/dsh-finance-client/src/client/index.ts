@@ -7,9 +7,9 @@
  */
 
 import type { ClientContext } from 'dsh-spark-plugin-kit/client'
-import financeRemote from 'dsh-spark-finance/remote'
-// Type-only: merges `ctx.remote.finance` and the locale Context merge.
-import type {} from 'dsh-spark-finance/remote'
+// The Remote descriptors + Zod codecs are declared once in the wire package
+// (P5 / ADR-005); this bundle inlines that same source the host registers.
+import { FINANCE_REMOTE_CONTRIBUTION } from 'dsh-spark-finance-wire'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import { en, zh, type FinanceKey } from './locales.ts'
@@ -39,7 +39,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   }, 'ui-finance: dictionaries')
 
   // Keep the finance Remote namespace mounted in the shell (once), then register.
-  const disposeRemote = await ctx.remote.$mount(financeRemote)
+  const disposeRemote = await ctx.remote.$mount(FINANCE_REMOTE_CONTRIBUTION)
   const injected: FinanceDockInject = startFinanceDockModule(ctx)
   if ('failed' in injected) console.warn('[dsh-spark-finance-client] dock 模块以失败态注册（remote.finance 不可用）')
 

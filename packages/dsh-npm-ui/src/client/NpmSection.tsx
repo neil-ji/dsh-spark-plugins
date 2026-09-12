@@ -147,6 +147,14 @@ function Loaded({ injected }: { injected: NpmSectionInjected }): ReactNode {
           </Button>
         </div>
 
+        {state.tokenError !== null && state.tokenError !== undefined
+          ? (
+            <p className={styles.error} role="status">
+              {t('tokenStatusFailed') + ': ' + state.tokenError}
+            </p>
+          )
+          : null}
+
         {state.token !== undefined
           ? <p className={styles.muted}>{state.token.configured ? t('tokenHintOk') : t('tokenHintMissing')}</p>
           : null}

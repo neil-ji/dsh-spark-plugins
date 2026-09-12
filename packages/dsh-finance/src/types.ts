@@ -6,6 +6,43 @@
  * @module @deepseek-ai/dsh-spark-finance/types
  */
 
+import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
+
+/**
+ * The finance Remote namespace, declared once for the whole plugin.
+ *
+ * This block used to live in `typert.remote-client.ts` — one of the two
+ * hand-copied manifests ADR-005 / P5 deleted. The descriptors themselves now
+ * come from `dsh-spark-finance-wire` (a single source); what remains here is
+ * only the static type face, which must name the host types and therefore
+ * cannot live in the dependency-free wire package.
+ */
+declare module '@deepseek-ai/dsh-typert-protocol' {
+  interface TypertRemoteNamespace$66696e616e6365 {
+    getBalance: () => Promise<RemoteResult<FinanceBalanceView>>
+    getLedger: () => Promise<RemoteResult<FinanceLedger>>
+    getOverview: () => Promise<RemoteResult<FinanceOverview>>
+    getBackfillProgress: () => Promise<RemoteResult<FinanceBackfillProgress>>
+    syncCommunityPrices: (options?: FinanceSyncOptions) => Promise<RemoteResult<FinanceCommunitySyncResult>>
+    getSyncStatus: () => Promise<RemoteResult<FinanceSyncStatus | null>>
+    listProviders: () => Promise<RemoteResult<FinanceListProvidersResult>>
+    refreshBalance: (request: FinanceRefreshBalanceRequest) => Promise<RemoteResult<FinanceProviderBalance>>
+  }
+  interface TypertRemoteMap {
+    'finance/getBalance': () => Promise<RemoteResult<FinanceBalanceView>>
+    'finance/getLedger': () => Promise<RemoteResult<FinanceLedger>>
+    'finance/getOverview': () => Promise<RemoteResult<FinanceOverview>>
+    'finance/getBackfillProgress': () => Promise<RemoteResult<FinanceBackfillProgress>>
+    'finance/syncCommunityPrices': (options?: FinanceSyncOptions) => Promise<RemoteResult<FinanceCommunitySyncResult>>
+    'finance/getSyncStatus': () => Promise<RemoteResult<FinanceSyncStatus | null>>
+    'finance/listProviders': () => Promise<RemoteResult<FinanceListProvidersResult>>
+    'finance/refreshBalance': (request: FinanceRefreshBalanceRequest) => Promise<RemoteResult<FinanceProviderBalance>>
+  }
+  interface TypertRemoteNamespaceMap {
+    finance: TypertRemoteNamespace$66696e616e6365
+  }
+}
+
 declare module '@deepseek-ai/dsh-session-projection/types' {
   interface SessionProjectionMap {
     /** Provider-reported token buckets accumulated by model and by UTC day. */

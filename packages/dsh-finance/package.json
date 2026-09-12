@@ -1,6 +1,6 @@
 {
   "name": "dsh-spark-finance",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "description": "DSH 成本统计插件 host：余额接入、账本重放、峰谷/供应商/模型/工作区成本计算核心",
   "type": "module",
   "homepage": "https://neil-ji.github.io/dsh-spark-plugins/",
@@ -27,14 +27,6 @@
       "types": "./lib/types/sync/community-prices.d.ts",
       "default": "./lib/sync/community-prices.js"
     },
-    "./typert": {
-      "types": "./lib/types/typert.host.d.ts",
-      "default": "./lib/typert.host.js"
-    },
-    "./remote": {
-      "types": "./lib/types/typert.remote-client.d.ts",
-      "default": "./lib/typert.remote-client.js"
-    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -52,10 +44,12 @@
     "@deepseek-ai/dsh-session-title": "^0.1.2-rc.1",
     "@deepseek-ai/dsh-settings": "^0.1.2-rc.1",
     "@deepseek-ai/dsh-typert-protocol": "^0.1.2-rc.1",
+    "@deepseek-ai/dsh-typert-registry": "^0.1.2-rc.1",
     "@deepseek-ai/dsh-workspace": "^0.1.2-rc.1"
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.18.1",
+    "dsh-spark-finance-wire": "workspace:*",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -69,6 +63,7 @@
     "@deepseek-ai/dsh-session-title": "^0.1.2-rc.1",
     "@deepseek-ai/dsh-settings": "^0.1.2-rc.1",
     "@deepseek-ai/dsh-typert-protocol": "^0.1.2-rc.1",
+    "@deepseek-ai/dsh-typert-registry": "^0.1.2-rc.1",
     "@deepseek-ai/dsh-workspace": "^0.1.2-rc.1",
     "esbuild": "^0.25.0"
   },

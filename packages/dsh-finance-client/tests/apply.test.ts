@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { apply } from '../src/client/index.ts'
-import financeRemote from 'dsh-spark-finance/remote'
+import { FINANCE_REMOTE_CONTRIBUTION } from 'dsh-spark-finance-wire'
 import type { FinanceCommunitySyncResult } from 'dsh-spark-finance/types'
 
 const stubOkSync: FinanceCommunitySyncResult = {
@@ -92,7 +92,7 @@ describe('dsh-spark-finance-client apply', () => {
   it('mounts the finance Remote contribution', async () => {
     const { ctx } = fakeCtx()
     await apply(ctx)
-    expect(ctx.remote.$mount).toHaveBeenCalledWith(financeRemote)
+    expect(ctx.remote.$mount).toHaveBeenCalledWith(FINANCE_REMOTE_CONTRIBUTION)
   })
 
   // B7: the standalone `settings.section` entry was removed in commit folding

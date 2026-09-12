@@ -33,7 +33,7 @@ jobs:
         run: pnpm -r typecheck
       - name: 单元测试
         run: pnpm test
-      - name: 架构闸门（孤包 / 依赖边界 / 契约漂移）
+      - name: 架构闸门（孤包 / 依赖边界 / 契约漂移，sourceLocation 严格）
         run: pnpm check:architecture
       - name: 设计系统闸门（对比度 / token 完整性 / 文档漂移）
         run: pnpm check:contrast

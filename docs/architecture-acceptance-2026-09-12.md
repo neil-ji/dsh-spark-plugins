@@ -108,6 +108,11 @@ pnpm sandbox:install && pnpm sandbox:up --detach && node dev-harness/real-host-c
 
 ## 6. 未完成项与阻塞
 
+> **后续（2026-09-13）**：本节第 1、2 项均已关闭 —— 阻塞条件（finance 在途改动）已在
+> commit `2cfe036` 落盘，随后完成 P5（`dsh-spark-finance-wire` 单源 + `ctx.typert.register`）
+> 与 F12（`remote-result.ts` 统一约定 + npm 静默吞修复）。新鲜证据见
+> `docs/architecture-acceptance-2026-09-13.md`。以下保留当时的原始记录。
+
 1. **F12 错误语义统一（未做）**：现状三套 —— npm 在成功值里再嵌一层 `ok:false` 且
    `token.status` 失败被静默吞掉；github 用 `status:'error'`；finance 同时用 envelope /
    slot `status` / 结果 `ok:false`。可行的第一步是定统一约定并修 github/npm 两处（不碰

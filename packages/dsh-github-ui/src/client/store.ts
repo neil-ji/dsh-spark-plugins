@@ -6,7 +6,10 @@
  * 凭据门面与加载骨架来自 `dsh-spark-plugin-kit/client`（评审 F13：两家连接器
  * 设置页曾各抄一份逐字相同的实现）。
  */
-import { CredentialToken, PageLoader, type ClientContext, type CredentialView } from 'dsh-spark-plugin-kit/client'
+import {
+  CredentialToken, PageLoader, messageOf, remoteFailureOf, unwrapRemote,
+  type ClientContext, type CredentialView,
+} from 'dsh-spark-plugin-kit/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { TypertRemoteNamespaceMap } from '@deepseek-ai/dsh-typert-protocol'
@@ -58,8 +61,8 @@ export class GithubSettingsStore {
         this.token.read(),
         this.github['config.get'](),
       ])
-      if (!configResult.ok) throw new Error(configResult.error.message)
-      return { credential, config: configResult.value }
+      // 加载路径失败一律抛错，由 PageLoader 转成 status:'error' + 重试（F12 约定 2）。
+      return { credential, config: unwrapRemote(configResult) }
     })
   }
 
@@ -69,11 +72,13 @@ export class GithubSettingsStore {
       const result = await this.github.whoami(
         draftToken === undefined ? {} : { draftToken },
       )
-      if (!result.ok) return result.error.message
-      this.store.update((s) => { s.whoami = result.value })
+      // 操作路径失败返回文案，就地显示（F12 约定 3）。
+      const failure = remoteFailureOf(result)
+      if (failure !== undefined) return failure
+      this.store.update((s) => { s.whoami = result.ok ? result.value : undefined })
       return undefined
     } catch (error) {
-      return error instanceof Error ? error.message : String(error)
+      return messageOf(error)
     }
   }
 
@@ -100,10 +105,13 @@ export class GithubSettingsStore {
   async testProxy(draft?: string): Promise<GithubProxyTestValue> {
     try {
       const result = await this.github['proxy.test'](draft === undefined ? {} : { proxy: draft })
-      if (!result.ok) return { ok: false, latencyMs: 0, host: 'github.com', error: result.error.message }
-      return result.value
+      // 返回值是 GithubProxyTestValue（自带 ok 的**领域结论**，约定 5）：
+      // 传输成功但探测失败仍是这一形状，与信封失败区分开。
+      const failure = remoteFailureOf(result)
+      if (failure !== undefined) return { ok: false, latencyMs: 0, host: 'github.com', error: failure }
+      return result.ok ? result.value : { ok: false, latencyMs: 0, host: 'github.com', error: 'unknown' }
     } catch (error) {
-      return { ok: false, latencyMs: 0, host: 'github.com', error: error instanceof Error ? error.message : String(error) }
+      return { ok: false, latencyMs: 0, host: 'github.com', error: messageOf(error) }
     }
   }
 
@@ -111,11 +119,12 @@ export class GithubSettingsStore {
   async saveConfig(patch: Record<string, unknown>): Promise<string | undefined> {
     try {
       const result = await this.github['config.set']({ patch })
-      if (!result.ok) return result.error.message
-      this.store.update((s) => { s.config = result.value })
+      const failure = remoteFailureOf(result)
+      if (failure !== undefined) return failure
+      if (result.ok) this.store.update((s) => { s.config = result.value })
       return undefined
     } catch (error) {
-      return error instanceof Error ? error.message : String(error)
+      return messageOf(error)
     }
   }
 }

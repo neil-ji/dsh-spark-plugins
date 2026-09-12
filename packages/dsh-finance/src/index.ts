@@ -16,6 +16,8 @@ import type {} from '@deepseek-ai/dsh-session-projection-cache'
 import type {} from '@deepseek-ai/dsh-workspace'
 import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
+import type {} from '@deepseek-ai/dsh-typert-registry'
+import { FINANCE_HOST_CONTRIBUTION } from 'dsh-spark-finance-wire'
 import { fetchFinanceBalance, FinanceBalanceError } from './balance.ts'
 import { backfillFinanceHourly, buildFinanceLedger } from './ledger.ts'
 import { financeUsageHourlyProjectionDefinition, financeUsageProjectionDefinition } from './projection.ts'
@@ -27,10 +29,6 @@ import {
   fetchCommunityPrices,
 } from './sync/community-prices.ts'
 import type { CommunityPriceRow } from './sync/community-prices.ts'
-import {
-  financeCommunitySyncResultSchema,
-  financeSyncStatusSchema,
-} from './typert.schemas.ts'
 import { hostProviderMeta } from './provider-meta.ts'
 import { HOST_KNOWN_PROVIDER_META } from './provider-meta.ts'
 import type {
@@ -274,6 +272,20 @@ export class FinanceService extends TypertRemoteService {
           this.refreshLayerCaches()
         },
       })
+    })
+
+    // P5 / ADR-005: the eight Remote descriptors + their strict Zod codecs +
+    // the reflection model are declared ONCE in dsh-spark-finance-wire and
+    // registered here, exactly like the github/npm connectors. The old
+    // hand-copied `typert.host.ts` manifest (which the platform's
+    // typert-loader picked up from the package's `./typert` export) is gone,
+    // and with it the `sourceLocation` line numbers that had already drifted.
+    //
+    // Injection is optional on purpose: a headless composition without the
+    // typert registry keeps the service usable for balance-only callers, and
+    // the registration is disposed with this plugin's fiber.
+    ctx.inject(['typert'], typertCtx => {
+      typertCtx.typert.register(FINANCE_HOST_CONTRIBUTION)
     })
 
     // Projection registration is optional: headless compositions without the
