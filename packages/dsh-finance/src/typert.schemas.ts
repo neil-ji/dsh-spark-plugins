@@ -159,6 +159,14 @@ export const financeLedgerSchema = z.object({
   })),
   byHourOfDay: z.array(financeHourOfDayRowSchema),
   peakValley: financePeakValleySplitSchema,
+  // Sessions whose stored log could not be read and were skipped: they are
+  // absent from `sessionCount` and every rollup above, and drive the
+  // dashboard's warning banner. Old hosts omit the list entirely.
+  unreadableSessions: z.array(z.object({
+    sessionId: z.string(),
+    createdAt: z.number(),
+    reason: z.string(),
+  })).optional().default([]),
   // Same rolling-upgrade allowance: old hosts send no cut-off date.
   windowedSinceMs: z.number().nullable().optional().default(null),
   hourOfDayWindowStartMs: z.number(),

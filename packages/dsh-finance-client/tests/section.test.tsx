@@ -38,6 +38,7 @@ const ZERO_LEDGER: FinanceLedger = {
   byWorkspace: [],
   tasks: [],
   sessions: [],
+  unreadableSessions: [],
   byHourOfDay: [],
   peakValley: { peakCostMicros: 0, offPeakCostMicros: 0, flatCostMicros: 0, unclassifiedCostMicros: 0, legacyCostMicros: 0, shiftSavingsMicros: 0 },
 }
@@ -422,6 +423,34 @@ describe('FinanceAuditSection (commit 21: multi-provider)', () => {
     const list = providerList([okProvider('deepseek-official', 0)])
     const html = renderToStaticMarkup(createElement(FinanceAuditSection, readyProps(list, ledger())))
     expect(html).toContain('empty')
+  })
+
+  // Regression: one unreadable session log (a legacy v0 artifact whose format
+  // migration is refused) must warn on the dashboard, not blank it. The
+  // ledger still arrives — with the session left out of the rollups — so the
+  // panel renders normally plus one warning line carrying the count.
+  it('warns about unreadable sessions instead of failing the dashboard', () => {
+    const list = providerList([okProvider('deepseek-official', 50_000_000)])
+    const led = ledger({
+      totalCostMicros: 300,
+      sessionCount: 2,
+      unreadableSessions: [
+        { sessionId: 'd4233351-27d4-4319-afcf-002ecabe9ac6', createdAt: 1, reason: 'turn/end 9936 reason abort cause has unexpected member "stack"' },
+      ],
+    })
+    const html = renderToStaticMarkup(createElement(FinanceAuditSection, readyProps(list, led)))
+    // The warning line, with the count substituted into the message.
+    expect(html).toContain('unreadableSessionsHint')
+    expect(html).toContain('title="d4233351-27d4-4319-afcf-002ecabe9ac6')
+    // …and the dashboard itself still rendered (no error page).
+    expect(html).toContain('data-provider="deepseek-official"')
+    expect(html).not.toContain('>error<')
+  })
+
+  it('renders no unreadable-sessions warning when every session reads', () => {
+    const list = providerList([okProvider('deepseek-official', 50_000_000)])
+    const html = renderToStaticMarkup(createElement(FinanceAuditSection, readyProps(list, ledger())))
+    expect(html).not.toContain('unreadableSessionsHint')
   })
 
   it('renders multiple provider cards in the grid without folding them into Other', () => {

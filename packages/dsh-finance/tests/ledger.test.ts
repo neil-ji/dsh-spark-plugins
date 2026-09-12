@@ -38,16 +38,30 @@ function tokenUsage(uncachedInputTokens: number, outputTokens: number, cacheRead
   return { uncachedInputTokens, outputTokens, cacheReadTokens, cacheWriteTokens: 0 }
 }
 
+/**
+ * The reader-side failure a legacy v0 artifact produces on the real host:
+ * `@deepseek-ai/dsh-session-format-v0-to-v1` refuses the whole log when one
+ * `turn/end` abort cause carries a member its exact-key check does not admit.
+ */
+const UNREADABLE_REASON = 'turn/end 9936 reason abort cause has unexpected member "stack"'
+
 function makeCtx(
   headers: Header[],
   projectionValues: Record<string, Record<string, unknown>>,
   coldProjectionValues: Record<string, Record<string, unknown>> = projectionValues,
+  options: {
+    /** Session ids whose persistence read rejects, like a migration-refused log. */
+    unreadable?: readonly string[]
+    logger?: { warn: (message: string, error?: unknown) => void }
+  } = {},
 ) {
+  const unreadable = new Set(options.unreadable ?? [])
   const snapshots = headers.map(header => ({ header, revision: 'rev-' + header.id }))
   // 0.1.2：coldSnapshot 是同步纯折叠（meta, inheritedEventCount, events）；
   // 折叠输入改由 sessionPersistence.inspect 提供的存储元数据 + 完整日志。
   const coldSnapshot = vi.fn((meta: Header) => ({ asOfSeq: 1, values: coldProjectionValues[meta.id] ?? {} }))
   const inspect = vi.fn(async (id: string) => {
+    if (unreadable.has(id)) throw new Error(UNREADABLE_REASON)
     const meta = headers.find(header => header.id === id) ?? ({ id } as Header)
     return { meta, inheritedEventCount: 0, events: [] as never[] }
   })
@@ -70,6 +84,7 @@ function makeCtx(
           sessionIds: ['sess-top'],
         }],
       },
+      logger: options.logger,
     } as never,
     coldSnapshot,
     coldSessionIds,
@@ -204,6 +219,58 @@ describe('buildFinanceLedger', () => {
     })
     const ledger = await buildFinanceLedger(ctx, config)
     expect(ledger.sessions.map(s => s.sessionId)).toEqual(['new', 'old'])
+  })
+
+  // The real-world regression: the host's v0→v1 session migration fail-loud
+  // refuses a whole legacy log when one abort cause carries an extra member,
+  // and the old ledger walk let that single session blank the dashboard.
+  it('skips an unreadable session and reports it instead of failing the ledger', async () => {
+    const warn = vi.fn()
+    const { ctx } = makeCtx([
+      { id: 'sess-ok', createdAt: 1000 },
+      { id: 'sess-legacy', createdAt: 2000, origin: 'subagent', delegationDepth: 2 },
+      { id: 'sess-also-ok', createdAt: 3000 },
+    ], {
+      'sess-ok': { financeUsage: usage(100, 50), title: 'OK' },
+      'sess-legacy': { financeUsage: usage(9_000, 9_000), title: 'Legacy' },
+      'sess-also-ok': { financeUsage: usage(1, 1), title: 'Also OK' },
+    }, undefined, { unreadable: ['sess-legacy'], logger: { warn } })
+
+    const ledger = await buildFinanceLedger(ctx, config)
+
+    // The ledger still builds, and only the readable sessions are priced.
+    expect(ledger.sessionCount).toBe(2)
+    expect(ledger.sessions.map(s => s.sessionId).sort()).toEqual(['sess-also-ok', 'sess-ok'])
+    expect(ledger.totals.uncachedInputTokens).toBe(101)
+    expect(ledger.byModel).toHaveLength(1)
+    expect(ledger.byWorkspace.every(row => row.sessionCount <= 2)).toBe(true)
+
+    // …and the skipped session is reported for the dashboard warning.
+    expect(ledger.unreadableSessions).toEqual([
+      { sessionId: 'sess-legacy', createdAt: 2000, reason: UNREADABLE_REASON },
+    ])
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(String(warn.mock.calls[0][0])).toContain('sess-legacy')
+  })
+
+  it('reports an empty unreadable list when every session reads', async () => {
+    const { ctx } = makeCtx([{ id: 'a', createdAt: 1000 }], { 'a': { financeUsage: usage(1, 1), title: 'A' } })
+    const ledger = await buildFinanceLedger(ctx, config)
+    expect(ledger.unreadableSessions).toEqual([])
+  })
+
+  it('propagates cancellation instead of reporting it as an unreadable session', async () => {
+    const controller = new AbortController()
+    const { ctx } = makeCtx([
+      { id: 'a', createdAt: 1000 },
+      { id: 'b', createdAt: 2000 },
+    ], {
+      'a': { financeUsage: usage(1, 1), title: 'A' },
+      'b': { financeUsage: usage(1, 1), title: 'B' },
+    }, undefined, { unreadable: ['b'] })
+
+    controller.abort()
+    await expect(buildFinanceLedger(ctx, config, controller.signal)).rejects.toThrow(UNREADABLE_REASON)
   })
 })
 

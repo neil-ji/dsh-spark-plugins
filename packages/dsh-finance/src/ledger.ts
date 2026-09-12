@@ -61,6 +61,7 @@ import type {
   FinanceSessionRow,
   FinanceTaskRow,
   FinanceTokenBuckets,
+  FinanceUnreadableSessionRow,
   FinanceUsageProjection,
   FinanceWorkspaceRow,
 } from './types.ts'
@@ -206,6 +207,11 @@ function addInto(record: Record<string, FinanceTokenBuckets>, key: string, bucke
  * (created before the windowed era) and hour-less (unclassified) costs stay
  * full-ledger: they cannot be attributed to an hour, so they never enter the
  * windowed buckets either way. `nowMs` is injectable for deterministic tests.
+ *
+ * Fail-soft per session: one unreadable log (a legacy v0 artifact the host's
+ * session-format migration refuses, a truncated file) is skipped and reported
+ * in `unreadableSessions` instead of aborting the build — mirroring
+ * `backfillFinanceHourly`, where one broken session never aborts the rest.
  */
 export async function buildFinanceLedger(
   ctx: Context,
@@ -230,9 +236,26 @@ export async function buildFinanceLedger(
   const windowedSinceMs = financeWindowedSince(config)
 
   const records: SessionRecord[] = []
+  const unreadableSessions: FinanceUnreadableSessionRow[] = []
   for (const snapshot of snapshots) {
     const header = snapshot.header
-    const read = await readProjection(ctx, header, signal)
+    let read: SessionProjectionRead
+    try {
+      read = await readProjection(ctx, header, signal)
+    } catch (error) {
+      // One unreadable log must not blank the dashboard: skip this session,
+      // keep every other row, and report it for the warning banner. Spend
+      // belonging to it is simply missing from the totals. Cancellation still
+      // propagates — an aborted build is not a broken session.
+      if (signal?.aborted === true) throw error
+      unreadableSessions.push({
+        sessionId: String(header.id),
+        createdAt: header.createdAt,
+        reason: error instanceof Error ? error.message : String(error),
+      })
+      ctx.logger?.warn?.(`finance: session ${String(header.id)} is unreadable, skipped`, error)
+      continue
+    }
     const workspace = workspaceBySession.get(String(header.id)) ?? null
     const legacy = windowedSinceMs !== null && header.createdAt < windowedSinceMs
     const priced = costOf(config, read, header.createdAt, legacy ? header.createdAt : null)
@@ -491,6 +514,7 @@ export async function buildFinanceLedger(
     byWorkspace: workspaceRows,
     tasks: taskRows,
     sessions: records.map(record => record.row).sort((a, b) => b.createdAt - a.createdAt),
+    unreadableSessions,
     byHourOfDay,
     peakValley: split,
   }

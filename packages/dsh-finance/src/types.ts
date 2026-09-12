@@ -378,6 +378,21 @@ export interface FinanceSessionRow {
   costMicros: number
 }
 
+/**
+ * One stored session the ledger could not read and therefore skipped.
+ *
+ * A single unreadable log — a legacy v0 artifact the host's session-format
+ * migration refuses, a truncated file — must not blank the whole dashboard.
+ * The session is excluded from every rollup (its spend is simply missing) and
+ * reported here so the panel can warn instead of failing the build outright.
+ */
+export interface FinanceUnreadableSessionRow {
+  sessionId: string
+  createdAt: number
+  /** Reader-side error message, surfaced verbatim in the dashboard warning. */
+  reason: string
+}
+
 export interface FinanceTaskRow {
   taskId: string
   title: string | null
@@ -556,6 +571,13 @@ export interface FinanceLedger {
   byWorkspace: readonly FinanceWorkspaceRow[]
   tasks: readonly FinanceTaskRow[]
   sessions: readonly FinanceSessionRow[]
+  /**
+   * Sessions whose stored log could not be read, hence skipped (see
+   * {@link FinanceUnreadableSessionRow}). They are absent from `sessionCount`
+   * and from every cost/token rollup above, so the dashboard warns about the
+   * missing spend rather than failing the whole build.
+   */
+  unreadableSessions: readonly FinanceUnreadableSessionRow[]
   /**
    * 24 local hour-of-day cost buckets for the rolling 24-hour window
    * (hourOfDayWindowStartMs .. now), i.e. what the dashboard labels

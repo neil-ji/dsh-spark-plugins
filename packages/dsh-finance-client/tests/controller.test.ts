@@ -61,6 +61,7 @@ const ZERO_LEDGER: FinanceLedger = {
   byWorkspace: [],
   tasks: [],
   sessions: [],
+  unreadableSessions: [],
   byHourOfDay: [],
   peakValley: { peakCostMicros: 0, offPeakCostMicros: 0, flatCostMicros: 0, unclassifiedCostMicros: 0, legacyCostMicros: 0, shiftSavingsMicros: 0 },
 }

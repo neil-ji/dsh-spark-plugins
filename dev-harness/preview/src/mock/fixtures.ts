@@ -122,6 +122,7 @@ export const ZERO_LEDGER: FinanceLedger = {
   byWorkspace: [],
   tasks: [],
   sessions: [],
+  unreadableSessions: [],
   byHourOfDay: [],
   peakValley: {
     peakCostMicros: 0, offPeakCostMicros: 0, flatCostMicros: 0,

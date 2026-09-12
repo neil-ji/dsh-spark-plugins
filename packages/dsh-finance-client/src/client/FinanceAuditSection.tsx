@@ -660,6 +660,11 @@ function FinanceReady({ providerList, ledger, peaks, staleSync, embedded, t, ref
   // full cost while peak/valley only covers the windowed era.
   const split = ledger.peakValley
   const legacyCost = split?.legacyCostMicros ?? 0
+  // Sessions the host could not read at all (a legacy log its format migration
+  // refuses, a truncated file): they are skipped from every rollup, so the
+  // dashboard warns about the missing spend instead of becoming an error page.
+  // Absent on hosts predating the field.
+  const unreadableSessions = ledger.unreadableSessions ?? []
   const splitRows = useMemo(() => {
     if (split === undefined) return [] as ChartDatum[]
     const sources: BreakdownSource[] = []
@@ -697,6 +702,16 @@ function FinanceReady({ providerList, ledger, peaks, staleSync, embedded, t, ref
       {staleSync ? (
         <div className={css.staleSyncHint} role="status">
           {t('staleSyncHint')}
+        </div>
+      ) : null}
+
+      {unreadableSessions.length > 0 ? (
+        <div
+          className={css.unreadableSessionsHint}
+          role="status"
+          title={unreadableSessions.map(row => `${row.sessionId} · ${row.reason}`).join('\n')}
+        >
+          {t('unreadableSessionsHint').replace('{count}', String(unreadableSessions.length))}
         </div>
       ) : null}
 

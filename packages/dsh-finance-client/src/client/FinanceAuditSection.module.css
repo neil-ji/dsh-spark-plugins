@@ -864,6 +864,21 @@
   line-height: 18px;
 }
 
+/* "Unreadable sessions" banner above the dashboard — surfaces when the host
+   could not read one or more stored session logs (e.g. a legacy artifact the
+   session-format migration refuses). Those sessions are skipped rather than
+   failing the build; the banner names the count and hovers the reasons. */
+.unreadableSessionsHint {
+  color: var(--dsw-alias-feedback-warning-fg, var(--spk-warn, #9a3412));
+  background: var(--dsw-alias-feedback-warning-bg, color-mix(in srgb, var(--spk-warn, #9a3412) 14%, transparent));
+  border: 1px solid color-mix(in srgb, var(--spk-warn, #9a3412) 30%, transparent);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: pre-line;
+}
+
 /* "Most worth shifting" hint under the peak/valley split donut. */
 .shiftSavingsTop {
   display: flex;
