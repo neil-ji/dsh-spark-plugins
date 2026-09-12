@@ -4,6 +4,8 @@
 > 与 **F12 错误语义统一**；外加上一轮报告 `docs/architecture-acceptance-2026-09-12.md` §6 的
 > 阻塞解除。
 > 本报告只记录**本次新鲜执行**的验收证据（命令 + 实测输出），不引用对话里的历史结论。
+> **状态：已结项（2026-09-13，HEAD `8dbb277`）** —— 九项验收面全绿，见 §6.1；
+> 唯一未收敛项（F11 两条定时器）已明确划为后续任务。
 > 验收环境：Windows + Node 24 + pnpm 11.11；沙箱宿主 `DSH_HOME=.dev/home`、profile
 > `devweb`、端口 3997。
 
@@ -248,14 +250,41 @@ P0–P2 删掉 SSE 端点后，三份 README 仍在把已移除的端点当产�
 | `dsh-spark-finance/lib/index.js` | 83.2 KB（−2 份 manifest 产物） |
 | `dsh-spark-finance-wire/lib/index.js` | 19.2 KB（新增单源） |
 
+## 6.1 结项验收（2026-09-13，HEAD `8dbb277`）
+
+在 `8dbb277`（工作区干净）上一次性重跑全部验收面，逐项结果：
+
+| # | 项 | 命令 | 实测 |
+| --- | --- | --- | --- |
+| 1 | 依赖可复现（CI 同口径） | `pnpm install --frozen-lockfile` | exit 0，锁文件同步（17 个 project，无解析变更） |
+| 2 | 构建 | `pnpm -r build` | exit 0，无 error/ERR 行 |
+| 3 | 类型 | `pnpm typecheck` | 15 个含脚本的包全 Done，**0 条 `error TS`** |
+| 4 | 单测 | `pnpm test` | **778** 项全过（根 312 · finance 162 · finance-client 133 · hippomemo 108 · spark 63），0 fail |
+| 5 | 门禁 | `pnpm check:all` | 架构**六查全 ok / 0 硬失败 / 0 告警**、对比度 154 项 PASS、版本纪律 PASS |
+| 6 | 预览保真 | `pnpm preview:verify` | **74/74** |
+| 7 | 版本纪律（全会话范围） | `node scripts/check-version-bump.mjs --base b9e05a3` | 4 个 commit **0 漏 bump** |
+| 8 | 发布打包（CI `pack-release-dry` 同口径） | `node scripts/pack-release.mjs --version 0.0.0-acceptance` | **16 个 tarball** + manifest.json + SHA256SUMS + 安装器，总体积 0.86 MB；新增的 `dsh-spark-finance-wire-0.1.0.tgz` 在列 |
+| 9 | 真宿主（tarball 安装 = 用户安装形态） | `node dev-harness/real-host-check.mjs` | **26/26**，控制台 0 告警，**退出码 0** |
+
+真宿主安装面核对：profile 的 16 个 `file:*.tgz` 依赖与提交版本逐一吻合，
+含 `dsh-spark-finance-wire-0.1.0`（本轮新增）与 `dsh-spark-finance-client-0.3.1`。
+
+**结项判定：本轮目标（P5 契约单源 + F12 错误语义统一 + 解除上一轮阻塞）全部达成，
+验收链全绿。** 唯一未收敛项是 §5.1 的 F11 两条定时器，**已判定为后续任务**，
+不在本轮范围内。
+
 ## 7. 复现步骤
 
 ```bash
-pnpm install && pnpm -r build && pnpm typecheck && pnpm test   # ① 构建/类型/单测
-pnpm check:all                                                # ② 架构(严格行号) + 对比度 + 版本纪律
-pnpm preview:verify                                            # ③ 零 dsh 预览自检（74 项）
-
-# ④ 真宿主（tarball 安装形态，与用户安装同路径）
+# ① 依赖可复现 + 构建 / 类型 / 单测
+pnpm install --frozen-lockfile && pnpm -r build && pnpm typecheck && pnpm test
+# ② 门禁：架构(六查，严格行号) + 对比度 + 版本纪律
+pnpm check:all
+# ③ 零 dsh 预览自检（74 项）
+pnpm preview:verify
+# ④ 发布打包（CI 同口径，可选）
+node scripts/pack-release.mjs --version 0.0.0-acceptance --out .dev/dist-release-acceptance
+# ⑤ 真宿主（tarball 安装形态，与用户安装同路径）
 pnpm sandbox:install && pnpm sandbox:up --detach && node dev-harness/real-host-check.mjs
 #    停止宿主：Get-NetTCPConnection -LocalPort 3997 -State Listen | % { Stop-Process -Id $_.OwningProcess -Force }
 ```
