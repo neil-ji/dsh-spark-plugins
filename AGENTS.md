@@ -150,6 +150,8 @@ dock 声明子槽并用平台 `renderSlot(key, { variant, activeId, onSelect }, 
    real-host-check 都按这些选择器断言）。
 6. 视觉规范以 `docs/spark-dock-design.md` 与 ui-kit demo 为准；改 UI 先开 `pnpm preview`
    对照，不凭空发明样式。
+7. **组件/页面/形制的完整规范见 `docs/UI-UX-SPEC.md`**（token 语义、间距/圆角/字号标度、
+   组件状态矩阵、四种页面模板、四态反馈、aria 模式表、密度变体模式）。UI 改动前必读。
 
 ---
 
