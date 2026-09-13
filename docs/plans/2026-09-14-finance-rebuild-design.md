@@ -93,8 +93,8 @@
 
 ## 8. 阶段计划与验收口径
 
-- **P0**（数据已在，零录入即可上线）：视图 ②（含缓存命中率与速率）、视图 ④、视图 ③的错峰与提缓存卡。
-- **P1**：视图 ①（需套餐静态定义）+ 速率投影落地 + 时间成本换算。
+- **P0**（数据已在，零录入即可上线）：视图 ①②③④ 全部落地（① 不含订阅卡，② 含缓存命中率但**不含速率列**），并删除六类配置面。零 host 改动、端点数不变。
+- **P1**：视图 ① 的订阅卡（需套餐静态定义）+ 速率投影落地 + ② 的速率列 + 时间成本换算。
 - **P2**：context 阶梯价格（`tiers`）+ 每 step 上下文长度采集 + 拆分会话反事实（标注估算）。
 - 每阶段验收：`pnpm -r build/typecheck/test` 顺序全绿 → `pnpm check:all` → `pnpm preview:verify` →
   改 host/注册面则 `pnpm sandbox:install` + `node dev-harness/real-host-check.mjs` 退出码 0。
@@ -113,3 +113,19 @@
 - 用户已选 **B**：套餐定义填一次静态（月费/额度/生效期），不追踪每周期剩余额度；
   "省了多少"用实际用量算。
 - 待决：无（技术取舍由实施方自主决定并按上述验收口径自证）。
+
+## 11. P0 落地记录（2026-09-14）
+
+**改了什么**：`dsh-spark-finance-client` 0.4.2 → 0.4.3 —— 面板从「总览/连接/供应商/高级」四页配置面重建为四页决策视图（本月值不值 / 该用谁 / 怎么调度更省 / 项目账）；删除 `FinanceCard`（含 CSS）、`FinanceCardController`、`price-forms`、`PriceEditors`（含 CSS）、`ProviderListView`、`ByModelTable`、`BalanceGrid`、`persist`（三套 localStorage 全删）、`FinanceAuditSection`（含 CSS）与 6 个对应测试文件。新增 `derive.ts`（纯函数派生：命中率 / 混合单位成本 / 分组比价 / 缓存差值估算 / 可用天数）、`FinancePanel` + 四个视图 + `panel.module.css`。host 与 wire **零改动**（仍是既有 9 条端点，全部 strict）。
+
+**验收证据（全部实跑）**：
+
+| 面 | 结果 |
+|---|---|
+| `pnpm -r build` / `pnpm -r typecheck` | 退出码 0（finance-client client.js 722.3kb） |
+| `pnpm -r test` | 退出码 0（finance host 162 + finance-client 38，其余包全绿） |
+| `pnpm check:all` | 架构 0 硬失败 0 告警（含 inject 面覆盖）/ 对比度 PASS / audit-tokens PASS / 版本纪律 PASS |
+| `pnpm preview:verify` | 71/71 通过；含新回归线「已无配置面（价格表 / 供应商默认价 / 视图偏好全部删除）」 |
+| `pnpm sandbox:install` + `node dev-harness/real-host-check.mjs` | 29/29 通过、退出码 0；真宿主 finance pane 实测渲染出新面板（四视图 + 空态引导 + 价格来源脚注），控制台 0 条 |
+
+**尚未做（P1/P2 边界，UI 不放占位、不冒充结论）**：订阅卡与「省了多少」、逐模型输出速率与时间成本、context 阶梯计价与「拆会话能省多少」。
