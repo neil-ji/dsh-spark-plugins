@@ -19,7 +19,10 @@ import { z } from 'zod'
 import type { StreamChunk, TokenUsage } from '@deepseek-ai/dsh-llm'
 import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 import { addFinanceBuckets, emptyFinanceBuckets, financeModelKey } from './pricing.ts'
+import { FINANCE_CONTEXT_BOUNDARIES } from './types.ts'
 import type {
+  FinanceContextBucket,
+  FinanceContextProjection,
   FinanceHourlyProjection,
   FinanceRateProjection,
   FinanceRateStats,
@@ -66,6 +69,7 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
     financeUsage: FinanceUsageState
     financeUsageHourly: FinanceHourlyState
     financeRate: FinanceRateState
+    financeContext: FinanceContextState
   }
 }
 
@@ -394,3 +398,131 @@ export const financeRateProjectionDefinition = {
   },
   stateVersion: 1,
 } satisfies ProjectionDefinition<'financeRate', FinanceRateState>
+
+/* ───────────────── 上下文长度分布（P2）：阶梯价与"拆分会话"的分析输入 ───────────────── */
+
+interface FinanceContextState {
+  currentModel: string | null
+  /** 每模型一份定长桶数组（`FINANCE_CONTEXT_BOUNDARIES.length + 1` 个）。 */
+  byModel: Record<string, FinanceContextBucket[]>
+  /** 上一步样本（用于同一步 last-wins 替换；跨模型的同一步也会被正确撤销）。 */
+  last: { turn: number; step: number; modelKey: string; bucketIndex: number; buckets: FinanceTokenBuckets } | null
+}
+
+/** 空桶数组：边界 + 一个无上界的兜底桶。 */
+function emptyContextBuckets(): FinanceContextBucket[] {
+  return [
+    ...FINANCE_CONTEXT_BOUNDARIES.map((bound) => ({ maxPromptTokens: bound, usage: emptyFinanceBuckets(), steps: 0 })),
+    { maxPromptTokens: null, usage: emptyFinanceBuckets(), steps: 0 },
+  ]
+}
+
+/** 该 prompt 长度落在哪个桶：第一个 `prompt <= bound` 的边界，否则兜底桶。 */
+function contextBucketIndex(promptTokens: number): number {
+  for (let index = 0; index < FINANCE_CONTEXT_BOUNDARIES.length; index += 1) {
+    if (promptTokens <= FINANCE_CONTEXT_BOUNDARIES[index]) return index
+  }
+  return FINANCE_CONTEXT_BOUNDARIES.length
+}
+
+function subtractBuckets(left: FinanceTokenBuckets, right: FinanceTokenBuckets): FinanceTokenBuckets {
+  return {
+    uncachedInputTokens: Math.max(0, left.uncachedInputTokens - right.uncachedInputTokens),
+    cacheReadTokens: Math.max(0, left.cacheReadTokens - right.cacheReadTokens),
+    cacheWriteTokens: Math.max(0, left.cacheWriteTokens - right.cacheWriteTokens),
+    outputTokens: Math.max(0, left.outputTokens - right.outputTokens),
+  }
+}
+
+/** 把 `delta`（+1 / -1，表示写入或撤销）应用到某个桶上。 */
+function bumpContextBucket(
+  buckets: readonly FinanceContextBucket[],
+  index: number,
+  sample: FinanceTokenBuckets,
+  delta: 1 | -1,
+): FinanceContextBucket[] {
+  return buckets.map((bucket, at) => {
+    if (at !== index) return bucket
+    return {
+      maxPromptTokens: bucket.maxPromptTokens,
+      usage: delta === 1 ? addFinanceBuckets(bucket.usage, sample) : subtractBuckets(bucket.usage, sample),
+      steps: Math.max(0, bucket.steps + delta),
+    }
+  })
+}
+
+function contextBucketsEmpty(buckets: readonly FinanceContextBucket[]): boolean {
+  return buckets.every((bucket) => bucket.steps === 0 && isEmpty(bucket.usage))
+}
+
+const contextSchema = z.object({
+  byModel: z.record(z.string(), z.array(z.object({
+    maxPromptTokens: z.number().nullable(),
+    usage: bucketsSchema,
+    steps: z.number().int().nonnegative(),
+  }).strict())),
+}).strict()
+
+/**
+ * The `financeContext` projection unit.
+ *
+ * 记账本**没有**的东西：每一步的 prompt 有多长。阶梯价（有的厂商按上下文长度分档）
+ * 与"把长会话拆开能省多少"都只能从这里算，而 `financeUsage`/`financeUsageHourly`
+ * 已经按模型×小时聚合掉了这层信息。
+ *
+ * forward-only：只有装了本版本的会话才有该键；旧会话缺席时相关卡片不显示该模型。
+ */
+export const financeContextProjectionDefinition = {
+  key: 'financeContext',
+  stateSchema: z.any(),
+  init: () => ({
+    currentModel: null,
+    byModel: {},
+    last: null,
+  }),
+  apply: (state, event) => {
+    if (event.type === 'request/header') {
+      const modelKey = financeModelKey(event.data.header.config.provider, event.data.header.config.model)
+      return state.currentModel === modelKey ? state : { ...state, currentModel: modelKey }
+    }
+
+    const sample = usageSampleFromEvent(event)
+    if (sample === null) return state
+    if (state.currentModel === null) return state
+    const { turn, step, usage } = sample
+    const buckets = bucketsFrom(usage)
+    const promptTokens = buckets.uncachedInputTokens + buckets.cacheReadTokens + buckets.cacheWriteTokens
+    const bucketIndex = contextBucketIndex(promptTokens)
+    const previous = state.last !== null && state.last.turn === turn && state.last.step === step
+      ? state.last
+      : undefined
+    if (previous !== undefined
+      && previous.modelKey === state.currentModel
+      && previous.bucketIndex === bucketIndex
+      && bucketsEqual(previous.buckets, buckets)) {
+      return state
+    }
+
+    // 同一步的旧样本先撤销（旧样本可能属于另一个模型），保证一步只落一个桶。
+    const byModel: Record<string, FinanceContextBucket[]> = { ...state.byModel }
+    if (previous !== undefined) {
+      const previousBuckets = byModel[previous.modelKey] ?? emptyContextBuckets()
+      const restored = bumpContextBucket(previousBuckets, previous.bucketIndex, previous.buckets, -1)
+      if (contextBucketsEmpty(restored)) delete byModel[previous.modelKey]
+      else byModel[previous.modelKey] = restored
+    }
+    const current = byModel[state.currentModel] ?? emptyContextBuckets()
+    byModel[state.currentModel] = bumpContextBucket(current, bucketIndex, buckets, 1)
+
+    return {
+      ...state,
+      byModel,
+      last: { turn, step, modelKey: state.currentModel, bucketIndex, buckets },
+    }
+  },
+  wire: {
+    viewSchema: contextSchema,
+    view: (state): FinanceContextProjection => ({ byModel: state.byModel }),
+  },
+  stateVersion: 1,
+} satisfies ProjectionDefinition<'financeContext', FinanceContextState>

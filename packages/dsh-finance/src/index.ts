@@ -22,6 +22,7 @@ import { FinanceEventsService } from './events-service.ts'
 import { fetchFinanceBalance, FinanceBalanceError } from './balance.ts'
 import { backfillFinanceHourly, buildFinanceLedger } from './ledger.ts'
 import {
+  financeContextProjectionDefinition,
   financeRateProjectionDefinition,
   financeUsageHourlyProjectionDefinition,
   financeUsageProjectionDefinition,
@@ -60,6 +61,7 @@ import type {
 
 export type * from './types.ts'
 export {
+  financeContextProjectionDefinition,
   financeRateProjectionDefinition,
   financeUsageHourlyProjectionDefinition,
   financeUsageProjectionDefinition,
@@ -105,6 +107,7 @@ export {
   normalizeFinanceConfig,
   normalizeFinancePlans,
   normalizeFinancePrices,
+  normalizeFinanceTiers,
 } from './pricing.ts'
 
 /** Settings namespace for user-editable price and base/balance connection facts. */
@@ -231,6 +234,17 @@ export class FinanceService extends TypertRemoteService {
      * 每周期剩余额度；"省了多少"由客户端用实际用量推算（derive.planInsight）。
      * monthlyMicros 上限与 provider 价格同一口径（100,000 主单位）。
      */
+    /**
+     * context 阶梯价（P2，可选）：按 modelKey 声明升序档位，maxPromptTokens 为 0 表示兜底档。
+     * 只服务面板的"拆分会话能省多少"估算，不参与账本既有成本口径。
+     */
+    tiers: z.dict(z.array(z.object({
+      maxPromptTokens: z.number().step(1).min(0).required(),
+      inputMicrosPerMtok: z.number().step(1).min(0).required(),
+      outputMicrosPerMtok: z.number().step(1).min(0).required(),
+      cacheReadMicrosPerMtok: z.number().step(1).min(0),
+      cacheWriteMicrosPerMtok: z.number().step(1).min(0),
+    }))).default({}),
     plans: z.array(z.object({
       provider: z.string().required(),
       monthlyMicros: z.number().step(1).min(0).max(100_000_000_000).required(),
@@ -321,6 +335,8 @@ export class FinanceService extends TypertRemoteService {
       projectionCtx.sessionProjections.register(financeUsageHourlyProjectionDefinition)
       // P1-B：每模型速率（解码墙钟 / 输出 token / 首 token 延迟）。
       projectionCtx.sessionProjections.register(financeRateProjectionDefinition)
+      // P2：每模型上下文长度分布（阶梯价与"拆分会话"的分析输入）。
+      projectionCtx.sessionProjections.register(financeContextProjectionDefinition)
     })
 
     // F11 commit: dedicated stream service for `finance.events()`. Cordis

@@ -6,12 +6,51 @@
  */
 
 import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
-import type { FinancePlanEntry, FinancePlanPeriod } from 'dsh-spark-finance/types'
+import type { FinancePlanEntry, FinancePlanPeriod, FinanceTierEntry } from 'dsh-spark-finance/types'
 import type { FinancePlanSeam } from './controller.ts'
 
-/** settings 里 `finance` 命名空间的形状（只用 plans 一个字段）。 */
+/** settings 里 `finance` 命名空间的形状（面板只用 plans 与 tiers 两个字段）。 */
 export interface FinanceSettingsSection {
   plans?: unknown
+  tiers?: unknown
+}
+
+/**
+ * 容错归一化阶梯价：与宿主 `normalizeFinanceTiers` 同一口径（坏档跳过、升序、
+ * 兜底档 0 排最后）。设置里没写、或写了坏档，都退化成"没有阶梯价"，
+ * 面板据此显示"该模型没有阶梯价，拆分不改变单价"。
+ */
+export function normalizeTierMap(value: unknown): Record<string, readonly FinanceTierEntry[]> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return {}
+  const out: Record<string, readonly FinanceTierEntry[]> = {}
+  for (const [modelKey, list] of Object.entries(value as Record<string, unknown>)) {
+    if (!Array.isArray(list)) continue
+    const entries: FinanceTierEntry[] = []
+    for (const raw of list) {
+      if (raw === null || typeof raw !== 'object') continue
+      const record = raw as Record<string, unknown>
+      const maxPromptTokens = Number(record.maxPromptTokens)
+      const input = Number(record.inputMicrosPerMtok)
+      const output = Number(record.outputMicrosPerMtok)
+      if (!Number.isFinite(maxPromptTokens) || maxPromptTokens < 0) continue
+      if (!Number.isFinite(input) || input < 0) continue
+      if (!Number.isFinite(output) || output < 0) continue
+      const cacheRead = Number(record.cacheReadMicrosPerMtok)
+      const cacheWrite = Number(record.cacheWriteMicrosPerMtok)
+      entries.push({
+        maxPromptTokens: Math.round(maxPromptTokens),
+        inputMicrosPerMtok: Math.round(input),
+        outputMicrosPerMtok: Math.round(output),
+        ...Number.isFinite(cacheRead) && cacheRead >= 0 ? { cacheReadMicrosPerMtok: Math.round(cacheRead) } : {},
+        ...Number.isFinite(cacheWrite) && cacheWrite >= 0 ? { cacheWriteMicrosPerMtok: Math.round(cacheWrite) } : {},
+      })
+    }
+    if (entries.length === 0) continue
+    const bounded = entries.filter((entry) => entry.maxPromptTokens > 0).sort((a, b) => a.maxPromptTokens - b.maxPromptTokens)
+    const catchAll = entries.filter((entry) => entry.maxPromptTokens === 0)
+    out[modelKey] = [...bounded, ...catchAll]
+  }
+  return out
 }
 
 const PERIODS: readonly FinancePlanPeriod[] = ['month', 'month-week', 'month-week-5h']
@@ -66,6 +105,7 @@ export function createPlanSeam(scope: SettingsScope<FinanceSettingsSection>): Fi
       const snapshot = scope.getSnapshot()
       return {
         plans: normalizePlanList(snapshot.value?.plans),
+        tiers: normalizeTierMap(snapshot.value?.tiers),
         writable: snapshot.writable,
       }
     },

@@ -3,6 +3,10 @@ import type { FinanceLedger, FinanceSessionRow, FinanceTokenBuckets } from 'dsh-
 import {
   balanceDaysLeft,
   cacheExtremes,
+  contextProfile,
+  splitEstimate,
+  tierForBucket,
+  usageCostMicros,
   cheapestInGroup,
   dailyAverageMicros,
   effectiveInputTokens,
@@ -165,6 +169,63 @@ describe('derive: balance days left', () => {
     expect(balanceDaysLeft(21_000_000, 7_000_000)).toBeCloseTo(3)
     expect(balanceDaysLeft(undefined, 1)).toBeNull()
     expect(balanceDaysLeft(100, null)).toBeNull()
+  })
+})
+
+describe('derive: 上下文分布与阶梯价（P2）', () => {
+  const bucket = (maxPromptTokens: number | null, usage: FinanceTokenBuckets, steps: number) => ({ maxPromptTokens, usage, steps })
+  const buckets1: ReturnType<typeof bucket>[] = [
+    bucket(32_000, buckets(400_000, 100_000, 0, 30_000), 20),
+    bucket(128_000, buckets(200_000, 300_000, 0, 20_000), 10),
+    bucket(200_000, buckets(0, 0, 0, 0), 0),
+    bucket(1_000_000, buckets(100_000, 50_000, 0, 10_000), 5),
+    bucket(null, buckets(0, 0, 0, 0), 0),
+  ]
+  const tiers = [
+    { maxPromptTokens: 128_000, inputMicrosPerMtok: 1_000_000, outputMicrosPerMtok: 4_000_000 },
+    { maxPromptTokens: 0, inputMicrosPerMtok: 2_000_000, outputMicrosPerMtok: 8_000_000 },
+  ]
+
+  it('splits usage at a context ceiling, conservatively', () => {
+    const profile = contextProfile(buckets1, 128_000)
+    // <= 128k 的两桶进界内
+    expect(profile.atOrBelow.uncachedInputTokens).toBe(600_000)
+    expect(profile.steps).toBe(35)
+    // 1M 桶整体算界外（宁可少算省额）
+    expect(profile.above.uncachedInputTokens).toBe(100_000)
+    expect(profile.stepsAbove).toBe(5)
+    // 界内输入 1_000_000（600k 未缓存 + 400k 缓存读），界外 150_000 → 150k/1_150k
+    expect(profile.shareAbove).toBeCloseTo(150_000 / 1_150_000)
+  })
+
+  it('prices a tier by the bucket upper bound', () => {
+    expect(tierForBucket(buckets1[2], tiers)?.maxPromptTokens).toBe(0)      // 200k 桶 -> 兜底档
+    expect(tierForBucket(buckets1[1], tiers)?.maxPromptTokens).toBe(128_000) // 128k 桶 -> 128k 档
+    expect(tierForBucket(buckets1[4], tiers)?.maxPromptTokens).toBe(0)       // 无上界 -> 兜底档
+    expect(usageCostMicros(buckets(1_000_000, 0, 0, 1_000_000), tiers[0])).toBe(5_000_000)
+    // 缓存读写缺省时按输入价算
+    expect(usageCostMicros(buckets(0, 1_000_000, 1_000_000, 0), tiers[0])).toBe(2_000_000)
+  })
+
+  it('estimates the ceiling saving of compressing every step into the smallest tier', () => {
+    const estimate = splitEstimate(buckets1, tiers)
+    expect(estimate).not.toBeNull()
+    if (estimate !== null) {
+      expect(estimate.smallestCeiling).toBe(128_000)
+      // 观测：32k 桶按 128k 档 400k 输入@1 + 100k 缓存读@1 + 30k 输出@4 = 620k；
+      //        128k 桶按 128k 档 200k@1 + 300k@1 + 20k@4 = 580k；1M 桶按兜底档 100k@2 + 50k@2 + 10k@8 = 380k
+      expect(estimate.observedMicros).toBeCloseTo(1_580_000)
+      // 全部压进 128k 档：1_150k 输入@1 + 60k 输出@4 = 1_390_000
+      expect(estimate.compressedMicros).toBeCloseTo(1_390_000)
+      expect(estimate.savedMicros).toBeCloseTo(190_000)
+    }
+  })
+
+  it('says nothing without tier prices or without a smallest tier', () => {
+    expect(splitEstimate(buckets1, [])).toBeNull()
+    expect(splitEstimate([], tiers)).toBeNull()
+    expect(splitEstimate(buckets1, [{ maxPromptTokens: 0, inputMicrosPerMtok: 1, outputMicrosPerMtok: 1 }])).toBeNull()
+    expect(splitEstimate([bucket(32_000, buckets(0, 0, 0, 0), 0)], tiers)).toBeNull()
   })
 })
 

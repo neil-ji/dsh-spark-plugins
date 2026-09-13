@@ -161,6 +161,14 @@ export function ledger(scenario: Scenario): FinanceLedger {
     shiftSavingsMicros: Math.round(410_000 * scale),
     // 10 分钟解码窗口，decodeTokens 由吞吐推出（rate 与 usage 相互独立）。
     rate: { decodeMs: 600_000, decodeTokens: Math.round(speed * 600), ttftMs: 40 * 320, ttftSteps: 40 },
+    // 上下文分布（P2）：多数步在 32k 以内，少数落在 128k–1M 档
+    context: [
+      { maxPromptTokens: 32_000, usage: buckets(scale * 0.4), steps: Math.round(20 * scale) },
+      { maxPromptTokens: 128_000, usage: buckets(scale * 0.3), steps: Math.round(12 * scale) },
+      { maxPromptTokens: 200_000, usage: buckets(scale * 0.06), steps: Math.round(3 * scale) },
+      { maxPromptTokens: 1_000_000, usage: buckets(scale * 0.05), steps: Math.round(2 * scale) },
+      { maxPromptTokens: null, usage: buckets(0), steps: 0 },
+    ],
   }))
   const byProvider = [
     { provider: 'deepseek', usage: buckets(3.5), costMicros: 18_240_000, modelCount: 2 },
@@ -312,6 +320,21 @@ export const FINANCE_BASE_CONFIG = {
   defaultPrice: { inputMicrosPerMtok: 2_000_000, cacheReadMicrosPerMtok: 200_000, cacheWriteMicrosPerMtok: 2_000_000, outputMicrosPerMtok: 8_000_000 },
   providerDefaults: { deepseek: { inputMicrosPerMtok: 2_000_000, cacheReadMicrosPerMtok: 200_000, cacheWriteMicrosPerMtok: 2_000_000, outputMicrosPerMtok: 8_000_000 } },
   prices: {},
+  /**
+   * context 阶梯价（P2，可选）：只给部分模型填 —— 预览画布因此能同时看到
+   * "有阶梯价 → 给上限估算"和"没填 → 拆分不改变单价"两种形态。
+   */
+  tiers: {
+    'deepseek/deepseek-v4.1-flash': [
+      { maxPromptTokens: 32_000, inputMicrosPerMtok: 2_000_000, cacheReadMicrosPerMtok: 200_000, outputMicrosPerMtok: 8_000_000 },
+      { maxPromptTokens: 128_000, inputMicrosPerMtok: 4_000_000, cacheReadMicrosPerMtok: 400_000, outputMicrosPerMtok: 16_000_000 },
+      { maxPromptTokens: 0, inputMicrosPerMtok: 8_000_000, cacheReadMicrosPerMtok: 800_000, outputMicrosPerMtok: 32_000_000 },
+    ],
+    'deepseek/deepseek-reasoner': [
+      { maxPromptTokens: 128_000, inputMicrosPerMtok: 3_000_000, cacheReadMicrosPerMtok: 300_000, outputMicrosPerMtok: 12_000_000 },
+      { maxPromptTokens: 0, inputMicrosPerMtok: 6_000_000, cacheReadMicrosPerMtok: 600_000, outputMicrosPerMtok: 24_000_000 },
+    ],
+  },
   providers: [
     { provider: 'deepseek', billingMode: 'metered', currency: 'CNY', totalPriceMicros: 0, autoFetchBalance: true },
   ],

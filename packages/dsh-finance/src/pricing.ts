@@ -24,6 +24,8 @@ import type {
   FinancePriceEntry,
   FinancePlanEntry,
   FinancePlanEntryInput,
+  FinanceTierEntry,
+  FinanceTierEntryInput,
   FinancePriceEntryInput,
   FinancePriceRate,
   FinanceProviderBillingMode,
@@ -423,6 +425,44 @@ function financePlanEffectiveFrom(value: string | number | undefined): number {
   return 0
 }
 
+/**
+ * context 阶梯价归一化：丢掉不可信的档（不猜），按 `maxPromptTokens` 升序排列，
+ * `0`（兜底档）恒排最后。空列表的 modelKey 不写入 —— 客户端据此判断"这个模型
+ * 没有阶梯价，拆分不改变单价"。
+ */
+export function normalizeFinanceTiers(
+  tiers: Record<string, readonly FinanceTierEntryInput[]> | undefined,
+): Record<string, readonly FinanceTierEntry[]> {
+  const out: Record<string, readonly FinanceTierEntry[]> = {}
+  for (const [modelKey, list] of Object.entries(tiers ?? {})) {
+    if (!Array.isArray(list)) continue
+    const entries: FinanceTierEntry[] = []
+    for (const raw of list) {
+      if (raw === null || typeof raw !== 'object') continue
+      const maxPromptTokens = Number(raw.maxPromptTokens)
+      const input = Number(raw.inputMicrosPerMtok)
+      const output = Number(raw.outputMicrosPerMtok)
+      if (!Number.isFinite(maxPromptTokens) || maxPromptTokens < 0) continue
+      if (!Number.isFinite(input) || input < 0) continue
+      if (!Number.isFinite(output) || output < 0) continue
+      const cacheRead = Number(raw.cacheReadMicrosPerMtok)
+      const cacheWrite = Number(raw.cacheWriteMicrosPerMtok)
+      entries.push({
+        maxPromptTokens: Math.round(maxPromptTokens),
+        inputMicrosPerMtok: Math.round(input),
+        outputMicrosPerMtok: Math.round(output),
+        ...Number.isFinite(cacheRead) && cacheRead >= 0 ? { cacheReadMicrosPerMtok: Math.round(cacheRead) } : {},
+        ...Number.isFinite(cacheWrite) && cacheWrite >= 0 ? { cacheWriteMicrosPerMtok: Math.round(cacheWrite) } : {},
+      })
+    }
+    if (entries.length === 0) continue
+    const bounded = entries.filter((entry) => entry.maxPromptTokens > 0).sort((a, b) => a.maxPromptTokens - b.maxPromptTokens)
+    const catchAll = entries.filter((entry) => entry.maxPromptTokens === 0)
+    out[modelKey] = [...bounded, ...catchAll]
+  }
+  return out
+}
+
 export function normalizeFinanceConfig(
   raw: FinanceConfigInput,
   hostMetaByProvider: Record<string, FinanceProviderBillingMode> = {},
@@ -438,6 +478,7 @@ export function normalizeFinanceConfig(
     hostMetaByProvider,
     prices: normalizeFinancePrices(raw.prices),
     plans: normalizeFinancePlans(raw.plans),
+    tiers: normalizeFinanceTiers(raw.tiers),
     providers: raw.providers ?? [],
   }
 }

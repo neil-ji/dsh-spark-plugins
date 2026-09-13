@@ -88,6 +88,11 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
      */
     financeRate: FinanceRateProjection
     /**
+     * 每模型的上下文长度分布（P2）：阶梯价与"把长会话拆开能省多少"的分析输入。
+     * 同样 forward-only：旧会话没有该键，相关卡片不显示该模型。
+     */
+    financeContext: FinanceContextProjection
+    /**
      * Provider-reported token totals from the harness core token-meter.
      * Checkpointed for every session (including ones persisted before this
      * plugin existed), so the ledger can read historical totals with zero log
@@ -140,6 +145,53 @@ export interface FinanceRateStats {
 /** Durable rate projection value for one session log. */
 export interface FinanceRateProjection {
   byModel: Record<string, FinanceRateStats>
+}
+
+/**
+ * 上下文长度分档的固定边界（prompt token）。分成 boundaries.length + 1 个桶：
+ * 每桶上界 = 该边界，最后一桶无上界。契约单源：host 折叠与 client 聚合都读这一份。
+ *
+ * 覆盖常见阶梯阈值（32k / 128k / 200k / 1M）；用户配置的档位阈值若不落在这些点上，
+ * 客户端按"桶上界 <= 阈值"保守聚合（宁可少算省额，不多算）。
+ */
+export const FINANCE_CONTEXT_BOUNDARIES: readonly number[] = [32_000, 128_000, 200_000, 1_000_000]
+
+/** 一个上下文长度桶里累计的用量。 */
+export interface FinanceContextBucket {
+  /** 桶上界（prompt token）；null = 最后一桶（无上界）。 */
+  maxPromptTokens: number | null
+  /** 落在该桶的步所消耗的四类 token。 */
+  usage: FinanceTokenBuckets
+  /** 落在该桶的步数。 */
+  steps: number
+}
+
+/** Durable context-length projection value for one session log. */
+export interface FinanceContextProjection {
+  /** Keyed by modelKey; every entry carries exactly `FINANCE_CONTEXT_BOUNDARIES.length + 1` buckets. */
+  byModel: Record<string, FinanceContextBucket[]>
+}
+
+/**
+ * 一条 context 阶梯价档：prompt token 不超过 `maxPromptTokens` 时整步按该档费率计。
+ * `maxPromptTokens = 0` 表示兜底档（吃掉前面所有档没覆盖的部分）。
+ * 这是在既有平价表之外的**附加估算输入**，不改变账本已算出的成本。
+ */
+export interface FinanceTierEntryInput {
+  maxPromptTokens: number
+  inputMicrosPerMtok: number
+  cacheReadMicrosPerMtok?: number
+  cacheWriteMicrosPerMtok?: number
+  outputMicrosPerMtok: number
+}
+
+/** 归一化后的阶梯档（按 `maxPromptTokens` 升序，兜底档恒在最后）。 */
+export interface FinanceTierEntry {
+  maxPromptTokens: number
+  inputMicrosPerMtok: number
+  cacheReadMicrosPerMtok?: number
+  cacheWriteMicrosPerMtok?: number
+  outputMicrosPerMtok: number
 }
 
 /**
@@ -246,6 +298,11 @@ export interface FinanceConfigInput {
    * 刻意**不**追踪每周期剩余额度——"省了多少"由实际用量推算（见客户端 derive.planInsight）。
    */
   plans?: FinancePlanEntryInput[]
+  /**
+   * 按 modelKey 声明的 context 阶梯价（可选）。只在"拆分会话能省多少"这张卡里用，
+   * **不改动**账本已有的成本口径（那仍然走 prices / providerDefaults / defaultPrice）。
+   */
+  tiers?: Record<string, FinanceTierEntryInput[]>
   /**
    * Per-provider configuration entries — one row per provider the user wants
    * to track (DeepSeek-official, MiniMax-M3, OpenAI, ...). Each row carries
@@ -372,6 +429,8 @@ export interface FinanceConfig {
   prices: Record<string, readonly FinancePriceEntry[]>
   /** Resolved static subscription plans (defaults to [] when settings omit them). */
   plans: readonly FinancePlanEntry[]
+  /** Resolved context tier cards, keyed by modelKey (defaults to {} when settings omit them). */
+  tiers: Record<string, readonly FinanceTierEntry[]>
   /** Resolved per-provider list (defaults to [] when settings omit it). */
   providers: readonly FinanceProviderEntry[]
 }
@@ -566,6 +625,11 @@ export interface FinanceModelRow {
    * 旧会话缺席 —— 面板此时不显示速率列，而不是拿 0 冒充。
    */
   rate?: FinanceRateStats
+  /**
+   * 上下文长度分布（P2）。同样 forward-only：旧会话缺席时"拆分会话"卡不显示该模型，
+   * 而不是假装它的上下文很短。
+   */
+  context?: readonly FinanceContextBucket[]
 }
 
 /** Per-provider cost rollup across every model observed under that provider. */

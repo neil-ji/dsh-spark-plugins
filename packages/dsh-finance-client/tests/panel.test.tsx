@@ -46,6 +46,14 @@ const LEDGER: FinanceLedger = {
       costMicros: 10_000_000,
       // 10 分钟解码窗口：a 92 tok/s、b 22 tok/s —— 同一模型跨供应商的时间成本可算。
       rate: { decodeMs: 600_000, decodeTokens: 55_200, ttftMs: 12_000, ttftSteps: 40 },
+      // 上下文分布（P2）：多数步在 32k 以内，少数落在 128k–1M
+      context: [
+        { maxPromptTokens: 32_000, usage: buckets(400_000, 100_000, 0, 30_000), steps: 20 },
+        { maxPromptTokens: 128_000, usage: buckets(200_000, 300_000, 0, 20_000), steps: 10 },
+        { maxPromptTokens: 200_000, usage: buckets(0, 0, 0, 0), steps: 0 },
+        { maxPromptTokens: 1_000_000, usage: buckets(100_000, 50_000, 0, 10_000), steps: 5 },
+        { maxPromptTokens: null, usage: buckets(0, 0, 0, 0), steps: 0 },
+      ],
     },
     {
       modelKey: 'acme/llm',
@@ -54,6 +62,13 @@ const LEDGER: FinanceLedger = {
       usage: buckets(2_000_000, 200_000, 0, 100_000),
       costMicros: 40_000_000,
       rate: { decodeMs: 600_000, decodeTokens: 13_200, ttftMs: 30_000, ttftSteps: 40 },
+      context: [
+        { maxPromptTokens: 32_000, usage: buckets(100_000, 20_000, 0, 10_000), steps: 3 },
+        { maxPromptTokens: 128_000, usage: buckets(0, 0, 0, 0), steps: 0 },
+        { maxPromptTokens: 200_000, usage: buckets(300_000, 100_000, 0, 20_000), steps: 6 },
+        { maxPromptTokens: 1_000_000, usage: buckets(0, 0, 0, 0), steps: 0 },
+        { maxPromptTokens: null, usage: buckets(0, 0, 0, 0), steps: 0 },
+      ],
     },
   ],
   byProvider: [
@@ -103,7 +118,7 @@ const PROVIDERS: FinanceListProvidersResult = {
 
 function render(state: Partial<FinancePanelState>): string {
   const injected = {
-    useSnapshot: () => ({ status: 'ready', error: null, plans: [], plansWritable: false, ...state }) as FinancePanelState,
+    useSnapshot: () => ({ status: 'ready', error: null, plans: [], tiers: {}, plansWritable: false, ...state }) as FinancePanelState,
     t,
     refresh: () => {},
     refreshProvider: async () => {},
@@ -258,7 +273,7 @@ describe('finance views', () => {
   })
 
   it('SaveMore shows both actionable estimates with their basis', () => {
-    const html = renderToStaticMarkup(createElement(SaveMoreView, { ledger: LEDGER, t }))
+    const html = renderToStaticMarkup(createElement(SaveMoreView, { ledger: LEDGER, tiers: {}, t }))
     expect(html).toContain('finance-peak-savings')
     expect(html).toContain('finance-cache-savings')
     expect(html).toContain('cacheSavingsNote')
@@ -268,9 +283,33 @@ describe('finance views', () => {
   it('SaveMore says there is nothing actionable when there is no peak window', () => {
     const html = renderToStaticMarkup(createElement(SaveMoreView, {
       ledger: { ...LEDGER, windowedSinceMs: null, peakValley: { ...LEDGER.peakValley, shiftSavingsMicros: 0 } },
+      tiers: {},
       t,
     }))
     expect(html).toContain('finance-peak-empty')
+  })
+
+  it('拆分卡：有上下文分布 + 阶梯价时给出上限估算，没阶梯价时明说拆分不改变单价', () => {
+    const withTiers = renderToStaticMarkup(createElement(SaveMoreView, {
+      ledger: LEDGER,
+      // 最小档 128k：把长上下文逐步压进这一档的费率
+      tiers: { 'acme/llm': [{ maxPromptTokens: 128_000, inputMicrosPerMtok: 1_000_000, outputMicrosPerMtok: 4_000_000 }] },
+      t,
+    }))
+    expect(withTiers).toContain('finance-context-card')
+    expect(withTiers).toContain('contextSavedUpper')
+    expect(withTiers).toContain('estimateTag')
+    expect(withTiers).toContain('contextNote')
+
+    const withoutTiers = renderToStaticMarkup(createElement(SaveMoreView, { ledger: LEDGER, tiers: {}, t }))
+    expect(withoutTiers).toContain('finance-context-card')
+    expect(withoutTiers).toContain('contextNoTiers')
+  })
+
+  it('拆分卡：没有上下文分布的旧会话不假装上下文很短', () => {
+    const noContext = { ...LEDGER, byModel: LEDGER.byModel.map(({ context: _context, ...row }) => row) }
+    const html = renderToStaticMarkup(createElement(SaveMoreView, { ledger: noContext, tiers: {}, t }))
+    expect(html).toContain('finance-context-empty')
   })
 
   it('Projects lists workspaces with their cost', () => {

@@ -19,6 +19,7 @@ import {
 import {
   FinancePanel,
   FinancePanelController,
+  SaveMoreView,
   WhoToUseView,
   createPlanSeam,
   en as financeEn,
@@ -27,6 +28,7 @@ import {
 import { bindSnapshotSelector } from './snapshot.ts'
 import { err, ok, type MockCtx, type Scenario } from './ctx.ts'
 import {
+  FINANCE_BASE_CONFIG,
   GITHUB_CONFIG,
   GITHUB_PROXY_TEST,
   GITHUB_WHOAMI,
@@ -40,7 +42,7 @@ import {
   syncStatus,
 } from './fixtures.ts'
 
-export { GithubSection, NpmSection, FinancePanel, WhoToUseView }
+export { GithubSection, NpmSection, FinancePanel, SaveMoreView, WhoToUseView }
 
 /* ─────────────────────────── github ─────────────────────────── */
 
@@ -160,8 +162,9 @@ export function buildFinanceInjected(ctx: MockCtx, scenario: Scenario) {
   const namespace = makeFinanceNamespace(scenario)
   ctx.__preview.namespace('remote.finance', namespace)
 
-  // 套餐走 settings 命名空间（假宿主实现 getSnapshot/subscribe/set），
-  // 与真宿主同形：面板只读 + 行内写回。
+  // 套餐与阶梯价走 settings 命名空间（假宿主实现 getSnapshot/subscribe/set），
+  // 与真宿主同形：套餐行内写回，阶梯价只读（composition 层 = cordis.patch.yml 默认值）。
+  ctx.__preview.scope('finance', FINANCE_BASE_CONFIG)
   const scope = ctx.settingsScope.bind({ namespace: 'finance' }) as never
   const controller = new FinancePanelController(namespace as never, createPlanSeam(scope))
   return {

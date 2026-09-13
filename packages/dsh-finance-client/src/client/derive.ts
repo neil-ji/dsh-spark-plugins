@@ -9,12 +9,14 @@
  */
 
 import type {
+  FinanceContextBucket,
   FinanceDayRow,
   FinanceLedger,
   FinanceModelRow,
   FinanceProviderRow,
   FinanceRateStats,
   FinanceSessionRow,
+  FinanceTierEntry,
   FinanceTokenBuckets,
   FinanceWorkspaceRow,
 } from 'dsh-spark-finance/types'
@@ -64,6 +66,8 @@ export interface ModelComparisonRow {
   shiftSavingsMicros?: number
   /** 速率样本；旧会话缺该键（此时不显示速率，而不是显示 0）。 */
   rate?: FinanceRateStats
+  /** 上下文长度分布；旧会话缺该键（此时不显示分布与拆分估算）。 */
+  context?: readonly FinanceContextBucket[]
 }
 
 /** byModel 行 -> 对比行（保持账本的成本降序）。 */
@@ -79,6 +83,7 @@ export function modelComparisonRows(ledger: FinanceLedger): ModelComparisonRow[]
     billingMode: row.billingMode,
     ...(row.shiftSavingsMicros !== undefined ? { shiftSavingsMicros: row.shiftSavingsMicros } : {}),
     ...(row.rate !== undefined ? { rate: row.rate } : {}),
+    ...(row.context !== undefined ? { context: row.context } : {}),
   }))
 }
 
@@ -259,6 +264,134 @@ export function peakShare(ledger: FinanceLedger): number | null {
   const total = ledger.totalCostMicros
   if (total <= 0) return null
   return ledger.peakValley.peakCostMicros / total
+}
+
+/* ─────────────────────── 上下文分布与阶梯价（P2，全部标注估算） ─────────────────────── */
+
+/** 一份用量按某个费率档折算成本（micros）。缓存读/写缺省时按输入价算。 */
+export function usageCostMicros(usage: FinanceTokenBuckets, rate: FinanceTierEntry): number {
+  const input = rate.inputMicrosPerMtok
+  const cacheRead = rate.cacheReadMicrosPerMtok ?? input
+  const cacheWrite = rate.cacheWriteMicrosPerMtok ?? input
+  return (usage.uncachedInputTokens / 1_000_000) * input
+    + (usage.cacheReadTokens / 1_000_000) * cacheRead
+    + (usage.cacheWriteTokens / 1_000_000) * cacheWrite
+    + (usage.outputTokens / 1_000_000) * rate.outputMicrosPerMtok
+}
+
+/** 上下文画像：以某个 prompt 上界为界，把用量劈成"界内 / 界外"。 */
+export interface ContextProfile {
+  /** prompt 长度 <= ceiling 的那部分（四类 token 分别累计）。 */
+  atOrBelow: FinanceTokenBuckets
+  /** prompt 长度 > ceiling 的那部分。 */
+  above: FinanceTokenBuckets
+  /** 该模型记录的步数。 */
+  steps: number
+  /** prompt 超过该界的步数。 */
+  stepsAbove: number
+  /** 界外 token 的输入侧占比（0..1）；没有输入侧 token 时 null。 */
+  shareAbove: number | null
+}
+
+/**
+ * 桶 -> 画像。**保守归属**：一个桶只有当它的上界本身 <= ceiling 时才计入"界内"，
+ * 所以 `ceiling` 落在桶中间时会把这个桶整体算作界外（宁可少算省额）。
+ */
+export function contextProfile(buckets: readonly FinanceContextBucket[], ceiling: number): ContextProfile {
+  let atOrBelow = emptyBuckets()
+  let above = emptyBuckets()
+  let steps = 0
+  let stepsAbove = 0
+  for (const bucket of buckets) {
+    steps += bucket.steps
+    const inRange = bucket.maxPromptTokens !== null && bucket.maxPromptTokens <= ceiling
+    if (inRange) {
+      atOrBelow = sumBuckets(atOrBelow, bucket.usage)
+    } else {
+      above = sumBuckets(above, bucket.usage)
+      stepsAbove += bucket.steps
+    }
+  }
+  const aboveInput = effectiveInputTokens(above)
+  const totalInput = aboveInput + effectiveInputTokens(atOrBelow)
+  return {
+    atOrBelow,
+    above,
+    steps,
+    stepsAbove,
+    shareAbove: totalInput <= 0 ? null : aboveInput / totalInput,
+  }
+}
+
+function emptyBuckets(): FinanceTokenBuckets {
+  return { uncachedInputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 }
+}
+
+function sumBuckets(left: FinanceTokenBuckets, right: FinanceTokenBuckets): FinanceTokenBuckets {
+  return {
+    uncachedInputTokens: left.uncachedInputTokens + right.uncachedInputTokens,
+    cacheReadTokens: left.cacheReadTokens + right.cacheReadTokens,
+    cacheWriteTokens: left.cacheWriteTokens + right.cacheWriteTokens,
+    outputTokens: left.outputTokens + right.outputTokens,
+  }
+}
+
+/** 某个桶适用的费率档：第一个上界 >= 桶上界的档；没有就用兜底档；再没有就用最后一档。 */
+export function tierForBucket(bucket: FinanceContextBucket, tiers: readonly FinanceTierEntry[]): FinanceTierEntry | null {
+  if (tiers.length === 0) return null
+  const catchAll = tiers.find((tier) => tier.maxPromptTokens === 0)
+  if (bucket.maxPromptTokens === null) return catchAll ?? tiers[tiers.length - 1]
+  const match = tiers.find((tier) => tier.maxPromptTokens > 0 && tier.maxPromptTokens >= (bucket.maxPromptTokens as number))
+  return match ?? catchAll ?? tiers[tiers.length - 1]
+}
+
+/** "把每一步都压进最小档"的上限估算。 */
+export interface SplitEstimate {
+  /** 按你填的阶梯价折算的观测成本（估算，独立于账本的成本口径）。 */
+  observedMicros: number
+  /** 同样的 token 量全部按最小档费率折算的成本（估算）。 */
+  compressedMicros: number
+  /** 上限可省 = observed − compressed（不小于 0）。 */
+  savedMicros: number
+  /** 所用的"最小档"上界（用户填的最小 maxPromptTokens）。 */
+  smallestCeiling: number
+  /** 落在最小档之上的输入侧 token 占比。 */
+  shareAbove: number | null
+}
+
+/**
+ * "拆分会话能省多少"的**上限**估算。
+ *
+ * 口径（UI 必须原样带出）：按用户填的阶梯价，把观测到的每一步按它所在档定价得到
+ * `observedMicros`；再把同样的 token 量全部按**最小档**费率定价得到 `compressedMicros`；
+ * 差额就是"如果每个请求的上下文都能压进最小档"的上限。它**不含**拆分会话的代价
+ * （重发前缀、打掉 prompt cache 命中），所以实际省额一定更小 —— 这也是为什么
+ * 卡片文案写的是"上限"。没有阶梯价、或没有最小档时返回 null。
+ */
+export function splitEstimate(
+  buckets: readonly FinanceContextBucket[],
+  tiers: readonly FinanceTierEntry[],
+): SplitEstimate | null {
+  if (buckets.length === 0 || tiers.length === 0) return null
+  const smallest = tiers.find((tier) => tier.maxPromptTokens > 0)
+  if (smallest === undefined) return null
+  let observedMicros = 0
+  let tokens = emptyBuckets()
+  for (const bucket of buckets) {
+    tokens = sumBuckets(tokens, bucket.usage)
+    const tier = tierForBucket(bucket, tiers)
+    if (tier !== null) observedMicros += usageCostMicros(bucket.usage, tier)
+  }
+  if (observedMicros <= 0) return null
+  const compressedMicros = usageCostMicros(tokens, smallest)
+  const profile = contextProfile(buckets, smallest.maxPromptTokens)
+  return {
+    observedMicros,
+    compressedMicros,
+    savedMicros: Math.max(0, observedMicros - compressedMicros),
+    smallestCeiling: smallest.maxPromptTokens,
+    shareAbove: profile.shareAbove,
+  }
 }
 
 /* ─────────────────────────── 速率与时间成本（P1-B） ─────────────────────────── */

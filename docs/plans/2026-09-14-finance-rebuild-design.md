@@ -143,4 +143,15 @@
 - **client**：`derive.outputTokensPerSecond / firstTokenMs / speedComparison`；视图② 新增「输出速率」列，并在**组头常显**时间成本比较（`{slow}` 的 N 个输出 token 按 `{fast}` 的速率只需 X 分钟），标注「估算」。
 - **修正一个真实产品缺陷（由真 fixture 暴露）**：原先 `groupByModel` 按 `modelKey`（`provider/model`）分组，而同一模型由两家供应时 modelKey 天然不同，于是永远各成一组、**根本不存在可比对象** —— 视图② 的「同一个模型哪家更划算」此前形同虚设（P0 的合成 fixture 掩盖了它）。现按 `model` 名分组，`cacheExtremes / estimateCacheSavings / speedComparison` 同步按模型名比。
 - **验收**：`pnpm -r build/typecheck/test` 退出码 0（finance **175** / finance-client **49**）；`pnpm check:all` PASS；`pnpm preview:verify` **79/79**（新增速率列、tok/s、时间成本比较三条断言）；`pnpm sandbox:install` + `node dev-harness/real-host-check.mjs` **29/29** 退出码 0、控制台 0 条。
-- **仍未做**：context 阶梯计价与「拆会话能省多少」（P2）。
+- **仍未做**：无（P0 / P1-A / P1-B / P2 四段全部落地）。
+
+## 14. P2 落地记录（2026-09-14）：上下文阶梯与「拆分会话能省多少」
+
+- **host**：新增 `financeContext` 投影单元 —— 定长 5 桶（≤32k / ≤128k / ≤200k / ≤1M / 无上界），每桶存四类 token 与步数；同一步 last-wins，且跨模型切换时会把旧样本从原模型的桶里正确撤销。新增 `tiers` 配置（按 modelKey 声明升序档位，`maxPromptTokens: 0` 为兜底档）+ `normalizeFinanceTiers`（坏档跳过、升序、兜底档恒最后）。ledger 把分布合进模型行（可选字段 `context`，旧会话缺席）。
+- **client**：`contextProfile / tierForBucket / usageCostMicros / splitEstimate`；视图③ 新增第三张卡「拆分会话能省」——展示**超过 128k 的输入占比**；对填了阶梯价的模型给出**上限**估算（按你填的档位逐步定价 vs 全部按最小档定价之差），没填的模型直接明说「拆分不改变单价（而且会打掉缓存复用，通常更贵）」。
+- **诚实边界（都写在卡片上）**：① 这是**上限**，不含拆分会话自身的代价（重发前缀、掉缓存命中）；② 阶梯价**不参与**账本既有成本口径（账本仍按 prices / providerDefaults / defaultPrice 算），避免两套数字打架；③ 阶梯价只在设置文档 / `cordis.patch.yml` 里声明，**不开配置 UI**（不新增配置页、不出现未接入实体）；④ `financeContext` 是 forward-only，旧会话没有分布时该模型不出现在卡里。
+- **验收**：`pnpm -r build/typecheck/test` 退出码 0（finance **182** / finance-client **55**）；`pnpm check:all` PASS；`pnpm preview:verify` **83/83**（新增拆分卡四条断言）；`pnpm sandbox:install` + `node dev-harness/real-host-check.mjs` **29/29** 退出码 0、控制台 0 条。
+
+## 15. 目标完成度
+
+P0（四视图 + 删除六类配置面）· P1-A（套餐静态定义 + 订阅节省）· P1-B（每模型速率 + 时间成本）· P2（上下文阶梯 + 拆分上限）四段全部落地并各自跑满五项验收；host 端点始终 9 条（8 RPC + `finance/events` stream）、契约未动。附带修掉两个真实缺陷：`modelKey` 分组导致视图② 无法跨供应商比较、价签输入溢出与开发文案泄漏。

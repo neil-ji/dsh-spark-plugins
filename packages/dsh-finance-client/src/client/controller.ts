@@ -18,6 +18,7 @@ import type {
   FinanceListProvidersResult,
   FinancePlanEntry,
   FinanceProviderBalance,
+  FinanceTierEntry,
 } from 'dsh-spark-finance/types'
 import { providerKey } from './derive.ts'
 
@@ -32,15 +33,21 @@ export interface FinancePanelState {
   lastSyncAppliedAt?: number
   /** 静态套餐定义（`finance.plans`，用户填一次）。 */
   plans: readonly FinancePlanEntry[]
+  /** context 阶梯价（`finance.tiers`，按 modelKey）；空 = 没有阶梯价可算。 */
+  tiers: Record<string, readonly FinanceTierEntry[]>
   /** 设置文档是否接受写入；memory 模式下为 false（面板显示只读提示）。 */
   plansWritable: boolean
 }
 
 type FinanceRemote = ClientRemote['finance']
 
-/** 套餐设置面：由挂载层（dock 模块）从 `ctx.settingsScope('finance')` 组装。 */
+/**
+ * `finance` 命名空间的设置面（套餐 + 阶梯价）：由挂载层（dock 模块）从
+ * `ctx.settingsScope('finance')` 组装。只有"读快照 + 整写 plans"两条写能力；
+ * 阶梯价是只读的（它属于价格事实，不是面板该编辑的东西）。
+ */
 export interface FinancePlanSeam {
-  getSnapshot(): { plans: readonly FinancePlanEntry[]; writable: boolean }
+  getSnapshot(): { plans: readonly FinancePlanEntry[]; tiers: Record<string, readonly FinanceTierEntry[]>; writable: boolean }
   subscribe(listener: () => void): () => void
   /** 整体写回 `plans` 字段（settings 的一次原子写）。 */
   write(plans: readonly FinancePlanEntry[]): Promise<void>
@@ -52,6 +59,7 @@ export class FinancePanelController {
     status: 'idle',
     error: null,
     plans: [],
+    tiers: {},
     plansWritable: false,
   })
   private generation = 0
@@ -65,6 +73,7 @@ export class FinancePanelController {
         const snapshot = seam.getSnapshot()
         this.store.update((state) => {
           state.plans = snapshot.plans
+          state.tiers = snapshot.tiers
           state.plansWritable = snapshot.writable
         })
       }

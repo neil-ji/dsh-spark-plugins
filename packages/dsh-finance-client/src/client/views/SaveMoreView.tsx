@@ -7,17 +7,30 @@
 
 import type { ReactNode } from 'react'
 import { BarChart, Card, CHART_PALETTE, Money, formatMicros } from 'dsh-ui-kit'
-import type { FinanceLedger } from 'dsh-spark-finance/types'
-import { cacheExtremes, estimateCacheSavings, formatPercent, modelComparisonRows, peakShare } from '../derive.ts'
+import type { FinanceLedger, FinanceTierEntry } from 'dsh-spark-finance/types'
+import {
+  cacheExtremes,
+  contextProfile,
+  estimateCacheSavings,
+  formatPercent,
+  modelComparisonRows,
+  peakShare,
+  splitEstimate,
+} from '../derive.ts'
 import type { FinanceTranslate } from '../locales.ts'
 import css from '../panel.module.css'
 
 export interface SaveMoreViewProps {
   ledger: FinanceLedger
+  /** context 阶梯价（按 modelKey）；空 = 该模型没有阶梯价，拆分不改变单价。 */
+  tiers: Record<string, readonly FinanceTierEntry[]>
   t: FinanceTranslate
 }
 
-export function SaveMoreView({ ledger, t }: SaveMoreViewProps): ReactNode {
+/** "界外"的参考上界：与常见阶梯阈值 128k 对齐（只用于分布展示）。 */
+const CONTEXT_SHARE_CEILING = 128_000
+
+export function SaveMoreView({ ledger, tiers, t }: SaveMoreViewProps): ReactNode {
   const currency = ledger.currency === '' ? 'CNY' : ledger.currency
   const peak = ledger.peakValley
   const share = peakShare(ledger)
@@ -31,6 +44,7 @@ export function SaveMoreView({ ledger, t }: SaveMoreViewProps): ReactNode {
   const rows = modelComparisonRows(ledger)
   const extremes = cacheExtremes(rows)
   const savings = estimateCacheSavings(rows)
+  const contextRows = rows.filter((row) => row.context !== undefined)
 
   return (
     <>
@@ -78,6 +92,41 @@ export function SaveMoreView({ ledger, t }: SaveMoreViewProps): ReactNode {
               <p className={css.hint}>{t('cacheSavingsNote')}</p>
             </>
           )}
+      </Card>
+
+      <Card title={t('contextCardTitle')} className={css.section}>
+        <p className={css.hint}>{t('contextCardHint')}</p>
+        {contextRows.length === 0
+          ? <p className={css.hint} data-testid="finance-context-empty">{t('contextNoData')}</p>
+          : (
+            <div className={css.table} data-testid="finance-context-card">
+              <div className={`${css.tableHead} ${css.colsModels}`}>
+                <span className={css.cell}>{t('colModel')}</span>
+                <span className={css.cell}>{t('colProvider')}</span>
+                <span className={css.cell}>{t('colContextShare')}</span>
+                <span className={css.cell}>{t('colSavingUpper')}</span>
+              </div>
+              {contextRows.map((row) => {
+                const buckets = row.context ?? []
+                const modelTiers = tiers[row.modelKey] ?? []
+                const profile = contextProfile(buckets, CONTEXT_SHARE_CEILING)
+                const estimate = splitEstimate(buckets, modelTiers)
+                return (
+                  <div className={`${css.tableRow} ${css.colsModels}`} key={`context:${row.modelKey}`} data-testid={`finance-context-${row.modelKey}`}>
+                    <span className={`${css.cell} ${css.modelKey}`} title={row.modelKey}>{row.model}</span>
+                    <span className={css.cell}>{row.provider}</span>
+                    <span className={css.cell}>{t('contextAboveShare', { pct: formatPercent(profile.shareAbove) })}</span>
+                    <span className={css.cell}>
+                      {estimate === null
+                        ? (modelTiers.length === 0 ? t('contextNoTiers') : t('contextNoUsage'))
+                        : `${t('contextSavedUpper', { amount: formatMicros(Math.round(estimate.savedMicros)) })} · ${t('estimateTag')}`}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        <p className={css.hint}>{t('contextNote')}</p>
       </Card>
     </>
   )

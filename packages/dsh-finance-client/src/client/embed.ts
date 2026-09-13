@@ -8,6 +8,7 @@
 export { FinancePanel, type FinancePanelInjected, type FinanceView } from './FinancePanel.tsx'
 export { WhoToUseView, type WhoToUseViewProps } from './views/WhoToUseView.tsx'
 export { ThisMonthView, type ThisMonthViewProps } from './views/ThisMonthView.tsx'
+export { SaveMoreView, type SaveMoreViewProps } from './views/SaveMoreView.tsx'
 export { FinancePanelController, type FinancePanelState, type FinancePlanSeam } from './controller.ts'
 export { createPlanSeam, normalizePlanList, majorToMicros, microsToMajor, type FinanceSettingsSection } from './plans.ts'
 export { en, zh, type FinanceKey, type FinanceTranslate } from './locales.ts'

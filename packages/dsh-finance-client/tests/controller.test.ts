@@ -143,7 +143,7 @@ describe('FinancePanelController', () => {
     let plans = [{ provider: 'acme', monthlyMicros: 5_000_000, currency: 'CNY', effectiveFrom: 0 }]
     let listeners = 0
     const seam = {
-      getSnapshot: () => ({ plans, writable: true }),
+      getSnapshot: () => ({ plans, tiers: {}, writable: true }),
       subscribe: () => { listeners += 1; return () => { listeners -= 1 } },
       write: async (next: typeof plans) => { plans = next },
     }
