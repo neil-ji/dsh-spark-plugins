@@ -16,8 +16,11 @@
  *   ② 每 agent 会话只注入一次；
  *   ③ 只用 `GET /sparks/stats` 同源的统计，不 list 全量再过滤（O(n) + 预算风险）。
  *
- * 未实现（设计 §5.3，B 档）：脏标记 + 惰性 reflect。挂载点就在本文件的 pre-step 里，
- * 但需要先有"距上次 reflect 的新增数"这个持久标记，故不在 A 档。
+ * 本模块同时承载三档改造的**编排**（每档的判定逻辑都是可单测的纯函数，放在各自模块里）：
+ *   A（已落地）收件箱提醒        —— 本文件
+ *   B 惰性涌现（§5.3）          —— `reflect-scheduler.ts`（脏标记判定）
+ *   C 脚本建议（§5.4）          —— `script-match.ts`（最近工具序列 × triggers）
+ *   D 命令失败挖掘（§5.5）      —— `command-mining.ts`（默认关）
  */
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
@@ -25,11 +28,15 @@ import type { PreStepDecision } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import type { SparkStats, SparkView } from 'dsh-spark-wire'
+import { shouldReflect } from './reflect-scheduler.ts'
+import { collectRecentCalls, matchScripts, renderScriptSuggestion } from './script-match.ts'
+import { observeSessionEvent, renderPitfallBriefing, selectPitfalls } from './command-mining.ts'
 import type {} from './spark-service.ts'
 import type {} from './emerge-service.ts'
+import type {} from './script-service.ts'
 
 export const name = 'spark-inbox'
-export const inject = ['agents', 'spark', 'emerge'] as const
+export const inject = ['agents', 'spark', 'emerge', 'script'] as const
 
 export interface SparkInboxConfig {
   /** 关掉即回到"只写不读"（默认 true）。 */
@@ -38,12 +45,41 @@ export interface SparkInboxConfig {
   maxChars?: number
   /** 最多列出几条待处理火花。默认 3。 */
   maxItems?: number
+  /** B 档：惰性涌现（脏标记 + 会话首步触发，无定时器）。 */
+  reflect?: { enabled?: boolean; threshold?: number; minIntervalMs?: number }
+  /** C 档：命中 scripts 的 triggers 时注入"有现成脚本"建议。 */
+  scriptSuggest?: { enabled?: boolean; maxRecentCalls?: number; maxChars?: number }
+  /** D 档：命令失败挖掘（**默认关**，先在沙箱观察一轮再开）。 */
+  commandMining?: { enabled?: boolean; minSessions?: number; maxPitfalls?: number; maxChars?: number }
 }
 
-export const Config: z<{ enabled: boolean; maxChars: number; maxItems: number }> = z.object({
+export const Config: z<{
+  enabled: boolean
+  maxChars: number
+  maxItems: number
+  reflect: { enabled: boolean; threshold: number; minIntervalMs: number }
+  scriptSuggest: { enabled: boolean; maxRecentCalls: number; maxChars: number }
+  commandMining: { enabled: boolean; minSessions: number; maxPitfalls: number; maxChars: number }
+}> = z.object({
   enabled: z.boolean().default(true),
   maxChars: z.number().step(1).min(120).default(800),
   maxItems: z.number().step(1).min(0).max(20).default(3),
+  reflect: z.object({
+    enabled: z.boolean().default(true),
+    threshold: z.number().step(1).min(0).default(3),
+    minIntervalMs: z.number().step(1).min(0).default(300_000),
+  }),
+  scriptSuggest: z.object({
+    enabled: z.boolean().default(true),
+    maxRecentCalls: z.number().step(1).min(1).max(50).default(8),
+    maxChars: z.number().step(1).min(120).default(600),
+  }),
+  commandMining: z.object({
+    enabled: z.boolean().default(false),
+    minSessions: z.number().step(1).min(2).max(10).default(2),
+    maxPitfalls: z.number().step(1).min(1).max(5).default(3),
+    maxChars: z.number().step(1).min(120).default(600),
+  }),
 })
 
 export function apply(ctx: Context, config: SparkInboxConfig = {}): void {
@@ -51,10 +87,34 @@ export function apply(ctx: Context, config: SparkInboxConfig = {}): void {
   if (!enabled) return
   const maxChars = config.maxChars ?? 800
   const maxItems = config.maxItems ?? 3
+  const reflectEnabled = config.reflect?.enabled ?? true
+  const reflectThreshold = config.reflect?.threshold ?? 3
+  const reflectMinIntervalMs = config.reflect?.minIntervalMs ?? 300_000
+  const scriptSuggestEnabled = config.scriptSuggest?.enabled ?? true
+  const maxRecentCalls = config.scriptSuggest?.maxRecentCalls ?? 8
+  const scriptMaxChars = config.scriptSuggest?.maxChars ?? 600
+  const miningEnabled = config.commandMining?.enabled ?? false
+  const miningMinSessions = config.commandMining?.minSessions ?? 2
+  const miningMaxPitfalls = config.commandMining?.maxPitfalls ?? 3
+  const miningMaxChars = config.commandMining?.maxChars ?? 600
   /** 每 agent 只注入一次（与 hippomemo 的 `injected` WeakSet 同构）。 */
   const injected = new WeakSet<object>()
+  /** 每个会话已经建议过哪些脚本，避免反复推荐同一条。 */
+  const suggestedScripts = new WeakMap<object, Set<string>>()
+  /** 进程内防重入：涌现正在跑就别再触发。 */
+  let reflecting = false
 
-  ctx.on('agent/pre-step', async ({ agent, step }, next): Promise<PreStepDecision> => {
+  // D 档：命令失败采集走会话事件（`tool/call` / `tool/result` 是 session 日志里真实
+  // append 的两类事件，见 dsh-agent-loop）。默认关时连订阅都不建。
+  if (miningEnabled) {
+    ctx.on('session/event', (session, event) => {
+      void observeSessionEvent(ctx, session, event, { minSessions: miningMinSessions }).catch(error => {
+        ctx.logger?.warn?.('spark-inbox: command mining failed: ' + String(error))
+      })
+    })
+  }
+
+  ctx.on('agent/pre-step', async ({ agent, messages, step }, next): Promise<PreStepDecision> => {
     const decision = await next()
     if (decision.kind === 'reject' || step !== 1) return decision
     if (injected.has(agent)) return decision
@@ -62,17 +122,81 @@ export function apply(ctx: Context, config: SparkInboxConfig = {}): void {
     injected.add(agent)
 
     try {
+      const out = [...decision.messages]
+
+      // A：收件箱状态通报（计数全为 0 时不注入）。
       const stats = await ctx.spark.stats(await pendingProposalCount(ctx))
-      if (stats.pending === 0 && stats.pendingProposals === 0) return decision
-      const pending = maxItems === 0 ? [] : await ctx.spark.list({ inboxState: 'pending', limit: maxItems })
-      const reminder = renderInboxReminder(stats, pending, maxChars)
-      if (reminder === undefined) return decision
-      return { kind: 'enter', messages: [...decision.messages, reminder] }
+      if (stats.pending > 0 || stats.pendingProposals > 0) {
+        const pending = maxItems === 0 ? [] : await ctx.spark.list({ inboxState: 'pending', limit: maxItems })
+        const reminder = renderInboxReminder(stats, pending, maxChars)
+        if (reminder !== undefined) out.push(reminder)
+      }
+
+      // C：最近工具序列命中某条脚本的 triggers → 建议直接调用而不是重写。
+      if (scriptSuggestEnabled) {
+        const scripts = await ctx.script.list({ limit: 100 })
+        const match = matchScripts(collectRecentCalls(messages, maxRecentCalls), scripts)
+        if (match !== undefined) {
+          let seen = suggestedScripts.get(agent)
+          if (seen === undefined) { seen = new Set(); suggestedScripts.set(agent, seen) }
+          if (!seen.has(match.script.id)) {
+            const suggestion = renderScriptSuggestion(match, scriptMaxChars)
+            if (suggestion !== undefined) {
+              seen.add(match.script.id)
+              out.push(suggestion)
+            }
+          }
+        }
+      }
+
+      // D：当前模型的已知命令坑（默认关；没有记录时不注入）。
+      if (miningEnabled) {
+        const pitfalls = await selectPitfalls(ctx, agent, miningMaxPitfalls)
+        const briefing = renderPitfallBriefing(pitfalls, miningMaxChars)
+        if (briefing !== undefined) out.push(briefing)
+      }
+
+      // B：惰性涌现（脏标记）。**不阻塞本步** —— 触发后立即返回，失败只记日志。
+      if (reflectEnabled) {
+        void triggerReflectIfDirty(ctx, reflectThreshold, reflectMinIntervalMs, () => reflecting, (value) => { reflecting = value })
+          .catch(error => { ctx.logger?.warn?.('spark-inbox: lazy reflect failed: ' + String(error)) })
+      }
+
+      if (out.length === decision.messages.length) return decision
+      return { kind: 'enter', messages: out }
     } catch (error) {
       ctx.logger?.warn?.('spark-inbox: reminder skipped: ' + String(error))
       return decision
     }
   })
+}
+
+/**
+ * B 档：脏标记判定 + 后台跑一次涌现。
+ *
+ * 触发条件（纯函数 `shouldReflect`）：自上次成功涌现以来新增/变更的火花数 ≥ threshold，
+ * 且距上次超过 `minIntervalMs`。跑完写回 `lastReflectAt`；失败不写回，下次首步自然重试。
+ */
+async function triggerReflectIfDirty(
+  ctx: Context,
+  threshold: number,
+  minIntervalMs: number,
+  isReflecting: () => boolean,
+  setReflecting: (value: boolean) => void,
+): Promise<void> {
+  if (isReflecting()) return
+  const meta = await ctx.spark.readMeta()
+  const changedCount = await ctx.spark.countChangedSince(meta.lastReflectAt)
+  const decision = shouldReflect({ changedCount, threshold, lastReflectAt: meta.lastReflectAt, now: Date.now(), minIntervalMs })
+  if (!decision.run) return
+  setReflecting(true)
+  try {
+    const result = await ctx.emerge.reflect({})
+    await ctx.spark.updateMeta(current => ({ ...current, lastReflectAt: Date.now() }))
+    ctx.logger?.info?.('spark-inbox: lazy reflect created ' + String(result.newProposals.length) + ' proposals (changed=' + String(changedCount) + ')')
+  } finally {
+    setReflecting(false)
+  }
 }
 
 /** 待决提议数；emerge 不可用时按 0 处理（通报不该因为它的缺失而失败）。 */

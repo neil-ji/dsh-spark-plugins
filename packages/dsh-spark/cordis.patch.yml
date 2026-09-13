@@ -10,9 +10,27 @@
 
     # 会话编排层（设计 §5）：把收件箱状态注入会话首步。
     # 在此之前 spark_capture 只写不读 —— 没有这一步，火花面板就是坟场。
+    # 三档子能力都挂在同一个 pre-step 入口上（判定逻辑各自是可单测的纯函数）。
     - id: spark-inbox
       name: 'dsh-spark/inbox'
       config:
         enabled: true
         maxChars: 800
         maxItems: 3
+        # B 档：脏标记 + 会话首步惰性涌现（**不用定时器** —— AGENTS.md §1.3 禁轮询）。
+        reflect:
+          enabled: true
+          threshold: 3
+          minIntervalMs: 300000
+        # C 档：最近工具序列命中 scripts.triggers 时建议用现成脚本（建议式，不拦截）。
+        scriptSuggest:
+          enabled: true
+          maxRecentCalls: 8
+          maxChars: 600
+        # D 档：命令失败挖掘（模型 × 命令模式 × 错误签名）。**默认关**：
+        # 先在沙箱观察一轮产出质量（噪声防线见 command-mining.ts），确认后再开。
+        commandMining:
+          enabled: false
+          minSessions: 2
+          maxPitfalls: 3
+          maxChars: 600

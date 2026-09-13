@@ -26,6 +26,14 @@ export { ValenceService } from './valence-service.ts'
 export type { ValenceConfig, ValenceRunStats } from './valence-service.ts'
 export { JsonlSparkStorage, SparkStoreConflictError, migrateSparkRecord, SPARK_STORE_VERSION } from './storage.ts'
 export { renderInboxReminder } from './inbox.ts'
+export { shouldReflect } from './reflect-scheduler.ts'
+export { collectRecentCalls, matchScripts, renderScriptSuggestion } from './script-match.ts'
+export { SparkMetaStore, defaultMetaPath, emptyMeta, parseMeta } from './meta-store.ts'
+export type { SparkMeta, CommandFailureEntry } from './meta-store.ts'
+export {
+  normalizeCommand, errorSignature, isNoiseFailure, failureKey, recordFailure,
+  clearFailuresForSuccess, eligibleForPromotion, pitfallsForModel, renderPitfallBriefing,
+} from './command-mining.ts'
 export { JsonlProposalStorage } from './proposal-storage.ts'
 export { JsonlScriptStorage, defaultScriptsFilePath } from './script-storage.ts'
 export { ensureJsonlPath, describeStorageError } from './jsonl-path.ts'

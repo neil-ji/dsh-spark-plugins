@@ -31,6 +31,7 @@ import {
   type SparkId,
 } from 'dsh-spark-wire'
 import { JsonlSparkStorage } from './storage.ts'
+import { SparkMetaStore, defaultMetaPath, type SparkMeta } from './meta-store.ts'
 import { ensureJsonlPath } from './jsonl-path.ts'
 import type { ScriptService } from './script-service.ts'
 import { registerSparkHttpRoutes } from './http.ts'
@@ -51,6 +52,8 @@ export interface SparkConfig {
   maxRecords?: number
   /** 墓碑保留天数；超过后由压实物理清除。默认 30 天。 */
   tombstoneRetentionDays?: number
+  /** 调度元数据 sidecar 路径（B/D 档的落点）；默认与 sparks.jsonl 同目录。 */
+  metaPath?: string
 }
 
 const DEFAULT_MAX_RECORDS = 5000
@@ -77,6 +80,7 @@ export class SparkService extends Service {
   private readonly filePath: string
   private readonly maxRecords: number
   private readonly tombstoneRetentionMs: number
+  private readonly metaStore: SparkMetaStore
   private storage: SparkStorage
   private httpRegistered = false
   private readonly scriptService: ScriptService | undefined
@@ -90,6 +94,7 @@ export class SparkService extends Service {
     this.maxRecords = config.maxRecords ?? DEFAULT_MAX_RECORDS
     this.tombstoneRetentionMs = (config.tombstoneRetentionDays ?? DEFAULT_TOMBSTONE_RETENTION_DAYS) * DAY_MS
     this.storage = new JsonlSparkStorage(this.filePath)
+    this.metaStore = new SparkMetaStore(config.metaPath ?? defaultMetaPath(this.filePath))
     this.ready = this.init(ctx)
   }
 
@@ -270,6 +275,28 @@ export class SparkService extends Service {
       oldestPendingAt: pending.length === 0 ? null : Math.min(...pending.map(r => r.createdAt)),
       pendingProposals,
     }
+  }
+
+  /**
+   * 自 `ts` 以来新增或变更的**活跃**火花数（B 档脏标记）。`ts === null` 时返回全部 ——
+   * 也就是"从未跑过涌现"的情况，首次会话就会触发一次挖掘。
+   */
+  async countChangedSince(ts: number | null): Promise<number> {
+    await this.whenReady()
+    const all = await this.storage.readAll()
+    const live = all.filter(r => r.deletedAt === null)
+    if (ts === null) return live.length
+    return live.filter(r => r.createdAt > ts || r.updatedAt > ts).length
+  }
+
+  /** 读调度元数据（lastReflectAt / 命令失败聚合）。损坏或缺失都降级成空值。 */
+  async readMeta(): Promise<SparkMeta> {
+    return this.metaStore.read()
+  }
+
+  /** 读-改-写调度元数据（同一临界区内，mutate 返回 null 表示不改）。 */
+  async updateMeta(mutate: (meta: SparkMeta) => SparkMeta | null): Promise<SparkMeta> {
+    return this.metaStore.update(mutate)
   }
 
   /** Test-only: swap the storage backend. */

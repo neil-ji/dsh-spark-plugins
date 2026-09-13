@@ -327,9 +327,9 @@ reflect 完成后清脏
 | 期 | 交付 | 依赖 | 状态 |
 |---|---|---|---|
 | **A** | inbox 显式状态机（`pending/crystallized/dropped/archived` + 迁移）+ `/sparks/stats` + 首步注入 + 模块计数条 + locale 整改 + **丢数据修复 + 删除审计** | 无 | ✅ 2026-09-14 完成（见 §10.4） |
-| **B** | 脏标记 + 惰性 reflect | A 的 `agent/pre-step` 入口 | 未开始 |
-| **C** | scripts `triggers` → `agent/pre-step` 建议注入 | B 的匹配骨架 | 未开始 |
-| **D** | 命令失败采集 / 聚合 / 模型弱项沉淀（默认关） | C 的注入层 | 未开始 |
+| **B** | 脏标记 + 惰性 reflect | A 的 `agent/pre-step` 入口 | ✅ 2026-09-14 完成（见 §10.5） |
+| **C** | scripts `triggers` → `agent/pre-step` 建议注入 | B 的匹配骨架 | ✅ 2026-09-14 完成（见 §10.5） |
+| **D** | 命令失败采集 / 聚合 / 模型弱项沉淀（默认关） | C 的注入层 | ✅ 2026-09-14 完成，**默认仍关**（见 §10.5） |
 | **P3** | 火花 client 包化（架构对称） | 任意，建议 C 后 |
 | **P4** | 悬浮球球体角标（kit 契约变更） | 单独排期 |
 
@@ -361,6 +361,33 @@ node dev-harness/real-host-check.mjs               # 退出码 0
 | v1→v2 迁移（真实形状数据） | 53 条记录：`{"__sparkStore":2}` 头已写、`status`/`resolvedAt` 零残留、`stateChangedAt`/`deletedAt` 全补齐 |
 
 新增的真宿主断言（`real-host-check.mjs` 3b）：`/sparks/stats` 形状、收件箱四个筛选位可见、**旧 `status` 查询参数已失效**（返回全量 vs `inboxState=archived` 返回 0）——最后一条是"破坏性变更真的生效"的可观测证据。
+
+### 10.5 B/C/D 三档落地说明（2026-09-14）
+
+三档都挂在**同一个 `agent/pre-step` 入口**上（`spark-inbox` 行），但判定逻辑各自是可单测的纯函数：
+
+| 档 | 实现位置 | 判定 |
+|---|---|---|
+| B 惰性涌现 | `src/reflect-scheduler.ts`（纯）+ `inbox.ts` 的 `triggerReflectIfDirty` | `changedCount ≥ threshold` 且距上次 ≥ `minIntervalMs`；**不用定时器**（AGENTS.md §1.3） |
+| C 脚本建议 | `src/script-match.ts`（纯） | 最近 K 次工具调用的 `name + args` 子串命中 `triggers`；打分 = 命中数 → successRate → 具体度；按会话去重 |
+| D 命令失败挖掘 | `src/command-mining.ts`（纯）+ `src/meta-store.ts` | `(model, 命令模式, 错误签名)` 跨会话复现 ≥ `minSessions`；成功即自愈清零 |
+
+**D 档为什么默认关**：噪声防线（grep 无匹配 / test -f / 被强杀进程 → 白名单）是这一档的全部价值所在，
+不先观察一轮就打开，挖出来的会是垃圾。打开方式：
+
+    - id: spark-inbox
+      config:
+        commandMining:
+          enabled: true
+
+开启后达到门槛的记录会沉淀成 hippomemo 的 `kind='constraint'` + `modelIds=[provider/model]`；
+进化引擎对 `modelIds` 非空的记录豁免 probation/consolidation（`memory-evolve.ts:203-209`），
+所以这些"按模型的错误笔记本"不会被自动打扫掉。
+
+**注入类改动的验收口径**（AGENTS.md：既要证明注入发生，也要证明不该注入时不注入）：
+`test/inbox-orchestration.test.ts` 用假 ctx 驱动真实的 pre-step 处理器，逐条断言：
+收件箱为空 → 不注入；有待处理 → 注入且每 agent 一次；命中脚本 → 注入、不命中 → 不注入；
+脏标记达标 → 后台跑一次并写回 `lastReflectAt`，不达标或关闭 → 一次都不跑。
 
 ### 10.3 成功指标
 
