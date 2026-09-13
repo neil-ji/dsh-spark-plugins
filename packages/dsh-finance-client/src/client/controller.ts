@@ -1,340 +1,128 @@
 /**
- * Finance dashboard controller: one snapshot store over the finance Remote.
- * Loads lazily on first open and refreshes balance independently.
+ * 财务面板控制器：一个 snapshot store 覆盖 finance Remote。
  *
- * Commit 21: the canonical balance surface is now the per-provider list
- * returned by `listProviders`,` not the legacy single-gauge `getBalance`
- * payload. The ledger is fetched separately via `getLedger`.` Per-provider
- * recharge baselines live in a `peaks` map (one entry per provider id),
- * mirroring `persist.ts` (commit 19).`
+ * 重建后它**不再**持有配置草稿、本地 provider 覆盖层或余额峰值基线（那些面已删除）。
+ * 只做四件事：加载 ledger + provider 列表、单 provider 余额刷新、把首次回填进度
+ * （finance/events stream）落进快照、记录最近一次社区价格同步时间（脚注用）。
  */
 
 import type { ClientRemote } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
-// F12：失败文案与信封拆解只从 kit 取一处实现（不再各包自带 messageOf）。
-import { messageOf, remoteFailureOf, unwrapRemote } from 'dsh-spark-plugin-kit/client'
-// Type-only: augments ClientRemote with the finance Remote namespace (the
-// augmentation itself is declared in dsh-spark-finance/types).
+// F12：失败文案与信封拆解只从 kit 取一处实现。
+import { messageOf, remoteFailureOf } from 'dsh-spark-plugin-kit/client'
 import type {
   FinanceBackfillProgress,
   FinanceLedger,
   FinanceListProvidersResult,
   FinanceProviderBalance,
 } from 'dsh-spark-finance/types'
-import { readAllBalancePeaks, readAllDshProviderOverrides, writeBalancePeak, type StoredBalancePeak } from './persist.ts'
 
-export interface FinanceAuditState {
+export interface FinancePanelState {
   status: 'idle' | 'loading' | 'ready' | 'error'
-  /** Cold aggregate of every persisted session, cached for a short TTL on the host. */
   ledger?: FinanceLedger
-  /**
-   * Multi-provider canonical surface (commit 19 host + commit 21 client).
-   * Hosts each provider row with its current balance slot + the user's
-   * `FinanceProviderEntry` (so the dashboard can render validity tags).
-   */
   providerList?: FinanceListProvidersResult
-  /**
-   * Per-provider recharge baseline (mirror of localStorage).` One entry per
-   * provider id; the dashboard shows it as a historical-peak reference next
-   * to the live balance.
-   */
-  peaks: Record<string, StoredBalancePeak>
   error: string | null
-  /** Live progress of the first-open hourly backfill, shown while loading. */
+  /** 首次回填进度（宿主推流；只有 loading 期间会用到）。 */
   progress?: FinanceBackfillProgress
-  /**
-   * Last successful community price sync the host has applied. Distinct
-   * from the per-card syncStatus: the dashboard polls it independently so a
-   * silent auto-sync failure surfaces as a "price table is N hours stale"
-   * hint instead of going unnoticed.
-   */
+  /** 最近一次成功的社区价格同步（epoch ms）；undefined = 从未同步。 */
   lastSyncAppliedAt?: number
 }
 
 type FinanceRemote = ClientRemote['finance']
 
-/**
-
- * Recharge detection: any balance above the persisted peak is treated as a
- * top-up, which raises the peak (and refills the gauge). The peak only ever
- * grows; drops are normal spending. Currency mismatches reset the baseline.
- *
- * Commit 21: per-provider; the controller takes the provider id + the slot,
- * not the legacy single `FinanceBalanceView`.
- */
-/**
- * Update one provider's per-currency baseline.
- *
- * Multi-currency aware: a CNY peak and a USD peak live in separate buckets,
- * so toggling currencies (or seeing both endpoints) no longer destroys the
- * other currency's history. Returns the merged peak record so the caller
- * can republish the snapshot.
- */
-function trackPeakFor(
-  provider: string,
-  slot: FinanceProviderBalance,
-  current: StoredBalancePeak | undefined,
-): StoredBalancePeak | undefined {
-  if (slot.status !== 'ok' || slot.totalMicros === undefined) return current
-  const currency = slot.currency ?? 'CNY'
-  const existing = current?.byCurrency[currency]
-  if (existing !== undefined && slot.totalMicros <= existing.micros) return current
-  const merged: StoredBalancePeak = {
-    byCurrency: {
-      ...current?.byCurrency,
-      [currency]: { micros: slot.totalMicros, updatedAt: Date.now() },
-    },
-  }
-  writeBalancePeak(provider, merged)
-  return merged
-}
-
-/** One controller per settings surface; never a module-level singleton. */
-export class FinanceAuditController {
-  readonly store: SnapshotStore<FinanceAuditState> = createSnapshotStore<FinanceAuditState>({
+/** 一个面板实例一个控制器；不做模块级单例。 */
+export class FinancePanelController {
+  readonly store: SnapshotStore<FinancePanelState> = createSnapshotStore<FinancePanelState>({
     status: 'idle',
     error: null,
-    peaks: {},
   })
   private generation = 0
+
   constructor(private readonly remote: FinanceRemote) {}
 
-  /**
-   * Push the latest backfill progress snapshot into the store. F11 commit:
-   * the dashboard no longer polls `finance/getBackfillProgress` every 600 ms
-   * — instead, the dock module subscribes to the `finance/events` typert
-   * stream (via `subscribeFrames`) and calls this method on every
-   * `progress` frame. The store update is intentionally lenient: a frame
-   * that arrives AFTER the dashboard has already resolved its `loading`
-   * state (e.g. the backfill finished during the network gap) still lands
-   * harmlessly — the controller will overwrite the snapshot on the next
-   * legitimate state transition.
-   *
-   * `progress.phase === 'done'` is a one-shot transition; callers don't
-   * have to unsubscribe explicitly (the stream's `dispose()` is what
-   * really matters, owned by `FinanceDockModule`).
-   */
+  /** 宿主推来的回填进度帧（dock 模块订阅 finance/events 后调用）。 */
   setProgress(progress: FinanceBackfillProgress): void {
-    this.store.update(state => { state.progress = progress })
+    this.store.update((state) => { state.progress = progress })
   }
 
-  /**
-   * Fetch the dashboard sources (ledger + provider list) in parallel.
-   * Keeps the last good snapshot on failure; refreshes over an existing
-   * snapshot patch quietly so the dashboard never flashes away.
-   */
+  /** 拉 ledger + provider 列表；失败保留上次快照，只切状态与错误文案。 */
   async load(): Promise<void> {
     const generation = ++this.generation
-    const firstLoad = this.store.getSnapshot().providerList === undefined
-    this.store.update(state => {
+    const firstLoad = this.store.getSnapshot().ledger === undefined
+    this.store.update((state) => {
       state.status = firstLoad ? 'loading' : 'ready'
       state.error = null
       if (firstLoad) state.progress = undefined
     })
-    // F11 commit: the legacy 600 ms `finance/getBackfillProgress` polling
-    // is gone. `FinanceDockModule` opens a `subscribeFrames` on the
-    // `finance/events` typert stream before invoking `load`, and calls
-    // `this.setProgress` on every `progress` frame. The first frame may
-    // already carry a terminal snapshot (the backfill may have finished
-    // while the client was offline), so we only `clear` it once the main
-    // data has resolved.
     try {
       const [listResult, ledgerResult] = await Promise.all([
         this.remote.listProviders(),
         this.remote.getLedger(),
       ])
       if (generation !== this.generation) return
-      // 主数据失败 → 错误态 + 重试（F12 约定 2；这里保留上一次快照而不是清空，
-      // 所以不走 PageLoader 的 blanket 状态迁移）。失败文案一律来自信封。
       const listFailure = remoteFailureOf(listResult)
       if (listFailure !== undefined || !listResult.ok) {
-        this.store.update(state => {
-          state.status = 'error'
-          state.error = listFailure ?? 'listProviders failed'
-        })
+        this.fail(listFailure ?? 'listProviders failed')
         return
       }
       const ledgerFailure = remoteFailureOf(ledgerResult)
       if (ledgerFailure !== undefined || !ledgerResult.ok) {
-        this.store.update(state => {
-          state.status = 'error'
-          state.error = ledgerFailure ?? 'getLedger failed'
-        })
+        this.fail(ledgerFailure ?? 'getLedger failed')
         return
       }
-      this.store.update(state => {
+      this.store.update((state) => {
         state.status = 'ready'
         state.providerList = listResult.value
         state.ledger = ledgerResult.value
         state.error = null
         state.progress = undefined
-        // Track per-provider peaks off the freshly fetched slots.
-        const peaks = { ...state.peaks }
-        for (const row of listResult.value.providers) {
-          const tracked = trackPeakFor(row.provider, row.balance, peaks[row.provider])
-          if (tracked !== undefined) peaks[row.provider] = tracked
-        }
-        state.peaks = peaks
       })
-      this.autoFetchFlaggedProviders(listResult.value)
-      this.refreshSyncStatus(generation)
+      void this.refreshSyncStatus(generation)
     } catch (error) {
       if (generation !== this.generation) return
-      this.store.update(state => {
-        state.status = 'error'
-        state.error = messageOf(error)
-      })
+      this.fail(messageOf(error))
     }
   }
 
   /**
-   * Honor the per-provider "auto-fetch balance" overlay from the Provider
-   * configuration card (browser-local). When the user flags a fetch-capable
-   * provider for auto-fetching, the host's `listProviders` may still gate it
-   * off (no per-provider entry, or an entry with auto-fetch off), so the slot
-   * comes back `unsupported`. Re-fetch those rows with `refreshBalance`
-   * (which bypasses the gate) so the overview shows the live balance on open
-   * instead of a dead "cannot fetch" state.
-   */
-  private autoFetchFlaggedProviders(list: FinanceListProvidersResult): void {
-    const overrides = readAllDshProviderOverrides()
-    for (const row of list.providers) {
-      const flagged = row.hostMeta?.supportsBalanceFetch === true
-        && row.balance.status === 'unsupported'
-        && overrides[row.provider]?.autoFetchBalance === true
-      if (flagged) void this.refreshProvider(row.provider)
-    }
-  }
-
-  /**
-   * Refresh the balance for ONE provider; used by the per-card refresh
-   * button on each balance grid card. Updates the slot in `providerList`
-   * + bumps the per-provider peak if the balance grew.
+   * 单 provider 余额刷新：host 侧绕过 autoFetch 开关（用户明确点了按钮）。
+   * 只替换那一行的 balance 槽，失败保留旧值、不打断整页。
    */
   async refreshProvider(provider: string): Promise<void> {
-    const snapshot = this.store.getSnapshot()
-    if (snapshot.status !== 'ready' || snapshot.providerList === undefined) return this.load()
-    const generation = this.generation
     try {
       const result = await this.remote.refreshBalance({ provider })
-      if (generation !== this.generation) return
-      if (!result.ok) {
-        // Surface as a per-row failure without losing other rows.
-        this.store.update(state => {
-          if (state.status !== 'ready' || state.providerList === undefined) return
-          state.providerList = {
-            ...state.providerList,
-            providers: state.providerList.providers.map((row) =>
-              row.provider === provider
-                ? {
-                    ...row,
-                    balance: { status: 'error', provider, code: 'client', message: result.error.message, fetchedAt: Date.now() },
-                  }
-                : row,
-            ),
-          }
-        })
-        return
-      }
-      this.store.update(state => {
-        if (state.status !== 'ready' || state.providerList === undefined) return
-        const slot = result.value
-        const nextRows = state.providerList.providers.map((row) =>
-          row.provider === provider ? { ...row, balance: slot } : row,
-        )
-        state.providerList = { ...state.providerList, providers: nextRows }
-        const tracked = trackPeakFor(provider, slot, state.peaks[provider])
-        if (tracked !== undefined) {
-          state.peaks = { ...state.peaks, [provider]: tracked }
-        } else {
-          const { [provider]: _drop, ...rest } = state.peaks
-          void _drop
-          state.peaks = rest
-        }
-      })
-    } catch (error) {
-      if (generation !== this.generation) return
-      this.store.update(state => {
-        if (state.status !== 'ready' || state.providerList === undefined) return
-        state.providerList = {
-          ...state.providerList,
-          providers: state.providerList.providers.map((row) =>
-            row.provider === provider
-              ? {
-                  ...row,
-                  balance: { status: 'error', provider, code: 'client', message: messageOf(error), fetchedAt: Date.now() },
-                }
-              : row,
-          ),
-        }
-      })
-    }
-  }
-
-  /**
-   * Refresh the ledger only — useful when the user wants to refresh the
-   * cost charts without re-pulling every balance.
-   */
-  async refreshLedger(): Promise<void> {
-    const snapshot = this.store.getSnapshot()
-    if (snapshot.status !== 'ready' || snapshot.ledger === undefined) return this.load()
-    const generation = this.generation
-    try {
-      const result = await this.remote.getLedger()
-      if (generation !== this.generation) return
-      if (!result.ok) {
-        this.store.update(state => {
-          state.status = 'error'
-          state.error = result.error.message
-        })
-        return
-      }
-      this.store.update(state => {
-        if (state.status !== 'ready') return
-        state.ledger = result.value
-        state.status = 'ready'
-        state.error = null
-      })
-    } catch (error) {
-      if (generation !== this.generation) return
-      this.store.update(state => {
-        state.status = 'error'
-        state.error = messageOf(error)
-      })
-    }
-  }
-
-  /**
-   * Invalidate in-flight reads. F11 commit: there is no progress timer to
-   * stop anymore — the `finance/events` stream subscription is owned by
-   * `FinanceDockModule` and disposed alongside the dock registration.
-   */
-  dispose(): void {
-    this.generation += 1
-  }
-
-  /**
-   * Fire-and-forget poll of the host's last sync status. Surfaces a stale
-   * or failed community price table in the dashboard header so the user
-   * notices when the bundle-default fallback has been in use too long.
-   *
-   * The card's own syncState is the authoritative UI; this is a best-effort
-   * mirror for the dashboard. Generation-guarded so a stale callback can't
-   * overwrite a fresher load.
-   */
-  private refreshSyncStatus(generation: number): void {
-    const remote = this.remote as { getSyncStatus?: () => Promise<{ ok: boolean; value?: { appliedAt?: number } | null; error?: { message: string } }> }
-    const getter = remote.getSyncStatus
-    if (getter === undefined) return
-    void getter().then((result) => {
-      if (generation !== this.generation) return
       if (!result.ok) return
-      const value = result.value
-      if (value === null || value === undefined) return
-      const appliedAt = value.appliedAt
-      if (typeof appliedAt !== 'number' || appliedAt === 0) return
-      this.store.update(state => { state.lastSyncAppliedAt = appliedAt })
+      const slot: FinanceProviderBalance = result.value
+      this.store.update((state) => {
+        const list = state.providerList
+        if (list === undefined) return
+        state.providerList = {
+          ...list,
+          providers: list.providers.map((row) => (row.provider === provider ? { ...row, balance: slot } : row)),
+        }
+      })
+    } catch {
+      // 单卡刷新失败：保留旧快照，用户可再点一次。
+    }
+  }
+
+  /** 价格来源脚注（尽力而为，失败不动快照）。 */
+  private async refreshSyncStatus(generation: number): Promise<void> {
+    try {
+      const result = await this.remote.getSyncStatus()
+      if (generation !== this.generation || !result.ok || result.value === null) return
+      const appliedAt = result.value.appliedAt
+      this.store.update((state) => { state.lastSyncAppliedAt = appliedAt })
+    } catch {
+      // 脚注不是关键路径。
+    }
+  }
+
+  private fail(message: string): void {
+    this.store.update((state) => {
+      state.status = 'error'
+      state.error = message
     })
   }
 }

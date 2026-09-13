@@ -32,6 +32,10 @@ const spies = vi.hoisted(() => ({ registerDockModule: vi.fn((_ctx: unknown, _spe
 vi.mock('dsh-spark-plugin-kit/client', () => ({
   bindSnapshotSelector: (source: { getSnapshot: () => object }) => () => source.getSnapshot(),
   registerDockModule: spies.registerDockModule,
+  // F12：错误语义只从 kit 取一处实现；apply 会真的触发一次 load()，
+  // 所以这两个 helper 必须在 mock 里存在。
+  messageOf: (error: unknown) => (error instanceof Error ? error.message : String(error)),
+  remoteFailureOf: () => undefined,
 }))
 
 function fakeCtx() {
@@ -111,7 +115,6 @@ describe('dsh-spark-finance-client apply', () => {
     await apply(ctx)
     expect(ctx.slots.inject).not.toHaveBeenCalledWith('settings.plugin.item', expect.any(Function))
     expect(ctx.reflect.get).toHaveBeenCalledWith('remote.finance')
-    expect(ctx.settingsScope.bind).toHaveBeenCalledWith({ namespace: 'finance' })
     expect(spies.registerDockModule).toHaveBeenCalledTimes(1)
     const spec = spies.registerDockModule.mock.calls[0][1] as { id: string, order: number, inject: () => object }
     expect(spec.id).toBe('finance')
@@ -123,8 +126,8 @@ describe('dsh-spark-finance-client apply', () => {
     const { ctx } = fakeCtx()
     await apply(ctx)
     // 0.1.2：locale.register 按语言逐条注册。
-    expect(ctx.locale.register).toHaveBeenCalledWith('settings.finance', 'zh', expect.objectContaining({ addModel: expect.any(String) }))
-    expect(ctx.locale.register).toHaveBeenCalledWith('settings.finance', 'en', expect.objectContaining({ addModel: expect.any(String) }))
+    expect(ctx.locale.register).toHaveBeenCalledWith('settings.finance', 'zh', expect.objectContaining({ tabThisMonth: expect.any(String) }))
+    expect(ctx.locale.register).toHaveBeenCalledWith('settings.finance', 'en', expect.objectContaining({ tabThisMonth: expect.any(String) }))
     expect(ctx.locale.register).toHaveBeenCalledTimes(2)
   })
 

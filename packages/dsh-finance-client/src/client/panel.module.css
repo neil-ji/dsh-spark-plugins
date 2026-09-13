@@ -1,0 +1,287 @@
+/**
+ * 财务面板形制（重建版）：四个决策视图共用一套表格式排版。
+ * 全部颜色 / 圆角 / 字号 / 间距走 spark token（audit-tokens 与 audit-contrast 双闸门）。
+ */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spk-space-3);
+  padding: var(--spk-pad-panel, var(--spk-space-3));
+  color: var(--spk-label);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spk-space-2);
+  flex-wrap: wrap;
+}
+
+.toolbarMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--spk-space-2);
+  color: var(--spk-label-3);
+  font-size: var(--spk-text-xs);
+}
+
+.tabs {
+  margin: 0;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--spk-gap-card, var(--spk-space-3));
+}
+
+.view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spk-gap-card, var(--spk-space-3));
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spk-space-2);
+}
+
+.hint {
+  margin: 0;
+  color: var(--spk-label-3);
+  font-size: var(--spk-text-xs);
+  line-height: 1.5;
+}
+
+/* ── 表格 ───────────────────────────────────────────────── */
+
+.table {
+  display: flex;
+  flex-direction: column;
+}
+
+.tableHead,
+.tableRow {
+  display: grid;
+  align-items: center;
+  gap: var(--spk-space-2);
+  padding: 8px 0;
+}
+
+.tableHead {
+  color: var(--spk-label-3);
+  font-size: var(--spk-text-xs);
+  border-bottom: 1px solid var(--spk-border);
+}
+
+.tableRow {
+  font-size: var(--spk-text-sm);
+  border-bottom: 1px solid var(--spk-border-2);
+}
+
+.tableRow:last-child {
+  border-bottom: none;
+}
+
+.colsModels {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.colsBalance {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr) auto;
+}
+
+.colsProjects {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.colsSessions {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.cell {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cellNum {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.modelKey {
+  font-family: var(--spk-font-mono);
+  font-size: var(--spk-text-xs);
+}
+
+/* ── 分组（同一模型跨供应商） ─────────────────────────────── */
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spk-space-1);
+  padding: 12px 0;
+  border-bottom: 1px solid var(--spk-border-2);
+}
+
+.group:last-child {
+  border-bottom: none;
+}
+
+.groupHead {
+  display: flex;
+  align-items: center;
+  gap: var(--spk-space-2);
+  flex-wrap: wrap;
+}
+
+.groupTitle {
+  font-size: var(--spk-text-sm);
+  font-weight: 600;
+}
+
+.pillRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spk-space-1);
+  flex-wrap: wrap;
+}
+
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spk-space-1);
+  padding: 8px 0 0 0;
+}
+
+.detailText {
+  color: var(--spk-label-3);
+  font-size: var(--spk-text-xs);
+}
+
+/* ── 余额 / 省额卡 ──────────────────────────────────────── */
+
+.balanceName {
+  font-size: var(--spk-text-sm);
+  font-weight: 600;
+}
+
+.balanceValue {
+  font-variant-numeric: tabular-nums;
+}
+
+.balanceNote {
+  color: var(--spk-label-3);
+  font-size: var(--spk-text-xs);
+}
+
+.amount {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spk-space-2);
+  flex-wrap: wrap;
+}
+
+.amountValue {
+  font-size: var(--spk-text-xl);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.tag {
+  color: var(--spk-warn);
+  font-size: var(--spk-text-xs);
+}
+
+.tagMuted {
+  color: var(--spk-label-3);
+  font-size: var(--spk-text-xs);
+}
+
+/* ── 状态 ──────────────────────────────────────────────── */
+
+.state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spk-space-2);
+  padding: 24px 16px;
+  text-align: center;
+}
+
+.stateTitle {
+  margin: 0;
+  font-size: var(--spk-text-md);
+  font-weight: 600;
+}
+
+.stateBody {
+  margin: 0;
+  color: var(--spk-label-2);
+  font-size: var(--spk-text-sm);
+  line-height: 1.6;
+}
+
+.stateNote {
+  margin: 0;
+  color: var(--spk-label-3);
+  font-size: var(--spk-text-xs);
+}
+
+.progressTrack {
+  width: 100%;
+  max-width: 320px;
+  height: 4px;
+  border-radius: var(--spk-radius-full);
+  background: var(--spk-border);
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  border-radius: var(--spk-radius-full);
+  background: var(--spk-acc-finance);
+  transition: width var(--spk-dur-med) var(--spk-ease-out);
+}
+
+.error {
+  color: var(--spk-error);
+}
+
+.footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spk-space-1);
+  padding-top: var(--spk-space-2);
+  border-top: 1px solid var(--spk-border-2);
+}
+
+.footerNote {
+  margin: 0;
+  color: var(--spk-label-3);
+  font-size: var(--spk-text-xs);
+}
+
+.backRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spk-space-2);
+}
+
+.projectTitle {
+  font-size: var(--spk-text-md);
+  font-weight: 600;
+}
+
+.topModels {
+  display: flex;
+  gap: var(--spk-space-1);
+  flex-wrap: wrap;
+  color: var(--spk-label-3);
+  font-size: var(--spk-text-xs);
+}

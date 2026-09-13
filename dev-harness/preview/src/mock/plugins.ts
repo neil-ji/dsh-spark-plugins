@@ -17,17 +17,14 @@ import {
   zh as npmZh,
 } from 'dsh-connector-npm-ui/embed'
 import {
-  FinanceAuditController,
-  FinanceCard,
-  FinanceCardController,
+  FinancePanel,
+  FinancePanelController,
   en as financeEn,
   zh as financeZh,
 } from 'dsh-spark-finance-client/embed'
-import type { FinanceCardInjected } from 'dsh-spark-finance-client/embed'
 import { bindSnapshotSelector } from './snapshot.ts'
 import { err, ok, type MockCtx, type Scenario } from './ctx.ts'
 import {
-  FINANCE_BASE_CONFIG,
   GITHUB_CONFIG,
   GITHUB_PROXY_TEST,
   GITHUB_WHOAMI,
@@ -41,7 +38,7 @@ import {
   syncStatus,
 } from './fixtures.ts'
 
-export { GithubSection, NpmSection, FinanceCard }
+export { GithubSection, NpmSection, FinancePanel }
 
 /* ─────────────────────────── github ─────────────────────────── */
 
@@ -151,34 +148,24 @@ export function makeFinanceNamespace(scenario: Scenario) {
   }
 }
 
-export function buildFinanceInjected(ctx: MockCtx, scenario: Scenario, baseConfig: object = FINANCE_BASE_CONFIG) {
+/**
+ * 财务面板的假装配：重建后面板只有一条数据通路（FinancePanelController），
+ * 没有任何配置面，所以这里不再需要 settingsScope 的 base 层。
+ */
+export function buildFinanceInjected(ctx: MockCtx, scenario: Scenario) {
   ctx.__preview.dictionary('settings.finance', 'zh', financeZh)
   ctx.__preview.dictionary('settings.finance', 'en', financeEn)
   const namespace = makeFinanceNamespace(scenario)
   ctx.__preview.namespace('remote.finance', namespace)
-  // settingsScope 的 base 层 = 宿主合成默认值。
-  ctx.__preview.scope('finance', baseConfig)
 
-  const audit = new FinanceAuditController(namespace as never)
-  const useSnapshot = bindSnapshotSelector(audit.store)
-  const t = ctx.locale.bind('settings.finance')
-  const refresh = (): void => { void audit.load() }
-  const refreshProvider = (provider: string): Promise<void> => audit.refreshProvider(provider)
-
-  const scope = ctx.settingsScope.bind({ namespace: 'finance' }) as never
-  const cardController = new FinanceCardController(scope, namespace as never)
-  const cardFace = cardController.inject()
-  const cardInjected = {
-    ...cardFace,
-    useFinanceCard: bindSnapshotSelector(cardFace.hooks.financeCard) as FinanceCardInjected['useFinanceCard'],
-    dashboardRefresh: refresh,
-    refreshProvider,
-    useSnapshot,
-  }
+  const controller = new FinancePanelController(namespace as never)
   return {
-    card: { ...cardInjected, useSnapshot, t, refresh, refreshProvider },
-    audit,
-    cardController,
-    scope,
+    panel: {
+      useSnapshot: bindSnapshotSelector(controller.store),
+      t: ctx.locale.bind('settings.finance'),
+      refresh: (): void => { void controller.load() },
+      refreshProvider: (provider: string): Promise<void> => controller.refreshProvider(provider),
+    },
+    controller,
   }
 }

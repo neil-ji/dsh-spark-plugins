@@ -13,14 +13,13 @@ import type { ReactElement } from 'react'
 import { createMockCtx, withInjectGate, type Lang, type MockCtx, type Scenario } from '../src/mock/ctx.ts'
 import { createSparkStore } from '../fixtures/sparks.mjs'
 import {
-  FinanceCard,
+  FinancePanel,
   GithubSection,
   NpmSection,
   buildFinanceInjected,
   buildGithubInjected,
   buildNpmInjected,
 } from '../src/mock/plugins.ts'
-import { FINANCE_BASE_CONFIG } from '../src/mock/fixtures.ts'
 import { DockOverlay } from 'dsh-spark-dock/DockOverlay'
 import { DOCK_CSS } from 'dsh-spark-dock/style'
 
@@ -183,31 +182,24 @@ export async function run(): Promise<{ checks: Check[] }> {
   /* ── finance ── */
   {
     const ctx = createMockCtx({ lang: () => lang, scenario: () => scenario })
-    const injected = buildFinanceInjected(ctx, scenario, FINANCE_BASE_CONFIG)
-    const first = renderToString(<FinanceCard {...injected.card} /> as ReactElement)
-    check('finance: 首屏渲染不抛错', typeof first === 'string' && first.length > 0, '')
-    await injected.audit.load()
+    const injected = buildFinanceInjected(ctx, scenario)
+    await injected.controller.load()
     await flush()
-    const audit = injected.audit.store.getSnapshot()
-    check('finance: ledger 载入', (audit.ledger?.byModel.length ?? 0) > 0, JSON.stringify(audit.status))
-    check('finance: provider 列表载入', (audit.providerList?.providers.length ?? 0) === 3, JSON.stringify(audit.providerList?.providers.length))
-    const scope = injected.scope as unknown as {
-      set(field: string, value: unknown): Promise<void>
-      unset(field: string): Promise<void>
-      getSnapshot(): { user: unknown }
-    }
-    await scope.set('balance.timeoutMs', 5000)
-    check('finance: scope.set 写入 user 层', JSON.stringify(scope.getSnapshot().user).includes('5000'), JSON.stringify(scope.getSnapshot().user))
-    await scope.unset('balance.timeoutMs')
-    check('finance: scope.unset 清掉 user 层', !JSON.stringify(scope.getSnapshot().user).includes('5000'), JSON.stringify(scope.getSnapshot().user))
-    const html = renderToString(<FinanceCard {...injected.card} /> as ReactElement)
-    expectContains('finance: 默认页签是总览（dashboard）', html, 'finance-card-dashboard')
-    expectContains('finance: 页签栏 role=tablist', html, 'role="tablist"')
-    // 单页渲染：只有当前页签的面板在 DOM 里（折叠交互已移除）
-    expectContains('finance: 当前页签面板存在', html, 'finance-tab-overview')
-    check('finance: 未选中的页签不渲染', !html.includes('finance-tab-advanced'), '')
-    expectContains('finance: 渲染出 provider 行', html, 'deepseek')
-    expectContains('finance: 渲染出成本数字', html, 'CNY')
+    const state = injected.controller.store.getSnapshot()
+    check('finance: ledger 载入', (state.ledger?.byModel.length ?? 0) > 0, JSON.stringify(state.status))
+    check('finance: provider 列表载入', (state.providerList?.providers.length ?? 0) === 3, JSON.stringify(state.providerList?.providers.length))
+    const html = renderToString(<FinancePanel {...injected.panel} /> as ReactElement)
+    check('finance: 面板渲染不抛错', typeof html === 'string' && html.length > 0, '')
+    expectContains('finance: 默认视图是「本月值不值」', html, 'finance-view-thisMonth')
+    expectContains('finance: 首屏有四个总量数字', html, 'finance-stat-cost')
+    expectContains('finance: 余额行按已接入 provider 渲染', html, 'finance-balance-deepseek')
+    expectContains('finance: 四个决策视图页签（zh 字典）', html, '怎么调度更省')
+    // 产品原则回归线：配置面（价格表 / 供应商默认价 / 视图偏好）必须不存在。
+    check(
+      'finance: 已无配置面（价格表 / 供应商默认价 / 视图偏好全部删除）',
+      !html.includes('价格表') && !html.includes('供应商默认价') && !html.includes('仪表盘视图'),
+      html.includes('价格表') ? 'still has 价格表' : '',
+    )
   }
 
   /* ── 空态 / 失败态 ── */
