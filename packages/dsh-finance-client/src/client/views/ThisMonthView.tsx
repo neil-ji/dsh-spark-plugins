@@ -1,15 +1,13 @@
 /**
- * 视图①：本月值不值。
+ * 视图①：本月值不值（子导航的第一个 tab）。
  *
- * 顺序 = 决策顺序：**订阅 vs 按量**（这个月这笔订阅值不值）→ 余额还剩多少 →
- * 成本趋势 → 单位成本最高的模型。
- *
- * 套餐（月费）由用户填一次，输入框**贴在该 provider 那一行旁边**——没有独立配置页，
- * 也只列出你本月真正用过的厂商（"只呈现你的实体"）。
+ * 这个 tab 拥有整页的钱：更新时间与刷新、五个总量数字、订阅 vs 按量、余额、
+ * 成本趋势、单位成本榜与两条脚注（价格来源 / 估算口径）。没有会话时只留
+ * 「数字 + 为什么是 0」的引导，不摆一堆空卡。
  */
 
 import { useState, type ReactNode } from 'react'
-import { Button, Card, Input, Money, SegmentedControl, TrendChart, formatMicros } from 'dsh-ui-kit'
+import { Button, Card, EmptyState, Input, Money, SegmentedControl, Stat, StatGrid, TrendChart, formatMicros } from 'dsh-ui-kit'
 import type {
   FinanceLedger,
   FinanceListProvidersResult,
@@ -37,6 +35,9 @@ export interface ThisMonthViewProps {
   plansWritable: boolean
   savePlan: (plan: FinancePlanEntry) => Promise<void>
   removePlan: (provider: string) => Promise<void>
+  refreshing: boolean
+  onRefresh: () => void
+  lastSyncAppliedAt: number | undefined
 }
 
 const TOP_MODEL_COUNT = 6
@@ -51,6 +52,9 @@ export function ThisMonthView({
   plansWritable,
   savePlan,
   removePlan,
+  refreshing,
+  onRefresh,
+  lastSyncAppliedAt,
 }: ThisMonthViewProps): ReactNode {
   const currency = ledger.currency === '' ? 'CNY' : ledger.currency
   const [editing, setEditing] = useState<string | null>(null)
@@ -64,154 +68,222 @@ export function ThisMonthView({
   const planByProvider = new Map(withPlan.map((insight) => [insight.provider, insight]))
   const planEntries = [...plans]
   const orderedProviders = [...withPlan.map((insight) => insight.provider), ...withoutPlan]
+  const empty = ledger.sessionCount === 0
 
   return (
     <>
-      <Card title={t('planCardTitle')} className={css.section}>
-        <p className={css.hint}>{t('planCardHint')}</p>
-        <div className={css.table} data-testid="finance-plan-card">
-          <div className={cx(css.tableHead, css.colsPlan)}>
-            <span className={css.cell}>{t('colProvider')}</span>
-            <span className={cx(css.cell, css.cellNum)}>{t('planMonthly')}</span>
-            <span className={cx(css.cell, css.cellNum)}>{t('planEquivalent')}</span>
-            <span className={css.cell}>{t('planVerdict')}</span>
-            <span className={css.cell} />
+      <div className={css.toolbar}>
+        <span className={css.toolbarMeta} data-testid="finance-updated">
+          {ledger.generatedAt > 0 ? t('lastUpdated', { minutes: minutesSince(ledger.generatedAt) }) : t('lastUpdatedNever')}
+        </span>
+        <Button onClick={onRefresh} disabled={refreshing} aria-label={t('refresh')}>
+          {refreshing ? t('refreshing') : t('refresh')}
+        </Button>
+      </div>
+
+      <StatGrid className={css.stats}>
+        <div data-testid="finance-stat-cost">
+          <Stat label={t('metricCost')} value={<Money micros={ledger.totalCostMicros} currency={currency} />} />
+        </div>
+        <div data-testid="finance-stat-metered">
+          <Stat
+            label={t('metricMetered')}
+            value={ledger.meteredCostMicros === undefined ? t('noData') : <Money micros={ledger.meteredCostMicros} currency={currency} />}
+          />
+        </div>
+        <div data-testid="finance-stat-plan">
+          <Stat
+            label={t('metricPlan')}
+            value={ledger.planEquivalentCostMicros === undefined ? t('noData') : <Money micros={ledger.planEquivalentCostMicros} currency={currency} />}
+          />
+        </div>
+        <div data-testid="finance-stat-sessions">
+          <Stat label={t('metricSessions')} value={ledger.sessionCount} />
+        </div>
+        <div data-testid="finance-stat-workspaces">
+          <Stat label={t('metricWorkspaces')} value={ledger.workspaceCount} />
+        </div>
+      </StatGrid>
+
+      {empty
+        ? (
+          <div data-testid="finance-empty">
+            <EmptyState message={t('emptyTitle')} hint={t('emptyHint')} />
           </div>
-          {orderedProviders.length === 0
-            ? <p className={css.hint}>{t('noData')}</p>
-            : orderedProviders.map((provider) => {
-              const insight = planByProvider.get(provider)
-              const existing = planEntries.find((plan) => plan.provider === provider)
-              const open = editing === provider
-              return (
-                <div key={provider} className={css.group}>
-                  <div className={cx(css.tableRow, css.colsPlan)} data-testid={`finance-plan-${provider}`}>
-                    <span className={cx(css.cell, css.balanceName)}>{provider}</span>
-                    <span className={cx(css.cell, css.cellNum)}>
-                      {insight === undefined ? '—' : <Money micros={insight.monthlyMicros} currency={insight.currency} />}
-                    </span>
-                    <span className={cx(css.cell, css.cellNum)}>
-                      <Money micros={insight?.equivalentMicros ?? 0} currency={currency} />
-                    </span>
-                    <span className={cx(css.cell, css.balanceNote)}>{verdictText(insight, currency, t)}</span>
-                    <span className={css.planActions}>
-                      {plansWritable
-                        ? (
-                          <Button
-                            onClick={() => setEditing(open ? null : provider)}
-                            aria-label={`${existing === undefined ? t('planFill') : t('planEdit')}: ${provider}`}
-                          >
-                            {existing === undefined ? t('planFill') : t('planEdit')}
-                          </Button>
-                        )
-                        : null}
-                      {plansWritable && existing !== undefined
-                        ? (
-                          <Button
-                            onClick={() => { void removePlan(provider) }}
-                            aria-label={`${t('planRemove')}: ${provider}`}
-                          >
-                            {t('planRemove')}
-                          </Button>
-                        )
-                        : null}
-                    </span>
-                  </div>
-                  {open
-                    ? (
-                      <PlanEditor
-                        provider={provider}
-                        initial={existing}
-                        t={t}
-                        onCancel={() => setEditing(null)}
-                        onSave={async (plan) => { await savePlan(plan); setEditing(null) }}
-                      />
-                    )
-                    : null}
+        )
+        : (
+          <>
+            <Card title={t('planCardTitle')} className={css.section}>
+              <p className={css.hint}>{t('planCardHint')}</p>
+              <div className={css.table} data-testid="finance-plan-card">
+                <div className={cx(css.tableHead, css.colsPlan)}>
+                  <span className={css.cell}>{t('colProvider')}</span>
+                  <span className={cx(css.cell, css.cellNum)}>{t('planMonthly')}</span>
+                  <span className={cx(css.cell, css.cellNum)}>{t('planEquivalent')}</span>
+                  <span className={css.cell}>{t('planVerdict')}</span>
+                  <span className={css.cell} />
                 </div>
-              )
-            })}
-        </div>
-        {plansWritable ? <p className={css.hint}>{t('planOnlyUsed')}</p> : <p className={css.tag}>{t('planReadOnly')}</p>}
-      </Card>
-
-      <Card title={t('balanceTitle')} className={css.section}>
-        <div className={css.table}>
-          <div className={cx(css.tableHead, css.colsBalance)}>
-            <span className={css.cell}>{t('colProvider')}</span>
-            <span className={cx(css.cell, css.cellNum)}>{t('balanceTitle')}</span>
-            <span className={css.cell} />
-            <span className={css.cell} />
-          </div>
-          {balanceRows.length === 0
-            ? <p className={css.hint}>{t('noData')}</p>
-            : balanceRows.map((row) => (
-              <div className={cx(css.tableRow, css.colsBalance)} key={row.provider} data-testid={`finance-balance-${row.provider}`}>
-                <span className={cx(css.cell, css.balanceName)}>{row.provider}</span>
-                <span className={cx(css.cell, css.cellNum, css.balanceValue)}>
-                  {balanceValue(ledger, row.balance, t)}
-                </span>
-                <span className={cx(css.cell, css.balanceNote)}>{balanceNote(row.provider, row.balance, ledger, t)}</span>
-                <span className={css.cellNum}>
-                  {row.hostMeta?.supportsBalanceFetch === true
-                    ? (
-                      <Button
-                        onClick={() => { void refreshProvider(row.provider) }}
-                        aria-label={`${t('balanceRefresh')}: ${row.provider}`}
-                      >
-                        {t('balanceRefresh')}
-                      </Button>
+                {orderedProviders.length === 0
+                  ? <p className={css.hint}>{t('noData')}</p>
+                  : orderedProviders.map((provider) => {
+                    const insight = planByProvider.get(provider)
+                    const existing = planEntries.find((plan) => plan.provider === provider)
+                    const open = editing === provider
+                    return (
+                      <div key={provider} className={css.group}>
+                        <div className={cx(css.tableRow, css.colsPlan)} data-testid={`finance-plan-${provider}`}>
+                          <span className={cx(css.cell, css.balanceName)}>{provider}</span>
+                          <span className={cx(css.cell, css.cellNum)}>
+                            {insight === undefined ? '—' : <Money micros={insight.monthlyMicros} currency={insight.currency} />}
+                          </span>
+                          <span className={cx(css.cell, css.cellNum)}>
+                            <Money micros={insight?.equivalentMicros ?? 0} currency={currency} />
+                          </span>
+                          <span className={cx(css.cell, css.balanceNote)}>{verdictText(insight, currency, t)}</span>
+                          <span className={css.planActions}>
+                            {plansWritable
+                              ? (
+                                <Button
+                                  onClick={() => setEditing(open ? null : provider)}
+                                  aria-label={`${existing === undefined ? t('planFill') : t('planEdit')}: ${provider}`}
+                                >
+                                  {existing === undefined ? t('planFill') : t('planEdit')}
+                                </Button>
+                              )
+                              : null}
+                            {plansWritable && existing !== undefined
+                              ? (
+                                <Button
+                                  onClick={() => { void removePlan(provider) }}
+                                  aria-label={`${t('planRemove')}: ${provider}`}
+                                >
+                                  {t('planRemove')}
+                                </Button>
+                              )
+                              : null}
+                          </span>
+                        </div>
+                        {open
+                          ? (
+                            <PlanEditor
+                              provider={provider}
+                              initial={existing}
+                              t={t}
+                              onCancel={() => setEditing(null)}
+                              onSave={async (plan) => { await savePlan(plan); setEditing(null) }}
+                            />
+                          )
+                          : null}
+                      </div>
                     )
-                    : null}
-                </span>
+                  })}
               </div>
-            ))}
-        </div>
-      </Card>
+              {plansWritable ? <p className={css.hint}>{t('planOnlyUsed')}</p> : <p className={css.tag}>{t('planReadOnly')}</p>}
+            </Card>
 
-      <Card
-        title={t('trendTitle')}
-        actions={<span className={css.tagMuted}>{t('trendRange', { days: ledger.byDay.length })}</span>}
-        className={css.section}
-      >
-        {trendPoints.length === 0
-          ? <p className={css.hint}>{t('noData')}</p>
-          : (
-            <TrendChart
-              points={trendPoints}
-              ariaLabel={t('trendTitle')}
-              formatValue={formatMicros}
-              gradientId="finance-trend"
-            />
-          )}
-        <p className={css.hint}>{t('trendHint')}</p>
-      </Card>
-
-      <Card title={t('topModelsTitle')} className={css.section}>
-        <div className={css.table}>
-          <div className={cx(css.tableHead, css.colsModels)}>
-            <span className={css.cell}>{t('colModel')}</span>
-            <span className={css.cell}>{t('colProvider')}</span>
-            <span className={cx(css.cell, css.cellNum)}>{t('colCost')}</span>
-            <span className={cx(css.cell, css.cellNum)}>{t('colUnitCost')}</span>
-          </div>
-          {topModels.length === 0
-            ? <p className={css.hint}>{t('noData')}</p>
-            : topModels.map((row) => (
-              <div className={cx(css.tableRow, css.colsModels)} key={row.modelKey}>
-                <span className={cx(css.cell, css.modelKey)} title={row.modelKey}>{row.model}</span>
-                <span className={css.cell}>{row.provider}</span>
-                <span className={cx(css.cell, css.cellNum)}><Money micros={row.costMicros} currency={currency} /></span>
-                <span className={cx(css.cell, css.cellNum)}>
-                  {row.unitCostMicros === null ? t('noData') : `${formatMicros(Math.round(row.unitCostMicros))}${t('perMtok')}`}
-                </span>
+            <Card title={t('balanceTitle')} className={css.section}>
+              <div className={css.table}>
+                <div className={cx(css.tableHead, css.colsBalance)}>
+                  <span className={css.cell}>{t('colProvider')}</span>
+                  <span className={cx(css.cell, css.cellNum)}>{t('balanceTitle')}</span>
+                  <span className={css.cell} />
+                  <span className={css.cell} />
+                </div>
+                {balanceRows.length === 0
+                  ? <p className={css.hint}>{t('noData')}</p>
+                  : balanceRows.map((row) => (
+                    <div className={cx(css.tableRow, css.colsBalance)} key={row.provider} data-testid={`finance-balance-${row.provider}`}>
+                      <span className={cx(css.cell, css.balanceName)}>{row.provider}</span>
+                      <span className={cx(css.cell, css.cellNum, css.balanceValue)}>
+                        {balanceValue(ledger, row.balance, t)}
+                      </span>
+                      <span className={cx(css.cell, css.balanceNote)}>{balanceNote(row.provider, row.balance, ledger, t)}</span>
+                      <span className={css.cellNum}>
+                        {row.hostMeta?.supportsBalanceFetch === true
+                          ? (
+                            <Button
+                              onClick={() => { void refreshProvider(row.provider) }}
+                              aria-label={`${t('balanceRefresh')}: ${row.provider}`}
+                            >
+                              {t('balanceRefresh')}
+                            </Button>
+                          )
+                          : null}
+                      </span>
+                    </div>
+                  ))}
               </div>
-            ))}
-        </div>
-        <p className={css.hint}>{t('topModelsHint')}</p>
-      </Card>
+            </Card>
+
+            <Card
+              title={t('trendTitle')}
+              actions={<span className={css.tagMuted}>{t('trendRange', { days: ledger.byDay.length })}</span>}
+              className={css.section}
+            >
+              {trendPoints.length === 0
+                ? <p className={css.hint}>{t('noData')}</p>
+                : (
+                  <TrendChart
+                    points={trendPoints}
+                    ariaLabel={t('trendTitle')}
+                    formatValue={formatMicros}
+                    gradientId="finance-trend"
+                  />
+                )}
+              <p className={css.hint}>{t('trendHint')}</p>
+            </Card>
+
+            <Card title={t('topModelsTitle')} className={css.section}>
+              <div className={css.table}>
+                <div className={cx(css.tableHead, css.colsModels)}>
+                  <span className={css.cell}>{t('colModel')}</span>
+                  <span className={css.cell}>{t('colProvider')}</span>
+                  <span className={cx(css.cell, css.cellNum)}>{t('colCost')}</span>
+                  <span className={cx(css.cell, css.cellNum)}>{t('colUnitCost')}</span>
+                </div>
+                {topModels.length === 0
+                  ? <p className={css.hint}>{t('noData')}</p>
+                  : topModels.map((row) => (
+                    <div className={cx(css.tableRow, css.colsModels)} key={row.modelKey}>
+                      <span className={cx(css.cell, css.modelKey)} title={row.modelKey}>{row.model}</span>
+                      <span className={css.cell}>{row.provider}</span>
+                      <span className={cx(css.cell, css.cellNum)}><Money micros={row.costMicros} currency={currency} /></span>
+                      <span className={cx(css.cell, css.cellNum)}>
+                        {row.unitCostMicros === null ? t('noData') : `${formatMicros(Math.round(row.unitCostMicros))}${t('perMtok')}`}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+              <p className={css.hint}>{t('topModelsHint')}</p>
+            </Card>
+          </>
+        )}
+
+      <div className={css.footer}>
+        <p className={css.footerNote}>{priceNote(lastSyncAppliedAt, t)}</p>
+        <p className={css.footerNote}>{t('estimateNote')}</p>
+        {ledger.unreadableSessions.length > 0
+          ? <p className={css.footerNote}>{t('unreadableNote', { count: ledger.unreadableSessions.length })}</p>
+          : null}
+      </div>
     </>
   )
+}
+
+function minutesSince(epochMs: number): number {
+  return Math.max(0, Math.round((Date.now() - epochMs) / 60_000))
+}
+
+const STALE_MS = 24 * 60 * 60 * 1000
+
+/** 价格来源脚注：说清账本用的是哪一层价格，以及新鲜度。 */
+export function priceNote(lastSyncAppliedAt: number | undefined, t: FinanceTranslate): string {
+  if (lastSyncAppliedAt === undefined) {
+    return `${t('priceNoteNever')} · ${t('priceStale')}`
+  }
+  const when = t('lastUpdated', { minutes: minutesSince(lastSyncAppliedAt) })
+  if (Date.now() - lastSyncAppliedAt > STALE_MS) return `${t('priceNote', { when })} · ${t('priceStale')}`
+  return t('priceNote', { when })
 }
 
 /** 结论列：省了多少 / 亏了多少 / 还没有用量 —— 全是账本观测值相减，不含估算。 */
@@ -223,7 +295,7 @@ function verdictText(insight: { savingsMicros: number; equivalentMicros: number;
     const discount = insight.discountRate === null ? '' : ` · ${t('planDiscount', { pct: `${Math.round(insight.discountRate * 100)}%` })}`
     return `${t('planSaved', { amount })}${discount}`
   }
-  const progress = insight.breakEvenRatio === null ? '' : ` · ${t('planBreakEven', { pct: `${Math.round(insight.breakEvenRatio * 100)}%` })}`
+  const progress = insight.breakEvenRatio === null ? '' : ` ${t('planBreakEven', { pct: `${Math.round(insight.breakEvenRatio * 100)}%` })}`
   return `${t('planLost', { amount })}${progress}`
 }
 

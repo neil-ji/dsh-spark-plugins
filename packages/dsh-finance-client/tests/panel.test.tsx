@@ -149,6 +149,10 @@ describe('FinancePanel shell', () => {
     expect(html).toContain('finance-stat-plan')
     expect(html).toContain('finance-view-thisMonth')
     expect(html).toContain('finance-balance-deepseek-official')
+    // 形制（与 hippomemo MemorySection 一致）：子页签栏是面板内容的第一件东西，
+    // 指标/操作/脚注都在 tab 里，不允许置顶。
+    expect(html.indexOf('finance-tabs')).toBeGreaterThan(-1)
+    expect(html.indexOf('finance-tabs')).toBeLessThan(html.indexOf('finance-stat-cost'))
     // 四个视图页签都在（label 走 t，这里断言 key 出现）
     for (const key of ['tabThisMonth', 'tabWhoToUse', 'tabSaveMore', 'tabProjects']) expect(html).toContain(key)
   })
@@ -188,6 +192,9 @@ describe('finance views', () => {
       plansWritable: true,
       savePlan: async () => {},
       removePlan: async () => {},
+      refreshing: false,
+      onRefresh: () => {},
+      lastSyncAppliedAt: undefined,
     }))
     expect(html).toContain('finance-balance-deepseek-official')
     expect(html).toContain('topModelsHint')
@@ -204,6 +211,9 @@ describe('finance views', () => {
       plansWritable: true,
       savePlan: async () => {},
       removePlan: async () => {},
+      refreshing: false,
+      onRefresh: () => {},
+      lastSyncAppliedAt: undefined,
     }))
     // 账本里用过 a / b，而未接入的厂商不会出现
     expect(noPlan).toContain('finance-plan-a')
@@ -219,6 +229,9 @@ describe('finance views', () => {
       plansWritable: true,
       savePlan: async () => {},
       removePlan: async () => {},
+      refreshing: false,
+      onRefresh: () => {},
+      lastSyncAppliedAt: undefined,
     }))
     // 等价按量价 10_000_000 > 月费 1_000_000 → 「省了」
     expect(withPlan).toContain('planSaved')
@@ -235,6 +248,9 @@ describe('finance views', () => {
       plansWritable: false,
       savePlan: async () => {},
       removePlan: async () => {},
+      refreshing: false,
+      onRefresh: () => {},
+      lastSyncAppliedAt: undefined,
     }))
     expect(html).toContain('planReadOnly')
     expect(html).not.toContain('planEdit')

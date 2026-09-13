@@ -194,6 +194,12 @@ export async function run(): Promise<{ checks: Check[] }> {
     check('finance: 面板渲染不抛错', typeof html === 'string' && html.length > 0, '')
     expectContains('finance: 默认视图是「本月值不值」', html, 'finance-view-thisMonth')
     expectContains('finance: 首屏有四个总量数字', html, 'finance-stat-cost')
+    // 形制回归线：子页签栏是面板内容的第一件东西（指标/操作都归各自的 tab，不置顶）
+    check(
+      'finance: 子导航在指标之前（与 hippomemo MemorySection 同形）',
+      html.indexOf('finance-tabs') > -1 && html.indexOf('finance-tabs') < html.indexOf('finance-stat-cost'),
+      'tabs@' + html.indexOf('finance-tabs') + ' stats@' + html.indexOf('finance-stat-cost'),
+    )
     expectContains('finance: 余额行按已接入 provider 渲染', html, 'finance-balance-deepseek')
     expectContains('finance: 四个决策视图页签（zh 字典）', html, '怎么调度更省')
     expectContains('finance: 订阅 vs 按量卡存在', html, 'finance-plan-card')

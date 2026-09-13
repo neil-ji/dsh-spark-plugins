@@ -1,13 +1,13 @@
 /**
- * 财务面板（重建版）：四个决策视图共用一个壳。
+ * 财务面板（重建版）：子导航是面板内容的第一件东西。
  *
- * 组织轴是「采购与调度决策」，不是配置：本月值不值 / 该用谁 / 怎么调度更省 / 项目账。
- * 配置面（价格表、供应商覆盖层、视图偏好）已整页删除——预置兜底值只在后台参与计算，
- * 不出现在编辑面（见 docs/plans/2026-09-14-finance-rebuild-design.md）。
+ * 形制与 hippomemo MemorySection 一致：`<子页签栏>` 紧贴面板内容开头，**上面不放任何
+ * 指标/操作**；四态（加载/错误/空/就绪）与所有卡片、脚注都归各自的 tab 所有。
+ * 嵌进 dock 时模块名与一句话说明由 dock 模块头提供，这里不再画大标题。
  */
 
 import { useState, type ReactNode } from 'react'
-import { Button, EmptyState, Money, SegmentedControl, Stat, StatGrid } from 'dsh-ui-kit'
+import { Button, SegmentedControl } from 'dsh-ui-kit'
 import type { SnapshotSelectorHook } from 'dsh-spark-plugin-kit/client'
 import type { FinancePlanEntry } from 'dsh-spark-finance/types'
 import type { FinancePanelState } from './controller.ts'
@@ -66,14 +66,7 @@ function ErrorState({ message, t, onRetry }: { message: string | null; t: Financ
   )
 }
 
-function minutesSince(epochMs: number): number {
-  return Math.max(0, Math.round((Date.now() - epochMs) / 60_000))
-}
-
-/**
- * 财务面板本体。dock 模块头已经给出模块名与一句话说明，这里只有内容：
- * 工具栏（更新时间 + 刷新）→ 四个总量数字 → 视图页签 → 视图内容 → 脚注。
- */
+/** 面板本体：加载/错误态之外，内容一律是「子页签栏 + 当前 tab」。 */
 export function FinancePanel(props: FinancePanelInjected): ReactNode {
   // SnapshotSelectorHook 是「选择器 → 值」形态（kit 的 uSES 绑定），因此显式传选择器。
   const state = props.useSnapshot<FinancePanelState>((snapshot) => snapshot)
@@ -82,95 +75,51 @@ export function FinancePanel(props: FinancePanelInjected): ReactNode {
   const ledger = state.ledger
 
   if (ledger === undefined) {
-    if (state.status === 'error') {
-      return <div className={css.panel} data-testid="finance-panel"><ErrorState message={state.error} t={t} onRetry={props.refresh} /></div>
-    }
-    return <div className={css.panel} data-testid="finance-panel"><LoadingState progress={state.progress} t={t} /></div>
+    return (
+      <div className={css.panel} data-testid="finance-panel">
+        {state.status === 'error'
+          ? <ErrorState message={state.error} t={t} onRetry={props.refresh} />
+          : <LoadingState progress={state.progress} t={t} />}
+      </div>
+    )
   }
 
-  const currency = ledger.currency === '' ? 'CNY' : ledger.currency
   const options = VIEWS.map((value) => ({ value, label: t(viewKey(value)) }))
 
   return (
     <div className={css.panel} data-testid="finance-panel">
-      <div className={css.toolbar}>
-        <div className={css.toolbarMeta}>
-          <span data-testid="finance-updated">
-            {ledger.generatedAt > 0 ? t('lastUpdated', { minutes: minutesSince(ledger.generatedAt) }) : t('lastUpdatedNever')}
-          </span>
-        </div>
-        <Button onClick={props.refresh} disabled={state.status === 'loading'} aria-label={t('refresh')}>
-          {state.status === 'loading' ? t('refreshing') : t('refresh')}
-        </Button>
+      {/* 面板内容的第一件东西：子导航。指标、操作、脚注都归各自的 tab。 */}
+      <div className={css.tabs} data-testid="finance-tabs">
+        <SegmentedControl<FinanceView>
+          options={options}
+          value={view}
+          onChange={setView}
+          ariaLabel={t('cardTabsLabel')}
+          fullWidth
+        />
       </div>
 
-      <StatGrid className={css.stats}>
-        <div data-testid="finance-stat-cost">
-          <Stat label={t('metricCost')} value={<Money micros={ledger.totalCostMicros} currency={currency} />} />
-        </div>
-        <div data-testid="finance-stat-metered">
-          <Stat
-            label={t('metricMetered')}
-            value={ledger.meteredCostMicros === undefined ? t('noData') : <Money micros={ledger.meteredCostMicros} currency={currency} />}
-          />
-        </div>
-        <div data-testid="finance-stat-plan">
-          <Stat
-            label={t('metricPlan')}
-            value={ledger.planEquivalentCostMicros === undefined ? t('noData') : <Money micros={ledger.planEquivalentCostMicros} currency={currency} />}
-          />
-        </div>
-        <div data-testid="finance-stat-sessions">
-          <Stat label={t('metricSessions')} value={ledger.sessionCount} />
-        </div>
-        <div data-testid="finance-stat-workspaces">
-          <Stat label={t('metricWorkspaces')} value={ledger.workspaceCount} />
-        </div>
-      </StatGrid>
-
-      <SegmentedControl<FinanceView>
-        className={css.tabs}
-        options={options}
-        value={view}
-        onChange={setView}
-        ariaLabel={t('cardTabsLabel')}
-        fullWidth
-      />
-
-      {ledger.sessionCount === 0
-        ? (
-          <div data-testid="finance-empty">
-            <EmptyState message={t('emptyTitle')} hint={t('emptyHint')} />
-          </div>
-        )
-        : (
-          <div className={css.view} data-testid={`finance-view-${view}`}>
-            {view === 'thisMonth'
-              ? (
-                <ThisMonthView
-                  ledger={ledger}
-                  providerList={state.providerList}
-                  t={t}
-                  refreshProvider={props.refreshProvider}
-                  plans={state.plans}
-                  plansWritable={state.plansWritable}
-                  savePlan={props.savePlan}
-                  removePlan={props.removePlan}
-                />
-              )
-              : null}
-            {view === 'whoToUse' ? <WhoToUseView ledger={ledger} t={t} /> : null}
-            {view === 'saveMore' ? <SaveMoreView ledger={ledger} tiers={state.tiers} t={t} /> : null}
-            {view === 'projects' ? <ProjectsView ledger={ledger} t={t} /> : null}
-          </div>
-        )}
-
-      <div className={css.footer}>
-        <p className={css.footerNote}>{priceNote(state.lastSyncAppliedAt, t)}</p>
-        <p className={css.footerNote}>{t('estimateNote')}</p>
-        {ledger.unreadableSessions.length > 0
-          ? <p className={css.footerNote}>{t('unreadableNote', { count: ledger.unreadableSessions.length })}</p>
+      <div className={css.view} data-testid={`finance-view-${view}`}>
+        {view === 'thisMonth'
+          ? (
+            <ThisMonthView
+              ledger={ledger}
+              providerList={state.providerList}
+              t={t}
+              refreshProvider={props.refreshProvider}
+              plans={state.plans}
+              plansWritable={state.plansWritable}
+              savePlan={props.savePlan}
+              removePlan={props.removePlan}
+              refreshing={state.status === 'loading'}
+              onRefresh={props.refresh}
+              lastSyncAppliedAt={state.lastSyncAppliedAt}
+            />
+          )
           : null}
+        {view === 'whoToUse' ? <WhoToUseView ledger={ledger} t={t} /> : null}
+        {view === 'saveMore' ? <SaveMoreView ledger={ledger} tiers={state.tiers} t={t} /> : null}
+        {view === 'projects' ? <ProjectsView ledger={ledger} t={t} /> : null}
       </div>
     </div>
   )
@@ -181,17 +130,4 @@ function viewKey(view: FinanceView): 'tabThisMonth' | 'tabWhoToUse' | 'tabSaveMo
   if (view === 'whoToUse') return 'tabWhoToUse'
   if (view === 'saveMore') return 'tabSaveMore'
   return 'tabProjects'
-}
-
-const STALE_MS = 24 * 60 * 60 * 1000
-
-/** 价格来源脚注：说清账本用的是哪一层价格，以及新鲜度。 */
-export function priceNote(lastSyncAppliedAt: number | undefined, t: FinanceTranslate): string {
-  if (lastSyncAppliedAt === undefined) {
-    return `${t('priceNoteNever')} · ${t('priceStale')}`
-  }
-  const minutes = minutesSince(lastSyncAppliedAt)
-  const when = t('lastUpdated', { minutes })
-  if (Date.now() - lastSyncAppliedAt > STALE_MS) return `${t('priceNote', { when })} · ${t('priceStale')}`
-  return t('priceNote', { when })
 }
