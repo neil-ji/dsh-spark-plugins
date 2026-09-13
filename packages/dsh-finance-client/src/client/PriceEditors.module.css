@@ -45,6 +45,18 @@
   text-align: right;
 }
 
+/* ui-kit Input 的壳允许收缩(min-width:0),但壳内原生 input 有固有宽度
+   (~20 字符),不收缩会溢出壳、把数字压到单位后缀上(实测超出 22px)。
+   强制撑满壳并允许收缩 —— 面板层所有同构字段一并修。 */
+.rateInput input,
+.modelKeyInput input,
+.providerInput input,
+.effectiveFromInput input,
+.scheduleInput input {
+  width: 100%;
+  min-width: 0;
+}
+
 .rateUnit {
   color: var(--spk-label-3);
   flex: 0 0 auto;

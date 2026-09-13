@@ -15,7 +15,7 @@ export const zh = {
   layoutStandard: '标准单列',
   // commit 21: per-provider balance grid + by-model table
   balanceGridTitle: '余额总览',
-  balanceGridHint: '每个 provider 一行；host-known 支持自动获取余额，其余显示状态码',
+  balanceGridHint: '余额按供应商一行展示：支持自动获取的直接拉取，其余显示状态码。',
   noProviderData: '还没有费用数据',
   noProviderDataHint: '切到「供应商」页加一条 provider 记录，再回到这里看数据',
   openConfig: '打开 Provider 配置',
@@ -242,7 +242,7 @@ export const en = {
   layoutStandard: 'Standard single-col',
   // commit 21: per-provider balance grid + by-model table
   balanceGridTitle: 'Balance overview',
-  balanceGridHint: 'One row per provider. host-known providers support auto-fetch; others show a stable code',
+  balanceGridHint: 'One row per provider. Auto-fetchable providers pull their balance directly; others show a status code.',
   noProviderData: 'No cost data yet',
   noProviderDataHint: 'Add a provider in the Providers tab, then come back to see the data here',
   openConfig: 'Open provider configuration',
