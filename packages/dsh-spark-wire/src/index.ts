@@ -13,7 +13,14 @@ import type { InvocationDescriptor, TypertRemoteContribution } from '@deepseek-a
 import type { TypertContribution } from '@deepseek-ai/dsh-typert-registry/types'
 
 export const sparkScopeSchema = z.enum(['session', 'project', 'global'])
-export const sparkStatusSchema = z.enum(['active', 'archived'])
+/**
+ * 收件箱状态（2026-09-14 设计：docs/spark-inbox-design-2026-09-14.md §4.1）。
+ *
+ * 取代旧的 `status: 'active' | 'archived'` —— 旧的"待处理"只能靠
+ * `status === 'active' && crystallized === null` 推导，同一个隐式规则要在
+ * 面板、统计、注入三处各复写一遍。显式状态是单一真源。
+ */
+export const sparkInboxStateSchema = z.enum(['pending', 'crystallized', 'dropped', 'archived'])
 export const sparkIdSchema = z.string().min(1).max(64)
 
 export const sparkCrystallizedSchema = z.object({
@@ -28,14 +35,17 @@ export const sparkViewSchema = z.object({
   content: z.string().min(1).max(20_000),
   scope: sparkScopeSchema,
   workspacePath: z.string().nullable(),
-  status: sparkStatusSchema,
+  inboxState: sparkInboxStateSchema,
   tags: z.array(z.string().min(1).max(50)).max(32),
   sourceSessionId: z.string(),
   sourceAgentId: z.string().nullable(),
   sourceTurn: z.number().int().nonnegative().nullable(),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
-  resolvedAt: z.number().int().nonnegative().nullable().default(null),
+  /** 状态最后一次变更的时间（取代旧字段 resolvedAt —— 旧字段只在归档时打点，是个特例）。 */
+  stateChangedAt: z.number().int().nonnegative().nullable().default(null),
+  /** 墓碑：软删除时间。非 null 的记录默认不出现在列表里，可由 restore 复原。 */
+  deletedAt: z.number().int().nonnegative().nullable().default(null),
   crystallized: sparkCrystallizedSchema.nullable().default(null),
 })
 
@@ -51,8 +61,10 @@ export const sparkCaptureSchema = z.object({
 })
 
 export const sparkListQuerySchema = z.object({
-  status: sparkStatusSchema.optional(),
+  inboxState: sparkInboxStateSchema.optional(),
   scope: sparkScopeSchema.optional(),
+  /** 默认隐藏墓碑；true 时把软删除的记录也带出来（"最近删除"视图）。 */
+  includeDeleted: z.boolean().default(false),
   limit: z.number().int().min(1).max(500).default(100),
 })
 
@@ -61,7 +73,7 @@ export const sparkPatchSchema = z.object({
   content: z.string().min(1).max(20_000).optional(),
   tags: z.array(z.string().min(1).max(50)).max(32).optional(),
   scope: sparkScopeSchema.optional(),
-  status: sparkStatusSchema.optional(),
+  inboxState: sparkInboxStateSchema.optional(),
 })
 
 export const sparkCrystallizeSchema = z.object({
@@ -69,6 +81,25 @@ export const sparkCrystallizeSchema = z.object({
   importance: z.number().min(0).max(1).default(0.5),
   scope: sparkScopeSchema.optional(),
   globalProven: z.boolean().default(false),
+})
+
+/**
+ * 收件箱统计（设计 §4.2）。三个消费方共用同一份形状：
+ *   ① `GET /sparks/stats`；② 会话首步注入的计数；③ dock 模块 header 的未处理数。
+ * **不要**让这些路径去 list 全量再过滤——那是 O(n) 且有预算风险。
+ */
+export const sparkStatsSchema = z.object({
+  total: z.number().int().nonnegative(),
+  pending: z.number().int().nonnegative(),
+  crystallized: z.number().int().nonnegative(),
+  dropped: z.number().int().nonnegative(),
+  archived: z.number().int().nonnegative(),
+  /** 墓碑（软删除）数量，默认不出现在列表里。 */
+  deleted: z.number().int().nonnegative(),
+  /** 最老的待处理火花的创建时间；无待处理时为 null。 */
+  oldestPendingAt: z.number().int().nonnegative().nullable(),
+  /** 待决提议数（来自 emerge 服务；不可用时为 0）。 */
+  pendingProposals: z.number().int().nonnegative(),
 })
 
 /**
@@ -166,13 +197,14 @@ export const scriptInvokeResultSchema = z.object({
 })
 
 export type SparkScope = z.infer<typeof sparkScopeSchema>
-export type SparkStatus = z.infer<typeof sparkStatusSchema>
+export type SparkInboxState = z.infer<typeof sparkInboxStateSchema>
 export type SparkId = z.infer<typeof sparkIdSchema>
 export type SparkView = z.infer<typeof sparkViewSchema>
 export type SparkCapture = z.infer<typeof sparkCaptureSchema>
 export type SparkListQuery = z.infer<typeof sparkListQuerySchema>
 export type SparkPatch = z.infer<typeof sparkPatchSchema>
 export type SparkCrystallized = z.infer<typeof sparkCrystallizedSchema>
+export type SparkStats = z.infer<typeof sparkStatsSchema>
 export type SparkCrystallize = z.infer<typeof sparkCrystallizeSchema>
 export type ProposalType = z.infer<typeof proposalTypeSchema>
 export type ProposalLeverage = z.infer<typeof proposalLeverageSchema>
@@ -206,7 +238,7 @@ export function errResult(code: string, message: string): SparkResult<never> {
 
 /** `sparks/changed` 的载荷：宿主每次火花变更后 emit。 */
 export const sparkChangedEventSchema = z.object({
-  operation: z.enum(['capture', 'patch', 'archive', 'delete', 'crystallize']),
+  operation: z.enum(['capture', 'patch', 'state', 'crystallize', 'delete', 'restore', 'purge']),
   id: sparkIdSchema,
   record: sparkViewSchema.nullable(),
   at: z.number().int().nonnegative(),
@@ -285,6 +317,7 @@ export const SPARK_HOST_CONTRIBUTION: TypertContribution = {
   face: 'host',
   schemas: [
     { name: 'SparkView', schema: sparkViewSchema },
+    { name: 'SparkStats', schema: sparkStatsSchema },
     { name: 'ProposalView', schema: proposalViewSchema },
     { name: 'SparkChangedEvent', schema: sparkChangedEventSchema },
     { name: 'ProposalsChangedEvent', schema: proposalsChangedEventSchema },

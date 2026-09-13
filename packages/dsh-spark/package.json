@@ -1,6 +1,6 @@
 {
   "name": "dsh-spark",
-  "version": "0.1.6",
+  "version": "0.2.0",
   "description": "DSH 火花认知层 host：spark 流（情景记忆）+ JSONL 持久化 + HTTP API + agent 工具",
   "type": "module",
   "main": "lib/index.js",
@@ -10,10 +10,15 @@
       "types": "./lib/types/index.d.ts",
       "default": "./lib/index.js"
     },
+    "./inbox": {
+      "types": "./lib/types/inbox.d.ts",
+      "default": "./lib/inbox.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
     "lib/index.js",
+    "lib/inbox.js",
     "lib/types/**/*.js",
     "lib/types/**/*.d.ts",
     "cordis.patch.yml"
@@ -26,7 +31,7 @@
   "scripts": {
     "build": "node build.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test --test-reporter=spec test/spark-core.test.ts test/proposals.test.ts test/scripts.test.ts test/valence.test.ts test/events.test.ts"
+    "test": "node --test --test-reporter=spec test/spark-core.test.ts test/spark-migration.test.ts test/inbox.test.ts test/proposals.test.ts test/scripts.test.ts test/valence.test.ts test/events.test.ts"
   },
   "publishConfig": {
     "access": "public"

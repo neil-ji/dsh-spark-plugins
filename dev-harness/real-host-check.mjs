@@ -166,6 +166,37 @@ try {
     })()`)
     check('面板打开且列出火花行', pane.rows > 0, JSON.stringify(pane))
 
+    // 3b) 收件箱化（2026-09-14，设计 §4.1/§4.2）：真宿主必须给出新契约
+    //     —— stats 形状、收件箱筛选存在、且旧的 status 语义确实失效。
+    const statsProbe = await evalJs(`fetch('/sparks/stats').then(async (r) => ({ ok: r.ok, status: r.status, value: await r.json() }))`)
+    const statsValue = statsProbe?.value?.value
+    check(
+      'GET /sparks/stats 返回收件箱计数（与 /sparks 同源）',
+      statsProbe?.ok === true && statsValue !== undefined
+        && typeof statsValue.pending === 'number' && typeof statsValue.dropped === 'number'
+        && typeof statsValue.deleted === 'number' && typeof statsValue.pendingProposals === 'number',
+      JSON.stringify(statsProbe).slice(0, 220),
+    )
+    // 断言放在**面板文本**上而不是某个 CSS 选择器上：行内的「结晶/归档/丢弃」动作钮
+    // 与筛选胶囊同类名，按类名取会取错（第一版就是这么误判的）。
+    const inboxText = String(pane.text ?? '')
+    check(
+      '收件箱四个筛选位可见（待处理/已沉淀/已归档/已丢弃）',
+      ['待处理', '已沉淀', '已归档', '已丢弃'].every((label) => inboxText.includes(label)),
+      inboxText.slice(0, 160),
+    )
+    // 破坏性变更的可观测证据：旧 `status` 参数被忽略（返回全量），新 `inboxState` 才过滤。
+    // 用 archived 而不是 pending —— 沙箱里没有归档记录，两者不可能撞成同一个数。
+    const legacyFilter = await evalJs(`Promise.all([
+      fetch('/sparks?status=archived&limit=50').then((r) => r.json()),
+      fetch('/sparks?inboxState=archived&limit=50').then((r) => r.json()),
+    ]).then(([legacy, modern]) => ({ legacy: legacy.value?.length ?? -1, modern: modern.value?.length ?? -1 }))`)
+    check(
+      '旧 status 查询参数已失效（破坏性变更真的生效）',
+      legacyFilter?.modern === 0 && (legacyFilter?.legacy ?? 0) > 0,
+      JSON.stringify(legacyFilter),
+    )
+
     // 4) 记忆模块：hippomemo 事件通道（同一条 mux 载波、另一条 stream 方法）
     const memoryTitle = '真宿主记忆验收 ' + Date.now().toString(36)
     const tabs = await evalJs(`Array.from(document.querySelectorAll('.dock-tab')).map((b) => b.getAttribute('aria-label'))`)

@@ -130,8 +130,10 @@ export function generateProposals(
   now: number = Date.now(),
 ): Omit<ProposalView, 'id' | 'status' | 'createdAt' | 'resolvedAt'>[] {
   const out: Omit<ProposalView, 'id' | 'status' | 'createdAt' | 'resolvedAt'>[] = []
+  // 候选 = 库里还"活着"的火花：pending（待处理）与 crystallized（已沉淀但仍可关联）。
+  // archived / dropped / 墓碑都不参与涌现（archived 是用户主动收起，dropped 是判定无价值）。
   const candidates = sparks
-    .filter(s => s.status === 'active')
+    .filter(s => s.deletedAt === null && (s.inboxState === 'pending' || s.inboxState === 'crystallized'))
     .slice(0, opts.candidateLimit)
 
   // link: pairs with high title-token Jaccard

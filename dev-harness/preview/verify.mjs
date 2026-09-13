@@ -151,7 +151,7 @@ async function runServerChecks() {
     check('hippomemo: candidates 含四类计数', candidates.ok === true && typeof candidates.value?.byKind === 'object', JSON.stringify(candidates).slice(0, 160))
 
     /* spark fixture（dock 的火花流 / 提议 / 脚本子页） */
-    const sparks = await (await fetch('http://127.0.0.1:' + PORT + '/sparks?status=active&limit=50')).json()
+    const sparks = await (await fetch('http://127.0.0.1:' + PORT + '/sparks?inboxState=pending&limit=50')).json()
     check('spark: /sparks 返回 ok 信封', sparks.ok === true && Array.isArray(sparks.value), JSON.stringify(sparks).slice(0, 160))
     check('spark: 有活跃火花', (sparks.value?.length ?? 0) >= 2, 'items=' + (sparks.value?.length ?? 0))
     const proposals = await (await fetch('http://127.0.0.1:' + PORT + '/proposals?status=pending')).json()

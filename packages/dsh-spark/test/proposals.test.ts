@@ -14,14 +14,15 @@ function makeSpark(overrides: Partial<SparkView> = {}): SparkView {
     content: overrides.content ?? 'some content',
     scope: overrides.scope ?? 'project',
     workspacePath: overrides.workspacePath ?? null,
-    status: overrides.status ?? 'active',
+    inboxState: overrides.inboxState ?? 'pending',
     tags: overrides.tags ?? [],
     sourceSessionId: overrides.sourceSessionId ?? 'sess',
     sourceAgentId: overrides.sourceAgentId ?? null,
     sourceTurn: overrides.sourceTurn ?? null,
     createdAt: overrides.createdAt ?? now,
     updatedAt: overrides.updatedAt ?? now,
-    resolvedAt: overrides.resolvedAt ?? null,
+    stateChangedAt: overrides.stateChangedAt ?? null,
+    deletedAt: overrides.deletedAt ?? null,
     crystallized: overrides.crystallized ?? null,
   }
 }
@@ -126,15 +127,29 @@ test('prune: recent spark is NOT pruned', () => {
   assert.equal(out.filter(c => c.type === 'prune').length, 0)
 })
 
-test('archived sparks are filtered out before emergence', () => {
+test('archived / dropped / tombstoned sparks are filtered out before emergence', () => {
   const now = 1_700_000_000_000
-  const sparks = [
-    makeSpark({ id: 'a', status: 'active', title: 'alpha beta gamma delta' }),
-    makeSpark({ id: 'b', status: 'archived', title: 'alpha beta gamma delta' }),
-  ]
-  const out = generateProposals(sparks, DEFAULT_OPTS, now)
-  // b is filtered out, a has no partner → no link
-  assert.equal(out.filter(c => c.type === 'link').length, 0)
+  const title = 'alpha beta gamma delta'
+  for (const excluded of ['archived', 'dropped'] as const) {
+    const out = generateProposals([
+      makeSpark({ id: 'a', inboxState: 'pending', title }),
+      makeSpark({ id: 'b', inboxState: excluded, title }),
+    ], DEFAULT_OPTS, now)
+    assert.equal(out.filter(c => c.type === 'link').length, 0, excluded + ' must not pair')
+  }
+  // crystallized 仍可参与关联（已沉淀但语义上仍有联系价值）。
+  // 注意标题不能完全相同 —— link 规则显式排除 jaccard === 1（完全重复由 dedup 处理）。
+  const withCrystallized = generateProposals([
+    makeSpark({ id: 'a', inboxState: 'pending', title: 'alpha beta gamma delta' }),
+    makeSpark({ id: 'b', inboxState: 'crystallized', title: 'alpha beta gamma', crystallized: { hippoId: 'm1', kind: 'insight', at: now } }),
+  ], DEFAULT_OPTS, now)
+  assert.equal(withCrystallized.filter(c => c.type === 'link').length, 1, 'crystallized sparks still link')
+  // 墓碑（软删除）不参与
+  const withTombstone = generateProposals([
+    makeSpark({ id: 'a', inboxState: 'pending', title }),
+    makeSpark({ id: 'b', inboxState: 'pending', title, deletedAt: now }),
+  ], DEFAULT_OPTS, now)
+  assert.equal(withTombstone.filter(c => c.type === 'link').length, 0, 'tombstoned sparks must not pair')
 })
 
 test('mixed scenario: link + cluster + prune all fire together', () => {

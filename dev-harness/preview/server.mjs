@@ -430,6 +430,8 @@ async function handleSpark(req, res, url) {
     return subscribeSparkStream(path, req, res)
   }
   if (path === '/sparks' && method === 'GET') return json(res, 200, spark.list(url.searchParams))
+  // 必须排在 /sparks/:id 之前：否则 /stats 会被当成一个火花 id（与真宿主 http.ts 同序）。
+  if (path === '/sparks/stats' && method === 'GET') return json(res, 200, spark.stats())
   if (path === '/sparks' && method === 'POST') {
     const result = spark.capture(body)
     if (result.ok === true) broadcastSpark('/sparks/events', { operation: 'capture', id: result.value.id, record: result.value, at: Date.now() })
@@ -443,12 +445,24 @@ async function handleSpark(req, res, url) {
       if (result.ok === true) broadcastSpark('/sparks/events', { operation: 'crystallize', id, at: Date.now() })
       return json(res, result.ok === true ? 200 : statusFor(result.error), result)
     }
+    if (rest.endsWith('/restore') && method === 'POST') {
+      const id = decodeURIComponent(rest.slice(0, -'/restore'.length))
+      const result = spark.restore(id)
+      if (result.ok === true) broadcastSpark('/sparks/events', { operation: 'restore', id, record: result.value, at: Date.now() })
+      return json(res, result.ok === true ? 200 : statusFor(result.error), result)
+    }
     if (method === 'PATCH') {
       const id = decodeURIComponent(rest)
       const result = spark.patch(id, body)
       if (result.ok === true) {
-        broadcastSpark('/sparks/events', { operation: result.value.status === 'archived' ? 'archive' : 'patch', id, record: result.value, at: Date.now() })
+        broadcastSpark('/sparks/events', { operation: 'state', id, record: result.value, at: Date.now() })
       }
+      return json(res, result.ok === true ? 200 : statusFor(result.error), result)
+    }
+    if (method === 'DELETE') {
+      const id = decodeURIComponent(rest)
+      const result = spark.remove(id)
+      if (result.ok === true) broadcastSpark('/sparks/events', { operation: 'delete', id, record: null, at: Date.now() })
       return json(res, result.ok === true ? 200 : statusFor(result.error), result)
     }
   }

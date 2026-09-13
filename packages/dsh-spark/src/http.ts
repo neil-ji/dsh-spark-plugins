@@ -65,6 +65,11 @@ async function handleSparks(
       send(res, 200, okEnvelope(list))
       return
     }
+    // 必须排在「按 id 取」之前：否则 /stats 会被当成一个火花 id。
+    if (req.method === 'GET' && sub === '/stats') {
+      send(res, 200, okEnvelope(await service.stats(await pendingProposalCount(ctx))))
+      return
+    }
     if (req.method === 'GET' && sub.startsWith('/')) {
       const id = decodeURIComponent(sub.slice(1))
       const record = await service.get(id as Parameters<typeof service.get>[0])
@@ -86,6 +91,12 @@ async function handleSparks(
       } catch (error) {
         send(res, errorStatusFor(error), errorEnvelope(errorCodeOf(error), errorMessageOf(error)))
       }
+      return
+    }
+    if (req.method === 'POST' && /\/restore$/.test(sub)) {
+      const id = decodeURIComponent(sub.slice(1, -'/restore'.length))
+      const record = await service.restore(id as Parameters<typeof service.restore>[0])
+      send(res, record === null ? 404 : 200, okEnvelope(record))
       return
     }
     if (req.method === 'PATCH' && sub.startsWith('/')) {
@@ -240,15 +251,30 @@ async function handleScripts(
   }
 }
 
+const INBOX_STATES = ['pending', 'crystallized', 'dropped', 'archived'] as const
+
 function queryFromUrl(url: URL): Record<string, unknown> {
   const query: Record<string, unknown> = {}
-  const status = url.searchParams.get('status')
-  if (status === 'active' || status === 'archived') query.status = status
+  const inboxState = url.searchParams.get('inboxState')
+  if (inboxState !== null && (INBOX_STATES as readonly string[]).includes(inboxState)) query.inboxState = inboxState
   const scope = url.searchParams.get('scope')
   if (scope === 'session' || scope === 'project' || scope === 'global') query.scope = scope
+  if (url.searchParams.get('includeDeleted') === 'true') query.includeDeleted = true
   const limit = url.searchParams.get('limit')
   if (limit !== null) query.limit = Number(limit)
   return query
+}
+
+/** 待决提议数；emerge 服务不可用时按 0 处理（统计端点不该因为它的缺失而 500）。 */
+async function pendingProposalCount(ctx: Context): Promise<number> {
+  try {
+    const emerge = ctx.emerge as EmergeService | undefined
+    if (emerge === undefined) return 0
+    const all = await emerge.list()
+    return all.filter(p => p.status === 'pending').length
+  } catch {
+    return 0
+  }
 }
 
 function readJsonBody(req: IncomingMessage): Promise<unknown> {
@@ -315,6 +341,8 @@ function errorStatusFor(error: unknown): number {
     const code = (error as { code: unknown }).code
     if (code === 'SPARK_NOT_FOUND') return 404
     if (code === 'SPARK_HIPPO_UNAVAILABLE') return 412
+    if (code === 'SPARK_STATE_INVALID') return 409
+    if (code === 'SPARK_STORE_CONFLICT') return 409
   }
   return 400
 }

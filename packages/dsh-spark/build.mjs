@@ -10,7 +10,7 @@ rmSync('lib', { recursive: true, force: true })
 execSync('npx --no-install tsc -p tsconfig.json', { stdio: 'inherit' })
 
 await build({
-  entryPoints: { 'index': 'src/index.ts' },
+  entryPoints: { 'index': 'src/index.ts', 'inbox': 'src/inbox.ts' },
   outdir: 'lib',
   bundle: true,
   format: 'esm',

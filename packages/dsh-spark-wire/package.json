@@ -1,6 +1,6 @@
 {
   "name": "dsh-spark-wire",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "DSH 火花认知层 wire：host/client 共享的 remote 协议与类型定义",
   "type": "module",
   "main": "lib/index.js",

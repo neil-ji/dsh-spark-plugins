@@ -24,14 +24,15 @@ function makeRecord(overrides: Partial<SparkView> = {}): SparkView {
     content: overrides.content ?? 'I should remember this',
     scope: overrides.scope ?? 'project',
     workspacePath: overrides.workspacePath ?? '/tmp/proj',
-    status: overrides.status ?? 'active',
+    inboxState: overrides.inboxState ?? 'pending',
     tags: overrides.tags ?? ['design', 'idea'],
     sourceSessionId: overrides.sourceSessionId ?? 'sess-1',
     sourceAgentId: overrides.sourceAgentId ?? 'agent-1',
     sourceTurn: overrides.sourceTurn ?? null,
     createdAt: overrides.createdAt ?? now,
     updatedAt: overrides.updatedAt ?? now,
-    resolvedAt: overrides.resolvedAt ?? null,
+    stateChangedAt: overrides.stateChangedAt ?? null,
+    deletedAt: overrides.deletedAt ?? null,
     crystallized: overrides.crystallized ?? null,
   }
 }
@@ -62,7 +63,7 @@ test('append + readAll round-trips records verbatim (incl. crystallized)', async
   assert.deepEqual(all[1]!.crystallized, { hippoId: 'mem-1', kind: 'insight', at: 1 })
 })
 
-test('writeAll replaces the entire store (used by crystallize)', async (t) => {
+test('writeAll replaces the entire store (used by the v1->v2 migration)', async (t) => {
   const { storage, cleanup } = await withTmpStorage()
   t.after(cleanup)
   const now = 1_700_000_000_000
@@ -207,9 +208,12 @@ test('rewrite is atomic via .tmp + rename (file never empty mid-write)', async (
   t.after(cleanup)
   await storage.append(makeRecord({ id: 'a' }))
   await storage.append(makeRecord({ id: 'b' }))
-  await storage.remove('a')
+  await storage.purge('a')
   const text = await readFile(file, 'utf8')
-  assert.match(text, /^\{.*\}\n?$/)
+  // 首行是版本头，其余每行一条记录（`.tmp` + rename，绝不会读到半截文件）。
+  const lines = text.split('\n').filter(Boolean)
+  assert.match(lines[0]!, /^\{"__sparkStore":\d+\}$/)
+  assert.equal(lines.length, 2)
   const all = await storage.readAll()
   assert.equal(all.length, 1)
   assert.equal(all[0]!.id, 'b')
@@ -246,16 +250,16 @@ test('readAll skips malformed lines without throwing', async (t) => {
   assert.equal(all[1]!.id, 'ok2')
 })
 
-test('patch updates fields, bumps updatedAt, and stamps resolvedAt on archive', async (t) => {
+test('patch updates fields, bumps updatedAt, and stamps stateChangedAt on a state change', async (t) => {
   const { storage, cleanup } = await withTmpStorage()
   t.after(cleanup)
   await storage.append(makeRecord({ id: 'a', title: 'old' }))
-  const next = await storage.patch('a', { title: 'new', status: 'archived' }, 1_700_000_000_999)
+  const next = await storage.patch('a', { title: 'new', inboxState: 'archived' }, 1_700_000_000_999)
   assert.ok(next !== null)
   assert.equal(next.title, 'new')
-  assert.equal(next.status, 'archived')
+  assert.equal(next.inboxState, 'archived')
   assert.equal(next.updatedAt, 1_700_000_000_999)
-  assert.equal(next.resolvedAt, 1_700_000_000_999)
+  assert.equal(next.stateChangedAt, 1_700_000_000_999)
   assert.equal(next.crystallized, null, 'patch should not touch crystallized')
   const all = await storage.readAll()
   assert.equal(all.length, 1)
@@ -270,16 +274,33 @@ test('patch returns null when id is unknown', async (t) => {
   assert.equal(result, null)
 })
 
-test('remove returns true once and false on second call', async (t) => {
+test('remove is a tombstone (soft delete): true once, false on repeat, record still readable', async (t) => {
   const { storage, cleanup } = await withTmpStorage()
   t.after(cleanup)
   await storage.append(makeRecord({ id: 'a' }))
   await storage.append(makeRecord({ id: 'b' }))
-  assert.equal(await storage.remove('a'), true)
-  assert.equal(await storage.remove('a'), false)
+  assert.equal(await storage.remove('a', 1_700_000_000_500), true)
+  assert.equal(await storage.remove('a'), false, 'second remove is a no-op')
   const all = await storage.readAll()
-  assert.equal(all.length, 1)
-  assert.equal(all[0]!.id, 'b')
+  assert.equal(all.length, 2, 'soft delete keeps the record in the file (auditable)')
+  const tomb = all.find(r => r.id === 'a')!
+  assert.equal(tomb.deletedAt, 1_700_000_000_500)
+  await storage.update('a', r => ({ ...r, deletedAt: null }))
+  assert.equal((await storage.readAll()).find(r => r.id === 'a')!.deletedAt, null, 'restorable')
+})
+
+test('purgeTombstones physically drops only tombstones past the retention window', async (t) => {
+  const { storage, cleanup } = await withTmpStorage()
+  t.after(cleanup)
+  const now = 1_700_000_000_000
+  await storage.append(makeRecord({ id: 'fresh', deletedAt: now - 1000 }))
+  await storage.append(makeRecord({ id: 'old', deletedAt: now - 10 * 86_400_000 }))
+  await storage.append(makeRecord({ id: 'live', deletedAt: null }))
+  const purged = await storage.purgeTombstones(30 * 86_400_000, now)
+  assert.equal(purged, 0, 'nothing has passed the 30-day window yet')
+  const purged2 = await storage.purgeTombstones(5 * 86_400_000, now)
+  assert.equal(purged2, 1)
+  assert.deepEqual((await storage.readAll()).map(r => r.id).sort(), ['fresh', 'live'])
 })
 
 console.log('spark-core tests loaded');

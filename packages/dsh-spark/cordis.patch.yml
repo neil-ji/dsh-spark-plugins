@@ -5,3 +5,14 @@
 - insert:
     - id: spark
       name: 'dsh-spark'
+      config:
+        tombstoneRetentionDays: 30
+
+    # 会话编排层（设计 §5）：把收件箱状态注入会话首步。
+    # 在此之前 spark_capture 只写不读 —— 没有这一步，火花面板就是坟场。
+    - id: spark-inbox
+      name: 'dsh-spark/inbox'
+      config:
+        enabled: true
+        maxChars: 800
+        maxItems: 3

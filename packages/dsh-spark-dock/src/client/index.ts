@@ -17,6 +17,7 @@ import { injectPluginStyle } from 'dsh-spark-plugin-kit/client'
 import { SPARK_REMOTE_CONTRIBUTION } from 'dsh-spark-wire'
 import { sparkChannelOf, type SparkEventChannel } from './spark/remote.ts'
 import { registerSparkDockModule, startSparkAnnouncements } from './spark/SparkDockModule.tsx'
+import { SPARK_DOCK_NS, en, zh, type SparkT } from './spark/locales.ts'
 import { DockOverlay } from './DockOverlay.tsx'
 import { DOCK_CSS } from './style.ts'
 
@@ -46,6 +47,16 @@ function injectDockStyle(): () => void {
  */
 export async function apply(ctx: ClientContext): Promise<void> {
   injectDockStyle()
+  // 文案字典（AGENTS.md §3.4）：dock 的 spark 模块此前是硬编码中文，这里补上
+  // zh/en 两份；`t` 只 bind 一次后复用，避免每次渲染返回新函数身份（槽位 effect 会重跑）。
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const localeCtx = ctx as any
+  localeCtx.effect(() => {
+    const offZh = localeCtx.locale.register(SPARK_DOCK_NS, 'zh', zh)
+    const offEn = localeCtx.locale.register(SPARK_DOCK_NS, 'en', en)
+    return () => { offZh(); offEn() }
+  }, SPARK_DOCK_NS + ': dictionaries')
+  const t = localeCtx.locale.bind(SPARK_DOCK_NS) as SparkT
   injectPluginStyle(DOCK_CSS, 'dsh-spark-dock', 'dsh-spark-dock')
   // 统一事件通道（ADR-001）：先 mount spark 的 stream 描述符并**等它完成**，
   // 再经 reflect 取回动态命名空间组装通道（`remote.spark` 不能写进 inject，见上）。
@@ -58,11 +69,11 @@ export async function apply(ctx: ClientContext): Promise<void> {
     console.warn('[dsh-spark-dock] spark 事件流描述符 mount 失败，实时刷新将不可用：', error)
   }
   // 1) 自己的模块走同一条自注册路径（spark 的 UI 与播报文案都住在本包）。
-  registerSparkDockModule(ctx, { channel })
+  registerSparkDockModule(ctx, { channel, t })
   // 1b) spark 的播报（F7）：模块自己订阅统一事件流并把帧翻成气泡文案；
   //     壳只订阅 kit 的播报总线（见 fairy/FairyFace.tsx）。
   if (channel !== null) {
-    const stopAnnouncements = startSparkAnnouncements(channel)
+    const stopAnnouncements = startSparkAnnouncements(channel, t)
     ctx.effect(() => stopAnnouncements, 'spark-dock: announcements')
   }
   // 2) 声明 shell.overlay 里的悬浮球，并声明 dock 的子槽 —— 插件据此自注册。
