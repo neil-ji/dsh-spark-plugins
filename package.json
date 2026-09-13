@@ -29,6 +29,7 @@
     "preview:verify": "node dev-harness/preview/verify.mjs",
     "preview:layout": "node dev-harness/preview/dom-audit.mjs",
     "preview:titles": "node dev-harness/preview/title-audit.mjs",
+    "shots:finance": "node dev-harness/finance-panel-shots.mjs",
     "check:dsh-upgrade": "node scripts/check-dsh-upgrade.mjs --write-report",
     "check:contrast": "node scripts/audit-contrast.mjs",
     "check:architecture": "node scripts/check-architecture.mjs --strict-locations",
