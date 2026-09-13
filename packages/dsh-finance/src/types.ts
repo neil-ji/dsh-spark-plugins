@@ -213,6 +213,11 @@ export interface FinanceConfigInput {
    */
   prices?: Record<string, FinancePriceEntryInput | FinancePriceEntryInput[]>
   /**
+   * 静态订阅套餐（用户填一次）：月费 + 可选额度 + 计费周期形态 + 生效期。
+   * 刻意**不**追踪每周期剩余额度——"省了多少"由实际用量推算（见客户端 derive.planInsight）。
+   */
+  plans?: FinancePlanEntryInput[]
+  /**
    * Per-provider configuration entries — one row per provider the user wants
    * to track (DeepSeek-official, MiniMax-M3, OpenAI, ...). Each row carries
    * billing mode, plan/top-up budget, currency, optional auto-fetch flag, and
@@ -286,6 +291,37 @@ export interface FinanceProviderBalance {
   fetchedAt: number
 }
 
+/** 计费周期形态（仅作标签：本插件不追踪周期剩余额度）。 */
+export type FinancePlanPeriod = 'month' | 'month-week' | 'month-week-5h'
+
+/**
+ * 用户填写的一条静态套餐：某 provider 每月花多少钱、可选的月额度。
+ * 这是 P1 的"订阅 vs 按量"对比输入——除月费外都不需要精确，缺省即不显示。
+ */
+export interface FinancePlanEntryInput {
+  /** Provider id（与账本 byProvider 对齐；`-official` 后缀会自动归一）。 */
+  provider: string
+  /** 月费，币种 micros（CNY/USD 由 currency 决定）。 */
+  monthlyMicros: number
+  currency: string
+  /** 可选：该套餐包含的月 token 额度（用于"用满能省多少"）。 */
+  quotaTokens?: number
+  /** 可选：计费周期形态，仅用于标签与提醒。 */
+  periodLabel?: FinancePlanPeriod
+  /** 可选生效期（epoch ms 或日期串）；空 = 始终生效。 */
+  effectiveFrom?: string | number
+}
+
+/** 归一化后的套餐条目（effectiveFrom 已折算为 epoch ms，0 = 始终）。 */
+export interface FinancePlanEntry {
+  provider: string
+  monthlyMicros: number
+  currency: string
+  quotaTokens?: number
+  periodLabel?: FinancePlanPeriod
+  effectiveFrom: number
+}
+
 /** Resolved finance configuration (prices normalized to era-sorted entries). */
 export interface FinanceConfig {
   currency: string
@@ -305,6 +341,8 @@ export interface FinanceConfig {
    */
   hostMetaByProvider: Record<string, FinanceProviderBillingMode>
   prices: Record<string, readonly FinancePriceEntry[]>
+  /** Resolved static subscription plans (defaults to [] when settings omit them). */
+  plans: readonly FinancePlanEntry[]
   /** Resolved per-provider list (defaults to [] when settings omit it). */
   providers: readonly FinanceProviderEntry[]
 }

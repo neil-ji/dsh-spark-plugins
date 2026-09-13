@@ -88,10 +88,12 @@ const PROVIDERS: FinanceListProvidersResult = {
 
 function render(state: Partial<FinancePanelState>): string {
   const injected = {
-    useSnapshot: () => ({ status: 'ready', error: null, ...state }) as FinancePanelState,
+    useSnapshot: () => ({ status: 'ready', error: null, plans: [], plansWritable: false, ...state }) as FinancePanelState,
     t,
     refresh: () => {},
     refreshProvider: async () => {},
+    savePlan: async () => {},
+    removePlan: async () => {},
   } as unknown as FinancePanelInjected
   return renderToStaticMarkup(createElement(FinancePanel, injected))
 }
@@ -147,10 +149,65 @@ describe('FinancePanel shell', () => {
 
 describe('finance views', () => {
   it('ThisMonth lists balances, the trend and the priciest models', () => {
-    const html = renderToStaticMarkup(createElement(ThisMonthView, { ledger: LEDGER, providerList: PROVIDERS, t, refreshProvider: async () => {} }))
+    const html = renderToStaticMarkup(createElement(ThisMonthView, {
+      ledger: LEDGER,
+      providerList: PROVIDERS,
+      t,
+      refreshProvider: async () => {},
+      plans: [],
+      plansWritable: true,
+      savePlan: async () => {},
+      removePlan: async () => {},
+    }))
     expect(html).toContain('finance-balance-deepseek-official')
     expect(html).toContain('topModelsHint')
     expect(html).toContain('trendTitle')
+  })
+
+  it('订阅卡只列用过的厂商，并对已填套餐给出省/亏结论', () => {
+    const noPlan = renderToStaticMarkup(createElement(ThisMonthView, {
+      ledger: LEDGER,
+      providerList: PROVIDERS,
+      t,
+      refreshProvider: async () => {},
+      plans: [],
+      plansWritable: true,
+      savePlan: async () => {},
+      removePlan: async () => {},
+    }))
+    // 账本里用过 a / b，而未接入的厂商不会出现
+    expect(noPlan).toContain('finance-plan-a')
+    expect(noPlan).toContain('finance-plan-b')
+    expect(noPlan).toContain('planFill')
+
+    const withPlan = renderToStaticMarkup(createElement(ThisMonthView, {
+      ledger: LEDGER,
+      providerList: PROVIDERS,
+      t,
+      refreshProvider: async () => {},
+      plans: [{ provider: 'a', monthlyMicros: 1_000_000, currency: 'CNY', effectiveFrom: 0 }],
+      plansWritable: true,
+      savePlan: async () => {},
+      removePlan: async () => {},
+    }))
+    // 等价按量价 10_000_000 > 月费 1_000_000 → 「省了」
+    expect(withPlan).toContain('planSaved')
+    expect(withPlan).toContain('planDiscount')
+  })
+
+  it('设置只读时套餐卡明确说明不能改，且不给编辑入口', () => {
+    const html = renderToStaticMarkup(createElement(ThisMonthView, {
+      ledger: LEDGER,
+      providerList: PROVIDERS,
+      t,
+      refreshProvider: async () => {},
+      plans: [{ provider: 'a', monthlyMicros: 1_000_000, currency: 'CNY', effectiveFrom: 0 }],
+      plansWritable: false,
+      savePlan: async () => {},
+      removePlan: async () => {},
+    }))
+    expect(html).toContain('planReadOnly')
+    expect(html).not.toContain('planEdit')
   })
 
   it('WhoToUse groups the same model across vendors and marks the cheaper one', () => {

@@ -194,6 +194,17 @@ export async function run(): Promise<{ checks: Check[] }> {
     expectContains('finance: 首屏有四个总量数字', html, 'finance-stat-cost')
     expectContains('finance: 余额行按已接入 provider 渲染', html, 'finance-balance-deepseek')
     expectContains('finance: 四个决策视图页签（zh 字典）', html, '怎么调度更省')
+    expectContains('finance: 订阅 vs 按量卡存在', html, 'finance-plan-card')
+    expectContains('finance: 套餐行只列用过的厂商', html, 'finance-plan-deepseek')
+    // 写回路径真的通：填一次月费 → 落到 settings 的 plans，并推出「省了多少」结论。
+    await injected.controller.savePlan({ provider: 'deepseek', monthlyMicros: 10_000_000, currency: 'CNY', periodLabel: 'month', effectiveFrom: 0 })
+    const afterPlan = renderToString(<FinancePanel {...injected.panel} /> as ReactElement)
+    expectContains('finance: 填月费后给出「比按量省」结论', afterPlan, '比按量省')
+    check(
+      'finance: 套餐写回 settings 的 plans 字段',
+      JSON.stringify((injected.scope as unknown as { getSnapshot(): { user: unknown } }).getSnapshot().user).includes('monthlyMicros'),
+      '',
+    )
     // 产品原则回归线：配置面（价格表 / 供应商默认价 / 视图偏好）必须不存在。
     check(
       'finance: 已无配置面（价格表 / 供应商默认价 / 视图偏好全部删除）',

@@ -6,6 +6,7 @@
  * `client.js` 自注册（ADR-003）。
  */
 export { FinancePanel, type FinancePanelInjected, type FinanceView } from './FinancePanel.tsx'
-export { FinancePanelController, type FinancePanelState } from './controller.ts'
+export { FinancePanelController, type FinancePanelState, type FinancePlanSeam } from './controller.ts'
+export { createPlanSeam, normalizePlanList, majorToMicros, microsToMajor, type FinanceSettingsSection } from './plans.ts'
 export { en, zh, type FinanceKey, type FinanceTranslate } from './locales.ts'
 export { FINANCE_REMOTE_CONTRIBUTION as financeRemoteContribution } from 'dsh-spark-finance-wire'

@@ -19,6 +19,8 @@ import {
 import { IconDollar } from 'dsh-ui-kit'
 import { FinancePanel, type FinancePanelInjected } from './FinancePanel.tsx'
 import { FinancePanelController, type FinancePanelState } from './controller.ts'
+import { createPlanSeam, type FinanceSettingsSection } from './plans.ts'
+import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { ClientRemote } from '@deepseek-ai/dsh-api-remotes/client'
 import type { FinanceBackfillStreamFrame } from 'dsh-spark-finance/types'
 import type { FinanceKey } from './locales.ts'
@@ -74,12 +76,17 @@ export function FinanceDockModule(props: FinanceDockInject & DockModuleOwnerProp
 export function startFinanceDockModule(ctx: ClientContext): FinanceDockInject {
   let injected: FinanceDockInject
   let disposeStream: (() => void) | undefined
+  let disposeController: (() => void) | undefined
   try {
     const finance = ctx.reflect.get('remote.finance')
     if (finance === undefined) {
       injected = { failed: true }
     } else {
-      const controller = new FinancePanelController(finance as ClientRemote['finance'])
+      // P1：套餐（月费）走 settings 的 `finance.plans`——面板只读 + 行内写回，
+      // 没有独立配置页；候选 provider 由账本里真正用过的厂商决定。
+      const scope = ctx.settingsScope.bind({ namespace: 'finance' }) as SettingsScope<FinanceSettingsSection>
+      const controller = new FinancePanelController(finance as ClientRemote['finance'], createPlanSeam(scope))
+      disposeController = () => controller.dispose()
       const useSnapshot = bindSnapshotSelector(controller.store) as SnapshotSelectorHook<FinancePanelState>
       const t = ctx.locale.bind('settings.finance') as (key: FinanceKey) => string
       injected = {
@@ -88,6 +95,8 @@ export function startFinanceDockModule(ctx: ClientContext): FinanceDockInject {
           t: t as FinancePanelInjected['t'],
           refresh: (): void => { void controller.load() },
           refreshProvider: (provider: string): Promise<void> => controller.refreshProvider(provider),
+          savePlan: (plan) => controller.savePlan(plan),
+          removePlan: (provider) => controller.removePlan(provider),
         },
       }
 
@@ -127,6 +136,8 @@ export function startFinanceDockModule(ctx: ClientContext): FinanceDockInject {
   })
   ctx.effect(() => () => {
     disposeStream?.()
+    // 套餐设置订阅归控制器所有：卸载时一并释放。
+    disposeController?.()
     dispose()
   }, 'finance-client: dock module + finance/events stream')
   return injected

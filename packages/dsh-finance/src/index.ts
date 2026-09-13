@@ -95,6 +95,7 @@ export {
   isPeakLocalDay,
   isPeakLocalHour,
   normalizeFinanceConfig,
+  normalizeFinancePlans,
   normalizeFinancePrices,
 } from './pricing.ts'
 
@@ -217,6 +218,19 @@ export class FinanceService extends TypertRemoteService {
      * policy but the values are ignored at lookup time.
      */
     prices: z.dict(priceEntries).default({}),
+    /**
+     * 静态订阅套餐（P1）：每个 provider 的月费 + 可选额度。用户填一次，不追踪
+     * 每周期剩余额度；"省了多少"由客户端用实际用量推算（derive.planInsight）。
+     * monthlyMicros 上限与 provider 价格同一口径（100,000 主单位）。
+     */
+    plans: z.array(z.object({
+      provider: z.string().required(),
+      monthlyMicros: z.number().step(1).min(0).max(100_000_000_000).required(),
+      currency: z.string().required(),
+      quotaTokens: z.number().step(1).min(0),
+      periodLabel: z.union(['month', 'month-week', 'month-week-5h']),
+      effectiveFrom: z.union([z.string(), z.number()]),
+    })).default([]),
     /**
      * Per-provider configuration list (commit 11, additive). Empty by default
      * — host-known metadata seeds it from `cordis.patch.yml` once commit 12

@@ -13,6 +13,8 @@ import {
   mixedUnitCostMicros,
   modelComparisonRows,
   peakShare,
+  planInsight,
+  planRows,
   projectRows,
   providerCostMicros,
   providerDailyMicros,
@@ -158,6 +160,41 @@ describe('derive: balance days left', () => {
     expect(balanceDaysLeft(21_000_000, 7_000_000)).toBeCloseTo(3)
     expect(balanceDaysLeft(undefined, 1)).toBeNull()
     expect(balanceDaysLeft(100, null)).toBeNull()
+  })
+})
+
+describe('derive: 订阅 vs 按量', () => {
+  const l = ledger({
+    byProvider: [
+      { provider: 'deepseek', usage: buckets(1_000_000, 0, 0, 0), costMicros: 30_000_000, modelCount: 1 },
+      { provider: 'acme', usage: buckets(1_000_000, 0, 0, 0), costMicros: 5_000_000, modelCount: 1 },
+    ],
+  })
+
+  it('compares the metered equivalent against the monthly fee', () => {
+    const saved = planInsight({ provider: 'deepseek-official', monthlyMicros: 10_000_000, currency: 'CNY' }, l)
+    expect(saved.equivalentMicros).toBe(30_000_000)
+    expect(saved.savingsMicros).toBe(20_000_000)
+    expect(saved.discountRate).toBeCloseTo(1 - 10 / 30)
+    expect(saved.breakEvenRatio).toBeCloseTo(3)
+
+    const lost = planInsight({ provider: 'acme', monthlyMicros: 10_000_000, currency: 'CNY' }, l)
+    expect(lost.savingsMicros).toBe(-5_000_000)
+    expect(lost.breakEvenRatio).toBeCloseTo(0.5)
+  })
+
+  it('says nothing when the month has no equivalent usage', () => {
+    const unknown = planInsight({ provider: 'nobody', monthlyMicros: 1_000_000, currency: 'CNY' }, l)
+    expect(unknown.equivalentMicros).toBe(0)
+    expect(unknown.discountRate).toBeNull()
+  })
+
+  it('lists only the vendors the ledger actually observed', () => {
+    const { withPlan, withoutPlan } = planRows(l, [{ provider: 'deepseek', monthlyMicros: 1, currency: 'CNY' }])
+    expect(withPlan.map((row) => row.provider)).toEqual(['deepseek'])
+    expect(withoutPlan).toEqual(['acme'])
+    // 没接入过的厂商永不出现
+    expect([...withPlan.map((r) => r.provider), ...withoutPlan]).not.toContain('openai')
   })
 })
 

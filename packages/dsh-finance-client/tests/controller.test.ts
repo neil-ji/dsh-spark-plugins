@@ -139,6 +139,32 @@ describe('FinancePanelController', () => {
     expect(providers.find((row) => row.provider === 'other')?.balance.status).toBe('unsupported')
   })
 
+  it('reads plans from the settings seam and writes them back', async () => {
+    let plans = [{ provider: 'acme', monthlyMicros: 5_000_000, currency: 'CNY', effectiveFrom: 0 }]
+    let listeners = 0
+    const seam = {
+      getSnapshot: () => ({ plans, writable: true }),
+      subscribe: () => { listeners += 1; return () => { listeners -= 1 } },
+      write: async (next: typeof plans) => { plans = next },
+    }
+    const controller = new FinancePanelController(fakeRemote() as never, seam as never)
+    expect(controller.store.getSnapshot().plans).toHaveLength(1)
+    expect(controller.store.getSnapshot().plansWritable).toBe(true)
+
+    await controller.savePlan({ provider: 'other', monthlyMicros: 1_000_000, currency: 'CNY', effectiveFrom: 0 })
+    expect(plans.map((plan) => plan.provider).sort()).toEqual(['acme', 'other'])
+
+    // 同 provider 覆盖而不是追加
+    await controller.savePlan({ provider: 'acme', monthlyMicros: 9_000_000, currency: 'CNY', effectiveFrom: 0 })
+    expect(plans.find((plan) => plan.provider === 'acme')?.monthlyMicros).toBe(9_000_000)
+
+    await controller.removePlan('other')
+    expect(plans.map((plan) => plan.provider)).toEqual(['acme'])
+
+    controller.dispose()
+    expect(listeners).toBe(0)
+  })
+
   it('records the last successful community sync for the price footnote', async () => {
     const remote = fakeRemote({ getSyncStatus: vi.fn().mockResolvedValue({ ok: true, value: { source: 'models.dev', appliedAt: 123, kept: 1, providers: [], fx: 7.2 } }) })
     const controller = new FinancePanelController(remote as never)

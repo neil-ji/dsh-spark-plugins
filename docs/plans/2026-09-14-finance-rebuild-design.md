@@ -129,3 +129,10 @@
 | `pnpm sandbox:install` + `node dev-harness/real-host-check.mjs` | 29/29 通过、退出码 0；真宿主 finance pane 实测渲染出新面板（四视图 + 空态引导 + 价格来源脚注），控制台 0 条 |
 
 **尚未做（P1/P2 边界，UI 不放占位、不冒充结论）**：订阅卡与「省了多少」、逐模型输出速率与时间成本、context 阶梯计价与「拆会话能省多少」。
+
+## 12. P1-A 落地记录（2026-09-14）：订阅 vs 按量
+
+- **host**：`FinanceConfigInput/FinanceConfig.plans`（provider / 月费 / 币种 / 可选额度 / 周期标签 / 生效期）+ `normalizeFinancePlans`（坏行跳过而不是猜、日期串与 epoch 都收）+ `FinanceService.Config.plans` schema；导出 `normalizeFinancePlans`。host 端点仍 9 条，无 wire 改动。
+- **client**：`derive.planInsight / planRows / providerKey`（省了多少 / 折扣率 / 回本进度全是观测值相减）；`plans.ts` 把 settings scope 收敛成 seam（只读快照 + 整写 `plans`）；视图① 首卡「订阅 vs 按量」——**行内**填月费（月费 + 币种 + 计费形态），候选 provider 只来自账本里真正用过的厂商，设置只读时明说不能改。
+- **验收**：`pnpm -r build/typecheck` 退出码 0；`pnpm -r test` 退出码 0（finance 168 / finance-client 44）；`pnpm check:all` PASS；`pnpm preview:verify` **75/75**（新增 4 条套餐断言，含写回 settings 的实测）；`pnpm sandbox:install` + `node dev-harness/real-host-check.mjs` **29/29** 退出码 0。
+- **仍未做**：逐模型输出速率与 ② 速率列、时间成本换算（P1-B）；context 阶梯与拆分会话反事实（P2）。

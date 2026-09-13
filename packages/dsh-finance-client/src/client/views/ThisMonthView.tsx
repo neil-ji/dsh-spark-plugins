@@ -1,19 +1,30 @@
 /**
  * 视图①：本月值不值。
  *
- * 回答三件事：这个月花了多少（成本 / 按量 / 订阅等价）、钱在哪个模型上、
- * 余额还能撑多久。**没有订阅卡**——套餐定义属 P1，本视图不假装知道订阅省了多少。
+ * 顺序 = 决策顺序：**订阅 vs 按量**（这个月这笔订阅值不值）→ 余额还剩多少 →
+ * 成本趋势 → 单位成本最高的模型。
+ *
+ * 套餐（月费）由用户填一次，输入框**贴在该 provider 那一行旁边**——没有独立配置页，
+ * 也只列出你本月真正用过的厂商（"只呈现你的实体"）。
  */
 
-import type { ReactNode } from 'react'
-import { Button, Card, Money, TrendChart, formatMicros } from 'dsh-ui-kit'
-import type { FinanceLedger, FinanceListProvidersResult, FinanceProviderBalance } from 'dsh-spark-finance/types'
+import { useState, type ReactNode } from 'react'
+import { Button, Card, Input, Money, SegmentedControl, TrendChart, formatMicros } from 'dsh-ui-kit'
+import type {
+  FinanceLedger,
+  FinanceListProvidersResult,
+  FinancePlanEntry,
+  FinancePlanPeriod,
+  FinanceProviderBalance,
+} from 'dsh-spark-finance/types'
 import {
   balanceDaysLeft,
   mixedUnitCostMicros,
   modelComparisonRows,
+  planRows,
   providerDailyMicros,
 } from '../derive.ts'
+import { FINANCE_PLAN_PERIODS, majorToMicros, microsToMajor } from '../plans.ts'
 import type { FinanceTranslate } from '../locales.ts'
 import css from '../panel.module.css'
 
@@ -22,37 +33,125 @@ export interface ThisMonthViewProps {
   providerList: FinanceListProvidersResult | undefined
   t: FinanceTranslate
   refreshProvider: (provider: string) => Promise<void>
+  plans: readonly FinancePlanEntry[]
+  plansWritable: boolean
+  savePlan: (plan: FinancePlanEntry) => Promise<void>
+  removePlan: (provider: string) => Promise<void>
 }
 
 const TOP_MODEL_COUNT = 6
+const cx = (...names: string[]): string => names.join(' ')
 
-export function ThisMonthView({ ledger, providerList, t, refreshProvider }: ThisMonthViewProps): ReactNode {
+export function ThisMonthView({
+  ledger,
+  providerList,
+  t,
+  refreshProvider,
+  plans,
+  plansWritable,
+  savePlan,
+  removePlan,
+}: ThisMonthViewProps): ReactNode {
+  const currency = ledger.currency === '' ? 'CNY' : ledger.currency
+  const [editing, setEditing] = useState<string | null>(null)
   const trendPoints = ledger.byDay.map((row) => ({ key: row.day, label: row.day.slice(5), value: row.costMicros }))
   const topModels = modelComparisonRows(ledger)
     .filter((row) => row.unitCostMicros !== null)
     .sort((a, b) => (b.unitCostMicros as number) - (a.unitCostMicros as number))
     .slice(0, TOP_MODEL_COUNT)
-  const rows = providerList?.providers ?? []
+  const balanceRows = providerList?.providers ?? []
+  const { withPlan, withoutPlan } = planRows(ledger, plans)
+  const planByProvider = new Map(withPlan.map((insight) => [insight.provider, insight]))
+  const planEntries = [...plans]
+  const orderedProviders = [...withPlan.map((insight) => insight.provider), ...withoutPlan]
 
   return (
     <>
+      <Card title={t('planCardTitle')} className={css.section}>
+        <p className={css.hint}>{t('planCardHint')}</p>
+        <div className={css.table} data-testid="finance-plan-card">
+          <div className={cx(css.tableHead, css.colsPlan)}>
+            <span className={css.cell}>{t('colProvider')}</span>
+            <span className={cx(css.cell, css.cellNum)}>{t('planMonthly')}</span>
+            <span className={cx(css.cell, css.cellNum)}>{t('planEquivalent')}</span>
+            <span className={css.cell}>{t('planVerdict')}</span>
+            <span className={css.cell} />
+          </div>
+          {orderedProviders.length === 0
+            ? <p className={css.hint}>{t('noData')}</p>
+            : orderedProviders.map((provider) => {
+              const insight = planByProvider.get(provider)
+              const existing = planEntries.find((plan) => plan.provider === provider)
+              const open = editing === provider
+              return (
+                <div key={provider} className={css.group}>
+                  <div className={cx(css.tableRow, css.colsPlan)} data-testid={`finance-plan-${provider}`}>
+                    <span className={cx(css.cell, css.balanceName)}>{provider}</span>
+                    <span className={cx(css.cell, css.cellNum)}>
+                      {insight === undefined ? '—' : <Money micros={insight.monthlyMicros} currency={insight.currency} />}
+                    </span>
+                    <span className={cx(css.cell, css.cellNum)}>
+                      <Money micros={insight?.equivalentMicros ?? 0} currency={currency} />
+                    </span>
+                    <span className={cx(css.cell, css.balanceNote)}>{verdictText(insight, currency, t)}</span>
+                    <span className={css.planActions}>
+                      {plansWritable
+                        ? (
+                          <Button
+                            onClick={() => setEditing(open ? null : provider)}
+                            aria-label={`${existing === undefined ? t('planFill') : t('planEdit')}: ${provider}`}
+                          >
+                            {existing === undefined ? t('planFill') : t('planEdit')}
+                          </Button>
+                        )
+                        : null}
+                      {plansWritable && existing !== undefined
+                        ? (
+                          <Button
+                            onClick={() => { void removePlan(provider) }}
+                            aria-label={`${t('planRemove')}: ${provider}`}
+                          >
+                            {t('planRemove')}
+                          </Button>
+                        )
+                        : null}
+                    </span>
+                  </div>
+                  {open
+                    ? (
+                      <PlanEditor
+                        provider={provider}
+                        initial={existing}
+                        t={t}
+                        onCancel={() => setEditing(null)}
+                        onSave={async (plan) => { await savePlan(plan); setEditing(null) }}
+                      />
+                    )
+                    : null}
+                </div>
+              )
+            })}
+        </div>
+        {plansWritable ? <p className={css.hint}>{t('planOnlyUsed')}</p> : <p className={css.tag}>{t('planReadOnly')}</p>}
+      </Card>
+
       <Card title={t('balanceTitle')} className={css.section}>
         <div className={css.table}>
-          <div className={`${css.tableHead} ${css.colsBalance}`}>
+          <div className={cx(css.tableHead, css.colsBalance)}>
             <span className={css.cell}>{t('colProvider')}</span>
-            <span className={`${css.cell} ${css.cellNum}`}>{t('balanceTitle')}</span>
+            <span className={cx(css.cell, css.cellNum)}>{t('balanceTitle')}</span>
             <span className={css.cell} />
             <span className={css.cell} />
           </div>
-          {rows.length === 0
+          {balanceRows.length === 0
             ? <p className={css.hint}>{t('noData')}</p>
-            : rows.map((row) => (
-              <div className={`${css.tableRow} ${css.colsBalance}`} key={row.provider} data-testid={`finance-balance-${row.provider}`}>
-                <span className={`${css.cell} ${css.balanceName}`}>{row.provider}</span>
-                <span className={`${css.cell} ${css.cellNum} ${css.balanceValue}`}>
-                  {balanceValue(row.balance, ledger.currency, t)}
+            : balanceRows.map((row) => (
+              <div className={cx(css.tableRow, css.colsBalance)} key={row.provider} data-testid={`finance-balance-${row.provider}`}>
+                <span className={cx(css.cell, css.balanceName)}>{row.provider}</span>
+                <span className={cx(css.cell, css.cellNum, css.balanceValue)}>
+                  {balanceValue(ledger, row.balance, t)}
                 </span>
-                <span className={`${css.cell} ${css.balanceNote}`}>{balanceNote(row.provider, row.balance, ledger, t)}</span>
+                <span className={cx(css.cell, css.balanceNote)}>{balanceNote(row.provider, row.balance, ledger, t)}</span>
                 <span className={css.cellNum}>
                   {row.hostMeta?.supportsBalanceFetch === true
                     ? (
@@ -90,20 +189,22 @@ export function ThisMonthView({ ledger, providerList, t, refreshProvider }: This
 
       <Card title={t('topModelsTitle')} className={css.section}>
         <div className={css.table}>
-          <div className={`${css.tableHead} ${css.colsModels}`}>
+          <div className={cx(css.tableHead, css.colsModels)}>
             <span className={css.cell}>{t('colModel')}</span>
             <span className={css.cell}>{t('colProvider')}</span>
-            <span className={`${css.cell} ${css.cellNum}`}>{t('colCost')}</span>
-            <span className={`${css.cell} ${css.cellNum}`}>{t('colUnitCost')}</span>
+            <span className={cx(css.cell, css.cellNum)}>{t('colCost')}</span>
+            <span className={cx(css.cell, css.cellNum)}>{t('colUnitCost')}</span>
           </div>
           {topModels.length === 0
             ? <p className={css.hint}>{t('noData')}</p>
             : topModels.map((row) => (
-              <div className={`${css.tableRow} ${css.colsModels}`} key={row.modelKey}>
-                <span className={`${css.cell} ${css.modelKey}`} title={row.modelKey}>{row.model}</span>
+              <div className={cx(css.tableRow, css.colsModels)} key={row.modelKey}>
+                <span className={cx(css.cell, css.modelKey)} title={row.modelKey}>{row.model}</span>
                 <span className={css.cell}>{row.provider}</span>
-                <span className={`${css.cell} ${css.cellNum}`}><Money micros={row.costMicros} currency={ledger.currency} /></span>
-                <span className={`${css.cell} ${css.cellNum}`}>{row.unitCostMicros === null ? t('noData') : `${formatMicros(Math.round(row.unitCostMicros))}${t('perMtok')}`}</span>
+                <span className={cx(css.cell, css.cellNum)}><Money micros={row.costMicros} currency={currency} /></span>
+                <span className={cx(css.cell, css.cellNum)}>
+                  {row.unitCostMicros === null ? t('noData') : `${formatMicros(Math.round(row.unitCostMicros))}${t('perMtok')}`}
+                </span>
               </div>
             ))}
         </div>
@@ -113,9 +214,94 @@ export function ThisMonthView({ ledger, providerList, t, refreshProvider }: This
   )
 }
 
-function balanceValue(balance: FinanceProviderBalance, currency: string, t: FinanceTranslate): ReactNode {
+/** 结论列：省了多少 / 亏了多少 / 还没有用量 —— 全是账本观测值相减，不含估算。 */
+function verdictText(insight: { savingsMicros: number; equivalentMicros: number; discountRate: number | null; breakEvenRatio: number | null } | undefined, currency: string, t: FinanceTranslate): string {
+  if (insight === undefined) return ''
+  if (insight.equivalentMicros <= 0) return t('planNoUsage')
+  const amount = `${formatMicros(Math.abs(insight.savingsMicros))} ${currency}`
+  if (insight.savingsMicros >= 0) {
+    const discount = insight.discountRate === null ? '' : ` · ${t('planDiscount', { pct: `${Math.round(insight.discountRate * 100)}%` })}`
+    return `${t('planSaved', { amount })}${discount}`
+  }
+  const progress = insight.breakEvenRatio === null ? '' : ` · ${t('planBreakEven', { pct: `${Math.round(insight.breakEvenRatio * 100)}%` })}`
+  return `${t('planLost', { amount })}${progress}`
+}
+
+/** 行内套餐编辑器：月费 + 币种 + 计费形态，保存写回 settings 的 `plans`。 */
+function PlanEditor({ provider, initial, t, onSave, onCancel }: {
+  provider: string
+  initial: FinancePlanEntry | undefined
+  t: FinanceTranslate
+  onSave: (plan: FinancePlanEntry) => Promise<void>
+  onCancel: () => void
+}): ReactNode {
+  const [fee, setFee] = useState(initial === undefined ? '' : microsToMajor(initial.monthlyMicros))
+  const [currency, setCurrency] = useState(initial?.currency ?? 'CNY')
+  const [period, setPeriod] = useState<FinancePlanPeriod>(initial?.periodLabel ?? 'month')
+  const micros = majorToMicros(fee)
+  const invalid = fee.trim() !== '' && micros === null
+  return (
+    <div className={css.planForm} data-testid={`finance-plan-form-${provider}`}>
+      <label className={css.section}>
+        <span className={css.balanceNote}>{t('planMonthly')}</span>
+        <Input
+          className={css.planInput}
+          type="text"
+          inputMode="decimal"
+          aria-label={`${t('planMonthly')}: ${provider}`}
+          value={fee}
+          aria-invalid={invalid}
+          onChange={(event) => setFee(event.currentTarget.value)}
+        />
+      </label>
+      <label className={css.section}>
+        <span className={css.balanceNote}>{t('planCurrency')}</span>
+        <Input
+          className={css.planInput}
+          type="text"
+          aria-label={`${t('planCurrency')}: ${provider}`}
+          value={currency}
+          onChange={(event) => setCurrency(event.currentTarget.value)}
+        />
+      </label>
+      <SegmentedControl<FinancePlanPeriod>
+        options={FINANCE_PLAN_PERIODS.map((value) => ({ value, label: periodLabel(value, t) }))}
+        value={period}
+        onChange={setPeriod}
+        ariaLabel={`${t('planPeriod')}: ${provider}`}
+      />
+      <span className={css.planActions}>
+        <Button
+          disabled={micros === null}
+          onClick={() => {
+            void onSave({
+              provider,
+              monthlyMicros: micros ?? 0,
+              currency: currency.trim() === '' ? 'CNY' : currency.trim(),
+              periodLabel: period,
+              effectiveFrom: 0,
+            })
+          }}
+        >
+          {t('planSave')}
+        </Button>
+        <Button onClick={onCancel}>{t('planCancel')}</Button>
+      </span>
+      {invalid ? <span className={css.tag}>{t('planInvalidFee')}</span> : null}
+    </div>
+  )
+}
+
+function periodLabel(period: FinancePlanPeriod, t: FinanceTranslate): string {
+  if (period === 'month-week') return t('periodMonthWeek')
+  if (period === 'month-week-5h') return t('periodMonthWeek5h')
+  return t('periodMonth')
+}
+
+function balanceValue(ledger: FinanceLedger, balance: FinanceProviderBalance, t: FinanceTranslate): ReactNode {
   if (balance.status === 'ok' && balance.totalMicros !== undefined) {
-    return <Money micros={balance.totalMicros} currency={balance.currency === undefined || balance.currency === '' ? currency : balance.currency} />
+    const currency = balance.currency === undefined || balance.currency === '' ? ledger.currency : balance.currency
+    return <Money micros={balance.totalMicros} currency={currency} />
   }
   if (balance.status === 'missing-credential') return t('balanceMissingKey')
   if (balance.status === 'unsupported') return t('balanceUnsupported')

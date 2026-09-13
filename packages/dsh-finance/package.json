@@ -1,6 +1,6 @@
 {
   "name": "dsh-spark-finance",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "DSH 成本统计插件 host：余额接入、账本重放、峰谷/供应商/模型/工作区成本计算核心",
   "type": "module",
   "homepage": "https://neil-ji.github.io/dsh-spark-plugins/",

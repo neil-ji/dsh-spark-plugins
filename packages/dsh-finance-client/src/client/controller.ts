@@ -1,9 +1,10 @@
 /**
- * 财务面板控制器：一个 snapshot store 覆盖 finance Remote。
+ * 财务面板控制器：一个 snapshot store 覆盖 finance Remote + 套餐设置面。
  *
  * 重建后它**不再**持有配置草稿、本地 provider 覆盖层或余额峰值基线（那些面已删除）。
  * 只做四件事：加载 ledger + provider 列表、单 provider 余额刷新、把首次回填进度
- * （finance/events stream）落进快照、记录最近一次社区价格同步时间（脚注用）。
+ * （finance/events stream）落进快照、记录最近一次社区价格同步时间（脚注用）；
+ * P1 起再加一件：把 `finance.plans`（静态套餐，用户填一次）读进快照并写回。
  */
 
 import type { ClientRemote } from '@deepseek-ai/dsh-api-remotes/client'
@@ -15,8 +16,10 @@ import type {
   FinanceBackfillProgress,
   FinanceLedger,
   FinanceListProvidersResult,
+  FinancePlanEntry,
   FinanceProviderBalance,
 } from 'dsh-spark-finance/types'
+import { providerKey } from './derive.ts'
 
 export interface FinancePanelState {
   status: 'idle' | 'loading' | 'ready' | 'error'
@@ -27,19 +30,53 @@ export interface FinancePanelState {
   progress?: FinanceBackfillProgress
   /** 最近一次成功的社区价格同步（epoch ms）；undefined = 从未同步。 */
   lastSyncAppliedAt?: number
+  /** 静态套餐定义（`finance.plans`，用户填一次）。 */
+  plans: readonly FinancePlanEntry[]
+  /** 设置文档是否接受写入；memory 模式下为 false（面板显示只读提示）。 */
+  plansWritable: boolean
 }
 
 type FinanceRemote = ClientRemote['finance']
+
+/** 套餐设置面：由挂载层（dock 模块）从 `ctx.settingsScope('finance')` 组装。 */
+export interface FinancePlanSeam {
+  getSnapshot(): { plans: readonly FinancePlanEntry[]; writable: boolean }
+  subscribe(listener: () => void): () => void
+  /** 整体写回 `plans` 字段（settings 的一次原子写）。 */
+  write(plans: readonly FinancePlanEntry[]): Promise<void>
+}
 
 /** 一个面板实例一个控制器；不做模块级单例。 */
 export class FinancePanelController {
   readonly store: SnapshotStore<FinancePanelState> = createSnapshotStore<FinancePanelState>({
     status: 'idle',
     error: null,
+    plans: [],
+    plansWritable: false,
   })
   private generation = 0
+  private readonly seam: FinancePlanSeam | undefined
+  private readonly disposeSeam: (() => void) | undefined
 
-  constructor(private readonly remote: FinanceRemote) {}
+  constructor(private readonly remote: FinanceRemote, seam?: FinancePlanSeam) {
+    this.seam = seam
+    if (seam !== undefined) {
+      const sync = (): void => {
+        const snapshot = seam.getSnapshot()
+        this.store.update((state) => {
+          state.plans = snapshot.plans
+          state.plansWritable = snapshot.writable
+        })
+      }
+      sync()
+      this.disposeSeam = seam.subscribe(sync)
+    }
+  }
+
+  /** 卸载时释放设置订阅（挂载层在 ctx.effect 的 disposer 里调用）。 */
+  dispose(): void {
+    this.disposeSeam?.()
+  }
 
   /** 宿主推来的回填进度帧（dock 模块订阅 finance/events 后调用）。 */
   setProgress(progress: FinanceBackfillProgress): void {
@@ -105,6 +142,20 @@ export class FinancePanelController {
     } catch {
       // 单卡刷新失败：保留旧快照，用户可再点一次。
     }
+  }
+
+  /** 保存一条套餐（同 provider 覆盖）。设置不可写时写回会被 host 拒绝。 */
+  async savePlan(plan: FinancePlanEntry): Promise<void> {
+    if (this.seam === undefined) return
+    const rest = this.store.getSnapshot().plans.filter((row) => providerKey(row.provider) !== providerKey(plan.provider))
+    await this.seam.write([...rest, plan])
+  }
+
+  /** 删除一条套餐。 */
+  async removePlan(provider: string): Promise<void> {
+    if (this.seam === undefined) return
+    const rest = this.store.getSnapshot().plans.filter((row) => providerKey(row.provider) !== providerKey(provider))
+    await this.seam.write(rest)
   }
 
   /** 价格来源脚注（尽力而为，失败不动快照）。 */

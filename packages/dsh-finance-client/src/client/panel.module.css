@@ -102,6 +102,28 @@
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
 }
 
+.colsPlan {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr) auto;
+}
+
+.planForm {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--spk-space-2);
+  flex-wrap: wrap;
+  padding: 8px 0;
+}
+
+.planInput {
+  width: 120px;
+}
+
+.planActions {
+  display: flex;
+  align-items: center;
+  gap: var(--spk-space-1);
+}
+
 .cell {
   min-width: 0;
   overflow: hidden;

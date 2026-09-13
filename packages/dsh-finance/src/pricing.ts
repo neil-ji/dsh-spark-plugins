@@ -22,6 +22,8 @@ import type {
   FinanceConfig,
   FinanceConfigInput,
   FinancePriceEntry,
+  FinancePlanEntry,
+  FinancePlanEntryInput,
   FinancePriceEntryInput,
   FinancePriceRate,
   FinanceProviderBillingMode,
@@ -382,6 +384,45 @@ export function mergePriceLayers(
  * unaware of provider-meta); the service layer injects the resolved
  * `hostMetaByProvider` at every callsite.
  */
+/**
+ * 套餐条目归一化：`effectiveFrom`（日期串 / 数字 / 缺省）一律折算成 epoch ms，
+ * 缺省为 0（= 始终生效）。`provider` 保持原样（比对时由调用方归一 `-official`）。
+ * 幂等：已归一化的条目直接通过。
+ */
+export function normalizeFinancePlans(
+  plans: readonly FinancePlanEntryInput[] | undefined,
+): readonly FinancePlanEntry[] {
+  const out: FinancePlanEntry[] = []
+  for (const plan of plans ?? []) {
+    if (plan === null || typeof plan !== 'object') continue
+    const provider = typeof plan.provider === 'string' ? plan.provider.trim() : ''
+    if (provider === '') continue
+    const monthlyMicros = Number(plan.monthlyMicros)
+    if (!Number.isFinite(monthlyMicros) || monthlyMicros < 0) continue
+    out.push({
+      provider,
+      monthlyMicros: Math.round(monthlyMicros),
+      currency: typeof plan.currency === 'string' && plan.currency !== '' ? plan.currency : 'CNY',
+      ...plan.quotaTokens !== undefined && Number.isFinite(Number(plan.quotaTokens))
+        ? { quotaTokens: Math.round(Number(plan.quotaTokens)) }
+        : {},
+      ...plan.periodLabel !== undefined ? { periodLabel: plan.periodLabel } : {},
+      effectiveFrom: financePlanEffectiveFrom(plan.effectiveFrom),
+    })
+  }
+  return out
+}
+
+/** 生效期折算：数字 = epoch ms；日期串 = Date.parse；无法解析或缺省 = 0（始终）。 */
+function financePlanEffectiveFrom(value: string | number | undefined): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Date.parse(value.trim())
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return 0
+}
+
 export function normalizeFinanceConfig(
   raw: FinanceConfigInput,
   hostMetaByProvider: Record<string, FinanceProviderBillingMode> = {},
@@ -396,6 +437,7 @@ export function normalizeFinanceConfig(
     providerDefaults: raw.providerDefaults ?? {},
     hostMetaByProvider,
     prices: normalizeFinancePrices(raw.prices),
+    plans: normalizeFinancePlans(raw.plans),
     providers: raw.providers ?? [],
   }
 }

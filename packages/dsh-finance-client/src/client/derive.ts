@@ -250,3 +250,60 @@ export function peakShare(ledger: FinanceLedger): number | null {
   if (total <= 0) return null
   return ledger.peakValley.peakCostMicros / total
 }
+
+/* ─────────────────────────── 订阅 vs 按量（P1） ─────────────────────────── */
+
+/** 一条套餐的对比结论。月费由用户填一次，等价按量价来自账本（订阅路线按目录价折算）。 */
+export interface PlanInsight {
+  provider: string
+  currency: string
+  monthlyMicros: number
+  /** 本月按量目录价等价（`ledger.byProvider.costMicros`）。 */
+  equivalentMicros: number
+  /** 正 = 省了，负 = 亏了。 */
+  savingsMicros: number
+  /** 折扣率 = 1 − 月费 ÷ 等价按量价；>0 表示按月费算比按量划算。null = 本月没有等价用量。 */
+  discountRate: number | null
+  /** 回本进度 = 等价按量价 ÷ 月费（1.0 = 刚好回本）。null = 没填月费。 */
+  breakEvenRatio: number | null
+}
+
+/** provider 比对键：账本用模型键前缀（`deepseek`），余额/套餐可能带 `-official`。 */
+export function providerKey(provider: string): string {
+  return provider.replace(/-official$/, '').toLowerCase()
+}
+
+/** 一条套餐 × 账本 → 对比结论。全观测值相减，没有估算成分。 */
+export function planInsight(plan: { provider: string; monthlyMicros: number; currency: string }, ledger: FinanceLedger): PlanInsight {
+  const equivalentMicros = providerCostMicros(ledger, plan.provider) ?? 0
+  return {
+    provider: plan.provider,
+    currency: plan.currency,
+    monthlyMicros: plan.monthlyMicros,
+    equivalentMicros,
+    savingsMicros: equivalentMicros - plan.monthlyMicros,
+    discountRate: equivalentMicros > 0 ? 1 - plan.monthlyMicros / equivalentMicros : null,
+    breakEvenRatio: plan.monthlyMicros > 0 ? equivalentMicros / plan.monthlyMicros : null,
+  }
+}
+
+/**
+ * 订阅卡的两种行：
+ *  - `withPlan`：已填套餐的 provider（可能同时有用量）；
+ *  - `withoutPlan`：**你实际用过但还没填月费**的 provider（从这里按需填写，
+ *    没接入过的 provider 永远不出现 —— 这就是"只呈现你的实体"原则）。
+ */
+export function planRows(
+  ledger: FinanceLedger,
+  plans: readonly { provider: string; monthlyMicros: number; currency: string }[],
+): { withPlan: PlanInsight[]; withoutPlan: string[] } {
+  const planned = new Set(plans.map((plan) => providerKey(plan.provider)))
+  const withPlan = plans
+    .map((plan) => planInsight(plan, ledger))
+    .sort((a, b) => b.equivalentMicros - a.equivalentMicros)
+  const withoutPlan = ledger.byProvider
+    .map((row) => row.provider)
+    .filter((provider) => !planned.has(providerKey(provider)))
+    .sort((a, b) => a.localeCompare(b))
+  return { withPlan, withoutPlan }
+}

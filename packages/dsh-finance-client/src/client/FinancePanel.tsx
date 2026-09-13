@@ -9,6 +9,7 @@
 import { useState, type ReactNode } from 'react'
 import { Button, EmptyState, Money, SegmentedControl, Stat, StatGrid } from 'dsh-ui-kit'
 import type { SnapshotSelectorHook } from 'dsh-spark-plugin-kit/client'
+import type { FinancePlanEntry } from 'dsh-spark-finance/types'
 import type { FinancePanelState } from './controller.ts'
 import type { FinanceTranslate } from './locales.ts'
 import { ProjectsView } from './views/ProjectsView.tsx'
@@ -24,6 +25,9 @@ export interface FinancePanelInjected {
   t: FinanceTranslate
   refresh: () => void
   refreshProvider: (provider: string) => Promise<void>
+  /** P1：套餐（月费）写回 settings 的 `finance.plans`。 */
+  savePlan: (plan: FinancePlanEntry) => Promise<void>
+  removePlan: (provider: string) => Promise<void>
 }
 
 const VIEWS: readonly FinanceView[] = ['thisMonth', 'whoToUse', 'saveMore', 'projects']
@@ -141,7 +145,20 @@ export function FinancePanel(props: FinancePanelInjected): ReactNode {
         )
         : (
           <div className={css.view} data-testid={`finance-view-${view}`}>
-            {view === 'thisMonth' ? <ThisMonthView ledger={ledger} providerList={state.providerList} t={t} refreshProvider={props.refreshProvider} /> : null}
+            {view === 'thisMonth'
+              ? (
+                <ThisMonthView
+                  ledger={ledger}
+                  providerList={state.providerList}
+                  t={t}
+                  refreshProvider={props.refreshProvider}
+                  plans={state.plans}
+                  plansWritable={state.plansWritable}
+                  savePlan={props.savePlan}
+                  removePlan={props.removePlan}
+                />
+              )
+              : null}
             {view === 'whoToUse' ? <WhoToUseView ledger={ledger} t={t} /> : null}
             {view === 'saveMore' ? <SaveMoreView ledger={ledger} t={t} /> : null}
             {view === 'projects' ? <ProjectsView ledger={ledger} t={t} /> : null}

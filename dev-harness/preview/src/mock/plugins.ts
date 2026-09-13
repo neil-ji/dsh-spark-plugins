@@ -19,6 +19,7 @@ import {
 import {
   FinancePanel,
   FinancePanelController,
+  createPlanSeam,
   en as financeEn,
   zh as financeZh,
 } from 'dsh-spark-finance-client/embed'
@@ -158,14 +159,20 @@ export function buildFinanceInjected(ctx: MockCtx, scenario: Scenario) {
   const namespace = makeFinanceNamespace(scenario)
   ctx.__preview.namespace('remote.finance', namespace)
 
-  const controller = new FinancePanelController(namespace as never)
+  // 套餐走 settings 命名空间（假宿主实现 getSnapshot/subscribe/set），
+  // 与真宿主同形：面板只读 + 行内写回。
+  const scope = ctx.settingsScope.bind({ namespace: 'finance' }) as never
+  const controller = new FinancePanelController(namespace as never, createPlanSeam(scope))
   return {
     panel: {
       useSnapshot: bindSnapshotSelector(controller.store),
       t: ctx.locale.bind('settings.finance'),
       refresh: (): void => { void controller.load() },
       refreshProvider: (provider: string): Promise<void> => controller.refreshProvider(provider),
+      savePlan: (plan: never) => controller.savePlan(plan),
+      removePlan: (provider: string) => controller.removePlan(provider),
     },
     controller,
+    scope,
   }
 }
