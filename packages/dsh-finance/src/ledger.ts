@@ -62,6 +62,8 @@ import type {
   FinanceTaskRow,
   FinanceTokenBuckets,
   FinanceUnreadableSessionRow,
+  FinanceRateProjection,
+  FinanceRateStats,
   FinanceUsageProjection,
   FinanceWorkspaceRow,
 } from './types.ts'
@@ -81,6 +83,8 @@ interface SessionRecord {
   modelCosts: Record<string, number>
   /** Per-model × UTC hour buckets, empty on the fallback path. */
   byModelHour: Record<string, Record<string, FinanceTokenBuckets>>
+  /** P1-B：每模型速率样本（旧会话为空）。 */
+  rate: Record<string, FinanceRateStats>
 }
 
 interface SessionProjectionRead {
@@ -88,6 +92,8 @@ interface SessionProjectionRead {
   byModel: Record<string, FinanceTokenBuckets>
   byDay: Record<string, FinanceTokenBuckets>
   byModelHour: Record<string, Record<string, FinanceTokenBuckets>>
+  /** P1-B：每模型速率样本；没有该投影键的会话（旧会话）为空。 */
+  rate: Record<string, FinanceRateStats>
   title: string | null
 }
 
@@ -99,6 +105,8 @@ interface SessionProjectionRead {
  * empty.
  */
 function extractProjection(values: Partial<SessionProjectionMap>, title: string | null): SessionProjectionRead {
+  // 速率是独立单元：无论用量走哪条腿，它都单独读（旧会话缺该键 -> 空对象）。
+  const rate = (values.financeRate as FinanceRateProjection | undefined)?.byModel ?? {}
   const hourly = values.financeUsageHourly as FinanceHourlyProjection | undefined
   if (hourly !== undefined) {
     const byModelHour = hourly.byModelHour
@@ -115,17 +123,17 @@ function extractProjection(values: Partial<SessionProjectionMap>, title: string 
       byModel[modelKey] = modelTotals
       usage = addFinanceBuckets(usage, modelTotals)
     }
-    return { usage, byModel, byDay, byModelHour, title }
+    return { usage, byModel, byDay, byModelHour, rate, title }
   }
   const finance = values.financeUsage as FinanceUsageProjection | undefined
   if (finance !== undefined) {
-    return { usage: finance.totals, byModel: finance.byModel, byDay: finance.byDay, byModelHour: {}, title }
+    return { usage: finance.totals, byModel: finance.byModel, byDay: finance.byDay, byModelHour: {}, rate, title }
   }
   const token = values.tokenUsage
   if (token !== undefined) {
-    return { usage: token, byModel: {}, byDay: {}, byModelHour: {}, title }
+    return { usage: token, byModel: {}, byDay: {}, byModelHour: {}, rate, title }
   }
-  return { usage: emptyFinanceBuckets(), byModel: {}, byDay: {}, byModelHour: {}, title }
+  return { usage: emptyFinanceBuckets(), byModel: {}, byDay: {}, byModelHour: {}, rate, title }
 }
 
 async function readProjection(ctx: Context, header: SessionHeader, signal?: AbortSignal): Promise<SessionProjectionRead> {
@@ -283,6 +291,7 @@ export async function buildFinanceLedger(
       byDayExactCost: priced.byDayExactCost,
       modelCosts: priced.modelCosts,
       byModelHour: read.byModelHour,
+      rate: read.rate,
     })
   }
 
@@ -309,6 +318,8 @@ export async function buildFinanceLedger(
   const byDayCost: Record<string, number> = {}
   const byModelUsage: Record<string, FinanceTokenBuckets> = {}
   const byModelCost: Record<string, number> = {}
+  /** P1-B：每模型的速率样本合计（只有装了 financeRate 的会话贡献）。 */
+  const byModelRate: Record<string, FinanceRateStats> = {}
   const byWorkspaceUsage: Record<string, FinanceTokenBuckets> = {}
   const byWorkspaceCost: Record<string, number> = {}
   const byTaskUsage: Record<string, FinanceTokenBuckets> = {}
@@ -345,7 +356,7 @@ export async function buildFinanceLedger(
   }
 
   for (const record of records) {
-    const { row, legacy, byModel, byDay, byDayExactCost, modelCosts, byModelHour } = record
+    const { row, legacy, byModel, byDay, byDayExactCost, modelCosts, byModelHour, rate } = record
     const workspaceKey = row.workspaceId ?? UNASSIGNED_WORKSPACE_ID
     Object.assign(totals, addFinanceBuckets(totals, row.usage))
     totalCost += row.costMicros
@@ -407,6 +418,15 @@ export async function buildFinanceLedger(
       addInto(byModelUsage, modelKey, buckets)
       byModelCost[modelKey] = (byModelCost[modelKey] ?? 0) + (modelCosts[modelKey] ?? 0)
     }
+    for (const [modelKey, sample] of Object.entries(rate)) {
+      const current = byModelRate[modelKey] ?? { decodeMs: 0, decodeTokens: 0, ttftMs: 0, ttftSteps: 0 }
+      byModelRate[modelKey] = {
+        decodeMs: current.decodeMs + sample.decodeMs,
+        decodeTokens: current.decodeTokens + sample.decodeTokens,
+        ttftMs: current.ttftMs + sample.ttftMs,
+        ttftSteps: current.ttftSteps + sample.ttftSteps,
+      }
+    }
     for (const [day, buckets] of Object.entries(byDay)) {
       addInto(byDayUsage, day, buckets)
       // Exact path: per-hour costs already carry the peak/off-peak split.
@@ -426,6 +446,9 @@ export async function buildFinanceLedger(
       usage,
       costMicros: byModelCost[modelKey] ?? 0,
       shiftSavingsMicros: Math.max(0, (modelPeakCost[modelKey] ?? 0) - (modelPeakOffPeakCost[modelKey] ?? 0)),
+      // 只在真的有速率样本时带上该字段：旧会话缺席 -> 客户端不显示速率列，
+      // 而不是把 0 当成"这个模型 0 tok/s"。
+      ...(byModelRate[modelKey] !== undefined ? { rate: byModelRate[modelKey] } : {}),
     }))
     .sort((a, b) => b.costMicros - a.costMicros)
   // Wallet math stays honest under plan subscriptions: plan rows are

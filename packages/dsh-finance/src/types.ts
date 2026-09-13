@@ -81,6 +81,13 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
      */
     financeUsageHourly: FinanceHourlyProjection
     /**
+     * 每模型的解码时长 / 输出 token / 首 token 延迟（P1-B）。与平台
+     * `sessionStats`（全会话口径）同一套事件语义，但按模型分桶 —— 面板要回答
+     * "哪个厂商的这个模型更快"。**forward-only**：只有装了本版本的会话才有该键，
+     * 旧会话不显示速率（不回溯补造）。
+     */
+    financeRate: FinanceRateProjection
+    /**
      * Provider-reported token totals from the harness core token-meter.
      * Checkpointed for every session (including ones persisted before this
      * plugin existed), so the ledger can read historical totals with zero log
@@ -111,6 +118,28 @@ export interface FinanceUsageProjection {
 export interface FinanceHourlyProjection {
   /** Keyed by modelKey, then by UTC hour key `YYYY-MM-DDTHH`. */
   byModelHour: Record<string, Record<string, FinanceTokenBuckets>>
+}
+
+/**
+ * 速率样本（一个模型的累计）：解码墙钟与输出 token 用来算输出吞吐，
+ * 首 token 延迟用来算"多久开始出字"。
+ * 口径与平台 `sessionStats` 一致：decode = 首 token → 组装消息，
+ * 只统计同时报了 output token 的步；被取消的步不计时。
+ */
+export interface FinanceRateStats {
+  /** Summed decode wall time over usage-reporting steps, ms. */
+  decodeMs: number
+  /** Summed provider output tokens over the same steps. */
+  decodeTokens: number
+  /** Summed first-token latency over `ttftSteps`, ms. */
+  ttftMs: number
+  /** Steps carrying a recorded first token. */
+  ttftSteps: number
+}
+
+/** Durable rate projection value for one session log. */
+export interface FinanceRateProjection {
+  byModel: Record<string, FinanceRateStats>
 }
 
 /**
@@ -532,6 +561,11 @@ export interface FinanceModelRow {
    * exact per-hour path; absent when the model has no hour detail.
    */
   shiftSavingsMicros?: number
+  /**
+   * 输出速率样本（P1-B）。只在装了 financeRate 投影之后产生的会话里有值；
+   * 旧会话缺席 —— 面板此时不显示速率列，而不是拿 0 冒充。
+   */
+  rate?: FinanceRateStats
 }
 
 /** Per-provider cost rollup across every model observed under that provider. */

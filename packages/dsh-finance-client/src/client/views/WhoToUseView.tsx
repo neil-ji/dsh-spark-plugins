@@ -1,14 +1,26 @@
 /**
  * 视图②：该用谁。
  *
- * 只列用户**实际用过**的模型（ledger.byModel），同一个模型跨供应商并列时按
- * 实际混合单位成本比大小；缓存命中率是观测值，不估算。
+ * 只列用户**实际用过**的模型（ledger.byModel），同一个模型跨供应商并列，按
+ * 实际混合单位成本比大小；列里再给出**缓存命中率**与**输出吞吐**（观测值）。
+ * 展开行的"时间成本"是估算：把慢那家实际产出的 token 量按快那家实测速率折算。
+ * 旧会话没有速率投影——那一格显示 `—`，不显示 0。
  */
 
 import { useState, type ReactNode } from 'react'
 import { Card, EmptyState, Money, Pill, formatMicros } from 'dsh-ui-kit'
 import type { FinanceLedger } from 'dsh-spark-finance/types'
-import { cheapestInGroup, formatPercent, groupByModel, mixedUnitCostMicros } from '../derive.ts'
+import {
+  cheapestInGroup,
+  firstTokenMs,
+  formatMs,
+  formatPercent,
+  formatSpeed,
+  groupByModel,
+  modelComparisonRows,
+  outputTokensPerSecond,
+  speedComparison,
+} from '../derive.ts'
 import type { FinanceTranslate } from '../locales.ts'
 import css from '../panel.module.css'
 
@@ -19,18 +31,8 @@ export interface WhoToUseViewProps {
 
 export function WhoToUseView({ ledger, t }: WhoToUseViewProps): ReactNode {
   const [openModel, setOpenModel] = useState<string | null>(null)
-  const groups = groupByModel(
-    ledger.byModel.map((row) => ({
-      modelKey: row.modelKey,
-      provider: row.provider,
-      model: row.model,
-      costMicros: row.costMicros,
-      usage: row.usage,
-      hitRate: null,
-      unitCostMicros: mixedUnitCostMicros(row.costMicros, row.usage),
-      billingMode: row.billingMode,
-    })).map((row) => ({ ...row, hitRate: hitRateOf(row.provider, ledger) })),
-  )
+  const groups = groupByModel(modelComparisonRows(ledger))
+  const currency = ledger.currency === '' ? 'CNY' : ledger.currency
 
   if (groups.length === 0) {
     return (
@@ -44,42 +46,65 @@ export function WhoToUseView({ ledger, t }: WhoToUseViewProps): ReactNode {
     <Card title={t('whoTitle')} className={css.section}>
       <p className={css.hint}>{t('whoHint')}</p>
       <div className={css.table}>
-        <div className={`${css.tableHead} ${css.colsModels}`}>
+        <div className={`${css.tableHead} ${css.colsCompare}`}>
           <span className={css.cell}>{t('colProvider')}</span>
           <span className={`${css.cell} ${css.cellNum}`}>{t('colCost')}</span>
           <span className={`${css.cell} ${css.cellNum}`}>{t('colUnitCost')}</span>
           <span className={`${css.cell} ${css.cellNum}`}>{t('colHitRate')}</span>
+          <span className={`${css.cell} ${css.cellNum}`}>{t('colSpeed')}</span>
         </div>
         {groups.map((group) => {
           const best = cheapestInGroup(group.rows)
-          const open = openModel === group.modelKey
+          const open = openModel === group.model
+          const speed = speedComparison(group.rows)
           return (
-            <div className={css.group} key={group.modelKey} data-testid={`finance-model-${group.modelKey}`}>
+            <div className={css.group} key={group.model} data-testid={`finance-model-${group.model}`}>
               <div className={css.groupHead}>
-                <span className={`${css.groupTitle} ${css.modelKey}`} title={group.modelKey}>{group.modelKey}</span>
+                <span className={`${css.groupTitle} ${css.modelKey}`} title={group.model}>{group.model}</span>
                 {best === null
                   ? <Pill accentColor="var(--spk-label-3)">{group.rows.length < 2 ? t('whoSingle') : t('whoNoVerdict')}</Pill>
-                  : <Pill accentColor="var(--spk-acc-finance-fg)">{t('whoBest')}: {best.provider}</Pill>}
+                  : <Pill accentColor="var(--spk-acc-finance-fg)">{t('whoBest')} · {best.provider}</Pill>}
                 <button
                   type="button"
                   className={css.tagMuted}
                   aria-expanded={open}
-                  aria-label={`${t('detailToggle')}: ${group.modelKey}`}
-                  onClick={() => setOpenModel(open ? null : group.modelKey)}
+                  aria-label={`${t('detailToggle')}: ${group.model}`}
+                  onClick={() => setOpenModel(open ? null : group.model)}
                 >
                   {t('detailToggle')}
                 </button>
               </div>
-              {group.rows.map((row) => (
-                <div className={`${css.tableRow} ${css.colsModels}`} key={`${group.modelKey}:${row.provider}`}>
-                  <span className={css.cell}>{row.provider}</span>
-                  <span className={`${css.cell} ${css.cellNum}`}><Money micros={row.costMicros} currency={ledger.currency} /></span>
-                  <span className={`${css.cell} ${css.cellNum}`}>
-                    {row.unitCostMicros === null ? t('noData') : `${formatMicros(Math.round(row.unitCostMicros))}/`}
-                  </span>
-                  <span className={`${css.cell} ${css.cellNum}`}>{formatPercent(row.hitRate)}</span>
-                </div>
-              ))}
+              {/* 时间成本放在组头下面常显：慢多少分钟比"谁快"更值得一眼看到。 */}
+              {speed === null
+                ? null
+                : (
+                  <p className={css.detailText} data-testid="finance-time-compare">
+                    {t('timeCompareSaved', {
+                      fast: speed.fastest.provider,
+                      slow: speed.slowest.provider,
+                      tokens: speed.tokens,
+                      minutes: speed.atFastestMinutes.toFixed(1),
+                      saved: speed.savedMinutes.toFixed(1),
+                    })}
+                    {' · '}{t('estimateTag')}
+                  </p>
+                )}
+              {group.rows.map((row) => {
+                const speedValue = outputTokensPerSecond(row.rate)
+                return (
+                  <div className={`${css.tableRow} ${css.colsCompare}`} key={`${group.model}:${row.provider}`}>
+                    <span className={css.cell}>{row.provider}</span>
+                    <span className={`${css.cell} ${css.cellNum}`}><Money micros={row.costMicros} currency={currency} /></span>
+                    <span className={`${css.cell} ${css.cellNum}`}>
+                      {row.unitCostMicros === null ? t('noData') : `${formatMicros(Math.round(row.unitCostMicros))}${t('perMtok')}`}
+                    </span>
+                    <span className={`${css.cell} ${css.cellNum}`}>{formatPercent(row.hitRate)}</span>
+                    <span className={`${css.cell} ${css.cellNum}`} data-testid={`finance-speed-${row.provider}`}>
+                      {speedValue === null ? '—' : `${formatSpeed(speedValue)}${t('perSecond')}`}
+                    </span>
+                  </div>
+                )
+              })}
               {open
                 ? (
                   <div className={css.detail}>
@@ -90,9 +115,10 @@ export function WhoToUseView({ ledger, t }: WhoToUseViewProps): ReactNode {
                           cacheRead: row.usage.cacheReadTokens,
                           cacheWrite: row.usage.cacheWriteTokens,
                           output: row.usage.outputTokens,
-                        })}
+                        })} · {t('ttftLabel', { ms: formatMs(firstTokenMs(row.rate)) })}
                       </p>
                     ))}
+                    {speed === null ? null : <p className={css.detailText}>{t('timeCompareNote')}</p>}
                     <p className={css.detailText}>{t('hitRateHint')}</p>
                   </div>
                 )
@@ -103,12 +129,4 @@ export function WhoToUseView({ ledger, t }: WhoToUseViewProps): ReactNode {
       </div>
     </Card>
   )
-}
-
-/** 该 provider 的整体命中率（账本没有逐模型逐 provider 命中率时用它的 provider 汇总）。 */
-function hitRateOf(provider: string, ledger: FinanceLedger): number | null {
-  const row = ledger.byProvider.find((candidate) => candidate.provider === provider)
-  if (row === undefined) return null
-  const denominator = row.usage.uncachedInputTokens + row.usage.cacheReadTokens + row.usage.cacheWriteTokens
-  return denominator <= 0 ? null : row.usage.cacheReadTokens / denominator
 }

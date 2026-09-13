@@ -16,10 +16,16 @@
  */
 
 import { z } from 'zod'
-import type { TokenUsage } from '@deepseek-ai/dsh-llm'
+import type { StreamChunk, TokenUsage } from '@deepseek-ai/dsh-llm'
 import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 import { addFinanceBuckets, emptyFinanceBuckets, financeModelKey } from './pricing.ts'
-import type { FinanceHourlyProjection, FinanceTokenBuckets, FinanceUsageProjection } from './types.ts'
+import type {
+  FinanceHourlyProjection,
+  FinanceRateProjection,
+  FinanceRateStats,
+  FinanceTokenBuckets,
+  FinanceUsageProjection,
+} from './types.ts'
 
 interface UsageSample {
   turn: number
@@ -59,6 +65,7 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
   interface SessionProjectionStateMap {
     financeUsage: FinanceUsageState
     financeUsageHourly: FinanceHourlyState
+    financeRate: FinanceRateState
   }
 }
 
@@ -273,3 +280,117 @@ export const financeUsageHourlyProjectionDefinition = {
   },
   stateVersion: 1,
 } satisfies ProjectionDefinition<'financeUsageHourly', FinanceHourlyState>
+
+/* ───────────────── 速率（P1-B）：每模型的解码时长 / 输出 token / TTFT ───────────────── */
+
+const EMPTY_RATE: FinanceRateStats = { decodeMs: 0, decodeTokens: 0, ttftMs: 0, ttftSteps: 0 }
+
+interface FinanceRateState {
+  currentModel: string | null
+  byModel: Record<string, FinanceRateStats>
+  /**
+   * 打开中的步：与平台 `sessionStats` 同形，只是额外记住这一步属于哪个模型
+   * —— 速率必须按模型分桶，全会话合计答不了"哪个厂商的这个模型更快"。
+   */
+  open: { turn: number; step: number; startTime: number; firstTokenTime: number | null; modelKey: string } | null
+}
+
+/**
+ * 首个可见 delta（text / reasoning）——就是"开始出字"的那一刻。
+ * 本仓库钉的平台版本没有 `assistant/attempt` 事件，所以首 token 从
+ * `assistant/chunk` 的 delta 流里判定（新平台的 `sessionStats` 折叠的是同一件事）。
+ */
+function isVisibleDelta(chunk: StreamChunk): boolean {
+  if (chunk.type === 'text-delta' || chunk.type === 'reasoning-delta') return chunk.text !== ''
+  return false
+}
+
+/** 使用量事件里上报的输出 token；缺失/非法一律 null（不拿 0 冒充）。 */
+function usageOutputTokens(usage: unknown): number | null {
+  if (typeof usage !== 'object' || usage === null) return null
+  const value = (usage as { outputTokens?: unknown }).outputTokens
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
+}
+
+const rateSchema = z.object({
+  byModel: z.record(z.string(), z.object({
+    decodeMs: z.number().nonnegative(),
+    decodeTokens: z.number().nonnegative(),
+    ttftMs: z.number().nonnegative(),
+    ttftSteps: z.number().nonnegative(),
+  }).strict()),
+}).strict()
+
+/**
+ * The `financeRate` projection unit.
+ *
+ * 与平台 `sessionStats` 完全同一套事件语义（`step/start` → 首个非空 delta →
+ * `assistant/message`；decode 只统计同时报了 output token 的步；被取消的步不计时），
+ * 差别只有一个：按 `request/header` 的模型键分桶。这样"同一模型换供应商谁更快"
+ * 才有数据支撑，而不是把整个会话的平均速率安到每个模型头上。
+ */
+export const financeRateProjectionDefinition = {
+  key: 'financeRate',
+  stateSchema: z.any(),
+  init: () => ({
+    currentModel: null,
+    byModel: {},
+    open: null,
+  }),
+  apply: (state, event) => {
+    switch (event.type) {
+      case 'request/header': {
+        const modelKey = financeModelKey(event.data.header.config.provider, event.data.header.config.model)
+        return state.currentModel === modelKey ? state : { ...state, currentModel: modelKey }
+      }
+      case 'step/start': {
+        if (state.currentModel === null) return state
+        return {
+          ...state,
+          open: {
+            turn: event.data.turn,
+            step: event.data.step,
+            startTime: event.time,
+            firstTokenTime: null,
+            modelKey: state.currentModel,
+          },
+        }
+      }
+      case 'assistant/chunk': {
+        const open = state.open
+        if (open === null || open.turn !== event.data.turn || open.step !== event.data.step) return state
+        if (open.firstTokenTime !== null) return state
+        if (!isVisibleDelta(event.data.chunk)) return state
+        return { ...state, open: { ...open, firstTokenTime: event.time } }
+      }
+      case 'assistant/message': {
+        const open = state.open
+        if (open === null || open.turn !== event.data.turn || open.step !== event.data.step) return state
+        const firstToken = open.firstTokenTime
+        if (firstToken === null) return { ...state, open: null }
+        const current = state.byModel[open.modelKey] ?? EMPTY_RATE
+        const outputTokens = usageOutputTokens(event.data.usage)
+        const next: FinanceRateStats = {
+          decodeMs: current.decodeMs + (outputTokens === null ? 0 : Math.max(0, event.time - firstToken)),
+          decodeTokens: current.decodeTokens + (outputTokens ?? 0),
+          ttftMs: current.ttftMs + Math.max(0, firstToken - open.startTime),
+          ttftSteps: current.ttftSteps + 1,
+        }
+        return {
+          ...state,
+          byModel: { ...state.byModel, [open.modelKey]: next },
+          open: null,
+        }
+      }
+      case 'step/end':
+        return state.open === null ? state : { ...state, open: null }
+      default:
+        return state
+    }
+  },
+  wire: {
+    viewSchema: rateSchema,
+    view: (state): FinanceRateProjection => ({ byModel: state.byModel }),
+  },
+  stateVersion: 1,
+} satisfies ProjectionDefinition<'financeRate', FinanceRateState>

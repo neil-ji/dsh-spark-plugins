@@ -7,9 +7,13 @@ import {
   dailyAverageMicros,
   effectiveInputTokens,
   estimateCacheSavings,
+  firstTokenMs,
   formatPercent,
+  formatSpeed,
   groupByModel,
   hitRate,
+  outputTokensPerSecond,
+  speedComparison,
   mixedUnitCostMicros,
   modelComparisonRows,
   peakShare,
@@ -94,7 +98,8 @@ describe('derive: model comparison', () => {
 
   it('groups by model, heaviest model first', () => {
     const groups = groupByModel(rows)
-    expect(groups.map((g) => g.modelKey)).toEqual(['acme/llm', 'acme/other'])
+    // 按模型名分组（provider/model 里的 model 段）——这样同一模型的两家供应商才会落进同一组
+    expect(groups.map((g) => g.model)).toEqual(['llm', 'other'])
     expect(groups[0].rows).toHaveLength(2)
   })
 
@@ -160,6 +165,52 @@ describe('derive: balance days left', () => {
     expect(balanceDaysLeft(21_000_000, 7_000_000)).toBeCloseTo(3)
     expect(balanceDaysLeft(undefined, 1)).toBeNull()
     expect(balanceDaysLeft(100, null)).toBeNull()
+  })
+})
+
+describe('derive: 速率与时间成本', () => {
+  const fast = { modelKey: 'acme/llm', provider: 'a', model: 'llm', usage: buckets(1_000_000, 0, 0, 100_000), costMicros: 10_000_000 }
+  const slow = { modelKey: 'acme/llm', provider: 'b', model: 'llm', usage: buckets(1_000_000, 0, 0, 100_000), costMicros: 10_000_000 }
+  const withRate = (row: typeof fast, speed: number, ms = 600_000) => ({
+    ...row,
+    hitRate: null,
+    unitCostMicros: mixedUnitCostMicros(row.costMicros, row.usage),
+    rate: { decodeMs: ms, decodeTokens: Math.round(speed * (ms / 1000)), ttftMs: 12_000, ttftSteps: 40 },
+  })
+
+  it('derives tok/s from decode tokens over decode wall time', () => {
+    const row = withRate(fast, 50)
+    expect(outputTokensPerSecond(row.rate)).toBeCloseTo(50)
+    expect(outputTokensPerSecond(undefined)).toBeNull()
+    expect(outputTokensPerSecond({ decodeMs: 0, decodeTokens: 10, ttftMs: 0, ttftSteps: 0 })).toBeNull()
+    expect(formatSpeed(50)).toBe('50.0')
+    expect(formatSpeed(null)).toBe('—')
+  })
+
+  it('averages first-token latency over the steps that carried one', () => {
+    expect(firstTokenMs({ decodeMs: 1, decodeTokens: 1, ttftMs: 30_000, ttftSteps: 40 })).toBeCloseTo(750)
+    expect(firstTokenMs({ decodeMs: 1, decodeTokens: 1, ttftMs: 0, ttftSteps: 0 })).toBeNull()
+  })
+
+  it('compares the same model across vendors in minutes, and stays quiet otherwise', () => {
+    const rows = [withRate(fast, 60), withRate(slow, 20)]
+    const comparison = speedComparison(rows)
+    expect(comparison).not.toBeNull()
+    if (comparison !== null) {
+      expect(comparison.fastest.provider).toBe('a')
+      expect(comparison.slowest.provider).toBe('b')
+      expect(comparison.tokens).toBe(12_000)
+      expect(comparison.slowestMinutes).toBeCloseTo(10)
+      expect(comparison.atFastestMinutes).toBeCloseTo(10 / 3)
+      expect(comparison.savedMinutes).toBeCloseTo(10 - 10 / 3)
+    }
+    // 跨模型不比
+    const cross = [withRate(fast, 60), withRate({ ...slow, modelKey: 'acme/other', model: 'other' }, 20)]
+    expect(speedComparison(cross)).toBeNull()
+    // 差距 <1% 不给结论
+    expect(speedComparison([withRate(fast, 60), withRate(slow, 60)])).toBeNull()
+    // 缺速率样本不给结论
+    expect(speedComparison([fast, slow].map((row) => ({ ...row, hitRate: null, unitCostMicros: null })))).toBeNull()
   })
 })
 

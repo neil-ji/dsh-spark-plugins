@@ -19,6 +19,7 @@ import {
 import {
   FinancePanel,
   FinancePanelController,
+  WhoToUseView,
   createPlanSeam,
   en as financeEn,
   zh as financeZh,
@@ -39,7 +40,7 @@ import {
   syncStatus,
 } from './fixtures.ts'
 
-export { GithubSection, NpmSection, FinancePanel }
+export { GithubSection, NpmSection, FinancePanel, WhoToUseView }
 
 /* ─────────────────────────── github ─────────────────────────── */
 

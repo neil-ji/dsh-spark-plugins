@@ -38,8 +38,23 @@ const LEDGER: FinanceLedger = {
     { day: '2026-09-14', usage: buckets(2_000_000, 800_000, 100_000, 300_000), costMicros: 60_000_000 },
   ],
   byModel: [
-    { modelKey: 'acme/llm', provider: 'a', model: 'llm', usage: buckets(1_000_000, 1_000_000, 0, 100_000), costMicros: 10_000_000 },
-    { modelKey: 'acme/llm', provider: 'b', model: 'llm', usage: buckets(2_000_000, 200_000, 0, 100_000), costMicros: 40_000_000 },
+    {
+      modelKey: 'acme/llm',
+      provider: 'a',
+      model: 'llm',
+      usage: buckets(1_000_000, 1_000_000, 0, 100_000),
+      costMicros: 10_000_000,
+      // 10 分钟解码窗口：a 92 tok/s、b 22 tok/s —— 同一模型跨供应商的时间成本可算。
+      rate: { decodeMs: 600_000, decodeTokens: 55_200, ttftMs: 12_000, ttftSteps: 40 },
+    },
+    {
+      modelKey: 'acme/llm',
+      provider: 'b',
+      model: 'llm',
+      usage: buckets(2_000_000, 200_000, 0, 100_000),
+      costMicros: 40_000_000,
+      rate: { decodeMs: 600_000, decodeTokens: 13_200, ttftMs: 30_000, ttftSteps: 40 },
+    },
   ],
   byProvider: [
     { provider: 'a', usage: buckets(1_000_000, 1_000_000, 0, 100_000), costMicros: 10_000_000, modelCount: 1 },
@@ -212,9 +227,34 @@ describe('finance views', () => {
 
   it('WhoToUse groups the same model across vendors and marks the cheaper one', () => {
     const html = renderToStaticMarkup(createElement(WhoToUseView, { ledger: LEDGER, t }))
-    expect(html).toContain('finance-model-acme/llm')
+    // 组名是模型名（不是 provider/model）：两家供应同一个模型才可能同组比较
+    expect(html).toContain('finance-model-llm')
     expect(html).toContain('whoBest')
     expect(html).toContain('colHitRate')
+  })
+
+  it('该用谁列出输出速率，并对同一模型给出时间成本比较（标注估算）', () => {
+    const html = renderToStaticMarkup(createElement(WhoToUseView, { ledger: LEDGER, t }))
+    expect(html).toContain('colSpeed')
+    expect(html).toContain('perSecond')
+    // 92 tok/s 与 22 tok/s 是观测值，直接渲染
+    expect(html).toContain('92.0')
+    expect(html).toContain('22.0')
+    // 时间成本比较常显在组头下面，并带「估算」标签
+    expect(html).toContain('finance-time-compare')
+    expect(html).toContain('timeCompareSaved')
+    expect(html).toContain('estimateTag')
+  })
+
+  it('没有速率样本的会话不显示速率（不是 0）', () => {
+    const withoutRate = {
+      ...LEDGER,
+      byModel: LEDGER.byModel.map(({ rate: _rate, ...row }) => row),
+    }
+    const html = renderToStaticMarkup(createElement(WhoToUseView, { ledger: withoutRate, t }))
+    expect(html).toContain('colSpeed')
+    expect(html).not.toContain('perSecond')
+    expect(html).not.toContain('finance-time-compare')
   })
 
   it('SaveMore shows both actionable estimates with their basis', () => {

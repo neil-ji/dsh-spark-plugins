@@ -142,13 +142,16 @@ export function ledger(scenario: Scenario): FinanceLedger {
       costMicros: Math.round(6_400_000 * scale),
     }
   })
+  // speed = 该模型的实测输出吞吐（tok/s）。deepseek-reasoner 故意由两家供应：
+  // 预览画布因此能看到"同一模型跨供应商"的比价与时间成本比较。
   const models = [
-    { modelKey: 'deepseek/deepseek-v4.1-flash', billingMode: 'metered' as const, scale: 2.4 },
-    { modelKey: 'deepseek/deepseek-reasoner', billingMode: 'metered' as const, scale: 1.1 },
-    { modelKey: 'tencent/hunyuan-4-preview', billingMode: 'metered' as const, scale: 0.6 },
-    { modelKey: 'openai/gpt-5-codex', billingMode: 'plan' as const, scale: 0.35 },
+    { modelKey: 'deepseek/deepseek-v4.1-flash', billingMode: 'metered' as const, scale: 2.4, speed: 92 },
+    { modelKey: 'deepseek/deepseek-reasoner', billingMode: 'metered' as const, scale: 1.1, speed: 41 },
+    { modelKey: 'tencent/deepseek-reasoner', billingMode: 'metered' as const, scale: 0.4, speed: 22 },
+    { modelKey: 'tencent/hunyuan-4-preview', billingMode: 'metered' as const, scale: 0.6, speed: 28 },
+    { modelKey: 'openai/gpt-5-codex', billingMode: 'plan' as const, scale: 0.35, speed: 120 },
   ]
-  const byModel = models.map(({ modelKey, billingMode, scale }) => ({
+  const byModel = models.map(({ modelKey, billingMode, scale, speed }) => ({
     modelKey,
     provider: modelKey.slice(0, modelKey.indexOf('/')),
     model: modelKey.slice(modelKey.indexOf('/') + 1),
@@ -156,10 +159,12 @@ export function ledger(scenario: Scenario): FinanceLedger {
     usage: buckets(scale),
     costMicros: Math.round(5_200_000 * scale),
     shiftSavingsMicros: Math.round(410_000 * scale),
+    // 10 分钟解码窗口，decodeTokens 由吞吐推出（rate 与 usage 相互独立）。
+    rate: { decodeMs: 600_000, decodeTokens: Math.round(speed * 600), ttftMs: 40 * 320, ttftSteps: 40 },
   }))
   const byProvider = [
     { provider: 'deepseek', usage: buckets(3.5), costMicros: 18_240_000, modelCount: 2 },
-    { provider: 'tencent', usage: buckets(0.6), costMicros: 3_120_000, modelCount: 1 },
+    { provider: 'tencent', usage: buckets(1.0), costMicros: 4_200_000, modelCount: 2 },
     { provider: 'openai', usage: buckets(0.35), costMicros: 1_820_000, modelCount: 1, billingMode: 'plan' as const },
   ]
   const byHourOfDay = Array.from({ length: 24 }, (_, localHour) => {

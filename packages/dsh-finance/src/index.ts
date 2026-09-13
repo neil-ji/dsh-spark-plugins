@@ -21,7 +21,11 @@ import { FINANCE_HOST_CONTRIBUTION } from 'dsh-spark-finance-wire'
 import { FinanceEventsService } from './events-service.ts'
 import { fetchFinanceBalance, FinanceBalanceError } from './balance.ts'
 import { backfillFinanceHourly, buildFinanceLedger } from './ledger.ts'
-import { financeUsageHourlyProjectionDefinition, financeUsageProjectionDefinition } from './projection.ts'
+import {
+  financeRateProjectionDefinition,
+  financeUsageHourlyProjectionDefinition,
+  financeUsageProjectionDefinition,
+} from './projection.ts'
 import { DEFAULT_PRICE, mergePriceLayers, normalizeFinanceConfig } from './pricing.ts'
 import {
   DEFAULT_FX as COMMUNITY_SYNC_DEFAULT_FX,
@@ -55,7 +59,11 @@ import type {
 } from './types.ts'
 
 export type * from './types.ts'
-export { financeUsageHourlyProjectionDefinition, financeUsageProjectionDefinition } from './projection.ts'
+export {
+  financeRateProjectionDefinition,
+  financeUsageHourlyProjectionDefinition,
+  financeUsageProjectionDefinition,
+} from './projection.ts'
 export { fetchFinanceBalance, FinanceBalanceError, microsFromDecimal } from './balance.ts'
 export { backfillFinanceHourly } from './ledger.ts'
 // Cross-generation `ctx.sessionPersistence` access (DSH 0.1.2 flat surface /
@@ -311,6 +319,8 @@ export class FinanceService extends TypertRemoteService {
     ctx.inject(['sessionProjections'], projectionCtx => {
       projectionCtx.sessionProjections.register(financeUsageProjectionDefinition)
       projectionCtx.sessionProjections.register(financeUsageHourlyProjectionDefinition)
+      // P1-B：每模型速率（解码墙钟 / 输出 token / 首 token 延迟）。
+      projectionCtx.sessionProjections.register(financeRateProjectionDefinition)
     })
 
     // F11 commit: dedicated stream service for `finance.events()`. Cordis

@@ -13,6 +13,7 @@ import type {
   FinanceLedger,
   FinanceModelRow,
   FinanceProviderRow,
+  FinanceRateStats,
   FinanceSessionRow,
   FinanceTokenBuckets,
   FinanceWorkspaceRow,
@@ -61,6 +62,8 @@ export interface ModelComparisonRow {
   unitCostMicros: number | null
   billingMode: FinanceModelRow['billingMode']
   shiftSavingsMicros?: number
+  /** 速率样本；旧会话缺该键（此时不显示速率，而不是显示 0）。 */
+  rate?: FinanceRateStats
 }
 
 /** byModel 行 -> 对比行（保持账本的成本降序）。 */
@@ -75,20 +78,27 @@ export function modelComparisonRows(ledger: FinanceLedger): ModelComparisonRow[]
     unitCostMicros: mixedUnitCostMicros(row.costMicros, row.usage),
     billingMode: row.billingMode,
     ...(row.shiftSavingsMicros !== undefined ? { shiftSavingsMicros: row.shiftSavingsMicros } : {}),
+    ...(row.rate !== undefined ? { rate: row.rate } : {}),
   }))
 }
 
-/** 同一 modelKey 分组（组内按成本降序）。 */
-export function groupByModel(rows: readonly ModelComparisonRow[]): Array<{ modelKey: string; rows: ModelComparisonRow[] }> {
+/**
+ * 按**模型名**分组（不是 modelKey！），组内按成本降序。
+ *
+ * 关键：`modelKey` 是 `provider/model`，同一个模型由两家供应时 modelKey 天然不同
+ * （`deepseek/deepseek-reasoner` vs `tencent/deepseek-reasoner`）。要回答"同一个模型
+ * 哪家更划算/更快"，必须按 `model` 分组，否则每家各成一组、永远不存在可比对象。
+ */
+export function groupByModel(rows: readonly ModelComparisonRow[]): Array<{ model: string; rows: ModelComparisonRow[] }> {
   const groups = new Map<string, ModelComparisonRow[]>()
   for (const row of rows) {
-    const list = groups.get(row.modelKey)
-    if (list === undefined) groups.set(row.modelKey, [row])
+    const list = groups.get(row.model)
+    if (list === undefined) groups.set(row.model, [row])
     else list.push(row)
   }
   return [...groups.entries()]
-    .map(([modelKey, groupRows]) => ({
-      modelKey,
+    .map(([model, groupRows]) => ({
+      model,
       rows: [...groupRows].sort((a, b) => b.costMicros - a.costMicros),
     }))
     .sort((a, b) => sumCost(b.rows) - sumCost(a.rows))
@@ -117,15 +127,15 @@ export function cheapestInGroup(rows: readonly ModelComparisonRow[]): ModelCompa
 /**
  * 命中率差距最大的一组「同一模型、不同供应商」的两行。
  *
- * 刻意**只在同一 modelKey 内部比**：跨模型比命中率没有意义（不同模型的 prompt
- * 结构与缓存策略本就不同），所以这里按模型分组，取组内差距 ≥2 个点且差距最大的一组。
+ * 刻意**只在同一模型内部比**（按 `model` 而不是 modelKey 分组）：跨模型比命中率
+ * 没有意义（不同模型的 prompt 结构与缓存策略本就不同）。
  */
 export function cacheExtremes(rows: readonly ModelComparisonRow[]): { best: ModelComparisonRow; worst: ModelComparisonRow } | null {
   const byModel = new Map<string, ModelComparisonRow[]>()
   for (const row of rows) {
     if (row.hitRate === null) continue
-    const list = byModel.get(row.modelKey)
-    if (list === undefined) byModel.set(row.modelKey, [row])
+    const list = byModel.get(row.model)
+    if (list === undefined) byModel.set(row.model, [row])
     else list.push(row)
   }
   let winner: { best: ModelComparisonRow; worst: ModelComparisonRow; spread: number } | null = null
@@ -156,7 +166,7 @@ export function estimateCacheSavings(rows: readonly ModelComparisonRow[]): {
   const extremes = cacheExtremes(rows)
   if (extremes === null) return null
   const { best, worst } = extremes
-  if (best.modelKey !== worst.modelKey) return null
+  if (best.model !== worst.model) return null
   if (best.unitCostMicros === null || worst.unitCostMicros === null) return null
   const unitGap = worst.unitCostMicros - best.unitCostMicros
   if (unitGap <= 0) return null
@@ -249,6 +259,73 @@ export function peakShare(ledger: FinanceLedger): number | null {
   const total = ledger.totalCostMicros
   if (total <= 0) return null
   return ledger.peakValley.peakCostMicros / total
+}
+
+/* ─────────────────────────── 速率与时间成本（P1-B） ─────────────────────────── */
+
+/**
+ * 输出吞吐（tok/s）= 解码输出 token ÷ 解码墙钟。两个数都得有、时长 > 0 才给结论；
+ * 缺数据一律 null（不拿 0 冒充"这个模型不产出"）。
+ */
+export function outputTokensPerSecond(rate: FinanceRateStats | undefined): number | null {
+  if (rate === undefined || rate.decodeMs <= 0 || rate.decodeTokens <= 0) return null
+  return rate.decodeTokens / (rate.decodeMs / 1000)
+}
+
+/** 平均首 token 延迟（ms）：多久开始出字。 */
+export function firstTokenMs(rate: FinanceRateStats | undefined): number | null {
+  if (rate === undefined || rate.ttftSteps <= 0) return null
+  return rate.ttftMs / rate.ttftSteps
+}
+
+/** 吞吐文本（数值部分；单位走 locale）。 */
+export function formatSpeed(tokensPerSecond: number | null): string {
+  return tokensPerSecond === null ? '—' : tokensPerSecond.toFixed(1)
+}
+
+/** 首 token 延迟文本。 */
+export function formatMs(ms: number | null): string {
+  return ms === null ? '—' : `${Math.round(ms)} ms`
+}
+
+/** 同一模型两家的时间成本对比。 */
+export interface SpeedComparison {
+  fastest: ModelComparisonRow
+  slowest: ModelComparisonRow
+  /** 慢的那家实际产出的输出 token 量。 */
+  tokens: number
+  /** 慢的那家实际用的解码分钟数（观测）。 */
+  slowestMinutes: number
+  /** 同样的 token 量按快的那家速率需要几分钟（估算）。 */
+  atFastestMinutes: number
+  /** 省下的分钟数（估算）。 */
+  savedMinutes: number
+}
+
+/**
+ * 同一 modelKey 内"最快 vs 最慢"的时间成本对比。
+ *
+ * 刻意只在同一模型内比（跨模型比吞吐没有意义），且只在吞吐差 ≥1% 时给结论。
+ * `savedMinutes` 是**估算**：把慢那家实际产出的 token 量按快那家的实测速率折算，
+ * 不做任何"如果换模型"的推断。
+ */
+export function speedComparison(rows: readonly ModelComparisonRow[]): SpeedComparison | null {
+  const rated = rows.filter((row) => outputTokensPerSecond(row.rate) !== null)
+  if (rated.length < 2) return null
+  const sorted = [...rated].sort(
+    (a, b) => (outputTokensPerSecond(b.rate) as number) - (outputTokensPerSecond(a.rate) as number),
+  )
+  const fastest = sorted[0]
+  const slowest = sorted[sorted.length - 1]
+  if (fastest.model !== slowest.model) return null
+  const fastSpeed = outputTokensPerSecond(fastest.rate) as number
+  const slowSpeed = outputTokensPerSecond(slowest.rate) as number
+  if (fastSpeed <= slowSpeed * 1.01) return null
+  const tokens = slowest.rate?.decodeTokens ?? 0
+  if (tokens <= 0) return null
+  const slowestMinutes = tokens / slowSpeed / 60
+  const atFastestMinutes = tokens / fastSpeed / 60
+  return { fastest, slowest, tokens, slowestMinutes, atFastestMinutes, savedMinutes: slowestMinutes - atFastestMinutes }
 }
 
 /* ─────────────────────────── 订阅 vs 按量（P1） ─────────────────────────── */

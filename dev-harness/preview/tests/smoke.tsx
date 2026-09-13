@@ -15,6 +15,7 @@ import { createSparkStore } from '../fixtures/sparks.mjs'
 import {
   FinancePanel,
   GithubSection,
+  WhoToUseView,
   NpmSection,
   buildFinanceInjected,
   buildGithubInjected,
@@ -200,6 +201,14 @@ export async function run(): Promise<{ checks: Check[] }> {
     await injected.controller.savePlan({ provider: 'deepseek', monthlyMicros: 10_000_000, currency: 'CNY', periodLabel: 'month', effectiveFrom: 0 })
     const afterPlan = renderToString(<FinancePanel {...injected.panel} /> as ReactElement)
     expectContains('finance: 填月费后给出「比按量省」结论', afterPlan, '比按量省')
+    // P1-B：该用谁 —— 输出速率列 + 同一模型跨供应商的时间成本比较。
+    check('finance: 账本带上了速率样本', state.ledger?.byModel.some((row) => row.rate !== undefined) === true, '')
+    const whoHtml = renderToString(
+      <WhoToUseView ledger={state.ledger!} t={ctx.locale.bind('settings.finance')} /> as ReactElement,
+    )
+    expectContains('finance: 该用谁有输出速率列', whoHtml, '输出速率')
+    expectContains('finance: 速率渲染为 tok/s', whoHtml, 'tok/s')
+    expectContains('finance: 同一模型跨供应商给出时间成本比较', whoHtml, 'finance-time-compare')
     check(
       'finance: 套餐写回 settings 的 plans 字段',
       JSON.stringify((injected.scope as unknown as { getSnapshot(): { user: unknown } }).getSnapshot().user).includes('monthlyMicros'),

@@ -135,4 +135,12 @@
 - **host**：`FinanceConfigInput/FinanceConfig.plans`（provider / 月费 / 币种 / 可选额度 / 周期标签 / 生效期）+ `normalizeFinancePlans`（坏行跳过而不是猜、日期串与 epoch 都收）+ `FinanceService.Config.plans` schema；导出 `normalizeFinancePlans`。host 端点仍 9 条，无 wire 改动。
 - **client**：`derive.planInsight / planRows / providerKey`（省了多少 / 折扣率 / 回本进度全是观测值相减）；`plans.ts` 把 settings scope 收敛成 seam（只读快照 + 整写 `plans`）；视图① 首卡「订阅 vs 按量」——**行内**填月费（月费 + 币种 + 计费形态），候选 provider 只来自账本里真正用过的厂商，设置只读时明说不能改。
 - **验收**：`pnpm -r build/typecheck` 退出码 0；`pnpm -r test` 退出码 0（finance 168 / finance-client 44）；`pnpm check:all` PASS；`pnpm preview:verify` **75/75**（新增 4 条套餐断言，含写回 settings 的实测）；`pnpm sandbox:install` + `node dev-harness/real-host-check.mjs` **29/29** 退出码 0。
-- **仍未做**：逐模型输出速率与 ② 速率列、时间成本换算（P1-B）；context 阶梯与拆分会话反事实（P2）。
+- **仍未做**：context 阶梯与拆分会话反事实（P2）。
+
+## 13. P1-B 落地记录（2026-09-14）：速率与时间成本
+
+- **host**：新增 `financeRate` 投影单元（每模型 `decodeMs / decodeTokens / ttftMs / ttftSteps`），与平台 `sessionStats` 同一套事件语义（`step/start` → 首个可见 delta → `assistant/message`；只统计报了 output token 的步；被取消的步不计时），差别只有一个：按 `request/header` 的模型键分桶。注意本仓库钉的平台版本**没有** `assistant/attempt` 事件与 `assistantStreamFirstTokenTime` 导出，因此首 token 从 `assistant/chunk` 的首个非空 `text-delta`/`reasoning-delta` 判定。ledger 读该单元并把样本合进 `byModel` 行（可选字段 `rate`；旧会话缺席 → 面板显示 `—`，不显示 0）。
+- **client**：`derive.outputTokensPerSecond / firstTokenMs / speedComparison`；视图② 新增「输出速率」列，并在**组头常显**时间成本比较（`{slow}` 的 N 个输出 token 按 `{fast}` 的速率只需 X 分钟），标注「估算」。
+- **修正一个真实产品缺陷（由真 fixture 暴露）**：原先 `groupByModel` 按 `modelKey`（`provider/model`）分组，而同一模型由两家供应时 modelKey 天然不同，于是永远各成一组、**根本不存在可比对象** —— 视图② 的「同一个模型哪家更划算」此前形同虚设（P0 的合成 fixture 掩盖了它）。现按 `model` 名分组，`cacheExtremes / estimateCacheSavings / speedComparison` 同步按模型名比。
+- **验收**：`pnpm -r build/typecheck/test` 退出码 0（finance **175** / finance-client **49**）；`pnpm check:all` PASS；`pnpm preview:verify` **79/79**（新增速率列、tok/s、时间成本比较三条断言）；`pnpm sandbox:install` + `node dev-harness/real-host-check.mjs` **29/29** 退出码 0、控制台 0 条。
+- **仍未做**：context 阶梯计价与「拆会话能省多少」（P2）。
