@@ -73,9 +73,32 @@ export function financeProviderDefault(config: FinanceConfig, modelKey: string):
  * to set it on, no defaults that ever classified anything as plan), so the
  * classification now flows exclusively from the host-known provider registry.
  */
-export function financeBillingMode(config: FinanceConfig, modelKey: string): 'metered' | 'plan' {
+export function financeBillingMode(config: FinanceConfig, modelKey: string): FinanceProviderBillingMode {
   const mode = config.hostMetaByProvider[financeProviderOf(modelKey)]
-  return mode === 'plan' ? 'plan' : 'metered'
+  if (mode === 'plan') return 'plan'
+  if (mode === 'free') return 'free'
+  return 'metered'
+}
+
+/**
+ * 折叠 provider 级计费方式：内置默认打底，用户层条目覆盖（客户自己打订阅/按量/免费标记），
+ * `isLocked` 为真的 provider 保持宿主决定（如 deepseek-official 的余额接口是纯按量）。
+ * 抽成纯函数以便单测这个容易写错、又不容易被 UI 发现的分支。
+ */
+export function foldProviderBillingModes(
+  base: Readonly<Record<string, FinanceProviderBillingMode>>,
+  entries: readonly { provider?: unknown; billingMode?: unknown }[] | undefined,
+  isLocked: (provider: string) => boolean = () => false,
+): Record<string, FinanceProviderBillingMode> {
+  const out: Record<string, FinanceProviderBillingMode> = { ...base }
+  for (const entry of entries ?? []) {
+    const provider = entry?.provider
+    if (typeof provider !== 'string' || provider === '') continue
+    if (isLocked(provider)) continue
+    const mode = entry?.billingMode
+    if (mode === 'plan' || mode === 'metered' || mode === 'free') out[provider] = mode
+  }
+  return out
 }
 
 /** Empty token buckets. */

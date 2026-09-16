@@ -14,6 +14,7 @@ import {
   financeModelKey,
   financeModelOf,
   financePriceProvenance,
+  foldProviderBillingModes,
   financeProviderDefault,
   financeProviderOf,
   financeRateAt,
@@ -337,11 +338,10 @@ describe('pricing', () => {
     expect(financeBillingMode(custom, 'zai/special-model')).toBe('plan')
     expect(financeBillingMode(custom, 'openai/gpt-4o')).toBe('metered')   // unlisted default
     expect(financeBillingMode(config, 'zai/glm-4.6')).toBe('metered')     // no map at all
-    // Free routes never book as cash flow; the wallet-vs-plan rollup ignores
-    // them regardless, but the lookup still returns the literal 'free' for
-    // observability — the ledger gates on `=== 'plan'`.
+    // Free routes never book as cash flow：三态从 ledger 起就分流 —— 'free' 单列进
+    // freeCostMicros，既不进按量桶也不进订阅等价桶（混进去就是一笔假账）。
     const freeConfig: FinanceConfig = { ...config, hostMetaByProvider: { openai: 'free' } }
-    expect(financeBillingMode(freeConfig, 'openai/gpt-4o')).toBe('metered') // free falls through to metered
+    expect(financeBillingMode(freeConfig, 'openai/gpt-4o')).toBe('free') // 三态直传，不再退化成 metered
   })
 
   it('normalizeFinanceConfig injects hostMetaByProvider with empty default', () => {
@@ -501,6 +501,35 @@ describe('financePriceProvenance', () => {
     expect(financePriceProvenance(custom, 'deepseek-official/deepseek-flash', 0)).toBe('entry')
     expect(financePriceProvenance(custom, 'openai/gpt-4o', 0)).toBe('provider-default')
     expect(financePriceProvenance(custom, 'mystery/model-x', 0)).toBe('builtin-fallback')
+  })
+})
+
+describe('foldProviderBillingModes / financeBillingMode', () => {
+  it('用户层覆盖内置默认；锁定项不被改写', () => {
+    const folded = foldProviderBillingModes(
+      { 'deepseek-official': 'metered' },
+      [
+        { provider: 'deepseek-official', billingMode: 'plan' },
+        { provider: 'zai', billingMode: 'plan' },
+        { provider: 'volcengine', billingMode: 'free' },
+        { provider: '', billingMode: 'plan' },
+        { provider: 'bad', billingMode: 'nonsense' },
+      ],
+      provider => provider === 'deepseek-official',
+    )
+    expect(folded['deepseek-official']).toBe('metered')
+    expect(folded['zai']).toBe('plan')
+    expect(folded['volcengine']).toBe('free')
+    expect(folded['bad']).toBeUndefined()
+    expect(folded['']).toBeUndefined()
+  })
+
+  it('financeBillingMode 三态：plan / free / 默认 metered（未知 provider 也是 metered）', () => {
+    const config = normalizeFinanceConfig({}, { 'deepseek-official': 'metered', zai: 'plan', volcengine: 'free' })
+    expect(financeBillingMode(config, 'deepseek-official/deepseek-flash')).toBe('metered')
+    expect(financeBillingMode(config, 'zai/glm-5.3')).toBe('plan')
+    expect(financeBillingMode(config, 'volcengine/doubao-seed-2-0-pro')).toBe('free')
+    expect(financeBillingMode(config, 'mystery/model-x')).toBe('metered')
   })
 })
 

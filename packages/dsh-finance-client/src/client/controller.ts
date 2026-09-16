@@ -18,6 +18,7 @@ import type {
   FinanceListProvidersResult,
   FinancePlanEntry,
   FinanceProviderBalance,
+  FinanceProviderBillingMode,
   FinancePriceTableStatus,
   FinanceTierEntry,
 } from 'dsh-spark-finance/types'
@@ -58,6 +59,11 @@ export interface FinancePlanSeam {
   subscribe(listener: () => void): () => void
   /** 整体写回 `plans` 字段（settings 的一次原子写）。 */
   write(plans: readonly FinancePlanEntry[]): Promise<void>
+  /**
+   * 只写某个 provider 的计费方式标记（订阅 / 按量 / 免费）。窄写：只碰
+   * `providers[i].billingMode` 这一个字段，其余字段原样保留。
+   */
+  writeBillingMode(provider: string, mode: FinanceProviderBillingMode): Promise<void>
 }
 
 /** 一个面板实例一个控制器；不做模块级单例。 */
@@ -167,6 +173,16 @@ export class FinancePanelController {
     if (this.seam === undefined) return
     const rest = this.store.getSnapshot().plans.filter((row) => providerKey(row.provider) !== providerKey(plan.provider))
     await this.seam.write([...rest, plan])
+  }
+
+  /**
+   * 给某个 provider 打「订阅 / 按量 / 免费」标记（写 settings → 宿主折叠进
+   * hostMetaByProvider → 账本按新分类重算），然后重新拉账本。
+   */
+  async setBillingMode(provider: string, mode: FinanceProviderBillingMode): Promise<void> {
+    if (this.seam === undefined) return
+    await this.seam.writeBillingMode(provider, mode)
+    await this.load()
   }
 
   /** 删除一条套餐。 */

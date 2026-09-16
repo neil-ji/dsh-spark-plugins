@@ -468,7 +468,7 @@ export async function buildFinanceLedger(
       modelKey,
       provider: financeProviderOf(modelKey),
       model: financeModelOf(modelKey),
-      billingMode: financeBillingMode(config, modelKey) as 'metered' | 'plan',
+      billingMode: financeBillingMode(config, modelKey),
       usage,
       costMicros: byModelCost[modelKey] ?? 0,
       shiftSavingsMicros: Math.max(0, (modelPeakCost[modelKey] ?? 0) - (modelPeakOffPeakCost[modelKey] ?? 0)),
@@ -485,10 +485,13 @@ export async function buildFinanceLedger(
   // — they stay in the metered bucket so the two shares always reconcile
   // exactly to totalCostMicros.
   let planEquivalentCostMicros = 0
+  let freeCostMicros = 0
   for (const row of modelRows) {
     if (row.billingMode === 'plan') planEquivalentCostMicros += row.costMicros
+    else if (row.billingMode === 'free') freeCostMicros += row.costMicros
   }
-  const meteredCostMicros = totalCost - planEquivalentCostMicros
+  // free 单列：既不是现金支出也不是订阅等价，混进按量桶会做出一笔假账。
+  const meteredCostMicros = totalCost - planEquivalentCostMicros - freeCostMicros
   // Per-provider rollup: fold the model rows by their provider part, keeping
   // the distinct model count so the dashboard can show how spread the spend is.
   // A provider mixing plan and metered models rolls up as 'mixed'.
@@ -554,6 +557,7 @@ export async function buildFinanceLedger(
     totalCostMicros: totalCost,
     meteredCostMicros,
     planEquivalentCostMicros,
+    freeCostMicros,
     sessionCount: records.length,
     workspaceCount: workspaceMeta.size,
     taskCount: taskMeta.size,

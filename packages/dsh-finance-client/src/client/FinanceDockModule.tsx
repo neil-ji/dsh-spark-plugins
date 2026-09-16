@@ -97,6 +97,7 @@ export function startFinanceDockModule(ctx: ClientContext): FinanceDockInject {
           refreshProvider: (provider: string): Promise<void> => controller.refreshProvider(provider),
           savePlan: (plan) => controller.savePlan(plan),
           removePlan: (provider) => controller.removePlan(provider),
+  setBillingMode: (provider, mode) => controller.setBillingMode(provider, mode),
   updatePrices: () => controller.updatePrices(),
   restorePrices: () => controller.restorePrices(),
         },

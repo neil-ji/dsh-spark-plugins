@@ -28,7 +28,7 @@ import {
   financeUsageProjectionDefinition,
 } from './projection.ts'
 import { createHash } from 'node:crypto'
-import { DEFAULT_PRICE, basePriceFingerprint, mergePriceLayersDetailed, normalizeFinanceConfig } from './pricing.ts'
+import { DEFAULT_PRICE, basePriceFingerprint, foldProviderBillingModes, mergePriceLayersDetailed, normalizeFinanceConfig } from './pricing.ts'
 import { FINANCE_PRICES_HASH, FINANCE_PRICES_SOURCE, FINANCE_PRICES_UPDATED } from './pricing-hash.generated.ts'
 import type { FinancePriceMergeDiagnostic } from './pricing.ts'
 import {
@@ -95,6 +95,7 @@ export {
   financeBaseCostMicros,
   financeBaseRate,
   financeBillingMode,
+  foldProviderBillingModes,
   financeBucketCostMicros,
   financeCostByModelHour,
   financeEntryFor,
@@ -418,6 +419,14 @@ export class FinanceService extends TypertRemoteService {
     for (const [id, meta] of Object.entries(HOST_KNOWN_PROVIDER_META)) {
       hostMetaByProvider[id] = meta.defaultBillingMode
     }
+    // 用户层 provider 条目的 billingMode 覆盖内置默认 —— 客户自己打「订阅 / 按量 / 免费」标记；
+    // `lockBillingModeAndCurrency` 的 provider（当前只有 deepseek-official）保持宿主决定。
+    const billingByProvider = foldProviderBillingModes(
+      hostMetaByProvider,
+      raw.providers as readonly { provider?: unknown; billingMode?: unknown }[] | undefined,
+      provider => hostProviderMeta(provider)?.lockBillingModeAndCurrency === true,
+    )
+    for (const [id, mode] of Object.entries(billingByProvider)) hostMetaByProvider[id] = mode
     return normalizeFinanceConfig({ ...raw, prices: layers.prices }, hostMetaByProvider)
   }
 

@@ -9,7 +9,7 @@
 import { useState, type ReactNode } from 'react'
 import { Button, SegmentedControl } from 'dsh-ui-kit'
 import type { SnapshotSelectorHook } from 'dsh-spark-plugin-kit/client'
-import type { FinancePlanEntry } from 'dsh-spark-finance/types'
+import type { FinancePlanEntry, FinanceProviderBillingMode } from 'dsh-spark-finance/types'
 import type { FinancePanelState } from './controller.ts'
 import type { FinanceTranslate } from './locales.ts'
 import { ProjectsView } from './views/ProjectsView.tsx'
@@ -28,6 +28,8 @@ export interface FinancePanelInjected {
   /** P1：套餐（月费）写回 settings 的 `finance.plans`。 */
   savePlan: (plan: FinancePlanEntry) => Promise<void>
   removePlan: (provider: string) => Promise<void>
+  /** 计费方式标记：订阅 / 按量 / 免费（provider 级）。 */
+  setBillingMode: (provider: string, mode: FinanceProviderBillingMode) => Promise<void>
   /** 价格表：一键更新（拉最新目录价）与还原（丢弃用户侧覆盖，回到发版快照）。 */
   updatePrices: () => Promise<void>
   restorePrices: () => Promise<void>
@@ -114,6 +116,7 @@ export function FinancePanel(props: FinancePanelInjected): ReactNode {
               plansWritable={state.plansWritable}
               savePlan={props.savePlan}
               removePlan={props.removePlan}
+              onSetBillingMode={props.setBillingMode}
               refreshing={state.status === 'loading'}
               onRefresh={props.refresh}
               lastSyncAppliedAt={state.lastSyncAppliedAt}

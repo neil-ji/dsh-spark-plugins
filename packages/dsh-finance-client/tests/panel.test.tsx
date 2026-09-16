@@ -214,11 +214,14 @@ describe('finance views', () => {
       refreshing: false,
       onRefresh: () => {},
       lastSyncAppliedAt: undefined,
+      onSetBillingMode: async () => {},
     }))
     // 账本里用过 a / b，而未接入的厂商不会出现
     expect(noPlan).toContain('finance-plan-a')
     expect(noPlan).toContain('finance-plan-b')
-    expect(noPlan).toContain('planFill')
+    // 未打订阅标记的厂商：只给「计费方式」控件，不再默认摆出「填月费」
+    expect(noPlan).toContain('billingMark: a')
+    expect(noPlan).not.toContain('planFill')
 
     const withPlan = renderToStaticMarkup(createElement(ThisMonthView, {
       ledger: LEDGER,

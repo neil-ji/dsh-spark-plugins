@@ -15,6 +15,7 @@ import type {
   FinancePlanPeriod,
   FinancePriceTableStatus,
   FinanceProviderBalance,
+  FinanceProviderBillingMode,
 } from 'dsh-spark-finance/types'
 import {
   balanceDaysLeft,
@@ -22,6 +23,7 @@ import {
   modelComparisonRows,
   planRows,
   providerDailyMicros,
+  providerKey,
 } from '../derive.ts'
 import { FINANCE_PLAN_PERIODS, majorToMicros, microsToMajor } from '../plans.ts'
 import type { FinanceTranslate } from '../locales.ts'
@@ -36,6 +38,8 @@ export interface ThisMonthViewProps {
   plansWritable: boolean
   savePlan: (plan: FinancePlanEntry) => Promise<void>
   removePlan: (provider: string) => Promise<void>
+  /** 打 provider 级计费方式标记（订阅 / 按量 / 免费）。 */
+  onSetBillingMode: (provider: string, mode: FinanceProviderBillingMode) => Promise<void>
   refreshing: boolean
   onRefresh: () => void
   lastSyncAppliedAt: number | undefined
@@ -50,6 +54,7 @@ export interface ThisMonthViewProps {
 }
 
 const TOP_MODEL_COUNT = 6
+const BILLING_MODES: readonly FinanceProviderBillingMode[] = ['metered', 'plan', 'free']
 const cx = (...names: string[]): string => names.join(' ')
 
 export function ThisMonthView({
@@ -61,6 +66,7 @@ export function ThisMonthView({
   plansWritable,
   savePlan,
   removePlan,
+  onSetBillingMode,
   refreshing,
   onRefresh,
   lastSyncAppliedAt,
@@ -78,6 +84,30 @@ export function ThisMonthView({
     .sort((a, b) => (b.unitCostMicros as number) - (a.unitCostMicros as number))
     .slice(0, TOP_MODEL_COUNT)
   const balanceRows = providerList?.providers ?? []
+  // provider 级「计费方式」标记：用户设置优先，其次宿主建议值；锁定的 provider 只读展示。
+  const billingExplicit = new Map<string, FinanceProviderBillingMode>()
+  const billingDefault = new Map<string, FinanceProviderBillingMode>()
+  const billingLocked = new Set<string>()
+  for (const row of balanceRows) {
+    const key = providerKey(row.provider)
+    const explicit = row.userEntry?.billingMode
+    if (explicit === 'plan' || explicit === 'metered' || explicit === 'free') billingExplicit.set(key, explicit)
+    const fallback = row.hostMeta?.defaultBillingMode ?? 'metered'
+    billingDefault.set(key, fallback === 'plan' || fallback === 'free' ? fallback : 'metered')
+    if (row.hostMeta?.lockBillingModeAndCurrency === true) billingLocked.add(key)
+  }
+  /**
+   * 生效的计费方式：**显式标记 > 已有月费条目（视为订阅）> 宿主默认**。
+   * 中间那条是为了兼容「早就填过月费、还没打标记」的老数据 —— 否则它们的订阅卡会
+   * 突然变成按量、连编辑入口都消失。
+   */
+  const billingFor = (provider: string): FinanceProviderBillingMode => {
+    const key = providerKey(provider)
+    const explicit = billingExplicit.get(key)
+    if (explicit !== undefined) return explicit
+    if (planEntries.some((plan) => providerKey(plan.provider) === key)) return 'plan'
+    return billingDefault.get(key) ?? 'metered'
+  }
   const { withPlan, withoutPlan } = planRows(ledger, plans)
   const planByProvider = new Map(withPlan.map((insight) => [insight.provider, insight]))
   const planEntries = [...plans]
@@ -155,7 +185,18 @@ export function ThisMonthView({
                           </span>
                           <span className={cx(css.cell, css.balanceNote)}>{verdictText(insight, currency, t)}</span>
                           <span className={css.planActions}>
-                            {plansWritable
+                            {/* 计费方式标记（provider 级）：按量 / 订阅 / 免费。锁定的 provider 只读。 */}
+                            {billingLocked.has(providerKey(provider))
+                              ? <span className={css.tagMuted}>{billingLabel(billingFor(provider), t)}</span>
+                              : (
+                                <SegmentedControl<FinanceProviderBillingMode>
+                                  options={BILLING_MODES.map((mode) => ({ value: mode, label: billingLabel(mode, t) }))}
+                                  value={billingFor(provider)}
+                                  onChange={(next) => { void onSetBillingMode(provider, next) }}
+                                  ariaLabel={`${t('billingMark')}: ${provider}`}
+                                />
+                              )}
+                            {plansWritable && billingFor(provider) === 'plan'
                               ? (
                                 <Button
                                   onClick={() => setEditing(open ? null : provider)}
@@ -165,7 +206,7 @@ export function ThisMonthView({
                                 </Button>
                               )
                               : null}
-                            {plansWritable && existing !== undefined
+                            {plansWritable && billingFor(provider) === 'plan' && existing !== undefined
                               ? (
                                 <Button
                                   onClick={() => { void removePlan(provider) }}
@@ -308,6 +349,13 @@ export function ThisMonthView({
       </div>
     </>
   )
+}
+
+/** 计费方式标签（面板只暴露三态；宿主回落的 mixed 归到按量展示）。 */
+export function billingLabel(mode: FinanceProviderBillingMode, t: FinanceTranslate): string {
+  if (mode === 'plan') return t('billing_plan')
+  if (mode === 'free') return t('billing_free')
+  return t('billing_metered')
 }
 
 function minutesSince(epochMs: number): number {

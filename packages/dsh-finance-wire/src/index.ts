@@ -118,6 +118,7 @@ export const financeLedgerSchema = z.object({
   // Billing-mode split; absent on hosts predating it.
   meteredCostMicros: z.number().optional().default(0),
   planEquivalentCostMicros: z.number().optional().default(0),
+  freeCostMicros: z.number().optional().default(0),
   sessionCount: z.number(),
   workspaceCount: z.number(),
   taskCount: z.number(),
@@ -132,7 +133,7 @@ export const financeLedgerSchema = z.object({
     provider: z.string().optional().default(''),
     model: z.string().optional().default(''),
     // Billing classification; absent on hosts predating it = 'metered'.
-    billingMode: z.enum(['metered', 'plan']).optional(),
+    billingMode: z.enum(['metered', 'plan', 'free']).optional(),
     usage: financeTokenBucketsSchema,
     costMicros: z.number(),
     shiftSavingsMicros: z.number().optional().default(0),
@@ -143,7 +144,7 @@ export const financeLedgerSchema = z.object({
     usage: financeTokenBucketsSchema,
     costMicros: z.number(),
     modelCount: z.number(),
-    billingMode: z.enum(['metered', 'plan', 'mixed']).optional(),
+    billingMode: z.enum(['metered', 'plan', 'free', 'mixed']).optional(),
   })).optional().default([]),
   byWorkspace: z.array(z.object({
     workspaceId: z.string().nullable(),
@@ -615,9 +616,9 @@ export const FINANCE_REFLECTION: TypertPackageModel = {
         { name: 'FinanceTokenBuckets', declaration: 'export interface FinanceTokenBuckets { uncachedInputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; outputTokens: number; }' },
         { name: 'FinanceHourOfDayRow', declaration: 'export interface FinanceHourOfDayRow { localHour: number; usage: FinanceTokenBuckets; costMicros: number; peakCostMicros: number; flatCostMicros: number; shiftSavingsMicros: number; }' },
         { name: 'FinancePeakValleySplit', declaration: 'export interface FinancePeakValleySplit { peakCostMicros: number; offPeakCostMicros: number; flatCostMicros: number; unclassifiedCostMicros: number; legacyCostMicros: number; shiftSavingsMicros: number; }' },
-        { name: 'FinanceBillingMode', declaration: "export type FinanceBillingMode = 'metered' | 'plan';" },
+        { name: 'FinanceBillingMode', declaration: "export type FinanceBillingMode = 'metered' | 'plan' | 'free';" },
         { name: 'FinanceProviderRow', declaration: 'export interface FinanceProviderRow { provider: string; usage: FinanceTokenBuckets; costMicros: number; modelCount: number; billingMode?: FinanceBillingMode | "mixed"; }' },
-        { name: 'FinanceLedger', declaration: 'export interface FinanceLedger { generatedAt: number; currency: string; totals: FinanceTokenBuckets; totalCostMicros: number; meteredCostMicros?: number; planEquivalentCostMicros?: number; sessionCount: number; workspaceCount: number; taskCount: number; windowedSinceMs: number | null; hourOfDayWindowStartMs: number; byDay: readonly FinanceDayRow[]; byModel: readonly FinanceModelRow[]; byProvider: readonly FinanceProviderRow[]; byWorkspace: readonly FinanceWorkspaceRow[]; tasks: readonly FinanceTaskRow[]; sessions: readonly FinanceSessionRow[]; unreadableSessions: readonly FinanceUnreadableSessionRow[]; byHourOfDay: readonly FinanceHourOfDayRow[]; peakValley: FinancePeakValleySplit; }' },
+        { name: 'FinanceLedger', declaration: 'export interface FinanceLedger { generatedAt: number; currency: string; totals: FinanceTokenBuckets; totalCostMicros: number; meteredCostMicros?: number; planEquivalentCostMicros?: number; freeCostMicros?: number; sessionCount: number; workspaceCount: number; taskCount: number; windowedSinceMs: number | null; hourOfDayWindowStartMs: number; byDay: readonly FinanceDayRow[]; byModel: readonly FinanceModelRow[]; byProvider: readonly FinanceProviderRow[]; byWorkspace: readonly FinanceWorkspaceRow[]; tasks: readonly FinanceTaskRow[]; sessions: readonly FinanceSessionRow[]; unreadableSessions: readonly FinanceUnreadableSessionRow[]; byHourOfDay: readonly FinanceHourOfDayRow[]; peakValley: FinancePeakValleySplit; }' },
         { name: 'FinanceUnreadableSessionRow', declaration: 'export interface FinanceUnreadableSessionRow { sessionId: string; createdAt: number; reason: string; }' },
         { name: 'FinanceOverview', declaration: 'export interface FinanceOverview { balance: FinanceBalanceView; ledger: FinanceLedger; }' },
         { name: 'FinanceBackfillProgress', declaration: 'export interface FinanceBackfillProgress { phase: "idle" | "backfill" | "done"; scanned: number; total: number; rescanned: number; startedAt: number; }' },

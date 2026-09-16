@@ -603,7 +603,7 @@ export interface FinanceWorkspaceRow {
  * amounts in the ledger are LIST-PRICE EQUIVALENTS, not cash flow, so the
  * client labels them apart and excludes them from wallet-facing math.
  */
-export type FinanceBillingMode = 'metered' | 'plan'
+export type FinanceBillingMode = 'metered' | 'plan' | 'free'
 
 export interface FinanceModelRow {
   modelKey: string
@@ -740,6 +740,11 @@ export interface FinanceLedger {
    * Present only from hosts with billing-mode awareness.
    */
   planEquivalentCostMicros?: number
+  /**
+   * 免费额度路线的用量按目录价折算出的金额。既不是现金支出，也不是订阅等价 ——
+   * 单列以免混进按量桶做出一笔假账（free provider 的用户才看得到）。
+   */
+  freeCostMicros?: number
   sessionCount: number
   workspaceCount: number
   taskCount: number

@@ -13,6 +13,8 @@ import type { FinancePlanSeam } from './controller.ts'
 export interface FinanceSettingsSection {
   plans?: unknown
   tiers?: unknown
+  /** provider 条目（含用户打的计费方式标记）。 */
+  providers?: unknown
 }
 
 /**
@@ -98,6 +100,18 @@ function toPlanInput(plan: FinancePlanEntry): Record<string, unknown> {
   }
 }
 
+/** provider id 归一（大小写与分隔符不敏感），与宿主 `providerKey` 同口径。 */
+function sameProvider(entry: Record<string, unknown>, provider: string): boolean {
+  const left = String(entry.provider ?? '').toLowerCase().replace(/[-_.]/g, '')
+  return left !== '' && left === provider.toLowerCase().replace(/[-_.]/g, '')
+}
+
+/** 读 settings 里的 provider 条目列表（形状不可信，一律当数组过滤）。 */
+function snapshotProviders(scope: SettingsScope<FinanceSettingsSection>): Array<Record<string, unknown>> {
+  const value = scope.getSnapshot().value?.providers
+  return Array.isArray(value) ? value.filter((entry): entry is Record<string, unknown> => entry !== null && typeof entry === 'object') : []
+}
+
 /** 把平台 settings scope 包成控制器要的 seam。 */
 export function createPlanSeam(scope: SettingsScope<FinanceSettingsSection>): FinancePlanSeam {
   return {
@@ -112,6 +126,16 @@ export function createPlanSeam(scope: SettingsScope<FinanceSettingsSection>): Fi
     subscribe: (listener) => scope.subscribe(listener),
     write: async (next) => {
       await scope.set('plans', next.map(toPlanInput))
+    },
+    writeBillingMode: async (provider, mode) => {
+      const list: Array<Record<string, unknown>> = snapshotProviders(scope)
+      const index = list.findIndex((entry) => sameProvider(entry, provider))
+      const next: Record<string, unknown> = index >= 0 ? { ...list[index] } : { provider, currency: 'CNY' }
+      next.billingMode = mode
+      const merged = [...list]
+      if (index >= 0) merged[index] = next
+      else merged.push(next)
+      await scope.set('providers', merged)
     },
   }
 }
