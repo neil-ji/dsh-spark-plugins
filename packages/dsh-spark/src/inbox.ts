@@ -124,13 +124,18 @@ export function apply(ctx: Context, config: SparkInboxConfig = {}): void {
     try {
       const out = [...decision.messages]
 
-      // A：收件箱状态通报（计数全为 0 时不注入）。
+      // A：收件箱状态通报（计数全为 0 时**也注入**，因为空状态
+      //   是模型最容易把火花面板忘掉的时刻 —— 主动钩子的关键场景）。
+      // 之前「0 不注入」的纪律是为零噪音，但实测下来空面板会直接
+      // 进入"无事可做"状态，模型就再也不会调 spark_capture。
+      // 2026-09-16 改为：始终注入；renderInboxReminder 内部按 stats 分支
+      //   渲染 head / hint，仅 0+0+空无 hint 时返回 undefined。
       const stats = await ctx.spark.stats(await pendingProposalCount(ctx))
-      if (stats.pending > 0 || stats.pendingProposals > 0) {
-        const pending = maxItems === 0 ? [] : await ctx.spark.list({ inboxState: 'pending', limit: maxItems })
-        const reminder = renderInboxReminder(stats, pending, maxChars)
-        if (reminder !== undefined) out.push(reminder)
-      }
+      const pending = (stats.pending > 0 && maxItems !== 0)
+        ? await ctx.spark.list({ inboxState: 'pending', limit: maxItems })
+        : []
+      const reminder = renderInboxReminder(stats, pending, maxChars)
+      if (reminder !== undefined) out.push(reminder)
 
       // C：最近工具序列命中某条脚本的 triggers → 建议直接调用而不是重写。
       if (scriptSuggestEnabled) {
@@ -222,14 +227,28 @@ export function renderInboxReminder(
   pending: readonly SparkView[],
   maxChars: number,
 ): UserMessage | undefined {
-  const head = 'Spark inbox (dsh-spark): ' + String(stats.pending) + ' pending spark'
-    + (stats.pending === 1 ? '' : 's')
-    + (stats.pendingProposals > 0 ? ', ' + String(stats.pendingProposals) + ' pending emergence proposal'
-      + (stats.pendingProposals === 1 ? '' : 's') : '')
-    + '.'
-  const hint = 'Sparks are raw inspirations waiting to be triaged. Promote one with spark_crystallize when it has matured, '
-    + 'or leave it for the user to handle in the Spark panel (core button: the floating ball). '
-    + 'This is a status notice, not an instruction.'
+  // 2026-09-16：head 按是否空调整措辞。空收件箱时不再报"0 pending sparks"，
+  // 那是噪音；改用"inbox is empty"+ 主动钩子。
+  let head: string
+  let hint: string
+  if (stats.pending > 0) {
+    head = 'Spark inbox (dsh-spark): ' + String(stats.pending) + ' pending spark'
+      + (stats.pending === 1 ? '' : 's')
+      + (stats.pendingProposals > 0 ? ', ' + String(stats.pendingProposals) + ' pending emergence proposal'
+        + (stats.pendingProposals === 1 ? '' : 's') : '')
+      + '.'
+    hint = 'Pending sparks are waiting for triage. If the current conversation has produced a conclusion or a concrete next step for one of them, promote it with spark_crystallize (need: spark id + kind). Otherwise leave them for the user to handle in the Spark panel (entry: the floating ball at the bottom-right). This is a status notice, not an instruction.'
+  } else if (stats.pendingProposals > 0) {
+    head = 'Spark inbox (dsh-spark): empty. ' + String(stats.pendingProposals) + ' pending emergence proposal'
+      + (stats.pendingProposals === 1 ? '' : 's') + '.'
+    hint = 'Emergence has surfaced ' + String(stats.pendingProposals) + ' pending proposal'
+      + (stats.pendingProposals === 1 ? '' : 's')
+      + '. If one of them matches something the user has now decided, call the corresponding resolve endpoint via the Spark panel — but only when the user has confirmed intent. This is a status notice, not an instruction.'
+  } else {
+    // 空 + 空：主动钩子（无 head 也能定位，仍用一行表明来源）
+    head = 'Spark inbox (dsh-spark): empty.'
+    hint = 'Spark inbox is empty. If the current turn produced a fleeting insight, an implicit assumption, a TODO that did not make it into the plan, or any "this might matter later" thought, capture it now with spark_capture(title, content, tags). Do not capture concrete actionable work — that goes through the regular task tool. This is the only hook that keeps the inbox from going empty between sessions.'
+  }
 
   const lines: string[] = []
   let budget = maxChars - head.length - hint.length - 64

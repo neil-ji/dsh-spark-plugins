@@ -5,10 +5,15 @@
  *  - 球：px 坐标 + 拖拽阈值 + 四角吸附 + 双击复位 + localStorage 持久化
  *  - 面板：随球反向弹出 + 视口夹取 + 夹取后若压住球则把球提到面板之上
  *  - shell.overlay 是 click-through 层，本组件根节点自带 pointer-events: auto
+ *
+ * 2026-09-16 徽章：球右上叠 `pending + pendingProposals` 红点。仅在
+ * channel 可用时订阅 `spark/events` 帧，事件驱动刷新而非轮询
+ * （AGENTS.md §1.3 禁轮询）；首帧前先拉一次 `/sparks/stats` 给到非零初值。
  */
 import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { IconSparkles } from 'dsh-ui-kit'
-import type { DockModuleOwnerProps } from 'dsh-spark-plugin-kit/client'
+import { useFrames, type DockModuleOwnerProps } from 'dsh-spark-plugin-kit/client'
+import { SPARK_EVENTS_STREAM } from './spark/remote.ts'
 import type { SparkEventChannel } from './spark/remote.ts'
 import { useFairy } from './fairy/FairyFace.tsx'
 
@@ -93,6 +98,40 @@ export function DockOverlay({ channel = null, renderSlot }: DockOverlayProps): J
     setActiveId(id)
     localStorage.setItem(ACTIVE_KEY, id)
   }, [])
+
+  // 浮球徽章（2026-09-16）：挂在 stats.pending + stats.pendingProposals 上。
+  // channel 不可用时不订阅（mount 失败/被卸载），徽章为 0，绝不阻塞浮球渲染。
+  // 拉取走 `/sparks/stats`（与 SparksPane 同源；events stream 只做 reload 触发器）。
+  const [ballBadge, setBallBadge] = useState(0)
+  const reloadBallBadge = useCallback((): void => {
+    fetch('/sparks/stats', { headers: { accept: 'application/json' } })
+      .then((res) => res.ok ? res.json() as Promise<{ ok: boolean; value?: { pending?: number; pendingProposals?: number } }> : null)
+      .then((body) => {
+        if (body === null || body.ok !== true || body.value === undefined) return
+        const v = body.value
+        const total = (typeof v.pending === 'number' ? v.pending : 0)
+          + (typeof v.pendingProposals === 'number' ? v.pendingProposals : 0)
+        setBallBadge(total)
+      })
+      .catch(() => { /* 接口暂未注册视为 0 */ })
+  }, [])
+  // 初始拉取 + 频道帧到达时再拉（事件驱动，不轮询）
+  useEffect(() => { reloadBallBadge() }, [reloadBallBadge])
+  // channel 不可用时 remote 为 null，kit 的 useFrames 会走 noop 分支，
+  // 因此这条 hook 必须无条件调用（hook 规则）。
+  const remote = channel?.remote ?? null
+  useFrames({
+    remote,
+    name: SPARK_EVENTS_STREAM,
+    // 类型上 `open` 不能为 null；不可用时给一个永不结束的 AsyncIterable，
+    // 让 stream 永远不开（remote 为 null 时 effect 提前 return，永远不调 open）。
+    open: remote !== null && channel !== null
+      ? (signal) => channel.events.events(signal)
+      : async function* noop(): AsyncIterable<never> { /* never yields */ if (false as boolean) yield '' as never },
+    kinds: ['spark', 'proposal', 'ready'],
+    onFrame: () => reloadBallBadge(),
+    onReady: () => reloadBallBadge(),
+  })
 
   /**
    * 渲染子槽里的自注册模块。`only` 让它只渲染当前激活那一条；`fallback` 覆盖
@@ -293,15 +332,31 @@ export function DockOverlay({ channel = null, renderSlot }: DockOverlayProps): J
       <button
         ref={ballRef}
         type="button"
-        className={'dock-ball' + (mood !== null ? ' mood-' + mood : '')}
-        aria-label="打开 Spark Dock"
+        className={'dock-ball' + (mood !== null ? ' mood-' + mood : '') + (ballBadge > 0 ? ' has-badge' : '')}
+        aria-label={ballBadge > 0
+          ? '打开 Spark Dock，' + String(ballBadge) + ' 项待处理'
+          : '打开 Spark Dock'}
         aria-expanded={open}
         aria-haspopup="dialog"
+        title={ballBadge > 0
+          ? '打开 Spark Dock · ' + String(ballBadge) + ' 项待处理'
+          : '打开 Spark Dock'}
       >
         {/* 静默形态的品牌标识（ui-kit 图标层，尺寸由 .dock-ball svg 接管）；
             BALL_FACE_ENABLED 恢复后这里换回 <FairyFace mood={mood} />。 */}
         <IconSparkles size={14} />
-        {/* badge 等 pending 计数有真实数据源后再恢复 */}
+        {/* 2026-09-16 待处理徽章：counts 是 pending + pendingProposals 之和（>0 才渲染）。
+            球右上角，红底白字，沿用既有 `.dock-badge` 样式表；99+ 截断避免溢出。 */}
+        {ballBadge > 0 && (
+          <span
+            className="dock-badge"
+            role="status"
+            aria-hidden={false}
+            data-count={String(ballBadge)}
+          >
+            {ballBadge > 99 ? '99+' : String(ballBadge)}
+          </span>
+        )}
       </button>
       {/* 播报气泡：真实事件文本，惰性状态（MASTER §5.8 → role=status + aria-live），
           出现/消失瞬时无动画；mood 只在表情层开启时参与（仅换描边色）。 */}

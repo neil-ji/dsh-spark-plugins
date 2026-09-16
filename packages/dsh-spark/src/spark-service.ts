@@ -37,6 +37,7 @@ import type { ScriptService } from './script-service.ts'
 import { registerSparkHttpRoutes } from './http.ts'
 import type { SparkChangedEvent, SparkRecordId, SparkStorage, HippoPutInput } from './types.ts'
 import { buildHippoInputFromSpark, deriveTitle } from './types.ts'
+import { seedDefaultScripts } from './seed-scripts.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -106,6 +107,11 @@ export class SparkService extends Service {
       if (version > 1) ctx.logger?.info?.('spark: store migrated to format v' + String(version))
       await this.enforceLimit()
       this.ensureRegistered(ctx)
+      // 2026-09-16：首次启动时种子脚本。仅当 scripts.jsonl 为空时写入，
+      // 永远不覆盖用户自定义脚本。best-effort：失败只记日志，不阻断 plugin 启动。
+      if (this.scriptService !== undefined) {
+        await seedDefaultScripts(this.scriptService)
+      }
     } catch (error) {
       ctx.logger?.error?.('spark: init failed: ' + String(error))
     }

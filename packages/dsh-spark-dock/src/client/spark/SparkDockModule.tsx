@@ -90,19 +90,63 @@ function announceSparkChange(payload: SparkChangedEvent, t: SparkT): void {
 
 /**
  * 注册 Spark 的 dock 模块。
+ *
+ * 2026-09-16 加徽章 + 动态 sub：模块内部维护一份 stats（订阅 `spark/events` 帧触发
+ * reload），把 `pending + pendingProposals` 暴露给 dock 的 tab badge 与 header sub。
+ * 计数取自 `/sparks/stats`（与 SparksPane 同源），事件驱动刷新而非轮询。
+ *
  * @param ctx - dock 的 client 根上下文。
  * @param inject - 注入面（事件通道 + 取词函数；apply 里已装配好）。
  */
 export function registerSparkDockModule(ctx: ClientContext, inject: SparkModuleInject): void {
+  // 模块内的 stats store：所有 tab 渲染都从这里读，确保 sub / badge / tab 数字同源。
+  let pending = 0
+  let pendingProposals = 0
+  const loadStats = (): void => {
+    fetch('/sparks/stats', { headers: { accept: 'application/json' } })
+      .then((res) => res.ok ? res.json() as Promise<{ ok: boolean; value?: { pending?: number; pendingProposals?: number } }> : null)
+      .then((body) => {
+        if (body === null || body.ok !== true || body.value === undefined) return
+        pending = typeof body.value.pending === 'number' ? body.value.pending : 0
+        pendingProposals = typeof body.value.pendingProposals === 'number' ? body.value.pendingProposals : 0
+      })
+      .catch(() => { /* 接口暂未注册视为 0 */ })
+  }
+  loadStats()
+  // channel 可用时订阅事件流；事件触发时再 reload stats，与 dock ball 共用一条流。
+  if (inject.channel !== null) {
+    const stopStatsRefresh = subscribeFrames<SparkStreamFrame>(inject.channel.remote, {
+      name: SPARK_EVENTS_STREAM,
+      open: (signal) => inject.channel!.events.events(signal),
+      kinds: ['spark', 'proposal', 'ready'],
+      onFrame: () => loadStats(),
+      onReady: () => loadStats(),
+    })
+    ctx.effect(() => stopStatsRefresh, 'spark-dock: stats refresh subscription')
+  }
   const dispose = registerDockModule<SparkModuleInject>(ctx, {
     id: 'spark',
     order: 10,
     label: () => inject.t('moduleLabel'),
     name: inject.t('moduleName'),
-    sub: inject.t('moduleSub'),
+    // 动态 sub：把待处理数拼到副标题里，让面板标题行也传达"有几条等你处理"。
+    // 0 条时回退到静态描述（不显示 N=0）。
+    sub: (() => {
+      const total = pending + pendingProposals
+      if (total === 0) return inject.t('moduleSub')
+      return createElement('span', null,
+        inject.t('moduleSub'),
+        ' · ',
+        createElement('strong', { 'data-pending': String(pending), 'data-proposals': String(pendingProposals) },
+          String(total), ' ', inject.t('pendingLabel')),
+      )
+    })(),
     icon: createElement(IconSparkles, { size: 14 }),
     accent: 'var(--spk-acc-spark, #d97706)',
     accentFg: 'var(--spk-acc-spark-fg, #92400e)',
+    // 模块级徽章：spark 这一格的待处理数（pending + pendingProposals 之和）。
+    // dock 顶层浮球的徽章由 DockOverlay 独立计算（取所有模块的 badge 之和）。
+    badge: () => pending + pendingProposals,
     inject: () => inject,
     Content: SparkDockModule,
   })

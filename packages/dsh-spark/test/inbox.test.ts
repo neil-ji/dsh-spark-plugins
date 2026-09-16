@@ -47,7 +47,18 @@ test('renders a status notice with counts, id-marked titles and a distinct first
 
 test('singular/plural wording', () => {
   assert.match(textOf(renderInboxReminder(stats({ pending: 1 }), [spark('a', 'x')], 800)!), /1 pending spark\./)
-  assert.match(textOf(renderInboxReminder(stats({ pending: 0, pendingProposals: 2 }), [], 800)!), /0 pending sparks, 2 pending emergence proposals/)
+  // 2026-09-16：当 pending=0 + proposals>0 时 head 改为「empty. N proposals」
+  // —— 不再像以前那样把 0 pending sparks 拼在 head 里（那是噪音）。
+  assert.match(textOf(renderInboxReminder(stats({ pending: 0, pendingProposals: 2 }), [], 800)!), /Spark inbox \(dsh-spark\): empty\. 2 pending emergence proposals/)
+})
+
+test('empty inbox shows the active hook (no false zero-pending wording)', () => {
+  // 2026-09-16：空 + 空时，head 是「empty.」+ hint 给出 spark_capture 主动钩子。
+  const message = renderInboxReminder(stats({ pending: 0, pendingProposals: 0 }), [], 800)!
+  const text = textOf(message)
+  assert.match(text, /Spark inbox \(dsh-spark\): empty\./)
+  assert.match(text, /spark_capture/)
+  assert.match(text, /the only hook that keeps the inbox from going empty/)
 })
 
 test('proposal-only state still injects, and no pending spark list is emitted', () => {

@@ -13,6 +13,9 @@ export const zh = {
   moduleLabel: '火花',
   moduleName: '火花 Spark',
   moduleSub: '灵感收件箱 · 结晶 · 涌现提议 · 脚本目录',
+  // 2026-09-16：模块栏副标题动态拼接——>0 条时挂上 "· N 项待处理"，
+  // 让面板标题行也传达有几条等你处理。0 条时 dock 仍按 moduleSub 渲染（不带数字）。
+  pendingLabel: '项待处理',
   paneSparks: '火花流',
   paneProposals: '涌现提议',
   paneScripts: '脚本目录',
@@ -119,6 +122,7 @@ export const en: Record<SparkDockLocaleKey, string> = {
   moduleLabel: 'Spark',
   moduleName: 'Spark',
   moduleSub: 'Inspiration inbox · crystallize · emergence · scripts',
+  pendingLabel: 'pending',
   paneSparks: 'Sparks',
   paneProposals: 'Proposals',
   paneScripts: 'Scripts',

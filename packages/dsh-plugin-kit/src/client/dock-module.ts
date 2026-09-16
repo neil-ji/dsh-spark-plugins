@@ -44,7 +44,14 @@ export interface DockModuleOwnerProps {
   onSelect: (id: string) => void
 }
 
-/** 一个 dock 模块的完整声明：chrome（图标/标题/强调色）与内容都在注册方手里。 */
+/**
+ * 一个 dock 模块的完整声明：chrome（图标/标题/强调色）与内容都在注册方手里。
+ *
+ * 2026-09-16 新增 `badge`：未读 / 待处理计数。当回调返回正数时，dock 会同时
+ * 在浮球与模块栏 tab 上叠加一个红底圆形徽章（a11y 标签 = label + "N 项待处理"）。
+ * 这是"回收回路"的物理落点——光在系统提示里说"有 N 条火花"看不见，
+ * 徽章让用户在主屏第一时间知道有东西要处理。
+ */
 export interface DockModuleSpec<I extends object> {
   /** 模块 id（同时是 localStorage 里记住的选中键）。 */
   id: string
@@ -54,14 +61,25 @@ export interface DockModuleSpec<I extends object> {
   label: () => string
   /** 面板标题行主标题（如「npm」）。 */
   name: string
-  /** 面板标题行副标题（功能说明）。 */
-  sub: string
+  /**
+   * 面板标题行副标题（功能说明）。允许 ReactNode 以承载动态计数：
+   * 静态描述用字符串；要带 N 条待处理数字时返回 `<span>… {n} pending</span>`。
+   * dock 不解析内容，仅负责排版与可访问名。
+   */
+  sub: ReactNode
   /** 模块栏图标（16px 光学网格，SVG，禁 emoji）。 */
   icon: ReactNode
   /** 模块强调色（激活态图标色 / 指示点）。 */
   accent: string
   /** 强调色的前景档（实底芯片用）。 */
   accentFg: string
+  /**
+   * 未读 / 待处理计数回调。返回正整数 → 渲染徽章；返回 0 / null → 隐藏。
+   * 浮球徽章取所有 dock 模块的 badge 之和（让"球"成为总入口信号）。
+   * dock 在以下时机拉取：① 注册时一次；② `spark/events` 流帧到达时再拉。
+   * 拉取失败（接口暂未注册）时视为 0，绝不阻塞浮球渲染。
+   */
+  badge?: () => number | null
   /** 注入面：组件 props 会额外获得 `{...inject(), variant, activeId, onSelect}`。 */
   inject: () => I
   /** 内容组件（只在 variant === 'pane' 且该模块激活时被 dock 渲染）。 */
@@ -71,6 +89,8 @@ export interface DockModuleSpec<I extends object> {
 /**
  * 模块栏按钮。结构与类名由本包固定（dock 注入的全局样式表按这些类名着色），
  * 是 kit ↔ dock 之间唯一的 chrome 契约。
+ *
+ * 2026-09-16 新增 `badge`：> 0 时在 tab 右上加红底圆点。返回 null/undefined/0 隐藏。
  */
 export function DockModuleTab(props: {
   id: string
@@ -79,8 +99,18 @@ export function DockModuleTab(props: {
   icon: ReactNode
   accent: string
   accentFg: string
+  badge?: number | null
   onSelect: () => void
 }): ReactNode {
+  const badge = typeof props.badge === 'number' && props.badge > 0 ? props.badge : null
+  const badgeNode = badge !== null
+    ? createElement('span', {
+        className: 'dock-tab-badge',
+        role: 'status',
+        'aria-label': String(badge) + ' 项待处理',
+        'data-count': String(badge),
+      }, badge > 99 ? '99+' : String(badge))
+    : null
   return createElement('button', {
     type: 'button',
     role: 'tab',
@@ -88,17 +118,18 @@ export function DockModuleTab(props: {
     // 所以每条 tab 必须带自己的 module id。
     'data-module-id': props.id,
     'aria-selected': props.active,
-    'aria-label': props.label,
-    title: props.label,
+    // 待处理徽章并入 a11y 标签（屏幕阅读器会念"Spark，5 项待处理"）。
+    'aria-label': badge !== null ? props.label + '，' + String(badge) + ' 项待处理' : props.label,
+    title: badge !== null ? props.label + ' · ' + String(badge) + ' 项待处理' : props.label,
     tabIndex: props.active ? 0 : -1,
     className: props.active ? 'dock-tab active' : 'dock-tab',
     style: { '--accent': props.accent, '--accent-fg': props.accentFg },
     onClick: props.onSelect,
-  }, props.icon)
+  }, props.icon, badgeNode)
 }
 
 /** 面板标题行（dock 的 `.dock-head` 里只放这一格，关闭钮等 chrome 仍归 dock）。 */
-export function DockModuleHeader(props: { name: string; sub: string; accent: string; accentFg: string }): ReactNode {
+export function DockModuleHeader(props: { name: string; sub: ReactNode; accent: string; accentFg: string }): ReactNode {
   return createElement('div', {
     className: 'titles',
     style: { '--accent': props.accent, '--accent-fg': props.accentFg },
@@ -127,6 +158,9 @@ export function registerDockModule<I extends object>(ctx: ClientContext, spec: D
         icon: spec.icon,
         accent: spec.accent,
         accentFg: spec.accentFg,
+        // badge 是回调 → 渲染时调一次取当前值；dock 在 stats 流帧到达时会强制
+        // 该模块重渲染（外部 effect 在 inject 里订阅即可），这里只负责读。
+        badge: spec.badge !== undefined ? spec.badge() : null,
         onSelect: () => props.onSelect(spec.id),
       })
     }
