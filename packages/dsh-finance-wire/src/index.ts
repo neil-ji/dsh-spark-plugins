@@ -34,6 +34,29 @@ export const financeTokenBucketsSchema = z.object({
 })
 
 /**
+ * Strict-boundary schema for one model's rate sample (P1-B). Mirrors
+ * `FinanceRateStats`; declared here because it crosses the wire on
+ * `FinanceLedger.byModel[].rate`.
+ */
+export const financeRateStatsSchema = z.object({
+  decodeMs: z.number().nonnegative(),
+  decodeTokens: z.number().nonnegative(),
+  ttftMs: z.number().nonnegative(),
+  ttftSteps: z.number().nonnegative(),
+})
+
+/**
+ * Strict-boundary schema for one context-length bucket (P2). Mirrors
+ * `FinanceContextBucket`; crosses the wire on `FinanceLedger.byModel[].context`.
+ * `maxPromptTokens` is null on the open-ended last bucket.
+ */
+export const financeContextBucketSchema = z.object({
+  maxPromptTokens: z.number().nullable(),
+  usage: financeTokenBucketsSchema,
+  steps: z.number().nonnegative(),
+})
+
+/**
  * Strict-boundary schema for one per-provider balance view. Mirrors
  * `FinanceProviderBalance` from the host types. The `status` union adds
  * `unsupported` (for providers the host cannot fetch) on top of the legacy
@@ -110,6 +133,33 @@ export const financePeakValleySplitSchema = z.object({
   shiftSavingsMicros: z.number(),
 })
 
+/**
+ * Strict-boundary schema for one `FinanceLedger.byModel` row (mirrors
+ * `FinanceModelRow`).
+ *
+ * The two optional legs are declared on purpose: the gateway advertises this
+ * schema as the endpoint's result contract, so a field the host returns without
+ * being declared here is a contract the tooling cannot see (the client would
+ * still receive it, which is exactly how P1-B shipped an undeclared `rate`).
+ * Absent means "this session's log predates the unit" — the panel renders "—"
+ * rather than a fake 0.
+ */
+export const financeModelRowSchema = z.object({
+  modelKey: z.string(),
+  // Rolling-upgrade allowance: hosts before the provider split omit them.
+  provider: z.string().optional().default(''),
+  model: z.string().optional().default(''),
+  // Billing classification; absent on hosts predating it = 'metered'.
+  billingMode: z.enum(['metered', 'plan', 'free']).optional(),
+  usage: financeTokenBucketsSchema,
+  costMicros: z.number(),
+  shiftSavingsMicros: z.number().optional().default(0),
+  /** P1-B: per-model decode wall time / output tokens / first-token latency. */
+  rate: financeRateStatsSchema.optional(),
+  /** P2: per-model context-length distribution (tier pricing / "split the session"). */
+  context: z.array(financeContextBucketSchema).optional(),
+})
+
 export const financeLedgerSchema = z.object({
   generatedAt: z.number(),
   currency: z.string(),
@@ -127,17 +177,7 @@ export const financeLedgerSchema = z.object({
     usage: financeTokenBucketsSchema,
     costMicros: z.number(),
   })),
-  byModel: z.array(z.object({
-    modelKey: z.string(),
-    // Rolling-upgrade allowance: hosts before the provider split omit them.
-    provider: z.string().optional().default(''),
-    model: z.string().optional().default(''),
-    // Billing classification; absent on hosts predating it = 'metered'.
-    billingMode: z.enum(['metered', 'plan', 'free']).optional(),
-    usage: financeTokenBucketsSchema,
-    costMicros: z.number(),
-    shiftSavingsMicros: z.number().optional().default(0),
-  })),
+  byModel: z.array(financeModelRowSchema),
   // Rolling-upgrade allowance: old hosts omit the provider rollup entirely.
   byProvider: z.array(z.object({
     provider: z.string(),
@@ -614,10 +654,13 @@ export const FINANCE_REFLECTION: TypertPackageModel = {
         { name: 'FinanceRefreshBalanceRequest', declaration: 'export interface FinanceRefreshBalanceRequest { provider: string; }' },
         { name: 'FinanceProviderSource', declaration: 'export type FinanceProviderSource = "host-known" | "user-config" | "ledger-observed" | "llm-runtime";' },
         { name: 'FinanceTokenBuckets', declaration: 'export interface FinanceTokenBuckets { uncachedInputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; outputTokens: number; }' },
+        { name: 'FinanceRateStats', declaration: 'export interface FinanceRateStats { decodeMs: number; decodeTokens: number; ttftMs: number; ttftSteps: number; }' },
+        { name: 'FinanceContextBucket', declaration: 'export interface FinanceContextBucket { maxPromptTokens: number | null; usage: FinanceTokenBuckets; steps: number; }' },
         { name: 'FinanceHourOfDayRow', declaration: 'export interface FinanceHourOfDayRow { localHour: number; usage: FinanceTokenBuckets; costMicros: number; peakCostMicros: number; flatCostMicros: number; shiftSavingsMicros: number; }' },
         { name: 'FinancePeakValleySplit', declaration: 'export interface FinancePeakValleySplit { peakCostMicros: number; offPeakCostMicros: number; flatCostMicros: number; unclassifiedCostMicros: number; legacyCostMicros: number; shiftSavingsMicros: number; }' },
         { name: 'FinanceBillingMode', declaration: "export type FinanceBillingMode = 'metered' | 'plan' | 'free';" },
         { name: 'FinanceProviderRow', declaration: 'export interface FinanceProviderRow { provider: string; usage: FinanceTokenBuckets; costMicros: number; modelCount: number; billingMode?: FinanceBillingMode | "mixed"; }' },
+        { name: 'FinanceModelRow', declaration: 'export interface FinanceModelRow { modelKey: string; provider: string; model: string; billingMode?: FinanceBillingMode; usage: FinanceTokenBuckets; costMicros: number; shiftSavingsMicros?: number; rate?: FinanceRateStats; context?: readonly FinanceContextBucket[]; }' },
         { name: 'FinanceLedger', declaration: 'export interface FinanceLedger { generatedAt: number; currency: string; totals: FinanceTokenBuckets; totalCostMicros: number; meteredCostMicros?: number; planEquivalentCostMicros?: number; freeCostMicros?: number; sessionCount: number; workspaceCount: number; taskCount: number; windowedSinceMs: number | null; hourOfDayWindowStartMs: number; byDay: readonly FinanceDayRow[]; byModel: readonly FinanceModelRow[]; byProvider: readonly FinanceProviderRow[]; byWorkspace: readonly FinanceWorkspaceRow[]; tasks: readonly FinanceTaskRow[]; sessions: readonly FinanceSessionRow[]; unreadableSessions: readonly FinanceUnreadableSessionRow[]; byHourOfDay: readonly FinanceHourOfDayRow[]; peakValley: FinancePeakValleySplit; }' },
         { name: 'FinanceUnreadableSessionRow', declaration: 'export interface FinanceUnreadableSessionRow { sessionId: string; createdAt: number; reason: string; }' },
         { name: 'FinanceOverview', declaration: 'export interface FinanceOverview { balance: FinanceBalanceView; ledger: FinanceLedger; }' },
@@ -667,6 +710,9 @@ export const FINANCE_HOST_CONTRIBUTION: TypertContribution = {
   face: 'host',
   schemas: [
     { name: 'FinanceTokenBuckets', schema: financeTokenBucketsSchema },
+    { name: 'FinanceModelRow', schema: financeModelRowSchema },
+    { name: 'FinanceRateStats', schema: financeRateStatsSchema },
+    { name: 'FinanceContextBucket', schema: financeContextBucketSchema },
     { name: 'FinanceProviderBalance', schema: financeProviderBalanceSchema },
     { name: 'FinanceBalanceView', schema: financeBalanceViewSchema },
     { name: 'FinanceProviderEntry', schema: financeProviderEntrySchema },

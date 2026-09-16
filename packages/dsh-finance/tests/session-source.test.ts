@@ -77,7 +77,11 @@ function ledgerCtx(sessionPersistence: object, projectionValues: Record<string, 
       sessionProjectionCache: {
         cachedSnapshot: (meta: Header) => {
           const values = projectionValues[meta.id]
-          return values === undefined ? undefined : { asOfSeq: 1, values }
+          if (values === undefined) return undefined
+          // 命中缓存的切面默认带齐 P1-B / P2 两条腿：本文件测的是 persistence 代际
+          // 兼容与"不多读日志"，"缺腿必须回冷折"那条线在 ledger.test.ts 里。
+          const legs = { financeRate: { byModel: {} }, financeContext: { byModel: {} } }
+          return { asOfSeq: 1, values: { ...legs, ...values } }
         },
         coldSnapshot,
       },

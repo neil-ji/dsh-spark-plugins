@@ -300,13 +300,104 @@ interface FinanceRateState {
 }
 
 /**
- * 首个可见 delta（text / reasoning）——就是"开始出字"的那一刻。
- * 本仓库钉的平台版本没有 `assistant/attempt` 事件，所以首 token 从
- * `assistant/chunk` 的 delta 流里判定（新平台的 `sessionStats` 折叠的是同一件事）。
+ * 首个可见 delta（text / reasoning）——0.1.2 语义：delta 以 `assistant/chunk`
+ * **会话事件**出现，投影能看到。
  */
 function isVisibleDelta(chunk: StreamChunk): boolean {
   if (chunk.type === 'text-delta' || chunk.type === 'reasoning-delta') return chunk.text !== ''
   return false
+}
+
+/** 投影 `apply` 收到的事件的最小面（只做字符串判别，形状按平台代次宽松处理）。 */
+interface CommittedEvent {
+  type: string
+  data?: unknown
+}
+
+/**
+ * 首个 token 的时刻判两代平台（**这是 2026-09-17 那个"输出速率没数据"的根因**）：
+ *
+ *  - 0.1.2（本仓库 pin 的版本）：delta 是会话事件 `assistant/chunk`；
+ *  - 0.1.5+（真宿主实测 0.1.5-rc.1）：整条流内嵌进 settlement 事件
+ *    （`assistant/message.stream` / `assistant/attempt.stream`），日志里**根本不再有**
+ *    `assistant/chunk`，投影也就一个 delta 都收不到。
+ *
+ * 只认 chunk 的折叠在 0.1.5 宿主上 `byModel` 恒为 `{}`，面板于是永远显示 `—`
+ * （真宿主 session_projcache 实测：装了该单元的会话全部 `byModel:{}`）。
+ *
+ * 语义按平台 `assistantStreamFirstTokenTime`（= `isTokenDelta`）逐字对齐，但**不直接
+ * import** 它：0.1.2 的 dsh-llm 没有这个导出，具名 import 会在宿主加载期直接
+ * SyntaxError。内嵌记录既可能是原始 `{type:'chunk',time,chunk}`，也可能是打包行
+ * （`text-chunks` / `reasoning-chunks` / `tool-call-chunks`），成员时间按 `time0 + Σdt` 还原。
+ */
+function isTokenDeltaChunk(chunk: unknown): boolean {
+  if (typeof chunk !== 'object' || chunk === null) return false
+  const candidate = chunk as { type?: unknown; text?: unknown; argumentsDelta?: unknown; name?: unknown }
+  switch (candidate.type) {
+    case 'text-delta':
+    case 'reasoning-delta':
+      return candidate.text !== ''
+    case 'tool-call-delta':
+      return candidate.argumentsDelta !== '' || candidate.name !== undefined
+    default:
+      return false
+  }
+}
+
+/**
+ * 内嵌流里第一个 token 的时刻；流缺席/为空/形状不认识一律 null（不拿 0 冒充）。
+ */
+function firstTokenTimeFromStream(stream: unknown): number | null {
+  if (!Array.isArray(stream)) return null
+  for (const record of stream) {
+    if (typeof record !== 'object' || record === null) continue
+    const entry = record as {
+      type?: unknown
+      time?: unknown
+      chunk?: unknown
+      time0?: unknown
+      dt?: unknown
+      texts?: unknown
+      args?: unknown
+      name?: unknown
+    }
+    if (entry.type === 'chunk') {
+      if (isTokenDeltaChunk(entry.chunk) && typeof entry.time === 'number') return entry.time
+      continue
+    }
+    const fragments = entry.type === 'tool-call-chunks'
+      ? entry.args
+      : entry.type === 'text-chunks' || entry.type === 'reasoning-chunks' ? entry.texts : null
+    if (!Array.isArray(fragments) || typeof entry.time0 !== 'number') continue
+    // 带名字的 tool-call 打包行从第一个成员起算（平台 isTokenDelta 的同一规则）。
+    if (entry.type === 'tool-call-chunks' && entry.name !== undefined) return entry.time0
+    const gaps = Array.isArray(entry.dt) ? entry.dt : []
+    let time = entry.time0
+    for (let index = 0; index < fragments.length; index += 1) {
+      if (index > 0) {
+        const gap = gaps[index - 1]
+        time += typeof gap === 'number' ? gap : 0
+      }
+      if (fragments[index] !== '') return time
+    }
+  }
+  return null
+}
+
+/**
+ * 0.1.5 的 `assistant/attempt`：提交不了 message 的失败/重试尝试。它只用来把
+ * 首个 token 的时刻补进打开中的步（与平台 `sessionStats` 同规则）；没有 output token
+ * 的尝试不会产生任何速率样本。
+ */
+function assistantAttempt(event: CommittedEvent): { turn: number | undefined; step: number | undefined; stream: unknown } | null {
+  if (event.type !== 'assistant/attempt') return null
+  const data = event.data as { turn?: unknown; step?: unknown; stream?: unknown } | undefined
+  if (typeof data !== 'object' || data === null) return null
+  return {
+    turn: typeof data.turn === 'number' ? data.turn : undefined,
+    step: typeof data.step === 'number' ? data.step : undefined,
+    stream: data.stream,
+  }
 }
 
 /** 使用量事件里上报的输出 token；缺失/非法一律 null（不拿 0 冒充）。 */
@@ -328,10 +419,13 @@ const rateSchema = z.object({
 /**
  * The `financeRate` projection unit.
  *
- * 与平台 `sessionStats` 完全同一套事件语义（`step/start` → 首个非空 delta →
+ * 与平台 `sessionStats` 完全同一套事件语义（`step/start` → 首个 token →
  * `assistant/message`；decode 只统计同时报了 output token 的步；被取消的步不计时），
  * 差别只有一个：按 `request/header` 的模型键分桶。这样"同一模型换供应商谁更快"
  * 才有数据支撑，而不是把整个会话的平均速率安到每个模型头上。
+ *
+ * 首个 token 跨两代平台取值（见 `firstTokenTimeFromStream`）：0.1.2 走
+ * `assistant/chunk` 会话事件，0.1.5+ 走 settlement 事件内嵌的 `stream`。
  */
 export const financeRateProjectionDefinition = {
   key: 'financeRate',
@@ -342,6 +436,17 @@ export const financeRateProjectionDefinition = {
     open: null,
   }),
   apply: (state, event) => {
+    // 0.1.5 的失败/重试尝试只有内嵌流：先把首个 token 的时刻补进打开中的步。
+    const attempt = assistantAttempt(event)
+    if (attempt !== null) {
+      const open = state.open
+      if (open === null || open.firstTokenTime !== null) return state
+      if (open.turn !== attempt.turn || open.step !== attempt.step) return state
+      const first = firstTokenTimeFromStream(attempt.stream)
+      if (first === null) return state
+      return { ...state, open: { ...open, firstTokenTime: first } }
+    }
+
     switch (event.type) {
       case 'request/header': {
         const modelKey = financeModelKey(event.data.header.config.provider, event.data.header.config.model)
@@ -370,7 +475,9 @@ export const financeRateProjectionDefinition = {
       case 'assistant/message': {
         const open = state.open
         if (open === null || open.turn !== event.data.turn || open.step !== event.data.step) return state
+        // 0.1.5+：消息自带整条流，首 token 直接从它里面取（chunk 事件已不存在）。
         const firstToken = open.firstTokenTime
+          ?? firstTokenTimeFromStream((event.data as { stream?: unknown }).stream)
         if (firstToken === null) return { ...state, open: null }
         const current = state.byModel[open.modelKey] ?? EMPTY_RATE
         const outputTokens = usageOutputTokens(event.data.usage)
@@ -396,7 +503,10 @@ export const financeRateProjectionDefinition = {
     viewSchema: rateSchema,
     view: (state): FinanceRateProjection => ({ byModel: state.byModel }),
   },
-  stateVersion: 1,
+  // v2（2026-09-17 修 bug）：v1 在 0.1.5 宿主上恒为空（只认 assistant/chunk），
+  // 落盘的行是**错的值**而不是缺的值 —— 追加新键救不了它，必须让版本门把旧行丢掉重折。
+  // 代价是每会话一次全量重放（回填进度条覆盖它），一次性。
+  stateVersion: 2,
 } satisfies ProjectionDefinition<'financeRate', FinanceRateState>
 
 /* ───────────────── 上下文长度分布（P2）：阶梯价与"拆分会话"的分析输入 ───────────────── */

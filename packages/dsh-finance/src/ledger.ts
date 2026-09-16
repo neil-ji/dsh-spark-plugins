@@ -143,6 +143,24 @@ function extractProjection(values: Partial<SessionProjectionMap>, title: string 
   return { usage: emptyFinanceBuckets(), byModel: {}, byDay: {}, byModelHour: {}, rate, context, title }
 }
 
+/**
+ * 账本必须拿到的"新腿"投影键。
+ *
+ * 缓存切面是**按行**给的：某个键的行缺席、或被版本门（stateVersion 不匹配）跳过时，
+ * 只要还有别的键有值，`cachedSnapshot` 照样返回一个切面 —— 于是 `extractProjection`
+ * 只能读到空对象，面板永远显示 `—`。
+ *
+ * 2026-09-17 修 bug（P1-B 速率列没数据）的两条腿都要在这里点名：
+ * `financeRate` 的 v1 行在 0.1.5 宿主上恒为空（只认 assistant/chunk，见 projection.ts），
+ * 版本门会丢弃它们；不点名的会话就会一直用"错但存在"的旧值渲染。
+ */
+const REQUIRED_PROJECTION_KEYS = ['financeRate', 'financeContext'] as const
+
+/** 缓存切面是否真的带齐了账本要的新腿（缺一个就退回 coldSnapshot 重折）。 */
+function hasRequiredProjections(values: Partial<SessionProjectionMap>): boolean {
+  return REQUIRED_PROJECTION_KEYS.every((key) => values[key] !== undefined)
+}
+
 async function readProjection(ctx: Context, header: SessionHeader, signal?: AbortSignal): Promise<SessionProjectionRead> {
   // 0.1.2: the cache identity needs the session's inherited-event count, which
   // only persistence metadata carries — inspect once, then cache-first fold.
@@ -150,9 +168,11 @@ async function readProjection(ctx: Context, header: SessionHeader, signal?: Abor
   // `inspect` / 0.1.5 read handle) onto this one shape.
   const inspection = await inspectPersistenceSession(ctx, String(header.id), signal)
   const cached = ctx.sessionProjectionCache.cachedSnapshot(inspection.meta, inspection.inheritedEventCount)
-  if (cached !== undefined) {
+  if (cached !== undefined && hasRequiredProjections(cached.values)) {
     return extractProjection(cached.values, typeof cached.values.title === 'string' ? cached.values.title : null)
   }
+  // 缺腿就走冷折一次（照 `rescanSessions` 的先例）：`coldSnapshot` 会把重折出来的行
+  // 写回缓存，所以这是**一次性**代价（旧会话第一次建账本时会跑回填进度）。
   // No cached rows at all (a session that never checkpointed): fold the core
   // projections — including tokenUsage — from the inspected log.
   const snapshot = ctx.sessionProjectionCache.coldSnapshot(inspection.meta, inspection.inheritedEventCount, inspection.events)

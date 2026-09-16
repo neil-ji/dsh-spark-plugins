@@ -45,6 +45,10 @@ function tokenUsage(uncachedInputTokens: number, outputTokens: number, cacheRead
  */
 const UNREADABLE_REASON = 'turn/end 9936 reason abort cause has unexpected member "stack"'
 
+/** 缓存切面里 P1-B / P2 两条腿的默认值（空样本）。 */
+const EMPTY_RATE_LEG = { financeRate: { byModel: {} } }
+const EMPTY_CONTEXT_LEG = { financeContext: { byModel: {} } }
+
 function makeCtx(
   headers: Header[],
   projectionValues: Record<string, Record<string, unknown>>,
@@ -52,10 +56,16 @@ function makeCtx(
   options: {
     /** Session ids whose persistence read rejects, like a migration-refused log. */
     unreadable?: readonly string[]
+    /**
+     * Session ids whose cached cut is missing the P1-B / P2 legs (row absent, or
+     * dropped by the unit's stateVersion gate) — the cold-refold regression line.
+     */
+    missingCacheLegs?: readonly string[]
     logger?: { warn: (message: string, error?: unknown) => void }
   } = {},
 ) {
   const unreadable = new Set(options.unreadable ?? [])
+  const missingCacheLegs = new Set(options.missingCacheLegs ?? [])
   const snapshots = headers.map(header => ({ header, revision: 'rev-' + header.id }))
   // 0.1.2：coldSnapshot 是同步纯折叠（meta, inheritedEventCount, events）；
   // 折叠输入改由 sessionPersistence.inspect 提供的存储元数据 + 完整日志。
@@ -72,7 +82,11 @@ function makeCtx(
       sessionProjectionCache: {
         cachedSnapshot: (meta: Header) => {
           const values = projectionValues[meta.id]
-          return values === undefined ? undefined : { asOfSeq: 1, values }
+          if (values === undefined) return undefined
+          // 命中缓存的用例默认带上 P1-B / P2 两条腿；"缺腿必须回冷折"由
+          // missingCacheLegs 显式造出来（否则账本会拿空对象当答案永远显示 —）。
+          const legs = missingCacheLegs.has(meta.id) ? {} : { ...EMPTY_RATE_LEG, ...EMPTY_CONTEXT_LEG }
+          return { asOfSeq: 1, values: { ...legs, ...values } }
         },
         coldSnapshot,
       },
@@ -193,6 +207,43 @@ describe('buildFinanceLedger', () => {
     expect(coldSessionIds()).toContain('a')
     expect(ledger.sessions[0].usage.uncachedInputTokens).toBe(50)
     expect(ledger.sessions[0].costMicros).toBe(300) // 50 input + 25 output at default rates
+  })
+
+  // 2026-09-17 修 bug（「该用谁 → 输出速率没数据」）：financeRate 的 v1 行在 0.1.5
+  // 宿主上恒为空（只认 assistant/chunk），靠 stateVersion 提升作废；版本门丢掉该行后
+  // 缓存切面**仍然有别的键**，所以账本必须自己发现缺腿再冷折一次 —— 只看
+  // `cached === undefined` 的话，旧会话永远显示 `—`。
+  it('cold-folds a cached cut whose P1-B/P2 leg was dropped by the version gate', async () => {
+    const stats = { decodeMs: 10_000, decodeTokens: 500, ttftMs: 800, ttftSteps: 1 }
+    const rateLeg = { byModel: { 'deepseek-official/deepseek-v4-flash': stats } }
+    const contextLeg = {
+      byModel: {
+        'deepseek-official/deepseek-v4-flash': [
+          { maxPromptTokens: 32_000, usage: { uncachedInputTokens: 100, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 50 }, steps: 3 },
+        ],
+      },
+    }
+    const { ctx, coldSessionIds } = makeCtx(
+      [{ id: 'a', createdAt: 1000 }],
+      { a: { financeUsage: usage(100, 50), title: 'Stale rate row' } },
+      { a: { financeUsage: usage(100, 50), title: 'Stale rate row', financeRate: rateLeg, financeContext: contextLeg } },
+      { missingCacheLegs: ['a'] },
+    )
+    const ledger = await buildFinanceLedger(ctx, config)
+    expect(coldSessionIds()).toContain('a')
+    expect(ledger.byModel[0].rate).toEqual(stats)
+    expect(ledger.byModel[0].context).toEqual(contextLeg.byModel['deepseek-official/deepseek-v4-flash'])
+  })
+
+  it('keeps the cached cut when both legs are present (no replay for healthy rows)', async () => {
+    const { ctx, coldSessionIds } = makeCtx([
+      { id: 'a', createdAt: 1000 },
+    ], {
+      'a': { financeUsage: usage(100, 50), title: 'Fresh' },
+    })
+    const ledger = await buildFinanceLedger(ctx, config)
+    expect(coldSessionIds()).toEqual([])
+    expect(ledger.sessions[0].usage.uncachedInputTokens).toBe(100)
   })
 
   it('reads a session with no usage anywhere as zero', async () => {

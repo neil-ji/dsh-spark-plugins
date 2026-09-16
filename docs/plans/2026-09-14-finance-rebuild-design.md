@@ -154,4 +154,34 @@
 
 ## 15. 目标完成度
 
-P0（四视图 + 删除六类配置面）· P1-A（套餐静态定义 + 订阅节省）· P1-B（每模型速率 + 时间成本）· P2（上下文阶梯 + 拆分上限）四段全部落地并各自跑满五项验收；host 端点始终 9 条（8 RPC + `finance/events` stream）、契约未动。附带修掉两个真实缺陷：`modelKey` 分组导致视图② 无法跨供应商比较、价签输入溢出与开发文案泄漏。
+P0（四视图 + 删除六类配置面）· P1-A（套餐静态定义 + 订阅节省）· P1-B（每模型速率 + 时间成本）· P2（上下文阶梯 + 拆分上限）四段全部落地并各自跑满五项验收；host 端点始终 9 条（8 RPC + `finance/events` stream）、契约未动。附带修掉三个真实缺陷：`modelKey` 分组导致视图② 无法跨供应商比较、价签输入溢出与开发文案泄漏、以及 §16 的「输出速率没数据」（首 token 判定写死了 0.1.2 的事件形状）。
+
+## 16. 修 bug 记录（2026-09-17）：视图②「输出速率」没数据
+
+- **现象**：真宿主（DSH **0.1.5-rc.1**）上视图② 每一行的速率列都是 `—`，时间成本比较也从不出现。
+- **证据链（不是猜的）**：
+  1. 真宿主 projection cache（`~/.dsh/storages/session_projcache/sessions/*.json`）里 19 个已装该单元的会话，
+     `financeRate.byModel` **全部是 `{}`**（`financeUsage` / `financeContext` 同期都有真实数据）→ 单元在跑，只是折叠不出样本；
+  2. 解压真会话日志（`session.v3.jsonl.zstd`，多帧 zstd）逐条数事件类型：**没有任何 `assistant/chunk`**
+     （0.1.5 把整条 delta 流内嵌进 `assistant/message.stream` / `assistant/attempt.stream`）；
+  3. 因此 `firstTokenTime` 永远是 null，`assistant/message` 分支每次都"没出过字"地丢弃样本。
+- **根因**：P1-B 的首 token 判定写死了 0.1.2 的事件形状（`assistant/chunk`）。本仓库 pin 的平台版本是 0.1.2-rc.1，
+  所以合成 fixture 全绿、真宿主全空 —— §13 那行"首 token 从 `assistant/chunk` 判定"就是这个 bug。
+- **修法**（三处，缺一条数据都回不来）：
+  1. `projection.ts`：首 token 跨两代取 —— 有 `assistant/chunk` 走老路；有内嵌 `stream` 就按平台
+     `assistantStreamFirstTokenTime` 的语义自己扫（原始 `{type:'chunk'}` 记录 + 打包行 `time0 + Σdt` 还原），
+     并补 `assistant/attempt` 的流（失败/重试尝试也曾经出过字）。**不 import 平台那个导出**：0.1.2 的 dsh-llm 没有它，
+     具名 import 会在宿主加载期直接 SyntaxError。
+  2. `projection.ts`：`financeRate.stateVersion` 1 → **2**。v1 落盘的是**错的值**（空 `byModel`）而不是缺的值，
+     加新键救不了，必须让版本门丢掉旧行重折。
+  3. `ledger.ts`：缓存切面是**按行**给的 —— 版本门丢掉 `financeRate` 后切面里还有别的键，`cachedSnapshot` 照样返回，
+     账本于是拿着空对象当答案。现在点名要求 `financeRate` / `financeContext` 两条腿，缺腿就 `coldSnapshot` 冷折一次
+     （照 `rescanSessions` 的先例；重折结果会写回缓存，所以是一次性代价，旧会话首次建账本走回填进度条）。
+- **wire**：`financeLedgerSchema.byModel` 行此前没声明 `rate`/`context`（网关把这份 strict schema 当结果契约宣告，
+  宿主发了、契约面看不见；结果路径不做 decode 所以客户端其实收得到，正是这个错位让 P1-B 显得"没坏"）。
+  现抽出 `financeModelRowSchema` 并补齐两条腿的声明 + 反射模型条目。
+- **验证**：把修好的折叠直接跑在真宿主会话日志上（`.dev/tmp` 一次性脚本，不入库）：
+  `deepseek-official/deepseek-flash` 得到 ttft ≈ 0.81–1.21s、decode ≈ 206–253 tok/s；与平台自己的
+  `sessionStats` 同一批日志逐字段对照，**只差最后未完结的一步**（例：ttft 718832ms/350 步 vs 平台 720108ms/351 步）。
+- **诚实边界**：① 速率是**端到端有效吞吐**（含首 token、限流/排队），不是厂商标称；② 旧会话要等一次冷折才出数
+  （真宿主下一次建账本时跑回填）；③ 若宿主是 0.1.2 老平台，走的仍是 chunk 那条腿，两代语义等价。
