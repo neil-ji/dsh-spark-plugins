@@ -54,6 +54,19 @@ const providerList = (rows: Array<{ provider: string; balance: FinanceProviderBa
   })),
 })
 
+const STUB_SYNC_RESULT = {
+  ok: true,
+  source: 'models.dev',
+  fx: 7.2,
+  requestedProviders: [],
+  requestedMissing: [],
+  kept: 0,
+  droppedDated: 0,
+  droppedNonToken: 0,
+  droppedNoCost: 0,
+  providers: [],
+}
+
 const STUB_PRICE_TABLE = {
   base: {
     ok: true,
@@ -74,6 +87,8 @@ interface FakeRemote {
   refreshBalance: ReturnType<typeof vi.fn>
   getSyncStatus: ReturnType<typeof vi.fn>
   getPriceTableStatus: ReturnType<typeof vi.fn>
+  syncCommunityPrices: ReturnType<typeof vi.fn>
+  clearPriceOverlay: ReturnType<typeof vi.fn>
 }
 
 function fakeRemote(overrides: Partial<Record<keyof FakeRemote, ReturnType<typeof vi.fn>>> = {}): FakeRemote {
@@ -83,6 +98,8 @@ function fakeRemote(overrides: Partial<Record<keyof FakeRemote, ReturnType<typeo
     refreshBalance: vi.fn().mockResolvedValue({ ok: true, value: okBalance() }),
     getSyncStatus: vi.fn().mockResolvedValue({ ok: true, value: null }),
     getPriceTableStatus: vi.fn().mockResolvedValue({ ok: true, value: STUB_PRICE_TABLE }),
+    syncCommunityPrices: vi.fn().mockResolvedValue({ ok: true, value: STUB_SYNC_RESULT }),
+    clearPriceOverlay: vi.fn().mockResolvedValue({ ok: true, value: { cleared: false, clearedKeys: 0 } }),
     ...overrides,
   } as unknown as FakeRemote
 }
@@ -179,6 +196,13 @@ describe('FinancePanelController', () => {
 
     controller.dispose()
     expect(listeners).toBe(0)
+  })
+
+  it('updatePrices 带业务参数调用 syncCommunityPrices（平台客户端校验 arity）', async () => {
+    const remote = fakeRemote()
+    const controller = new FinancePanelController(remote as never)
+    await controller.updatePrices()
+    expect(remote.syncCommunityPrices).toHaveBeenCalledWith({})
   })
 
   it('records the last successful community sync for the price footnote', async () => {

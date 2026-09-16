@@ -197,7 +197,8 @@ export class FinancePanelController {
   /** 一键更新价格表：拉最新目录价 → 覆盖层原子替换 → 刷新状态与账本（SPEC §5.1）。 */
   async updatePrices(): Promise<void> {
     await this.runPriceAction(async () => {
-      const result = await this.remote.syncCommunityPrices()
+      // 平台客户端会校验 arity：这条端点在 wire 上声明了 1 个业务参数，必须显式传（空对象即默认值）。
+      const result = await this.remote.syncCommunityPrices({})
       return { ok: result.ok, failure: remoteFailureOf(result) }
     }, 'syncCommunityPrices failed')
   }
