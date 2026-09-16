@@ -28,6 +28,9 @@ export interface FinancePanelInjected {
   /** P1：套餐（月费）写回 settings 的 `finance.plans`。 */
   savePlan: (plan: FinancePlanEntry) => Promise<void>
   removePlan: (provider: string) => Promise<void>
+  /** 价格表：一键更新（拉最新目录价）与还原（丢弃用户侧覆盖，回到发版快照）。 */
+  updatePrices: () => Promise<void>
+  restorePrices: () => Promise<void>
 }
 
 const VIEWS: readonly FinanceView[] = ['thisMonth', 'whoToUse', 'saveMore', 'projects']
@@ -114,6 +117,11 @@ export function FinancePanel(props: FinancePanelInjected): ReactNode {
               refreshing={state.status === 'loading'}
               onRefresh={props.refresh}
               lastSyncAppliedAt={state.lastSyncAppliedAt}
+              priceTable={state.priceTable}
+              priceBusy={state.priceBusy}
+              priceError={state.priceError}
+              onUpdatePrices={props.updatePrices}
+              onRestorePrices={props.restorePrices}
             />
           )
           : null}

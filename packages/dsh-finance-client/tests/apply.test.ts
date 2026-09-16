@@ -57,6 +57,16 @@ function fakeCtx() {
         getLedger: vi.fn(),
         syncCommunityPrices: vi.fn(async () => ({ ok: true, value: stubOkSync })),
         getSyncStatus: vi.fn(async () => ({ ok: true, value: null })),
+        getPriceTableStatus: vi.fn(async () => ({
+          ok: true,
+          value: {
+            base: { ok: true, source: 'stub', updated: '2026-09-16T00:00:00.000Z', expected: 'stub', actual: 'stub' },
+            overlay: null,
+            overlayKeyCount: 0,
+            userKeyCount: 0,
+            rejected: [],
+          },
+        })),
       })),
     },
     slots: {

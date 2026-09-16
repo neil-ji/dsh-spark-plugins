@@ -54,11 +54,26 @@ const providerList = (rows: Array<{ provider: string; balance: FinanceProviderBa
   })),
 })
 
+const STUB_PRICE_TABLE = {
+  base: {
+    ok: true,
+    source: 'https://api-docs.deepseek.com/zh-cn/quick_start/pricing/',
+    updated: '2026-09-16T00:00:00.000Z',
+    expected: 'stub',
+    actual: 'stub',
+  },
+  overlay: null,
+  overlayKeyCount: 0,
+  userKeyCount: 0,
+  rejected: [],
+}
+
 interface FakeRemote {
   listProviders: ReturnType<typeof vi.fn>
   getLedger: ReturnType<typeof vi.fn>
   refreshBalance: ReturnType<typeof vi.fn>
   getSyncStatus: ReturnType<typeof vi.fn>
+  getPriceTableStatus: ReturnType<typeof vi.fn>
 }
 
 function fakeRemote(overrides: Partial<Record<keyof FakeRemote, ReturnType<typeof vi.fn>>> = {}): FakeRemote {
@@ -67,6 +82,7 @@ function fakeRemote(overrides: Partial<Record<keyof FakeRemote, ReturnType<typeo
     getLedger: vi.fn().mockResolvedValue({ ok: true, value: ZERO_LEDGER }),
     refreshBalance: vi.fn().mockResolvedValue({ ok: true, value: okBalance() }),
     getSyncStatus: vi.fn().mockResolvedValue({ ok: true, value: null }),
+    getPriceTableStatus: vi.fn().mockResolvedValue({ ok: true, value: STUB_PRICE_TABLE }),
     ...overrides,
   } as unknown as FakeRemote
 }
@@ -166,7 +182,7 @@ describe('FinancePanelController', () => {
   })
 
   it('records the last successful community sync for the price footnote', async () => {
-    const remote = fakeRemote({ getSyncStatus: vi.fn().mockResolvedValue({ ok: true, value: { source: 'models.dev', appliedAt: 123, kept: 1, providers: [], fx: 7.2 } }) })
+    const remote = fakeRemote({ getPriceTableStatus: vi.fn().mockResolvedValue({ ok: true, value: { ...STUB_PRICE_TABLE, overlay: { source: 'models.dev', appliedAt: 123, kept: 1, providers: [], fx: 7.2 } } }) })
     const controller = new FinancePanelController(remote as never)
     await controller.load()
     expect(controller.store.getSnapshot().lastSyncAppliedAt).toBe(123)

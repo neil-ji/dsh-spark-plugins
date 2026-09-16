@@ -275,6 +275,37 @@ export const financeSyncStatusSchema = z.object({
   fx: z.number(),
 })
 
+/** 被形状守卫拒绝的一个覆盖键（INV-2）。 */
+export const financePriceRejectionSchema = z.object({
+  key: z.string(),
+  base: z.string(),
+  incoming: z.string(),
+})
+
+/**
+ * Strict-boundary schema for `finance.getPriceTableStatus`. Mirrors
+ * `FinancePriceTableStatus`: 基础表完整性 + 覆盖层状态 + 被拒键。
+ */
+export const financePriceTableStatusSchema = z.object({
+  base: z.object({
+    ok: z.boolean(),
+    source: z.string(),
+    updated: z.string(),
+    expected: z.string(),
+    actual: z.string(),
+  }),
+  overlay: financeSyncStatusSchema.nullable(),
+  overlayKeyCount: z.number(),
+  userKeyCount: z.number(),
+  rejected: z.array(financePriceRejectionSchema),
+})
+
+/** Strict-boundary schema for `finance.clearPriceOverlay`. Mirrors `FinanceClearOverlayResult`. */
+export const financeClearOverlayResultSchema = z.object({
+  cleared: z.boolean(),
+  clearedKeys: z.number(),
+})
+
 /**
  * Commit 19: per-row source flag for the merged provider list. One entry can
  * carry several sources (e.g. `host-known` + `user-config` + `ledger-observed`).
@@ -320,7 +351,7 @@ export const financeRefreshBalanceRequestSchema = z.object({
 /* ───────────────────────── Remote 端点（单源描述符） ───────────────────────── */
 
 /**
- * The eight Remote invocations shared by the host registration and the client
+ * The ten Remote invocations shared by the host registration and the client
  * `$mount`. `implementation` is deliberately omitted everywhere: every host
  * method is decorated with a bare `@Remote`, so the gateway's
  * `descriptor.implementation ?? descriptor.method` resolves to the method name
@@ -421,6 +452,34 @@ export const FINANCE_INVOCATIONS: readonly InvocationDescriptor[] = [
       mode: 'strict',
       typeSymbol: 'dsh-spark-finance/types#FinanceSyncStatus',
       schema: financeSyncStatusSchema.nullable(),
+    },
+  },
+  {
+    id: 'dsh-spark-finance#finance/getPriceTableStatus',
+    service: 'finance',
+    namespace: 'finance',
+    method: 'getPriceTableStatus',
+    invocation: { kind: 'direct' },
+    parameters: [],
+    cancellation: { parameter: 'signal' },
+    result: {
+      mode: 'strict',
+      typeSymbol: 'dsh-spark-finance/types#FinancePriceTableStatus',
+      schema: financePriceTableStatusSchema,
+    },
+  },
+  {
+    id: 'dsh-spark-finance#finance/clearPriceOverlay',
+    service: 'finance',
+    namespace: 'finance',
+    method: 'clearPriceOverlay',
+    invocation: { kind: 'direct' },
+    parameters: [],
+    cancellation: { parameter: 'signal' },
+    result: {
+      mode: 'strict',
+      typeSymbol: 'dsh-spark-finance/types#FinanceClearOverlayResult',
+      schema: financeClearOverlayResultSchema,
     },
   },
   {
@@ -537,6 +596,8 @@ export const FINANCE_REFLECTION: TypertPackageModel = {
         { name: 'getBackfillProgress', signature: 'getBackfillProgress(): Promise<FinanceBackfillProgress>', kind: 'method' },
         { name: 'syncCommunityPrices', signature: 'syncCommunityPrices(options?: { providers?: readonly string[]; fx?: number }, signal?: AbortSignal): Promise<FinanceCommunitySyncResult>', kind: 'method' },
         { name: 'getSyncStatus', signature: 'getSyncStatus(): Promise<FinanceSyncStatus | null>', kind: 'method' },
+        { name: 'getPriceTableStatus', signature: 'getPriceTableStatus(): Promise<FinancePriceTableStatus>', kind: 'method' },
+        { name: 'clearPriceOverlay', signature: 'clearPriceOverlay(): Promise<FinanceClearOverlayResult>', kind: 'method' },
         { name: 'listProviders', signature: 'listProviders(signal?: AbortSignal): Promise<FinanceListProvidersResult>', kind: 'method' },
         { name: 'refreshBalance', signature: 'refreshBalance(request: FinanceRefreshBalanceRequest, signal?: AbortSignal): Promise<FinanceProviderBalance>', kind: 'method' },
       ],
@@ -544,6 +605,9 @@ export const FINANCE_REFLECTION: TypertPackageModel = {
         { name: 'FinanceBalanceView', declaration: 'export interface FinanceBalanceView { status: FinanceBalanceStatus; updatedAt: number; isAvailable?: boolean; currency?: string; totalMicros?: number; grantedMicros?: number; toppedUpMicros?: number; code?: string; message?: string; }' },
         { name: 'FinanceCommunitySyncResult', declaration: 'export interface FinanceCommunitySyncResult { ok: boolean; source: string; appliedAt?: number; fx: number; requestedProviders: readonly string[]; requestedMissing: readonly string[]; kept: number; droppedDated: number; droppedNonToken: number; droppedNoCost: number; providers: readonly string[]; error?: { message: string }; }' },
         { name: 'FinanceSyncStatus', declaration: 'export interface FinanceSyncStatus { source: string; appliedAt: number; kept: number; providers: readonly string[]; fx: number; }' },
+        { name: 'FinancePriceTableStatus', declaration: 'export interface FinancePriceTableStatus { base: { ok: boolean; source: string; updated: string; expected: string; actual: string }; overlay: FinanceSyncStatus | null; overlayKeyCount: number; userKeyCount: number; rejected: readonly FinancePriceRejection[]; }' },
+        { name: 'FinancePriceRejection', declaration: 'export interface FinancePriceRejection { key: string; base: string; incoming: string; }' },
+        { name: 'FinanceClearOverlayResult', declaration: 'export interface FinanceClearOverlayResult { cleared: boolean; clearedKeys: number; }' },
         { name: 'FinanceListProvidersResult', declaration: 'export interface FinanceListProvidersResult { providers: readonly FinanceListProvidersEntry[]; generatedAt: number; }' },
         { name: 'FinanceListProvidersEntry', declaration: 'export interface FinanceListProvidersEntry { provider: string; sources: readonly FinanceProviderSource[]; hostMeta?: { defaultBillingMode: FinanceProviderBillingMode; defaultCurrency: "CNY" | "USD"; supportsBalanceFetch: boolean; lockBillingModeAndCurrency?: boolean }; userEntry?: FinanceProviderEntry; balance: FinanceProviderBalance; }' },
         { name: 'FinanceRefreshBalanceRequest', declaration: 'export interface FinanceRefreshBalanceRequest { provider: string; }' },

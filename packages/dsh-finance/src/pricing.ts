@@ -277,6 +277,58 @@ export function financeRateAt(config: FinanceConfig, modelKey: string, timeMs: n
   return financeWindowInfo(config, modelKey, timeMs).rate
 }
 
+/**
+ * 顺序无关的规范化 JSON：era 比较与价格表指纹都靠它 —— 同一组价位的键序不同
+ * （YAML 解析 vs 生成器构造）必须判定为「未变化」，否则会反复追加空 era（INV-8）。
+ */
+export function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return '[' + value.map(item => stableJson(item)).join(',') + ']'
+  if (value !== null && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    return '{' + entries.map(([key, item]) => JSON.stringify(key) + ':' + stableJson(item)).join(',') + '}'
+  }
+  return JSON.stringify(value) ?? 'null'
+}
+
+/** 生成器负责的 provider 段：基础表指纹只覆盖这一段（社区块另有来源）。 */
+export const BASE_PRICE_PROVIDERS: readonly string[] = ['deepseek-official']
+
+/**
+ * 价格表指纹（SPEC §2.2 / INV-5）：只覆盖 **结构与数值**，丢掉 `meta`（来源/observedAt 等
+ * 之后追加的元数据）与键序。生成物哈希与 host 侧校验必须用同一个函数，否则会假报警。
+ */
+export function financePricesFingerprint(prices: Record<string, unknown>): string {
+  const normalized = normalizeFinancePrices(prices)
+  const shaped: Record<string, unknown> = {}
+  for (const key of Object.keys(normalized).sort()) {
+    shaped[key] = (normalized[key] ?? []).map(entry => ({ effectiveFrom: entry.effectiveFrom, kind: entry.kind, rate: entry.rate }))
+  }
+  return stableJson(shaped)
+}
+
+/** 只取生成器负责的 provider 段（`deepseek-official/*`）做指纹。 */
+export function basePriceFingerprint(prices: Record<string, unknown> | undefined): string {
+  const subset: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(prices ?? {})) {
+    if (BASE_PRICE_PROVIDERS.some(provider => key.startsWith(provider + '/'))) subset[key] = value
+  }
+  return financePricesFingerprint(subset)
+}
+
+/**
+ * 一个模型键的定价来源分级（SPEC §4.2「未命中语义」）：
+ * - `entry` 命中价格表条目（精确）；
+ * - `provider-default` 命中 provider 级默认率（估算，UI 打「估」）；
+ * - `builtin-fallback` 落到全局 `defaultPrice`（最弱，就是本次虚高的那条路径 —— 必须打「估」并标注来源）。
+ */
+export type FinancePriceProvenance = 'entry' | 'provider-default' | 'builtin-fallback'
+
+export function financePriceProvenance(config: FinanceConfig, modelKey: string, timeMs: number): FinancePriceProvenance {
+  if (financeEntryFor(config, modelKey, timeMs) !== undefined) return 'entry'
+  if (config.providerDefaults?.[financeProviderOf(modelKey)] !== undefined) return 'provider-default'
+  return 'builtin-fallback'
+}
+
 /** Epoch ms at the start of a UTC hour key `YYYY-MM-DDTHH`. */
 export function financeHourTime(hourKey: string): number {
   return Date.UTC(
@@ -357,27 +409,144 @@ export function normalizeFinancePrices(
   return out
 }
 
+/** 价格值的形状：结构维度（窗口/分档/阶梯）只允许由基础层产出（SPEC INV-1）。 */
+export type FinancePriceShape = 'flat' | 'windowed' | 'unknown'
+
+/** 覆盖层被拒绝的原因（SPEC INV-2：形状不兼容时拒绝并记录，绝不静默替换）。 */
+export interface FinancePriceMergeDiagnostic {
+  key: string
+  reason: 'shape-mismatch'
+  /** 基础层形状（保留者）。 */
+  base: FinancePriceShape
+  /** 被拒绝的覆盖层形状。 */
+  incoming: FinancePriceShape
+}
+
+function asEntryList(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value
+  return value === undefined || value === null ? [] : [value]
+}
+
+function recordOf(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === 'object' ? value as Record<string, unknown> : undefined
+}
+
+function shapeOfEntry(entry: unknown): FinancePriceShape {
+  const record = recordOf(entry)
+  if (record === undefined) return 'unknown'
+  const rate = recordOf(record.rate)
+  if (rate !== undefined && (rate.offPeak !== undefined || rate.peak !== undefined)) return 'windowed'
+  if (record.offPeak !== undefined || record.peak !== undefined) return 'windowed'
+  if (record.kind === 'windowed') return 'windowed'
+  if (record.kind === 'flat') return 'flat'
+  if (rate !== undefined || record.inputMicrosPerMtok !== undefined || record.outputMicrosPerMtok !== undefined) return 'flat'
+  return 'unknown'
+}
+
+/** 值的形状由最后一个 era 决定（它是当前生效的那条）。 */
+export function financePriceShape(value: unknown): FinancePriceShape {
+  const list = asEntryList(value)
+  return list.length === 0 ? 'unknown' : shapeOfEntry(list[list.length - 1])
+}
+
+function effectiveFromOfEntry(entry: unknown): number {
+  const raw = recordOf(entry)?.effectiveFrom
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw
+  if (typeof raw === 'string' && raw !== '') {
+    const parsed = Date.parse(raw)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return 0
+}
+
 /**
- * Three-tier merge of price tables: `composition` ⊆ `community` ⊆ `user`. Each
- * tier is a raw key→entry/entry-history shape; their strings keys are merged
- * with later-wins (composition < community < user). The result feeds back into
- * `normalizeFinanceConfig` so pricing.ts stays the single owner of price-table
- * shape. Used by `FinanceService.currentConfig` to fold the in-memory community
- * layer between the cordis.patch.yml defaults and the user overlay.
+ * 只把覆盖层的**数值**搬进基础层的 era：窗口、星期、UTC 偏移、阶梯等结构字段一律保留
+ * 基础层的值（INV-1）。兼容已归一化（`kind` + `rate`）与原始（`offPeak`/`peak`/`input…`）两种形态。
+ */
+function overlayNumbers(baseEntry: unknown, incomingEntry: unknown): unknown {
+  const base = recordOf(baseEntry)
+  const incoming = recordOf(incomingEntry)
+  if (base === undefined || incoming === undefined) return baseEntry
+  const baseRate = recordOf(base.rate)
+  const incomingRate = recordOf(incoming.rate)
+  if (baseRate !== undefined) {
+    if (baseRate.offPeak !== undefined || baseRate.peak !== undefined) {
+      return { ...base, rate: { ...baseRate, offPeak: incomingRate?.offPeak ?? baseRate.offPeak, peak: incomingRate?.peak ?? baseRate.peak } }
+    }
+    return { ...base, rate: { ...baseRate, ...(incomingRate ?? {}) } }
+  }
+  if (base.offPeak !== undefined || base.peak !== undefined) {
+    return { ...base, offPeak: incoming.offPeak ?? base.offPeak, peak: incoming.peak ?? base.peak }
+  }
+  const numbers: Record<string, unknown> = {}
+  for (const field of ['inputMicrosPerMtok', 'cacheReadMicrosPerMtok', 'cacheWriteMicrosPerMtok', 'outputMicrosPerMtok']) {
+    if (incoming[field] !== undefined) numbers[field] = incoming[field]
+  }
+  return { ...base, ...numbers }
+}
+
+/**
+ * 同形状合并：**保留基础层全部 era**（INV-4），覆盖层按 `effectiveFrom` 命中则只改数值、
+ * 未命中则作为新 era 追加（保持升序）。形态（单值 vs 列表）跟随基础层。
+ */
+function mergeSameShape(baseValue: unknown, incomingValue: unknown): unknown {
+  const out = asEntryList(baseValue).slice()
+  for (const incoming of asEntryList(incomingValue)) {
+    const at = effectiveFromOfEntry(incoming)
+    const index = out.findIndex(entry => effectiveFromOfEntry(entry) === at)
+    if (index === -1) out.push(incoming)
+    else out[index] = overlayNumbers(out[index], incoming)
+  }
+  out.sort((a, b) => effectiveFromOfEntry(a) - effectiveFromOfEntry(b))
+  return Array.isArray(baseValue) ? out : out[out.length - 1]
+}
+
+/**
+ * 三层价格合并（`composition` ⊆ `community` ⊆ `user`），带**形状守卫**：
  *
- * Iteration is explicit (no `Object.assign`) so callers can audit each tier in
- * isolation. Empty tiers are skipped — no allocation for absent layers.
+ * - `composition` 是基础层，是**唯一的结构源**；
+ * - 覆盖层可以补齐基础层没有的键（长尾模型）；
+ * - 同形状（flat↔flat / windowed↔windowed）→ 逐 era 合并，只改数值、保留基础层全部 era；
+ * - 形状不兼容（例如 windowed 基础层被 flat 社区快照覆盖）→ **拒绝该键 + 记录诊断**，
+ *   基础层原样保留（SPEC INV-1/INV-2）。这条正是"用户点一次更新就把峰谷与纪元抹掉"的防线。
  */
 export function mergePriceLayers(
   composition: FinanceConfigInput['prices'] | undefined,
   community: FinanceConfigInput['prices'] | undefined,
   user: FinanceConfigInput['prices'] | undefined,
 ): Record<string, FinanceConfigInput['prices'] extends infer T ? (T extends Record<string, infer V> ? V : never) : never> {
+  return mergePriceLayersDetailed(composition, community, user).prices
+}
+
+/** 同 `mergePriceLayers`，但把被拒绝的键一并返回，供 UI 明示（SPEC §5.2）。 */
+export function mergePriceLayersDetailed(
+  composition: FinanceConfigInput['prices'] | undefined,
+  community: FinanceConfigInput['prices'] | undefined,
+  user: FinanceConfigInput['prices'] | undefined,
+): {
+  prices: Record<string, FinanceConfigInput['prices'] extends infer T ? (T extends Record<string, infer V> ? V : never) : never>
+  diagnostics: readonly FinancePriceMergeDiagnostic[]
+} {
+  const diagnostics: FinancePriceMergeDiagnostic[] = []
   const merged: Record<string, unknown> = {}
-  if (composition !== undefined) Object.assign(merged, composition)
-  if (community !== undefined) Object.assign(merged, community)
-  if (user !== undefined) Object.assign(merged, user)
-  return merged as Record<string, FinanceConfigInput['prices'] extends infer T ? (T extends Record<string, infer V> ? V : never) : never>
+  for (const [key, value] of Object.entries(composition ?? {})) merged[key] = value
+  for (const layer of [community, user]) {
+    for (const [key, incoming] of Object.entries(layer ?? {})) {
+      const base = merged[key]
+      if (base === undefined) { merged[key] = incoming; continue }
+      const baseShape = financePriceShape(base)
+      const incomingShape = financePriceShape(incoming)
+      if (baseShape !== 'unknown' && incomingShape !== 'unknown' && baseShape !== incomingShape) {
+        diagnostics.push({ key, reason: 'shape-mismatch', base: baseShape, incoming: incomingShape })
+        continue
+      }
+      merged[key] = mergeSameShape(base, incoming)
+    }
+  }
+  return {
+    prices: merged as Record<string, FinanceConfigInput['prices'] extends infer T ? (T extends Record<string, infer V> ? V : never) : never>,
+    diagnostics,
+  }
 }
 
 /**

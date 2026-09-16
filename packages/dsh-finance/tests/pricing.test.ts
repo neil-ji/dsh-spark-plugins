@@ -13,6 +13,7 @@ import {
   financeLocalDay,
   financeModelKey,
   financeModelOf,
+  financePriceProvenance,
   financeProviderDefault,
   financeProviderOf,
   financeRateAt,
@@ -21,6 +22,7 @@ import {
   isPeakLocalDay,
   isPeakLocalHour,
   mergePriceLayers,
+  mergePriceLayersDetailed,
   normalizeFinanceConfig,
   normalizeFinancePrices,
 } from '../src/pricing.ts'
@@ -481,6 +483,27 @@ describe('financeWindowedSince', () => {
 })
 
 
+describe('financePriceProvenance', () => {
+  it('分级：命中条目 / provider 默认率 / 全局兜底（SPEC §4.2 未命中语义）', () => {
+    const custom = normalizeFinanceConfig({
+      prices: {
+        'deepseek-official/deepseek-flash': [{
+          effectiveFrom: 0,
+          kind: 'windowed',
+          rate: {
+            offPeak: { inputMicrosPerMtok: 1_000_000, outputMicrosPerMtok: 4_000_000 },
+            peak: { inputMicrosPerMtok: 2_000_000, outputMicrosPerMtok: 8_000_000 },
+          },
+        }],
+      },
+      providerDefaults: { openai: { inputMicrosPerMtok: 9, outputMicrosPerMtok: 9 } },
+    })
+    expect(financePriceProvenance(custom, 'deepseek-official/deepseek-flash', 0)).toBe('entry')
+    expect(financePriceProvenance(custom, 'openai/gpt-4o', 0)).toBe('provider-default')
+    expect(financePriceProvenance(custom, 'mystery/model-x', 0)).toBe('builtin-fallback')
+  })
+})
+
 describe('mergePriceLayers', () => {
   const flat = (input: number, output: number) => [{
     effectiveFrom: 0,
@@ -553,13 +576,74 @@ describe('mergePriceLayers', () => {
     expect(merged['openai/gpt-4o']).toEqual(flat(1, 2))
   })
 
-  it('preserves the windowed shape across tiers', () => {
+  it('结构只由基础层产出：windowed 覆盖层不得改写 flat 基础层（INV-1）', () => {
     const merged = mergePriceLayers(
       { 'deepseek-official/v4-flash': flat(1, 2) },
       { 'deepseek-official/v4-flash': windows(99, 99) },
       undefined,
     )
-    expect((merged['deepseek-official/v4-flash'] as Array<{ kind: string }>)[0].kind).toBe('windowed')
+    expect(merged['deepseek-official/v4-flash']).toEqual(flat(1, 2))
+  })
+
+  it('反向更危险：flat 社区快照不得打掉 windowed 基础层（INV-2，本次 bug 的防线）', () => {
+    const { prices, diagnostics } = mergePriceLayersDetailed(
+      { 'deepseek-official/deepseek-flash': windows(2_000_000, 1_000_000) },
+      { 'deepseek-official/deepseek-flash': flat(450_000, 1_200_000) },
+      undefined,
+    )
+    expect(prices['deepseek-official/deepseek-flash']).toEqual(windows(2_000_000, 1_000_000))
+    expect(diagnostics).toEqual([
+      { key: 'deepseek-official/deepseek-flash', reason: 'shape-mismatch', base: 'windowed', incoming: 'flat' },
+    ])
+  })
+
+  it('同形状覆盖只改数值、保留基础层结构与全部 era（INV-1/INV-4）', () => {
+    const base = [
+      { effectiveFrom: 0, kind: 'flat' as const, rate: { inputMicrosPerMtok: 1, outputMicrosPerMtok: 2 } },
+      {
+        effectiveFrom: ERA_B,
+        kind: 'windowed' as const,
+        rate: {
+          offPeak: { inputMicrosPerMtok: 10, outputMicrosPerMtok: 20 },
+          peak: { inputMicrosPerMtok: 20, outputMicrosPerMtok: 40 },
+          peakHours: [[9, 12]] as ReadonlyArray<readonly [number, number]>,
+          peakDays: [1] as ReadonlyArray<number>,
+          utcOffsetMinutes: 480,
+        },
+      },
+    ]
+    const { prices, diagnostics } = mergePriceLayersDetailed(
+      { 'x/y': base },
+      {
+        'x/y': [{
+          effectiveFrom: ERA_B,
+          kind: 'windowed',
+          rate: {
+            offPeak: { inputMicrosPerMtok: 15, outputMicrosPerMtok: 30 },
+            peak: { inputMicrosPerMtok: 30, outputMicrosPerMtok: 60 },
+          },
+        }],
+      },
+      undefined,
+    )
+    expect(diagnostics).toEqual([])
+    const merged = prices['x/y'] as typeof base
+    expect(merged).toHaveLength(2)
+    expect(merged[0]).toEqual(base[0])
+    expect(merged[1].rate.offPeak.inputMicrosPerMtok).toBe(15)
+    expect(merged[1].rate.peakHours).toEqual([[9, 12]])
+    expect(merged[1].rate.utcOffsetMinutes).toBe(480)
+  })
+
+  it('覆盖层可以补齐基础层没有的键（长尾模型）', () => {
+    const { prices, diagnostics } = mergePriceLayersDetailed(
+      { 'openai/gpt-4o': flat(1, 2) },
+      { 'zai/glm-4.6': flat(9, 9) },
+      undefined,
+    )
+    expect(prices['zai/glm-4.6']).toEqual(flat(9, 9))
+    expect(prices['openai/gpt-4o']).toEqual(flat(1, 2))
+    expect(diagnostics).toEqual([])
   })
 })
 

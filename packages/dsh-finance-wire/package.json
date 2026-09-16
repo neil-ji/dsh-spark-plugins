@@ -1,6 +1,6 @@
 {
   "name": "dsh-spark-finance-wire",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "DSH 成本统计插件 wire：host/client 共享的 remote 协议、Zod 边界 schema 与反射模型",
   "type": "module",
   "homepage": "https://neil-ji.github.io/dsh-spark-plugins/",

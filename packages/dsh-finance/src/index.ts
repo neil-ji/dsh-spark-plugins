@@ -27,7 +27,10 @@ import {
   financeUsageHourlyProjectionDefinition,
   financeUsageProjectionDefinition,
 } from './projection.ts'
-import { DEFAULT_PRICE, mergePriceLayers, normalizeFinanceConfig } from './pricing.ts'
+import { createHash } from 'node:crypto'
+import { DEFAULT_PRICE, basePriceFingerprint, mergePriceLayersDetailed, normalizeFinanceConfig } from './pricing.ts'
+import { FINANCE_PRICES_HASH, FINANCE_PRICES_SOURCE, FINANCE_PRICES_UPDATED } from './pricing-hash.generated.ts'
+import type { FinancePriceMergeDiagnostic } from './pricing.ts'
 import {
   DEFAULT_FX as COMMUNITY_SYNC_DEFAULT_FX,
   DEFAULT_PROVIDERS as COMMUNITY_SYNC_DEFAULT_PROVIDERS,
@@ -57,6 +60,8 @@ import type {
   FinanceRefreshBalanceRequest,
   FinanceSyncOptions,
   FinanceSyncStatus,
+  FinanceClearOverlayResult,
+  FinancePriceTableStatus,
 } from './types.ts'
 
 export type * from './types.ts'
@@ -296,6 +301,11 @@ export class FinanceService extends TypertRemoteService {
    * `getSyncStatus`.
    */
   private lastSyncStatus: FinanceCommunitySyncResult | null = null
+  /**
+   * 预合成的三层合并结果（SPEC §4.2）：三层任一变化即失效。
+   * diagnostics 是被形状守卫拒绝的键，UI 据此明示「哪些覆盖没生效」。
+   */
+  private priceLayerCache: { prices: FinanceConfigInput['prices']; diagnostics: readonly FinancePriceMergeDiagnostic[] } | undefined
 
   constructor(ctx: Context, config: FinanceConfigInput = {}) {
     super(ctx, 'finance')
@@ -309,6 +319,7 @@ export class FinanceService extends TypertRemoteService {
         },
         onChange: () => {
           this.ledgerCache = undefined
+          this.priceLayerCache = undefined
           this.refreshLayerCaches()
         },
       })
@@ -356,6 +367,7 @@ export class FinanceService extends TypertRemoteService {
   setCommunityPrices(prices: FinanceConfigInput['prices']): void {
     this.communityPrices = prices ?? {}
     this.ledgerCache = undefined
+    this.priceLayerCache = undefined
   }
 
   /**
@@ -372,6 +384,7 @@ export class FinanceService extends TypertRemoteService {
    * composition, hiding which keys the user explicitly set.
    */
   private refreshLayerCaches(): void {
+    this.priceLayerCache = undefined
     this.userPrices = readDescriptorPrices(this.ctx, NS, 'user')
     // `descriptor.base` is the composition entry; re-capture too in case the
     // settings section was re-registered with a different entry.
@@ -388,15 +401,72 @@ export class FinanceService extends TypertRemoteService {
    */
   private currentConfig(): FinanceConfig {
     const raw = this.configSource()
-    const compositionPrices = this.compositionPrices
-    const communityPrices = this.communityPrices
-    const userPrices = this.userPrices
-    const mergedPrices = mergePriceLayers(compositionPrices, communityPrices, userPrices)
+    const layers = this.priceLayerCache ?? this.rebuildPriceLayers()
     const hostMetaByProvider: Record<string, FinanceProviderBillingMode> = {}
     for (const [id, meta] of Object.entries(HOST_KNOWN_PROVIDER_META)) {
       hostMetaByProvider[id] = meta.defaultBillingMode
     }
-    return normalizeFinanceConfig({ ...raw, prices: mergedPrices }, hostMetaByProvider)
+    return normalizeFinanceConfig({ ...raw, prices: layers.prices }, hostMetaByProvider)
+  }
+
+  /**
+   * 重新合成三层价格（唯一入口）。形状守卫住在 pricing.ts：
+   * 结构只由基础层产出、同形状只改数值、形状不兼容即拒绝并记录（INV-1/INV-2）。
+   */
+  private rebuildPriceLayers(): { prices: FinanceConfigInput['prices']; diagnostics: readonly FinancePriceMergeDiagnostic[] } {
+    const merged = mergePriceLayersDetailed(this.compositionPrices, this.communityPrices, this.userPrices)
+    this.priceLayerCache = { prices: merged.prices, diagnostics: merged.diagnostics }
+    return this.priceLayerCache
+  }
+
+  /** 被形状守卫拒绝的价格覆盖键（UI 明示用，SPEC §5.2）。 */
+  getPriceLayerDiagnostics(): readonly FinancePriceMergeDiagnostic[] {
+    return (this.priceLayerCache ?? this.rebuildPriceLayers()).diagnostics
+  }
+
+  /**
+   * 基础表完整性（SPEC INV-5）：composition 层的 `deepseek-official/*` 指纹必须等于生成器
+   * 写进 lib 的常量。不匹配 = 基础表被本地改动过 —— UI 应明示并允许"还原"（重装/丢弃覆盖）。
+   * 哈希锚点刻意放在 lib 里：它与数据不在同一个可写配置文件里，改数据改不到锚点。
+   */
+  getBasePriceIntegrity(): { ok: boolean; expected: string; actual: string; source: string; updated: string } {
+    const actual = createHash('sha256').update(basePriceFingerprint(this.compositionPrices as Record<string, unknown>)).digest('hex')
+    return {
+      ok: actual === FINANCE_PRICES_HASH,
+      expected: FINANCE_PRICES_HASH,
+      actual,
+      source: FINANCE_PRICES_SOURCE,
+      updated: FINANCE_PRICES_UPDATED,
+    }
+  }
+
+  /**
+   * 基础表 / 覆盖层状态（SPEC §5.1）：UI 据此显示快照日期与来源、覆盖键数、
+   * 以及**被形状守卫拒绝的键**（INV-2 的可见面）。
+   */
+  @Remote
+  async getPriceTableStatus(signal?: AbortSignal): Promise<FinancePriceTableStatus> {
+    void signal
+    return {
+      base: this.getBasePriceIntegrity(),
+      overlay: this.syncStatusView(),
+      overlayKeyCount: Object.keys(this.communityPrices ?? {}).length,
+      userKeyCount: Object.keys(this.userPrices ?? {}).length,
+      rejected: this.getPriceLayerDiagnostics().map(diagnostic => ({
+        key: diagnostic.key,
+        base: diagnostic.base,
+        incoming: diagnostic.incoming,
+      })),
+    }
+  }
+
+  /** 清空用户侧价格覆盖，回到发版冻结的基础表（SPEC §5.1「还原到发版快照」）。 */
+  @Remote
+  async clearPriceOverlay(): Promise<FinanceClearOverlayResult> {
+    const clearedKeys = Object.keys(this.communityPrices ?? {}).length
+    this.setCommunityPrices({})
+    this.lastSyncStatus = null
+    return { cleared: clearedKeys > 0, clearedKeys }
   }
 
   /** Fetch the first-party balance now. The API key never leaves the host. */
@@ -924,6 +994,11 @@ export class FinanceService extends TypertRemoteService {
    */
   @Remote
   async getSyncStatus(): Promise<FinanceSyncStatus | null> {
+    return this.syncStatusView()
+  }
+
+  /** 覆盖层快照：`getSyncStatus` 与 `getPriceTableStatus` 共用的同一份映射。 */
+  private syncStatusView(): FinanceSyncStatus | null {
     return this.lastSyncStatus
       ? {
           source: this.lastSyncStatus.source,

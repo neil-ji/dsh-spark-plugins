@@ -44,6 +44,8 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     getBackfillProgress: () => Promise<RemoteResult<FinanceBackfillProgress>>
     syncCommunityPrices: (options?: FinanceSyncOptions) => Promise<RemoteResult<FinanceCommunitySyncResult>>
     getSyncStatus: () => Promise<RemoteResult<FinanceSyncStatus | null>>
+    getPriceTableStatus: () => Promise<RemoteResult<FinancePriceTableStatus>>
+    clearPriceOverlay: () => Promise<RemoteResult<FinanceClearOverlayResult>>
     listProviders: () => Promise<RemoteResult<FinanceListProvidersResult>>
     refreshBalance: (request: FinanceRefreshBalanceRequest) => Promise<RemoteResult<FinanceProviderBalance>>
     events: (signal?: AbortSignal) => AsyncIterable<FinanceBackfillStreamFrame>
@@ -55,6 +57,8 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'finance/getBackfillProgress': () => Promise<RemoteResult<FinanceBackfillProgress>>
     'finance/syncCommunityPrices': (options?: FinanceSyncOptions) => Promise<RemoteResult<FinanceCommunitySyncResult>>
     'finance/getSyncStatus': () => Promise<RemoteResult<FinanceSyncStatus | null>>
+    'finance/getPriceTableStatus': () => Promise<RemoteResult<FinancePriceTableStatus>>
+    'finance/clearPriceOverlay': () => Promise<RemoteResult<FinanceClearOverlayResult>>
     'finance/listProviders': () => Promise<RemoteResult<FinanceListProvidersResult>>
     'finance/refreshBalance': (request: FinanceRefreshBalanceRequest) => Promise<RemoteResult<FinanceProviderBalance>>
     'finance/events': (signal?: AbortSignal) => AsyncIterable<FinanceBackfillStreamFrame>
@@ -888,6 +892,48 @@ export interface FinanceCommunitySyncResult {
   providers: readonly string[]
   /** Error tag + message when `ok: false`. */
   error?: { message: string }
+}
+
+/**
+ * 基础表完整性 + 覆盖层状态（SPEC §5.1 / INV-5）：`finance.getPriceTableStatus` 的返回体。
+ * UI 用它显示「基础快照日期与来源 / 覆盖层来源与时间 / 被拒键 / 覆盖键数」。
+ */
+export interface FinancePriceTableStatus {
+  /** 基础表（发版冻结的生成物）指纹与 lib 内常量是否一致；false = 被本地修改过。 */
+  base: {
+    ok: boolean
+    /** 生成该基础表时的来源（厂商页 URL 或 fixture 路径）。 */
+    source: string
+    /** 生成时间（ISO）。 */
+    updated: string
+    expected: string
+    actual: string
+  }
+  /** 最近一次成功同步的覆盖层；null = 正在使用发版快照（没有任何用户侧覆盖）。 */
+  overlay: FinanceSyncStatus | null
+  /** 当前内存覆盖层覆盖的键数（一键更新写入的 community 层）。 */
+  overlayKeyCount: number
+  /** 用户持久层（设置文档里逐行编辑）覆盖的键数。 */
+  userKeyCount: number
+  /** 被形状守卫拒绝的键（INV-2）：UI 必须明示「这次更新里哪些键没生效」。 */
+  rejected: readonly FinancePriceRejection[]
+}
+
+/** 一个被形状守卫拒绝的价格覆盖键（结构不允许被覆盖层改写）。 */
+export interface FinancePriceRejection {
+  key: string
+  /** 基础层形状（保留者）。 */
+  base: string
+  /** 被拒绝的覆盖层形状。 */
+  incoming: string
+}
+
+/** `finance.clearPriceOverlay`（还原到发版快照）的结果。 */
+export interface FinanceClearOverlayResult {
+  /** 是否真的清掉了非空覆盖层。 */
+  cleared: boolean
+  /** 被清掉的键数。 */
+  clearedKeys: number
 }
 
 /**

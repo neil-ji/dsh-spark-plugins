@@ -13,6 +13,7 @@ import type {
   FinanceListProvidersResult,
   FinancePlanEntry,
   FinancePlanPeriod,
+  FinancePriceTableStatus,
   FinanceProviderBalance,
 } from 'dsh-spark-finance/types'
 import {
@@ -38,6 +39,14 @@ export interface ThisMonthViewProps {
   refreshing: boolean
   onRefresh: () => void
   lastSyncAppliedAt: number | undefined
+  /** 价格表状态：基础快照完整性/来源 + 覆盖层 + 被形状守卫拒绝的键。 */
+  priceTable: FinancePriceTableStatus | undefined
+  /** 价格表操作进行中（更新 / 还原）。 */
+  priceBusy: boolean | undefined
+  /** 价格表操作失败信息。 */
+  priceError: string | null | undefined
+  onUpdatePrices: () => Promise<void>
+  onRestorePrices: () => Promise<void>
 }
 
 const TOP_MODEL_COUNT = 6
@@ -55,6 +64,11 @@ export function ThisMonthView({
   refreshing,
   onRefresh,
   lastSyncAppliedAt,
+  priceTable,
+  priceBusy,
+  priceError,
+  onUpdatePrices,
+  onRestorePrices,
 }: ThisMonthViewProps): ReactNode {
   const currency = ledger.currency === '' ? 'CNY' : ledger.currency
   const [editing, setEditing] = useState<string | null>(null)
@@ -261,6 +275,32 @@ export function ThisMonthView({
 
       <div className={css.footer}>
         <p className={css.footerNote}>{priceNote(lastSyncAppliedAt, t)}</p>
+        {/* 价格表操作（SPEC §5.1）：用户自行决定何时更新，并可一键还原到发版快照。 */}
+        <div className={css.planActions} role="group" aria-label={t('priceActionsLabel')}>
+          <Button disabled={priceBusy} onClick={() => { void onUpdatePrices() }} aria-label={t('updatePrices')}>
+            {t('updatePrices')}
+          </Button>
+          <Button
+            disabled={priceBusy || (priceTable !== undefined && priceTable.overlayKeyCount + priceTable.userKeyCount === 0)}
+            onClick={() => { void onRestorePrices() }}
+            aria-label={t('restorePrices')}
+          >
+            {t('restorePrices')}
+          </Button>
+        </div>
+        {priceTable?.base.ok === false
+          ? <p className={css.footerNote} role="status">{t('priceTampered')}</p>
+          : null}
+        {priceTable !== undefined && priceTable.rejected.length > 0
+          ? (
+            <p className={css.footerNote} role="status">
+              {t('priceRejected', { count: priceTable.rejected.length, keys: priceTable.rejected.map(row => row.key).join(', ') })}
+            </p>
+          )
+          : null}
+        {priceError != null
+          ? <p className={css.footerNote} role="status">{t('priceActionFailed', { message: priceError })}</p>
+          : null}
         <p className={css.footerNote}>{t('estimateNote')}</p>
         {ledger.unreadableSessions.length > 0
           ? <p className={css.footerNote}>{t('unreadableNote', { count: ledger.unreadableSessions.length })}</p>

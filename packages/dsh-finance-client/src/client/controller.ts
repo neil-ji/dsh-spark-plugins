@@ -18,6 +18,7 @@ import type {
   FinanceListProvidersResult,
   FinancePlanEntry,
   FinanceProviderBalance,
+  FinancePriceTableStatus,
   FinanceTierEntry,
 } from 'dsh-spark-finance/types'
 import { providerKey } from './derive.ts'
@@ -31,6 +32,12 @@ export interface FinancePanelState {
   progress?: FinanceBackfillProgress
   /** 最近一次成功的社区价格同步（epoch ms）；undefined = 从未同步。 */
   lastSyncAppliedAt?: number
+  /** 价格表状态（基础快照完整性 + 覆盖层 + 被形状守卫拒绝的键）。 */
+  priceTable?: FinancePriceTableStatus
+  /** 价格表操作进行中（更新 / 还原）。可选：旧测试夹具不必补该字段。 */
+  priceBusy?: boolean
+  /** 价格表操作失败信息；不改账本状态，只在价格行显示。 */
+  priceError?: string | null
   /** 静态套餐定义（`finance.plans`，用户填一次）。 */
   plans: readonly FinancePlanEntry[]
   /** context 阶梯价（`finance.tiers`，按 modelKey）；空 = 没有阶梯价可算。 */
@@ -61,6 +68,8 @@ export class FinancePanelController {
     plans: [],
     tiers: {},
     plansWritable: false,
+    priceBusy: false,
+    priceError: null,
   })
   private generation = 0
   private readonly seam: FinancePlanSeam | undefined
@@ -124,7 +133,7 @@ export class FinancePanelController {
         state.error = null
         state.progress = undefined
       })
-      void this.refreshSyncStatus(generation)
+      void this.refreshPriceTable(generation)
     } catch (error) {
       if (generation !== this.generation) return
       this.fail(messageOf(error))
@@ -167,15 +176,65 @@ export class FinancePanelController {
     await this.seam.write(rest)
   }
 
-  /** 价格来源脚注（尽力而为，失败不动快照）。 */
-  private async refreshSyncStatus(generation: number): Promise<void> {
+  /**
+   * 价格表状态（尽力而为，失败不动快照）：基础快照的日期/来源/完整性 + 覆盖层 +
+   * 被形状守卫拒绝的键。一次 RPC 拿全，脚注与"未生效键"列表共用同一份数据。
+   */
+  private async refreshPriceTable(generation: number): Promise<void> {
     try {
-      const result = await this.remote.getSyncStatus()
-      if (generation !== this.generation || !result.ok || result.value === null) return
-      const appliedAt = result.value.appliedAt
-      this.store.update((state) => { state.lastSyncAppliedAt = appliedAt })
+      const result = await this.remote.getPriceTableStatus()
+      if (generation !== this.generation || !result.ok) return
+      const table = result.value
+      this.store.update((state) => {
+        state.priceTable = table
+        state.lastSyncAppliedAt = table.overlay?.appliedAt
+      })
     } catch {
       // 脚注不是关键路径。
+    }
+  }
+
+  /** 一键更新价格表：拉最新目录价 → 覆盖层原子替换 → 刷新状态与账本（SPEC §5.1）。 */
+  async updatePrices(): Promise<void> {
+    await this.runPriceAction(async () => {
+      const result = await this.remote.syncCommunityPrices()
+      return { ok: result.ok, failure: remoteFailureOf(result) }
+    }, 'syncCommunityPrices failed')
+  }
+
+  /** 还原到发版快照：丢弃用户侧覆盖（SPEC §5.1）。 */
+  async restorePrices(): Promise<void> {
+    await this.runPriceAction(async () => {
+      const result = await this.remote.clearPriceOverlay()
+      return { ok: result.ok, failure: remoteFailureOf(result) }
+    }, 'clearPriceOverlay failed')
+  }
+
+  /**
+   * 两个价格动作共用的一条路径：失败**保留原快照**并只写 priceError（不把整个面板切到错误态），
+   * 成功则刷新状态与账本。原子性由宿主保证（拉取失败不替换覆盖层）。
+   */
+  private async runPriceAction(
+    run: () => Promise<{ ok: boolean; failure: string | undefined }>,
+    fallbackMessage: string,
+  ): Promise<void> {
+    const generation = this.generation
+    this.store.update((state) => { state.priceBusy = true; state.priceError = null })
+    try {
+      const outcome = await run()
+      if (generation !== this.generation) return
+      if (!outcome.ok) {
+        this.store.update((state) => { state.priceError = outcome.failure ?? fallbackMessage })
+        return
+      }
+      await this.refreshPriceTable(generation)
+      await this.load()
+    } catch (error) {
+      if (generation === this.generation) {
+        this.store.update((state) => { state.priceError = error instanceof Error ? error.message : String(error) })
+      }
+    } finally {
+      if (generation === this.generation) this.store.update((state) => { state.priceBusy = false })
     }
   }
 

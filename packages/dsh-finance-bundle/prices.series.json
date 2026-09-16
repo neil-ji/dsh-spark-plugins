@@ -1,0 +1,261 @@
+{
+  "schemaVersion": 1,
+  "currency": "CNY",
+  "unit": "per_mtok",
+  "generatedAt": "2026-09-16T05:34:40.802Z",
+  "sources": [
+    {
+      "id": "deepseek-pricing-zh",
+      "url": "https://api-docs.deepseek.com/zh-cn/quick_start/pricing/",
+      "fetchedAt": "2026-09-16T05:34:40.802Z"
+    }
+  ],
+  "seedNote": "migrated from cordis.patch.yml composition table (bill-verified 2026-09-16)",
+  "prices": {
+    "deepseek-official/deepseek-flash": [
+      {
+        "effectiveFrom": 1788969600000,
+        "kind": "windowed",
+        "rate": {
+          "offPeak": {
+            "inputMicrosPerMtok": 1000000,
+            "cacheReadMicrosPerMtok": 20000,
+            "outputMicrosPerMtok": 4000000
+          },
+          "peak": {
+            "inputMicrosPerMtok": 2000000,
+            "cacheReadMicrosPerMtok": 40000,
+            "outputMicrosPerMtok": 8000000
+          },
+          "peakHours": [
+            [
+              9,
+              12
+            ],
+            [
+              14,
+              18
+            ]
+          ],
+          "peakDays": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "utcOffsetMinutes": 480
+        },
+        "meta": {
+          "src": "packages/dsh-finance/tests/fixtures/deepseek-pricing.zh-cn.2026-09-16.html",
+          "observedAt": 1789530385243,
+          "confidence": "verified"
+        }
+      }
+    ],
+    "deepseek-official/deepseek-v4-flash": [
+      {
+        "effectiveFrom": 0,
+        "kind": "flat",
+        "rate": {
+          "inputMicrosPerMtok": 1000000,
+          "outputMicrosPerMtok": 2000000,
+          "cacheReadMicrosPerMtok": 20000
+        }
+      },
+      {
+        "effectiveFrom": 1786896000000,
+        "kind": "windowed",
+        "rate": {
+          "offPeak": {
+            "inputMicrosPerMtok": 1500000,
+            "outputMicrosPerMtok": 4500000,
+            "cacheReadMicrosPerMtok": 50000
+          },
+          "peak": {
+            "inputMicrosPerMtok": 3000000,
+            "outputMicrosPerMtok": 9000000,
+            "cacheReadMicrosPerMtok": 100000
+          },
+          "peakHours": [
+            [
+              9,
+              12
+            ],
+            [
+              14,
+              18
+            ]
+          ],
+          "peakDays": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "utcOffsetMinutes": 480
+        }
+      },
+      {
+        "effectiveFrom": 1788969600000,
+        "kind": "windowed",
+        "rate": {
+          "offPeak": {
+            "inputMicrosPerMtok": 1000000,
+            "cacheReadMicrosPerMtok": 20000,
+            "outputMicrosPerMtok": 4000000
+          },
+          "peak": {
+            "inputMicrosPerMtok": 2000000,
+            "cacheReadMicrosPerMtok": 40000,
+            "outputMicrosPerMtok": 8000000
+          },
+          "peakHours": [
+            [
+              9,
+              12
+            ],
+            [
+              14,
+              18
+            ]
+          ],
+          "peakDays": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "utcOffsetMinutes": 480
+        },
+        "meta": {
+          "src": "packages/dsh-finance/tests/fixtures/deepseek-pricing.zh-cn.2026-09-16.html",
+          "observedAt": 1789530385243,
+          "confidence": "verified"
+        }
+      }
+    ],
+    "deepseek-official/deepseek-v4-flash-vision-exp": [
+      {
+        "effectiveFrom": 1786896000000,
+        "kind": "windowed",
+        "rate": {
+          "offPeak": {
+            "inputMicrosPerMtok": 1500000,
+            "outputMicrosPerMtok": 4500000,
+            "cacheReadMicrosPerMtok": 50000
+          },
+          "peak": {
+            "inputMicrosPerMtok": 3000000,
+            "outputMicrosPerMtok": 9000000,
+            "cacheReadMicrosPerMtok": 100000
+          },
+          "peakHours": [
+            [
+              9,
+              12
+            ],
+            [
+              14,
+              18
+            ]
+          ],
+          "peakDays": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "utcOffsetMinutes": 480
+        }
+      },
+      {
+        "effectiveFrom": 1788969600000,
+        "kind": "windowed",
+        "rate": {
+          "offPeak": {
+            "inputMicrosPerMtok": 1000000,
+            "cacheReadMicrosPerMtok": 20000,
+            "outputMicrosPerMtok": 4000000
+          },
+          "peak": {
+            "inputMicrosPerMtok": 2000000,
+            "cacheReadMicrosPerMtok": 40000,
+            "outputMicrosPerMtok": 8000000
+          },
+          "peakHours": [
+            [
+              9,
+              12
+            ],
+            [
+              14,
+              18
+            ]
+          ],
+          "peakDays": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "utcOffsetMinutes": 480
+        },
+        "meta": {
+          "src": "packages/dsh-finance/tests/fixtures/deepseek-pricing.zh-cn.2026-09-16.html",
+          "observedAt": 1789530385243,
+          "confidence": "verified"
+        }
+      }
+    ],
+    "deepseek-official/deepseek-v4-pro": [
+      {
+        "effectiveFrom": 0,
+        "kind": "flat",
+        "rate": {
+          "inputMicrosPerMtok": 3000000,
+          "outputMicrosPerMtok": 6000000,
+          "cacheReadMicrosPerMtok": 25000
+        }
+      },
+      {
+        "effectiveFrom": 1786896000000,
+        "kind": "windowed",
+        "rate": {
+          "offPeak": {
+            "inputMicrosPerMtok": 4500000,
+            "outputMicrosPerMtok": 13500000,
+            "cacheReadMicrosPerMtok": 150000
+          },
+          "peak": {
+            "inputMicrosPerMtok": 9000000,
+            "outputMicrosPerMtok": 27000000,
+            "cacheReadMicrosPerMtok": 300000
+          },
+          "peakHours": [
+            [
+              9,
+              12
+            ],
+            [
+              14,
+              18
+            ]
+          ],
+          "peakDays": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "utcOffsetMinutes": 480
+        }
+      }
+    ]
+  }
+}

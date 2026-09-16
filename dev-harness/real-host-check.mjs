@@ -273,8 +273,8 @@ try {
       const endpoints = registered.endpoints ?? []
       const financeEndpoints = endpoints.filter((endpoint) => endpoint.startsWith('finance/'))
       check(
-        'finance 的 9 条 Remote 定义由 ctx.typert.register 落地（非 SRC 兜底；F11-① 新增 finance/events）',
-        financeEndpoints.length === 9,
+        'finance 的 11 条 Remote 定义由 ctx.typert.register 落地（非 SRC 兜底；F11-① finance/events；价格体系新增 getPriceTableStatus/clearPriceOverlay）',
+        financeEndpoints.length === 11,
         JSON.stringify(financeEndpoints),
       )
       check(
@@ -289,13 +289,22 @@ try {
       // 就是「注册真的生效」的判据 —— 面板能渲染证明不了这一点。
       const descriptors = registered.descriptors ?? []
       const financeDescriptors = descriptors.filter((entry) => entry.endpoint.startsWith('finance/'))
-      const allStrict = financeDescriptors.length === 9
+      const allStrict = financeDescriptors.length === 11
         && financeDescriptors.every((entry) => entry.resultMode === 'strict')
       check(
-        'finance 的 9 条描述符都是 strict 模式（未退化到 SRC 的 src-json 兜底）',
+        'finance 的 11 条描述符都是 strict 模式（未退化到 SRC 的 src-json 兜底）',
         allStrict,
         JSON.stringify(financeDescriptors.map((entry) => entry.endpoint + ':' + entry.resultMode)),
       )
+      // 价格体系新增的两条端点必须真的落到严格注册面（SPEC §5.1 的 UI 依赖它们）。
+      const priceStatus = financeDescriptors.find((entry) => entry.endpoint === 'finance/getPriceTableStatus')
+      const clearOverlay = financeDescriptors.find((entry) => entry.endpoint === 'finance/clearPriceOverlay')
+      check(
+        '价格体系端点 getPriceTableStatus / clearPriceOverlay 已注册且为 strict',
+        priceStatus?.resultMode === 'strict' && clearOverlay?.resultMode === 'strict',
+        JSON.stringify([priceStatus ?? '(缺失)', clearOverlay ?? '(缺失)']),
+      )
+
       // implementation ≠ method 的实例证明该字段确实来自描述符本身
       // （finance 全部省略 implementation，故取 method；github 显式给了别的名字）。
       const renamed = descriptors.find((entry) => entry.implementation !== entry.endpoint.split('/')[1])
