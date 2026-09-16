@@ -42,6 +42,26 @@ describe('价格表指纹与完整性', () => {
     expect(basePriceFingerprint(normalized)).toBe(basePriceFingerprint(withCommunity))
   })
 
+  it('配置侧（YAML 原始形态）与序列侧指纹一致 —— 归一会补出显式 undefined 的 cacheWrite', () => {
+    // YAML 里的 deepseek 生成段就是这个形态（没有 kind、没有 cacheWrite）
+    const rawFromYaml = {
+      'deepseek-official/x': [{
+        effectiveFrom: '1970-01-01T00:00:00.000Z',
+        inputMicrosPerMtok: 1_000_000,
+        cacheReadMicrosPerMtok: 20_000,
+        outputMicrosPerMtok: 2_000_000,
+      }],
+    }
+    const normalizedFromSeries = {
+      'deepseek-official/x': [{
+        effectiveFrom: 0,
+        kind: 'flat',
+        rate: { inputMicrosPerMtok: 1_000_000, cacheReadMicrosPerMtok: 20_000, outputMicrosPerMtok: 2_000_000 },
+      }],
+    }
+    expect(basePriceFingerprint(rawFromYaml)).toBe(basePriceFingerprint(normalizedFromSeries))
+  })
+
   it('数值被改动 → 指纹变化（篡改可被发现）', () => {
     const base = { 'deepseek-official/x': [{ effectiveFrom: 0, kind: 'flat', rate: { inputMicrosPerMtok: 1_000_000, outputMicrosPerMtok: 2_000_000 } }] }
     const tampered = { 'deepseek-official/x': [{ effectiveFrom: 0, kind: 'flat', rate: { inputMicrosPerMtok: 1_500_000, outputMicrosPerMtok: 2_000_000 } }] }

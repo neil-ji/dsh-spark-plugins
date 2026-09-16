@@ -13,6 +13,7 @@
  * 退出码：0 = 全过；1 = 有硬失败。
  */
 
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -100,6 +101,19 @@ if (begin === -1 || end === -1 || end < begin) {
     }
     if (diffs.length === 0) ok('A4 YAML 可解析，且生成段与 prices.series.json 逐值一致', Object.keys(prices).length + ' 个 key')
     else bad('A4 生成物与序列不一致', JSON.stringify(diffs))
+
+    // A4b 跨侧指纹：host 的 getBasePriceIntegrity 用 basePriceFingerprint(composition) 与 lib 内
+    // 常量比对。两侧必须用同一个指纹函数且结果相等 —— 否则面板会**误报**「基础表已被本地改动」
+    // （曾经因为归一会给 flat 条目补一个 undefined 的 cacheWrite 键而误报）。
+    const { basePriceFingerprint } = await import(pathToFileURL(path.join(ROOT, 'packages/dsh-finance/src/pricing.ts')).href)
+    const { FINANCE_PRICES_HASH } = await import(pathToFileURL(path.join(ROOT, 'packages/dsh-finance/src/pricing-hash.generated.ts')).href)
+    const subset = {}
+    for (const [key, value] of Object.entries(yamlPrices)) {
+      if (key.startsWith(PROVIDER + '/')) subset[key] = value
+    }
+    const actualHash = createHash('sha256').update(basePriceFingerprint(subset)).digest('hex')
+    if (actualHash === FINANCE_PRICES_HASH) ok('A4b 配置侧指纹 = lib 内哈希常量（完整性检测不会误报）')
+    else bad('A4b 配置侧指纹 ≠ lib 内哈希常量（面板会误报基础表被改）', actualHash.slice(0, 16) + ' vs ' + FINANCE_PRICES_HASH.slice(0, 16))
   }
 }
 

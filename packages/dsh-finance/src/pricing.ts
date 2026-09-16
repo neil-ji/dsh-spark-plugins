@@ -284,7 +284,12 @@ export function financeRateAt(config: FinanceConfig, modelKey: string, timeMs: n
 export function stableJson(value: unknown): string {
   if (Array.isArray(value)) return '[' + value.map(item => stableJson(item)).join(',') + ']'
   if (value !== null && typeof value === 'object') {
-    const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    const entries = Object.entries(value as Record<string, unknown>)
+      // 关键：**丢掉 undefined 值的键**。归一化会给 flat 条目补一个显式
+      // `cacheWriteMicrosPerMtok: undefined`（YAML 里本来没这个键），若把它序列化成
+      // `null`，配置侧与序列侧的指纹就会不等 —— host 会误报「基础表已被本地改动」。
+      .filter(([, item]) => item !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     return '{' + entries.map(([key, item]) => JSON.stringify(key) + ':' + stableJson(item)).join(',') + '}'
   }
   return JSON.stringify(value) ?? 'null'
