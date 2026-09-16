@@ -154,7 +154,7 @@
 
 ## 15. 目标完成度
 
-P0（四视图 + 删除六类配置面）· P1-A（套餐静态定义 + 订阅节省）· P1-B（每模型速率 + 时间成本）· P2（上下文阶梯 + 拆分上限）四段全部落地并各自跑满五项验收；host 端点始终 9 条（8 RPC + `finance/events` stream）、契约未动。附带修掉三个真实缺陷：`modelKey` 分组导致视图② 无法跨供应商比较、价签输入溢出与开发文案泄漏、以及 §16 的「输出速率没数据」（首 token 判定写死了 0.1.2 的事件形状）。
+P0（四视图 + 删除六类配置面）· P1-A（套餐静态定义 + 订阅节省）· P1-B（每模型速率 + 时间成本）· P2（上下文阶梯 + 拆分上限）四段全部落地并各自跑满五项验收；host 端点始终 9 条（8 RPC + `finance/events` stream）、契约未动。附带修掉四个真实缺陷：`modelKey` 分组导致视图② 无法跨供应商比较、价签输入溢出与开发文案泄漏、§16 的「输出速率没数据」（首 token 判定写死了 0.1.2 的事件形状）、§17 的「订阅等价恒为 0」（宿主漏了「填过月费 = 订阅」这条腿）。
 
 ## 16. 修 bug 记录（2026-09-17）：视图②「输出速率」没数据
 
@@ -185,3 +185,26 @@ P0（四视图 + 删除六类配置面）· P1-A（套餐静态定义 + 订阅�
   `sessionStats` 同一批日志逐字段对照，**只差最后未完结的一步**（例：ttft 718832ms/350 步 vs 平台 720108ms/351 步）。
 - **诚实边界**：① 速率是**端到端有效吞吐**（含首 token、限流/排队），不是厂商标称；② 旧会话要等一次冷折才出数
   （真宿主下一次建账本时跑回填）；③ 若宿主是 0.1.2 老平台，走的仍是 chunk 那条腿，两代语义等价。
+
+## 17. 修 bug 记录（2026-09-17）：本月值不值「订阅等价」恒为 0
+
+- **现象**：真宿主「本月值不值」顶部 **订阅等价永远 ¥0**，而下面「订阅计划」卡里明明列着 zai / minimax-cn 两条订阅（按量等价非零）；同时「按量支出」把这两家的用量也算了进去。
+- **根因**：**同一个问题在两端有两套口径**。
+  - 客户端 `ThisMonthView.billingFor` 是三层：**显式标记 > 填过月费 = 订阅 > 宿主默认**（中间那条腿是给“早就填过月费、还没打标记”的老数据兜底的）；
+  - 宿主 `financeBillingMode`（账本唯一的分类口）只有两层：宿主默认 + 显式标记，`plans` 根本没进 `hostMetaByProvider`。
+  于是“只填月费、不打标记”的用户看到的是：面板按订阅展示、账本按按量记账 → `planEquivalentCostMicros` 恒 0，
+  `meteredCostMicros` 虚高（三块加起来仍等于总额，所以只是口径错位，不显眼）。
+- **证据（真宿主）**：`~/.dsh/settings.yaml` 的 `finance.plans` 有 `zai`（¥94.4/月）与 `minimax-cn`（¥119/月），
+  `finance.providers` 段为空（从来没打过标记）；`session_projcache` 里 `zai/glm-5.3-flash`（32 会话）与
+  `minimax-cn/MiniMax-M3`（8 会话）都有真实 output token。
+- **修法**：
+  1. `pricing.ts`：`foldProviderBillingModes` 增加第 4 参 `planProviders`，把“填过月费 = 订阅”这条腿补到宿主侧
+     （优先级：内置默认 → 月费 → 显式标记；`lockBillingModeAndCurrency` 只挡显式标记那一层 —— 客户端 billingFor
+     同样让月费越过锁，两侧必须一致）；
+  2. `index.ts currentConfig`：把 `raw.plans` 的 provider 喂给折叠 —— 漏了这一行等于没修（回归线专治它）；
+  3. provider 名归一化统一成「先小写再剥 `-official`」：宿主新增 `financeProviderKey`，客户端 `providerKey` 同步；
+     `ledgerProviderNames` 改成**双向**候选（`deepseek` ↔ `deepseek-official` 互相都配得上）—— 此前“套餐写 deepseek、
+     账本记 deepseek-official”会静默配不上（等价用量算成 0）。
+- **回归线**：`tests/plan-billing.test.ts` 走**真实服务链路**（constructor → currentConfig → buildFinanceLedger），
+  而不是只测纯函数；实测把第 2 条接线去掉后 3 条挂 2 条（有牙）。客户端补 `providerKey` 大小写与反向候选两条断言。
+- **验收**：`pnpm -r build/typecheck/test` 退出码 0（finance **231** / finance-client **58**）。

@@ -301,6 +301,26 @@ describe('derive: 订阅 vs 按量', () => {
     expect(unknown.discountRate).toBeNull()
   })
 
+  it('账本记 deepseek-official、套餐写 deepseek 也要配得上（反方向同理）', () => {
+    const official = ledger({
+      byProvider: [
+        { provider: 'deepseek-official', usage: buckets(1_000_000, 0, 0, 0), costMicros: 12_000_000, modelCount: 1 },
+      ],
+    })
+    expect(planInsight({ provider: 'deepseek', monthlyMicros: 1, currency: 'CNY' }, official).equivalentMicros)
+      .toBe(12_000_000)
+    expect(providerCostMicros(official, 'deepseek-official')).toBe(12_000_000)
+  })
+
+  it('provider 比对键大小写不敏感（手写 DeepSeek-Official 也要认成 deepseek）', () => {
+    // 值要对上账本的 deepseek 行；标签保留用户自己写的那串（显示层不做改写）。
+    const insight = planInsight({ provider: 'DeepSeek-Official', monthlyMicros: 1, currency: 'CNY' }, l)
+    expect(insight.equivalentMicros).toBe(30_000_000)
+    const { withPlan, withoutPlan } = planRows(l, [{ provider: 'DeepSeek-Official', monthlyMicros: 1, currency: 'CNY' }])
+    expect(withPlan).toHaveLength(1)
+    expect(withoutPlan).toEqual(['acme'])
+  })
+
   it('lists only the vendors the ledger actually observed', () => {
     const { withPlan, withoutPlan } = planRows(l, [{ provider: 'deepseek', monthlyMicros: 1, currency: 'CNY' }])
     expect(withPlan.map((row) => row.provider)).toEqual(['deepseek'])

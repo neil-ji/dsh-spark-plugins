@@ -81,16 +81,48 @@ export function financeBillingMode(config: FinanceConfig, modelKey: string): Fin
 }
 
 /**
- * 折叠 provider 级计费方式：内置默认打底，用户层条目覆盖（客户自己打订阅/按量/免费标记），
- * `isLocked` 为真的 provider 保持宿主决定（如 deepseek-official 的余额接口是纯按量）。
+ * provider id 的比对键：与客户端 `derive.providerKey` 逐字同口径
+ * （`deepseek-official` → `deepseek`，小写）。
+ *
+ * 为什么需要它：套餐条目里的 provider 是**用户手填/继承来的**字符串，而账本里的
+ * provider 是模型键前缀；同一个厂商两侧可能差一个 `-official` 后缀。不归一的话，
+ * "填过月费 = 订阅" 这条腿在客户端成立、在宿主不成立 —— 面板把厂商列进订阅卡，
+ * 账本却按按量记账。
+ */
+export function financeProviderKey(provider: string): string {
+  return provider.toLowerCase().replace(/-official$/, '')
+}
+
+/**
+ * 折叠 provider 级计费方式，优先级自低到高：
+ *
+ *  1. `base`（内置默认，如 deepseek-official = metered）；
+ *  2. **填过月费的 provider 视为订阅**（`planProviders`）—— 与客户端
+ *     `ThisMonthView.billingFor` 的中间那条腿同口径：老数据（早就填过月费、还没打标记）
+ *     不能被当成按量，否则客户端把它排进「订阅计划」卡、账本却按按量记账 →
+ *     顶部「订阅等价」恒为 0、按量支出虚高（2026-09-17 真宿主 bug）；
+ *  3. 用户层显式标记覆盖上面一切；`isLocked` 为真的 provider 保持宿主决定
+ *     （如 deepseek-official 的余额接口是纯按量）—— 锁只挡显式标记这一层，
+ *     因为客户端 billingFor 同样让月费条目越过锁，两侧必须一致。
+ *
  * 抽成纯函数以便单测这个容易写错、又不容易被 UI 发现的分支。
  */
 export function foldProviderBillingModes(
   base: Readonly<Record<string, FinanceProviderBillingMode>>,
   entries: readonly { provider?: unknown; billingMode?: unknown }[] | undefined,
   isLocked: (provider: string) => boolean = () => false,
+  planProviders: readonly string[] = [],
 ): Record<string, FinanceProviderBillingMode> {
   const out: Record<string, FinanceProviderBillingMode> = { ...base }
+  for (const raw of planProviders) {
+    if (typeof raw !== 'string') continue
+    const provider = raw.trim()
+    if (provider === '') continue
+    // 命中已有键（含 host-known 的 `-official` 写法）就改写那一条，否则按用户填的键登记：
+    // 账本查的是模型键前缀，登记一个对不上的键等于没登记。
+    const key = Object.keys(out).find(candidate => financeProviderKey(candidate) === financeProviderKey(provider)) ?? provider
+    out[key] = 'plan'
+  }
   for (const entry of entries ?? []) {
     const provider = entry?.provider
     if (typeof provider !== 'string' || provider === '') continue

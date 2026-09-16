@@ -419,12 +419,15 @@ export class FinanceService extends TypertRemoteService {
     for (const [id, meta] of Object.entries(HOST_KNOWN_PROVIDER_META)) {
       hostMetaByProvider[id] = meta.defaultBillingMode
     }
-    // 用户层 provider 条目的 billingMode 覆盖内置默认 —— 客户自己打「订阅 / 按量 / 免费」标记；
-    // `lockBillingModeAndCurrency` 的 provider（当前只有 deepseek-official）保持宿主决定。
+    // 计费方式三层（低 → 高）：内置默认 → **填过月费的 provider 视为订阅** → 用户显式标记。
+    // 中间那条腿必须在这里补上：客户端 billingFor 有它（老数据没打标记时也算订阅），
+    // 宿主漏了就会出现"面板把厂商列进订阅卡、账本按按量记账 → 订阅等价恒 0"（2026-09-17 bug）。
+    // `lockBillingModeAndCurrency` 的 provider（当前只有 deepseek-official）只锁显式标记那一层。
     const billingByProvider = foldProviderBillingModes(
       hostMetaByProvider,
       raw.providers as readonly { provider?: unknown; billingMode?: unknown }[] | undefined,
       provider => hostProviderMeta(provider)?.lockBillingModeAndCurrency === true,
+      (raw.plans ?? []).map(plan => (typeof plan?.provider === 'string' ? plan.provider : '')),
     )
     for (const [id, mode] of Object.entries(billingByProvider)) hostMetaByProvider[id] = mode
     return normalizeFinanceConfig({ ...raw, prices: layers.prices }, hostMetaByProvider)

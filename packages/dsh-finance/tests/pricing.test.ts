@@ -524,6 +524,58 @@ describe('foldProviderBillingModes / financeBillingMode', () => {
     expect(folded['']).toBeUndefined()
   })
 
+  // 2026-09-17 修 bug（「订阅等价」恒为 0）：客户端 billingFor 有"填过月费 = 订阅"这条腿，
+  // 账本侧漏了它 → 面板把厂商排进订阅卡、账本却按按量记账。
+  it('填过月费的 provider 视为订阅（与客户端 billingFor 同口径）', () => {
+    const folded = foldProviderBillingModes(
+      { 'deepseek-official': 'metered' },
+      undefined,
+      () => false,
+      ['zai', 'minimax-cn'],
+    )
+    expect(folded['zai']).toBe('plan')
+    expect(folded['minimax-cn']).toBe('plan')
+    expect(folded['deepseek-official']).toBe('metered')
+    // 没填月费的 provider 不会被平白升级成订阅。
+    expect(folded['volcengine']).toBeUndefined()
+  })
+
+  it('月费条目里的 provider 名字带 -official / 大小写也能对上账本的键', () => {
+    const folded = foldProviderBillingModes(
+      { 'deepseek-official': 'metered' },
+      undefined,
+      () => false,
+      ['DeepSeek-Official', '  '],
+    )
+    expect(folded['deepseek-official']).toBe('plan')
+    // 不新增对不上模型键前缀的键（登记 'DeepSeek-Official' 这种写法等于没登记）。
+    expect(Object.keys(folded)).toEqual(['deepseek-official'])
+  })
+
+  it('显式标记仍然压过月费推断（用户自己说这是按量/免费）', () => {
+    const folded = foldProviderBillingModes(
+      { 'deepseek-official': 'metered' },
+      [
+        { provider: 'zai', billingMode: 'metered' },
+        { provider: 'minimax-cn', billingMode: 'free' },
+      ],
+      () => false,
+      ['zai', 'minimax-cn'],
+    )
+    expect(folded['zai']).toBe('metered')
+    expect(folded['minimax-cn']).toBe('free')
+  })
+
+  it('锁定的 provider：显式标记被挡，但月费条目照样算订阅（客户端 billingFor 同此口径）', () => {
+    const folded = foldProviderBillingModes(
+      { 'deepseek-official': 'metered' },
+      [{ provider: 'deepseek-official', billingMode: 'free' }],
+      provider => provider === 'deepseek-official',
+      ['deepseek-official'],
+    )
+    expect(folded['deepseek-official']).toBe('plan')
+  })
+
   it('financeBillingMode 三态：plan / free / 默认 metered（未知 provider 也是 metered）', () => {
     const config = normalizeFinanceConfig({}, { 'deepseek-official': 'metered', zai: 'plan', volcengine: 'free' })
     expect(financeBillingMode(config, 'deepseek-official/deepseek-flash')).toBe('metered')

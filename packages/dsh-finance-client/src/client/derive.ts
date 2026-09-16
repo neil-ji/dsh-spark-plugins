@@ -193,11 +193,13 @@ export function dailyAverageMicros(byDay: readonly FinanceDayRow[], days = 7): n
 
 /**
  * 把一个 provider id 归一化到账本的 provider 名：账本用的是模型键前缀
- * （`deepseek`），余额接口用的是 host 注册表 id（`deepseek-official`）。
+ * （`deepseek-official`），套餐 / 余额接口常写 `deepseek` —— **两个方向都要能对上**，
+ * 否则「套餐写 deepseek、账本记 deepseek-official」会静默配不上（等价用量算成 0）。
+ * 大小写与 `-official` 后缀一律不敏感，与宿主 `financeProviderKey` 同口径。
  */
 export function ledgerProviderNames(providerId: string): string[] {
-  const stripped = providerId.replace(/-official$/, '')
-  return stripped === providerId ? [providerId] : [providerId, stripped]
+  const key = providerKey(providerId)
+  return [...new Set([providerId, key, `${key}-official`])]
 }
 
 /** 某 provider 在账本里的累计成本（micros）；找不到返回 null。 */
@@ -478,9 +480,13 @@ export interface PlanInsight {
   breakEvenRatio: number | null
 }
 
-/** provider 比对键：账本用模型键前缀（`deepseek`），余额/套餐可能带 `-official`。 */
+/**
+ * provider 比对键：账本用模型键前缀（`deepseek`），余额/套餐可能带 `-official`。
+ * 先小写再剥后缀 —— 用户手写的套餐条目可能写成 `DeepSeek-Official`，宿主侧
+ * `financeProviderKey` 是同一口径（大小写不敏感），两侧必须逐字一致。
+ */
 export function providerKey(provider: string): string {
-  return provider.replace(/-official$/, '').toLowerCase()
+  return provider.toLowerCase().replace(/-official$/, '')
 }
 
 /** 一条套餐 × 账本 → 对比结论。全观测值相减，没有估算成分。 */
