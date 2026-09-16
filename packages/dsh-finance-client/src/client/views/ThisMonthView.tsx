@@ -117,10 +117,12 @@ export function ThisMonthView({
     ...planEntries.map((plan) => plan.provider),
     ...allProviders.map((row) => row.provider),
   ])]
-  const subscriptionProviders = knownProviders.filter((provider) => billingFor(provider) === 'plan')
-  const meteredProviders = knownProviders.filter((provider) => billingFor(provider) !== 'plan')
   const spendByProvider = new Map(ledger.byProvider.map((row) => [providerKey(row.provider), row.costMicros]))
   const providerRowOf = new Map(allProviders.map((row) => [providerKey(row.provider), row]))
+  const subscriptionProviders = knownProviders.filter((provider) => billingFor(provider) === 'plan')
+  // 按量付费卡只列**有余额接口**的厂商（白名单）：没有接口的整行去掉，不占版面。
+  const meteredProviders = knownProviders.filter((provider) => billingFor(provider) !== 'plan'
+    && providerRowOf.get(providerKey(provider))?.hostMeta?.supportsBalanceFetch === true)
   const empty = ledger.sessionCount === 0
 
   return (
