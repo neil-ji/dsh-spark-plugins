@@ -148,7 +148,7 @@ describe('FinancePanel shell', () => {
     expect(html).toContain('finance-stat-metered')
     expect(html).toContain('finance-stat-plan')
     expect(html).toContain('finance-view-thisMonth')
-    expect(html).toContain('finance-balance-deepseek-official')
+    expect(html).toContain('finance-metered-deepseek-official')
     // 形制（与 hippomemo MemorySection 一致）：子页签栏是面板内容的第一件东西，
     // 指标/操作/脚注都在 tab 里，不允许置顶。
     expect(html.indexOf('finance-tabs')).toBeGreaterThan(-1)
@@ -196,7 +196,7 @@ describe('finance views', () => {
       onRefresh: () => {},
       lastSyncAppliedAt: undefined,
     }))
-    expect(html).toContain('finance-balance-deepseek-official')
+    expect(html).toContain('finance-metered-deepseek-official')
     expect(html).toContain('topModelsHint')
     expect(html).toContain('trendTitle')
   })
@@ -216,11 +216,12 @@ describe('finance views', () => {
       lastSyncAppliedAt: undefined,
       onSetBillingMode: async () => {},
     }))
-    // 账本里用过 a / b，而未接入的厂商不会出现
-    expect(noPlan).toContain('finance-plan-a')
-    expect(noPlan).toContain('finance-plan-b')
-    // 未打订阅标记的厂商：只给「计费方式」控件，不再默认摆出「填月费」
+    // 账本里用过 a / b，未接入的厂商不出现；默认（按量）落在「按量付费」卡
+    expect(noPlan).toContain('finance-metered-a')
+    expect(noPlan).toContain('finance-metered-b')
     expect(noPlan).toContain('billingMark: a')
+    // 订阅计划卡此时为空态，且不再默认摆出「填月费」
+    expect(noPlan).toContain('planEmpty')
     expect(noPlan).not.toContain('planFill')
 
     const withPlan = renderToStaticMarkup(createElement(ThisMonthView, {
@@ -255,7 +256,9 @@ describe('finance views', () => {
       onRefresh: () => {},
       lastSyncAppliedAt: undefined,
     }))
-    expect(html).toContain('planReadOnly')
+    // 有月费条目的厂商按「订阅」归类 → 落在订阅计划卡；只读时计费方式以标签呈现
+    expect(html).toContain('finance-plan-a')
+    expect(html).toContain('billing_plan')
     expect(html).not.toContain('planEdit')
   })
 

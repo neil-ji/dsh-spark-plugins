@@ -84,9 +84,6 @@ export function ThisMonthView({
     .sort((a, b) => (b.unitCostMicros as number) - (a.unitCostMicros as number))
     .slice(0, TOP_MODEL_COUNT)
   const allProviders = providerList?.providers ?? []
-  // 余额卡只列**宿主支持余额接口**的 provider（白名单，当前仅 deepseek-official）：
-  // 不支持的整块不展示，不占布局。
-  const balanceRows = allProviders.filter((row) => row.hostMeta?.supportsBalanceFetch === true)
   // provider 级「计费方式」标记：用户设置优先，其次宿主建议值；锁定的 provider 只读展示。
   const billingExplicit = new Map<string, FinanceProviderBillingMode>()
   const billingDefault = new Map<string, FinanceProviderBillingMode>()
@@ -111,10 +108,19 @@ export function ThisMonthView({
     if (planEntries.some((plan) => providerKey(plan.provider) === key)) return 'plan'
     return billingDefault.get(key) ?? 'metered'
   }
-  const { withPlan, withoutPlan } = planRows(ledger, plans)
+  const { withPlan } = planRows(ledger, plans)
   const planByProvider = new Map(withPlan.map((insight) => [insight.provider, insight]))
   const planEntries = [...plans]
-  const orderedProviders = [...withPlan.map((insight) => insight.provider), ...withoutPlan]
+  // 两张卡：订阅计划 = 打了订阅标记的厂商；按量付费 = 其余（含免费）。
+  const knownProviders = [...new Set([
+    ...ledger.byProvider.map((row) => row.provider),
+    ...planEntries.map((plan) => plan.provider),
+    ...allProviders.map((row) => row.provider),
+  ])]
+  const subscriptionProviders = knownProviders.filter((provider) => billingFor(provider) === 'plan')
+  const meteredProviders = knownProviders.filter((provider) => billingFor(provider) !== 'plan')
+  const spendByProvider = new Map(ledger.byProvider.map((row) => [providerKey(row.provider), row.costMicros]))
+  const providerRowOf = new Map(allProviders.map((row) => [providerKey(row.provider), row]))
   const empty = ledger.sessionCount === 0
 
   return (
@@ -161,7 +167,6 @@ export function ThisMonthView({
         : (
           <>
             <Card title={t('planCardTitle')} className={css.section}>
-              <p className={css.hint}>{t('planCardHint')}</p>
               <div className={css.table} data-testid="finance-plan-card">
                 <div className={cx(css.tableHead, css.colsPlan)}>
                   <span className={css.cell}>{t('colProvider')}</span>
@@ -170,9 +175,9 @@ export function ThisMonthView({
                   <span className={css.cell}>{t('planVerdict')}</span>
                   <span className={css.cell} />
                 </div>
-                {orderedProviders.length === 0
-                  ? <p className={css.hint}>{t('noData')}</p>
-                  : orderedProviders.map((provider) => {
+                {subscriptionProviders.length === 0
+                  ? <p className={css.hint}>{t('planEmpty')}</p>
+                  : subscriptionProviders.map((provider) => {
                     const insight = planByProvider.get(provider)
                     const existing = planEntries.find((plan) => plan.provider === provider)
                     const open = editing === provider
@@ -189,7 +194,7 @@ export function ThisMonthView({
                           <span className={cx(css.cell, css.balanceNote)}>{verdictText(insight, currency, t)}</span>
                           <span className={css.planActions}>
                             {/* 计费方式标记（provider 级）：按量 / 订阅 / 免费。锁定的 provider 只读。 */}
-                            {billingLocked.has(providerKey(provider))
+                            {!plansWritable || billingLocked.has(providerKey(provider))
                               ? <span className={css.tagMuted}>{billingLabel(billingFor(provider), t)}</span>
                               : (
                                 <SegmentedControl<FinanceProviderBillingMode>
@@ -199,7 +204,7 @@ export function ThisMonthView({
                                   ariaLabel={`${t('billingMark')}: ${provider}`}
                                 />
                               )}
-                            {plansWritable && billingFor(provider) === 'plan'
+                            {plansWritable
                               ? (
                                 <Button
                                   onClick={() => setEditing(open ? null : provider)}
@@ -209,7 +214,7 @@ export function ThisMonthView({
                                 </Button>
                               )
                               : null}
-                            {plansWritable && billingFor(provider) === 'plan' && existing !== undefined
+                            {plansWritable && existing !== undefined
                               ? (
                                 <Button
                                   onClick={() => { void removePlan(provider) }}
@@ -236,31 +241,48 @@ export function ThisMonthView({
                     )
                   })}
               </div>
-              {plansWritable ? <p className={css.hint}>{t('planOnlyUsed')}</p> : <p className={css.tag}>{t('planReadOnly')}</p>}
             </Card>
 
-            {balanceRows.length === 0
+            {meteredProviders.length === 0
               ? null
               : (
-            <Card title={t('balanceTitle')} className={css.section}>
+            <Card title={t('meteredCardTitle')} className={css.section}>
               <div className={css.table}>
                 <div className={cx(css.tableHead, css.colsBalance)}>
                   <span className={css.cell}>{t('colProvider')}</span>
-                  <span className={cx(css.cell, css.cellNum)}>{t('balanceTitle')}</span>
-                  <span className={css.cell} />
+                  <span className={cx(css.cell, css.cellNum)}>{t('meteredSpend')}</span>
+                  <span className={cx(css.cell, css.cellNum)}>{t('balanceLabel')}</span>
                   <span className={css.cell} />
                 </div>
-                {balanceRows.map((row) => (
-                    <div className={cx(css.tableRow, css.colsBalance)} key={row.provider} data-testid={`finance-balance-${row.provider}`}>
-                      <span className={cx(css.cell, css.balanceName)}>{row.provider}</span>
+                {meteredProviders.map((provider) => {
+                  const row = providerRowOf.get(providerKey(provider))
+                  const spend = spendByProvider.get(providerKey(provider)) ?? 0
+                  const mark = billingFor(provider)
+                  const supportsBalance = row?.hostMeta?.supportsBalanceFetch === true
+                  return (
+                    <div className={cx(css.tableRow, css.colsBalance)} key={provider} data-testid={`finance-metered-${provider}`}>
+                      <span className={cx(css.cell, css.balanceName)}>{provider}</span>
                       <span className={cx(css.cell, css.cellNum, css.balanceValue)}>
-                        {balanceValue(ledger, row.balance, t)}
+                        {mark === 'free' ? t('billing_free') : <Money micros={spend} currency={currency} />}
                       </span>
-                      <span className={cx(css.cell, css.balanceNote)}>{balanceNote(row.provider, row.balance, ledger, t)}</span>
-                      {/* 「刷新余额」已移除：余额由宿主自动抓取并在每次 load 时同步。 */}
-                      <span className={css.cell} />
+                      <span className={cx(css.cell, css.cellNum)}>
+                        {supportsBalance && row !== undefined ? balanceValue(ledger, row.balance, t) : ''}
+                      </span>
+                      <span className={css.planActions}>
+                        {!plansWritable || billingLocked.has(providerKey(provider))
+                          ? <span className={css.tagMuted}>{billingLabel(mark, t)}</span>
+                          : (
+                            <SegmentedControl<FinanceProviderBillingMode>
+                              options={BILLING_MODES.map((mode) => ({ value: mode, label: billingLabel(mode, t) }))}
+                              value={mark}
+                              onChange={(next) => { void onSetBillingMode(provider, next) }}
+                              ariaLabel={`${t('billingMark')}: ${provider}`}
+                            />
+                          )}
+                      </span>
                     </div>
-                  ))}
+                  )
+                })}
               </div>
             </Card>
               )}
