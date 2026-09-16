@@ -306,12 +306,19 @@ export class FinanceService extends TypertRemoteService {
    * diagnostics 是被形状守卫拒绝的键，UI 据此明示「哪些覆盖没生效」。
    */
   private priceLayerCache: { prices: FinanceConfigInput['prices']; diagnostics: readonly FinancePriceMergeDiagnostic[] } | undefined
+  /**
+   * settings 注入面的 ctx。**descriptor 读取必须用它**：服务自身的 `this.ctx` 没注入 settings，
+   * 裸读会抛，`readDescriptorPrices` 的守卫于是返回 `{}` —— 曾经因此把构造期捕获的
+   * composition 价格表清空（面板随即回落到 legacy 兜底价，完整性检测也永远报"被改动"）。
+   */
+  private settingsCtx: Context | undefined
 
   constructor(ctx: Context, config: FinanceConfigInput = {}) {
     super(ctx, 'finance')
     this.configSource = () => config
     this.compositionPrices = config.prices ?? {}
     ctx.inject(['settings'], (sctx) => {
+      this.settingsCtx = sctx
       sctx.settings.installSection(ctx, NS, FinanceService.Config, config, {
         setSource: source => {
           this.configSource = source
@@ -385,10 +392,15 @@ export class FinanceService extends TypertRemoteService {
    */
   private refreshLayerCaches(): void {
     this.priceLayerCache = undefined
-    this.userPrices = readDescriptorPrices(this.ctx, NS, 'user')
+    const ctx = this.settingsCtx
+    // settings 未注入（headless 组合 / 尚未安装）：保留构造期捕获的 composition 价格表，
+    // **绝不**用空的读取结果覆盖它 —— 否则基础表会凭空消失，账本回落到 legacy 兜底价。
+    if (ctx === undefined) return
+    this.userPrices = readDescriptorPrices(ctx, NS, 'user')
     // `descriptor.base` is the composition entry; re-capture too in case the
-    // settings section was re-registered with a different entry.
-    this.compositionPrices = readDescriptorPrices(this.ctx, NS, 'base')
+    // settings section was re-registered with a different entry. 只在读到非空时替换。
+    const base = readDescriptorPrices(ctx, NS, 'base') ?? {}
+    if (Object.keys(base).length > 0) this.compositionPrices = base
   }
 
   /**
