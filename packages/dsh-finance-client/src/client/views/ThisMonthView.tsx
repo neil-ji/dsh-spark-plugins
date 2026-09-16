@@ -83,12 +83,15 @@ export function ThisMonthView({
     .filter((row) => row.unitCostMicros !== null)
     .sort((a, b) => (b.unitCostMicros as number) - (a.unitCostMicros as number))
     .slice(0, TOP_MODEL_COUNT)
-  const balanceRows = providerList?.providers ?? []
+  const allProviders = providerList?.providers ?? []
+  // 余额卡只列**宿主支持余额接口**的 provider（白名单，当前仅 deepseek-official）：
+  // 不支持的整块不展示，不占布局。
+  const balanceRows = allProviders.filter((row) => row.hostMeta?.supportsBalanceFetch === true)
   // provider 级「计费方式」标记：用户设置优先，其次宿主建议值；锁定的 provider 只读展示。
   const billingExplicit = new Map<string, FinanceProviderBillingMode>()
   const billingDefault = new Map<string, FinanceProviderBillingMode>()
   const billingLocked = new Set<string>()
-  for (const row of balanceRows) {
+  for (const row of allProviders) {
     const key = providerKey(row.provider)
     const explicit = row.userEntry?.billingMode
     if (explicit === 'plan' || explicit === 'metered' || explicit === 'free') billingExplicit.set(key, explicit)
@@ -236,6 +239,9 @@ export function ThisMonthView({
               {plansWritable ? <p className={css.hint}>{t('planOnlyUsed')}</p> : <p className={css.tag}>{t('planReadOnly')}</p>}
             </Card>
 
+            {balanceRows.length === 0
+              ? null
+              : (
             <Card title={t('balanceTitle')} className={css.section}>
               <div className={css.table}>
                 <div className={cx(css.tableHead, css.colsBalance)}>
@@ -244,31 +250,20 @@ export function ThisMonthView({
                   <span className={css.cell} />
                   <span className={css.cell} />
                 </div>
-                {balanceRows.length === 0
-                  ? <p className={css.hint}>{t('noData')}</p>
-                  : balanceRows.map((row) => (
+                {balanceRows.map((row) => (
                     <div className={cx(css.tableRow, css.colsBalance)} key={row.provider} data-testid={`finance-balance-${row.provider}`}>
                       <span className={cx(css.cell, css.balanceName)}>{row.provider}</span>
                       <span className={cx(css.cell, css.cellNum, css.balanceValue)}>
                         {balanceValue(ledger, row.balance, t)}
                       </span>
                       <span className={cx(css.cell, css.balanceNote)}>{balanceNote(row.provider, row.balance, ledger, t)}</span>
-                      <span className={css.cellNum}>
-                        {row.hostMeta?.supportsBalanceFetch === true
-                          ? (
-                            <Button
-                              onClick={() => { void refreshProvider(row.provider) }}
-                              aria-label={`${t('balanceRefresh')}: ${row.provider}`}
-                            >
-                              {t('balanceRefresh')}
-                            </Button>
-                          )
-                          : null}
-                      </span>
+                      {/* 「刷新余额」已移除：余额由宿主自动抓取并在每次 load 时同步。 */}
+                      <span className={css.cell} />
                     </div>
                   ))}
               </div>
             </Card>
+              )}
 
             <Card
               title={t('trendTitle')}

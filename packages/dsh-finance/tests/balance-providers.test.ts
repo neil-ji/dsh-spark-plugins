@@ -157,17 +157,11 @@ describe('FinanceService.getBalance providers map', () => {
       code: 'unsupported-provider',
     })
     expect(view.providers!['minimax-cn']!.message).toContain('minimax-cn')
-    // No deepseek entry, so no fetch should fire either.
-    expect(fake).not.toHaveBeenCalled()
-    // Commit 19: the canonical surface always carries a deepseek-official slot,
-    // even when the user has no per-provider entry — the dashboard can render
-    // a coherent "you have not configured this provider" empty state instead
-    // of an undefined slot.
-    expect(view.providers!['deepseek-official']).toMatchObject({
-      status: 'unsupported',
-      provider: 'deepseek-official',
-      code: 'unsupported-provider',
-    })
+    // 余额自动获取（本次变更）：deepseek-official 是宿主白名单里唯一支持余额接口的
+    // provider，即使用户没有 per-provider 条目也**自动抓取一次**，不再报 unsupported。
+    expect(fake).toHaveBeenCalledTimes(1)
+    expect(view.providers!['deepseek-official']!.provider).toBe('deepseek-official')
+    expect(view.providers!['deepseek-official']!.code).not.toBe('unsupported-provider')
   })
 
   it('marks free unknown providers as free-provider', async () => {

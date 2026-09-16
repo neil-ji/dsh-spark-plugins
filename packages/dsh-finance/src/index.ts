@@ -772,7 +772,9 @@ export class FinanceService extends TypertRemoteService {
       return this.unsupportedSlot(entry, fetchedAt, 'free-provider', 'free providers do not track a balance')
     }
     const isFetchCapable = meta !== undefined && meta.supportsBalanceFetch
-    const autoFetchOn = forceFetch || (entry?.autoFetchBalance ?? false)
+    // 余额默认自动获取：宿主已知且支持余额接口的 provider（白名单，当前仅 deepseek-official）
+    // 即使用户没有 per-provider 条目也直接抓取 —— 这就是「自动尝试获取、同步最新余额」。
+    const autoFetchOn = forceFetch || (entry?.autoFetchBalance ?? isFetchCapable)
     if (isFetchCapable && autoFetchOn) {
       // Only deepseek-official has a registered fetch path today. Other
       // fetch-capable providers would slot in here as their APIs land.
