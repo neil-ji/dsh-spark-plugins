@@ -187,14 +187,20 @@ try {
       inboxText.slice(0, 160),
     )
     // 破坏性变更的可观测证据：旧 `status` 参数被忽略（返回全量），新 `inboxState` 才过滤。
-    // 用 archived 而不是 pending —— 沙箱里没有归档记录，两者不可能撞成同一个数。
+    // 注意**不要**断言 archived 子集为 0：验收轮自己会归档火花，沙箱数据是可变的
+    // （acc-20260917 的 QA 轮归档了 1 条，这条断言当轮就翻红 —— 断言要表达不变量，不是数据巧合）。
     const legacyFilter = await evalJs(`Promise.all([
-      fetch('/sparks?status=archived&limit=50').then((r) => r.json()),
-      fetch('/sparks?inboxState=archived&limit=50').then((r) => r.json()),
-    ]).then(([legacy, modern]) => ({ legacy: legacy.value?.length ?? -1, modern: modern.value?.length ?? -1 }))`)
+      fetch('/sparks?status=archived&limit=200').then((r) => r.json()),
+      fetch('/sparks?inboxState=archived&limit=200').then((r) => r.json()),
+      fetch('/sparks?limit=200').then((r) => r.json()),
+    ]).then(([legacy, modern, all]) => ({
+      legacy: legacy.value?.length ?? -1,
+      modern: modern.value?.length ?? -1,
+      all: all.value?.length ?? -1,
+    }))`)
     check(
-      '旧 status 查询参数已失效（破坏性变更真的生效）',
-      legacyFilter?.modern === 0 && (legacyFilter?.legacy ?? 0) > 0,
+      '旧 status 查询参数已失效（status= 被忽略返回全量，只有 inboxState= 会过滤）',
+      legacyFilter?.legacy === legacyFilter?.all && legacyFilter?.modern >= 0 && legacyFilter?.modern < legacyFilter?.all,
       JSON.stringify(legacyFilter),
     )
 
@@ -332,6 +338,249 @@ try {
     const interesting = console_.filter((line) => /spark|dock|remote|stream|mux|event|Error|error|warn/.test(line))
     console.log('\n--- 控制台（过滤后 ' + interesting.length + '/' + console_.length + ' 条）---')
     for (const line of interesting.slice(0, 20)) console.log('    ' + line.slice(0, 300))
+  }
+
+  // 6) PC 端验收回归（acceptance-dsh-spark-plugins-20260917-1906）
+  //    把这一轮修掉的问题焊成断言：关闭态焦点序、视口重吸附、方向键/双击、子页签方向键、
+  //    危险态可辨、token 直连、点击目标下限、禁用原因。AGENTS §5：新防线进验收脚本。
+  await evalJs(`(() => {
+    const spark = Array.from(document.querySelectorAll('.dock-tab')).find((b) => (b.getAttribute('aria-label') ?? '').startsWith('火花'))
+    if (spark) spark.click()
+  })()`)
+  await sleep(900)
+
+  // 6a) PCQA-001：关闭态面板必须移出焦点序与无障碍树，且焦点回球
+  await evalJs(`(() => {
+    const panel = document.querySelector('.dock-panel')
+    const ball = document.querySelector('.dock-ball')
+    if (!panel || !ball) return
+    if (!panel.classList.contains('open')) ball.click()
+  })()`)
+  await sleep(700)
+  // 前置：焦点必须真的落进面板（inert 生效时 focus() 是空操作，落不进说明前置条件没满足）
+  const focusPlanted = await evalJs(`(() => {
+    const panel = document.querySelector('.dock-panel')
+    const tab = panel?.querySelector('[role="tab"]')
+    tab?.focus()
+    return panel !== null && tab !== null && panel.contains(document.activeElement)
+  })()`)
+  check('PCQA-001 前置：面板展开时焦点可落入面板内', focusPlanted === true, String(focusPlanted))
+  await evalJs(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)
+  await sleep(600)
+  const closedState = await evalJs(`(() => {
+    const panel = document.querySelector('.dock-panel')
+    const ball = document.querySelector('.dock-ball')
+    if (!panel || !ball) return null
+    const cs = getComputedStyle(panel)
+    return {
+      open: panel.classList.contains('open'),
+      inert: panel.hasAttribute('inert'),
+      visibility: cs.visibility,
+      focusOnBall: document.activeElement === ball,
+    }
+  })()`)
+  check(
+    'PCQA-001 关闭态面板 inert + visibility:hidden（移出焦点序与无障碍树）',
+    closedState !== null && closedState.open === false && closedState.inert === true && closedState.visibility === 'hidden',
+    JSON.stringify(closedState),
+  )
+  check('PCQA-001 Esc 收起后焦点回到悬浮球', closedState?.focusOnBall === true, JSON.stringify(closedState))
+
+  // 关闭态不得出现在 Tab 序里（旧实现只靠 opacity:0，Tab 会连续落进 16 个不可见控件）
+  await evalJs(`document.querySelector('.dock-ball').focus()`)
+  for (let i = 0; i < 3; i += 1) {
+    await send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9 })
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9 })
+    await sleep(180)
+  }
+  const tabProbe = await evalJs(`(() => {
+    const panel = document.querySelector('.dock-panel')
+    const active = document.activeElement
+    return { inPanel: panel.contains(active), where: String(active?.getAttribute('aria-label') ?? active?.className ?? '') }
+  })()`)
+  check('PCQA-001 关闭态面板不参与 Tab 序列（连续 Tab 不落进面板）', tabProbe.inPanel === false, JSON.stringify(tabProbe))
+
+  // 6b) PCQA-002：视口变化后球必须重吸附角落（旧实现停在旧坐标并压住正文）
+  await evalJs(`document.querySelector('.dock-ball').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))`)
+  await sleep(700)
+  await send('Emulation.setDeviceMetricsOverride', { width: 1100, height: 700, deviceScaleFactor: 1, mobile: false })
+  await sleep(800)
+  const resnap = await evalJs(`(() => {
+    const ball = document.querySelector('.dock-ball')
+    return { got: [ball.style.left, ball.style.top], want: [(innerWidth - 48 - 16) + 'px', (innerHeight - 48 - 16) + 'px'], vw: innerWidth, vh: innerHeight }
+  })()`)
+  check('PCQA-002 视口缩小后悬浮球重吸附到右下角', resnap.got[0] === resnap.want[0] && resnap.got[1] === resnap.want[1], JSON.stringify(resnap))
+  await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false })
+  await sleep(800)
+  const resnapBack = await evalJs(`(() => {
+    const ball = document.querySelector('.dock-ball')
+    return { got: ball.style.left, want: (innerWidth - 48 - 16) + 'px' }
+  })()`)
+  check('PCQA-002 视口恢复后球仍在右下角', resnapBack.got === resnapBack.want, JSON.stringify(resnapBack))
+
+  // 6c) PCQA-009 / PCQA-008：方向键微调（拖拽的键盘替代）与双击复位
+  const nudge = await evalJs(`(() => {
+    const ball = document.querySelector('.dock-ball')
+    ball.focus()
+    const before = { x: parseFloat(ball.style.left), y: parseFloat(ball.style.top) }
+    ball.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true, cancelable: true }))
+    const mid = { x: parseFloat(ball.style.left), y: parseFloat(ball.style.top) }
+    ball.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true }))
+    const up = { x: parseFloat(ball.style.left), y: parseFloat(ball.style.top) }
+    return { before, mid, up }
+  })()`)
+  check(
+    'PCQA-009 方向键微调球位置（← -8px / ↑ -8px）',
+    nudge.mid.x === nudge.before.x - 8 && nudge.mid.y === nudge.before.y && nudge.up.y === nudge.before.y - 8,
+    JSON.stringify(nudge),
+  )
+  await evalJs(`document.querySelector('.dock-ball').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))`)
+  await sleep(700)
+  const resetPos = await evalJs(`(() => {
+    const ball = document.querySelector('.dock-ball')
+    return { x: parseFloat(ball.style.left), y: parseFloat(ball.style.top), wantX: innerWidth - 48 - 16, wantY: innerHeight - 48 - 16 }
+  })()`)
+  check('PCQA-008 双击球复位默认右下角', resetPos.x === resetPos.wantX && resetPos.y === resetPos.wantY, JSON.stringify(resetPos))
+
+  // 6d) 形制探针（在真实宿主的真实 CSS 下量，不靠渲染出来的业务内容）：
+  //     PCQA-012 字号不借圆角 token / PCQA-015 危险态可辨 / PCQA-017 卡片题 14px /
+  //     PCQA-018 内容列预留下水道 / PCQA-020 点击目标 ≥26px
+  await evalJs(`document.querySelector('.dock-ball').click()`)
+  await sleep(900)
+  const shape = await evalJs(`(() => {
+    const embed = document.querySelector('.dock-embed') ?? document.querySelector('.dock-body')
+    const probe = (tag, cls) => {
+      const el = document.createElement(tag)
+      if (cls) el.className = cls
+      el.textContent = 'probe'
+      embed.appendChild(el)
+      const cs = getComputedStyle(el)
+      const out = { font: cs.fontSize, color: cs.color, height: el.getBoundingClientRect().height }
+      el.remove()
+      return out
+    }
+    const panel = document.querySelector('.dock-panel')
+    const tag = document.createElement('span')
+    tag.style.color = 'var(--spk-label-3)'
+    panel.appendChild(tag)
+    const spkLabel3 = getComputedStyle(tag).color
+    tag.style.color = 'var(--dsw-alias-label-tertiary)'
+    const hostAlias = getComputedStyle(tag).color
+    tag.remove()
+    const sub = document.querySelector('.dock-head .sub')
+    const body = document.querySelector('.dock-body')
+    return {
+      sub: sub ? getComputedStyle(sub).color : null,
+      spkLabel3,
+      hostAlias,
+      prop: probe('span', 'dock-prop-type'),
+      h3: probe('h3', ''),
+      pill: probe('button', 'dock-pill'),
+      pillDanger: probe('button', 'dock-pill danger'),
+      pillPlain: probe('button', 'dock-pill'),
+      gutter: body ? getComputedStyle(body).scrollbarGutter : null,
+    }
+  })()`)
+  check(
+    'PCQA-007/016 dock 副标题直连 --spk-label-3（不再被宿主别名顶掉）',
+    shape.sub === shape.spkLabel3,
+    JSON.stringify({ sub: shape.sub, spkLabel3: shape.spkLabel3, hostAlias: shape.hostAlias }),
+  )
+  check('PCQA-012 提案类型标签字号 = 11px（不再借圆角 token 的 10px）', shape.prop.font === '11px', JSON.stringify(shape.prop))
+  check('PCQA-017 卡片题 14px（与 ui-kit Card.title 同档）', shape.h3.font === '14px', JSON.stringify(shape.h3))
+  check('PCQA-020 胶囊点击目标高度 ≥26px', parseFloat(shape.pill.height) >= 26, JSON.stringify(shape.pill))
+  const dangerDiffers = shape.pillDanger.color !== shape.pillPlain.color
+  check('PCQA-015 破坏性胶囊有可辨识的危险态（字色 ≠ 安全操作）', dangerDiffers, JSON.stringify({ danger: shape.pillDanger, plain: shape.pillPlain }))
+  check('PCQA-018 内容列预留滚动条槽位（scrollbar-gutter: stable）', shape.gutter === 'stable', String(shape.gutter))
+
+  // 6f) PCQA-014：「捕获」禁用时要给原因文案
+  const capture = await evalJs(`(() => {
+    const bar = document.querySelector('.dock-capture-bar')
+    const btn = bar?.querySelector('button[type="submit"]')
+    return btn ? { disabled: btn.disabled, described: btn.getAttribute('aria-describedby'), hint: (bar.textContent ?? '').trim() } : null
+  })()`)
+  check(
+    'PCQA-014 空输入时禁用态给出原因文案（且与按钮 aria 关联）',
+    capture !== null && capture.disabled === true && capture.hint.includes('输入内容后可捕获'),
+    JSON.stringify(capture),
+  )
+
+  // 6e) PCQA-004：子页签方向键切换 + roving tabindex（注意：它会把子页签切到下一项，
+  //     所以任何依赖「火花流」页内容的断言都必须排在这一步之前）
+  const segBefore = await evalJs(`(() => {
+    const list = document.querySelector('.dock-embed [role="tablist"]')
+    if (!list) return null
+    const tabs = Array.from(list.querySelectorAll('[role="tab"]'))
+    const sel = tabs.find((t) => t.getAttribute('aria-selected') === 'true') ?? tabs[0]
+    sel.focus()
+    const idx = tabs.indexOf(sel)
+    sel.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }))
+    return { count: tabs.length, idx, tabIndexes: tabs.map((t) => t.tabIndex) }
+  })()`)
+  await sleep(400)
+  const segAfter = await evalJs(`(() => {
+    const list = document.querySelector('.dock-embed [role="tablist"]')
+    const tabs = Array.from(list.querySelectorAll('[role="tab"]'))
+    return { sel: tabs.findIndex((t) => t.getAttribute('aria-selected') === 'true'), focused: tabs.indexOf(document.activeElement) }
+  })()`)
+  const segWant = segBefore === null ? -1 : (segBefore.idx + 1) % segBefore.count
+  check(
+    'PCQA-004 子页签支持方向键切换并同步焦点（roving tabindex）',
+    segBefore !== null && segAfter.sel === segWant && segAfter.focused === segWant
+      && segBefore.tabIndexes.filter((n) => n === 0).length === 1,
+    JSON.stringify({ before: segBefore, after: segAfter, want: segWant }),
+  )
+
+  // 6g) PCQA-005/006：GitHub「默认可见性」下拉 —— Esc 只关菜单不关面板，且焦点回触发钮
+  const githubIndex = await evalJs(`(() => Array.from(document.querySelectorAll('.dock-tab')).findIndex((b) => (b.getAttribute('aria-label') ?? '').startsWith('GitHub')))()`)
+  if (githubIndex >= 0) {
+    await evalJs(`document.querySelectorAll('.dock-tab')[` + githubIndex + `].click()`)
+    await sleep(1200)
+    const trigger = await evalJs(`(() => {
+      const pane = document.querySelector('.dock-body')
+      const btn = Array.from(pane.querySelectorAll('button')).find((b) => (b.getAttribute('aria-label') ?? '').includes('默认可见性') || ['私有', '公开'].includes((b.textContent ?? '').trim()))
+      if (!btn) return null
+      window.__pcqaVisibilityBtn = btn
+      btn.click()
+      // 只取点击前就稳定的属性：aria-expanded 是 React 状态，必须等重渲染后再读
+      return { label: btn.getAttribute('aria-label'), text: (btn.textContent ?? '').trim() }
+    })()`)
+    await sleep(600)
+    const menuOpen = await evalJs(`(() => {
+      const menu = document.querySelector('[data-spk-layer="menu"]')
+      const panel = document.querySelector('.dock-panel')
+      const btn = window.__pcqaVisibilityBtn
+      return {
+        menu: menu !== null,
+        panelOpen: panel.classList.contains('open'),
+        haspopup: btn?.getAttribute('aria-haspopup') ?? null,
+        expanded: btn?.getAttribute('aria-expanded') ?? null,
+      }
+    })()`)
+    check(
+      'PCQA-006 可见性触发钮暴露 aria-haspopup/aria-expanded，可访问名含可见文本',
+      trigger !== null && menuOpen.haspopup === 'listbox' && menuOpen.expanded === 'true'
+        && String(trigger.label ?? '').includes(trigger.text),
+      JSON.stringify({ trigger, menuOpen }),
+    )
+    check('PCQA-005 菜单展开态可断言（data-spk-layer）', menuOpen.menu === true, JSON.stringify(menuOpen))
+    await evalJs(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)
+    await sleep(500)
+    const afterMenuEsc = await evalJs(`(() => {
+      const panel = document.querySelector('.dock-panel')
+      const menu = document.querySelector('[data-spk-layer="menu"]')
+      const active = document.activeElement
+      return { panelOpen: panel.classList.contains('open'), menu: menu !== null, focus: (active?.textContent ?? '').trim().slice(0, 12) }
+    })()`)
+    check(
+      'PCQA-005 Esc 先关菜单、面板保持打开、焦点回触发钮',
+      afterMenuEsc.panelOpen === true && afterMenuEsc.menu === false && afterMenuEsc.focus.length > 0,
+      JSON.stringify(afterMenuEsc),
+    )
+    await evalJs(`document.querySelector('.dock-iconbtn')?.click()`)
+    await sleep(400)
+  } else {
+    check('PCQA-005/006 GitHub 模块可定位（前置条件）', false, '未找到 GitHub tab')
   }
 
   // 无论球有没有挂上，都把控制台线索打出来（挂载失败时这里才是答案）
