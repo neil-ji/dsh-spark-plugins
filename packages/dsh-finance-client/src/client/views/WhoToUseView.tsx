@@ -93,7 +93,7 @@ export function WhoToUseView({ ledger, t }: WhoToUseViewProps): ReactNode {
                 return (
                   <div className={`${css.tableRow} ${css.colsCompare}`} key={`${group.model}:${row.provider}`}>
                     <span className={css.cell}>{row.provider}</span>
-                    <span className={`${css.cell} ${css.cellNum}`}><Money micros={row.costMicros} currency={currency} /></span>
+                    <span className={`${css.cell} ${css.cellNum}`}><Money micros={row.costMicros} currency={currency} exact /></span>
                     <span className={`${css.cell} ${css.cellNum}`}>
                       {row.unitCostMicros === null ? t('noData') : `${formatMicros(Math.round(row.unitCostMicros))}${t('perMtok')}`}
                     </span>

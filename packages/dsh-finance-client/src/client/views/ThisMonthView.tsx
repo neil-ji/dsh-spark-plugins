@@ -80,6 +80,9 @@ export function ThisMonthView({
   const [editing, setEditing] = useState<string | null>(null)
   /** 还原价格表（回退/破坏性）的二次确认；确认后才真调 onRestorePrices。 */
   const [confirmRestore, setConfirmRestore] = useState(false)
+  /** 没有覆盖层时「还原」没有可回退的东西 —— 禁用必须给原因（UI-UX-SPEC §3.1 Don't）。 */
+  const restoreBlocked = priceTable !== undefined && priceTable.overlayKeyCount + priceTable.userKeyCount === 0
+  const restoreDisabled = Boolean(priceBusy) || restoreBlocked
   const trendPoints = ledger.byDay.map((row) => ({ key: row.day, label: row.day.slice(5), value: row.costMicros }))
   const topModels = modelComparisonRows(ledger)
     .filter((row) => row.unitCostMicros !== null)
@@ -192,10 +195,10 @@ export function ThisMonthView({
                         <div className={cx(css.tableRow, css.colsPlan)} data-testid={`finance-plan-${provider}`}>
                           <span className={cx(css.cell, css.balanceName)}>{provider}</span>
                           <span className={cx(css.cell, css.cellNum)}>
-                            {insight === undefined ? '—' : <Money micros={insight.monthlyMicros} currency={insight.currency} />}
+                            {insight === undefined ? '—' : <Money micros={insight.monthlyMicros} currency={insight.currency} exact />}
                           </span>
                           <span className={cx(css.cell, css.cellNum)}>
-                            <Money micros={insight?.equivalentMicros ?? 0} currency={currency} />
+                            <Money micros={insight?.equivalentMicros ?? 0} currency={currency} exact />
                           </span>
                           <span className={cx(css.cell, css.cellWrap, css.balanceNote)}>{verdictText(insight, currency, t)}</span>
                           <span className={css.planActions}>
@@ -273,7 +276,7 @@ export function ThisMonthView({
                     <div className={cx(css.tableRow, css.colsBalance)} key={provider} data-testid={`finance-metered-${provider}`}>
                       <span className={cx(css.cell, css.balanceName)}>{provider}</span>
                       <span className={cx(css.cell, css.cellNum, css.balanceValue)}>
-                        {mark === 'free' ? t('billing_free') : <Money micros={spend} currency={currency} />}
+                        {mark === 'free' ? t('billing_free') : <Money micros={spend} currency={currency} exact />}
                       </span>
                       <span className={cx(css.cell, css.cellNum)}>
                         {supportsBalance && row !== undefined ? balanceValue(ledger, row.balance, t) : ''}
@@ -326,9 +329,9 @@ export function ThisMonthView({
                   ? <p className={css.hint}>{t('noData')}</p>
                   : topModels.map((row) => (
                     <div className={cx(css.tableRow, css.colsModels)} key={row.modelKey}>
-                      <span className={cx(css.cell, css.modelKey)} title={row.modelKey}>{row.model}</span>
+                      <span className={cx(css.cell, css.modelKey, css.cellWrap)} title={row.modelKey}>{row.model}</span>
                       <span className={css.cell}>{row.provider}</span>
-                      <span className={cx(css.cell, css.cellNum)}><Money micros={row.costMicros} currency={currency} /></span>
+                      <span className={cx(css.cell, css.cellNum)}><Money micros={row.costMicros} currency={currency} exact /></span>
                       <span className={cx(css.cell, css.cellNum)}>
                         {row.unitCostMicros === null ? t('noData') : `${formatMicros(Math.round(row.unitCostMicros))}${t('perMtok')}`}
                       </span>
@@ -352,13 +355,17 @@ export function ThisMonthView({
           </Button>
           <Button
             variant="danger"
-            disabled={priceBusy || (priceTable !== undefined && priceTable.overlayKeyCount + priceTable.userKeyCount === 0)}
+            disabled={restoreDisabled}
+            aria-describedby={restoreBlocked ? 'finance-restore-hint' : undefined}
             onClick={() => { setConfirmRestore(true) }}
             aria-label={t('restorePrices')}
           >
             {t('restorePrices')}
           </Button>
         </div>
+        {restoreBlocked
+          ? <p id='finance-restore-hint' className={css.hint} role='status'>{t('restoreDisabledHint')}</p>
+          : null}
         {/* 破坏性操作二次确认（UI-UX-SPEC §4.2 模板 4「危险区 … danger Button + 二次确认（Modal）」）。
             文案走 locale；Modal 自己负责焦点圈闭，Esc 由它这层接管（不会连带收掉指挥舱）。 */}
         <Modal

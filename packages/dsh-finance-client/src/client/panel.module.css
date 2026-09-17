@@ -3,11 +3,13 @@
  * 全部颜色 / 圆角 / 字号 / 间距走 spark token（audit-tokens 与 audit-contrast 双闸门）。
  */
 
+/* 面板内容区**不再自带内边距**：dock 的 .dock-body 已经给了 var(--spk-pad-panel)，
+   两边叠加会让财务的内容列（含页级分栏）比其它模块窄 32px（复核报告 PCQA-006 实测
+   分栏宽度 火花 517 / 记忆 513 / 财务 485）。内边距归壳，模块只排版。 */
 .panel {
   display: flex;
   flex-direction: column;
   gap: var(--spk-space-3);
-  padding: var(--spk-pad-panel, var(--spk-space-3));
   color: var(--spk-label);
 }
 
@@ -58,9 +60,12 @@
 
 /* ── 表格 ───────────────────────────────────────────────── */
 
+/* 列宽不足时横向滚动而不是压扁列（UI-UX-SPEC §4.5）；各 cols* 给出列的最小宽度，
+   文本单元格配 .cellWrap 折行——两者合起来保证「关键数字和模型名都不会被省略号吃掉」。 */
 .table {
   display: flex;
   flex-direction: column;
+  overflow-x: auto;
 }
 
 .tableHead,
@@ -91,7 +96,7 @@
 }
 
 .colsModels {
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(120px, 2fr) minmax(88px, 1fr) minmax(96px, 1fr) minmax(96px, 1fr);
 }
 
 .colsBalance {
@@ -103,11 +108,11 @@
 }
 
 .colsSessions {
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(120px, 2fr) minmax(80px, 1fr) minmax(96px, 1fr) minmax(80px, 1fr);
 }
 
 .colsCompare {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(88px, 1.2fr) minmax(72px, 1fr) minmax(88px, 1fr) minmax(64px, 1fr) minmax(72px, 1fr);
 }
 
 .colsPlan {

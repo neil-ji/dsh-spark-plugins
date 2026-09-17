@@ -109,10 +109,10 @@ export function SaveMoreView({ ledger, tiers, t }: SaveMoreViewProps): ReactNode
                 const estimate = splitEstimate(buckets, modelTiers)
                 return (
                   <div className={`${css.tableRow} ${css.colsModels}`} key={`context:${row.modelKey}`} data-testid={`finance-context-${row.modelKey}`}>
-                    <span className={`${css.cell} ${css.modelKey}`} title={row.modelKey}>{row.model}</span>
+                    <span className={`${css.cell} ${css.modelKey} ${css.cellWrap}`} title={row.modelKey}>{row.model}</span>
                     <span className={css.cell}>{row.provider}</span>
-                    <span className={css.cell}>{t('contextAboveShare', { pct: formatPercent(profile.shareAbove) })}</span>
-                    <span className={css.cell}>
+                    <span className={`${css.cell} ${css.cellWrap}`}>{t('contextAboveShare', { pct: formatPercent(profile.shareAbove) })}</span>
+                    <span className={`${css.cell} ${css.cellWrap}`}>
                       {estimate === null
                         ? (modelTiers.length === 0 ? t('contextNoTiers') : t('contextNoUsage'))
                         : (

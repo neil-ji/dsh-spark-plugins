@@ -103,12 +103,12 @@ function ProjectDetail({ row, ledger, currency, t, onBack }: {
 function SessionRow({ session, currency, t }: { session: FinanceSessionRow; currency: string; t: FinanceTranslate }): ReactNode {
   return (
     <div className={`${css.tableRow} ${css.colsSessions}`}>
-      <span className={css.cell} title={session.sessionId}>
+      <span className={`${css.cell} ${css.cellWrap}`} title={session.sessionId}>
         {session.title === null || session.title === '' ? t('untitledSession') : session.title}
       </span>
       <span className={css.cell}>{new Date(session.createdAt).toLocaleDateString()}</span>
       <span className={`${css.cell} ${css.modelKey}`} title={session.modelKeys[0]}>{session.modelKeys.length === 0 ? t('noData') : session.modelKeys[0]}</span>
-      <span className={`${css.cell} ${css.cellNum}`}><Money micros={session.costMicros} currency={currency} /></span>
+      <span className={`${css.cell} ${css.cellNum}`}><Money micros={session.costMicros} currency={currency} exact /></span>
     </div>
   )
 }
