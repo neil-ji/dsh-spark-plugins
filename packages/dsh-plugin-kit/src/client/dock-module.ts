@@ -48,7 +48,7 @@ export interface DockModuleOwnerProps {
  * 一个 dock 模块的完整声明：chrome（图标/标题/强调色）与内容都在注册方手里。
  *
  * 2026-09-16 新增 `badge`：未读 / 待处理计数。当回调返回正数时，dock 会同时
- * 在浮球与模块栏 tab 上叠加一个红底圆形徽章（a11y 标签 = label + "N 项待处理"）。
+ * 在浮球与模块栏 tab 上叠加一个红底圆形徽章（a11y 标签由 `formatBadge` 本地化）。
  * 这是"回收回路"的物理落点——光在系统提示里说"有 N 条火花"看不见，
  * 徽章让用户在主屏第一时间知道有东西要处理。
  */
@@ -80,6 +80,17 @@ export interface DockModuleSpec<I extends object> {
    * 拉取失败（接口暂未注册）时视为 0，绝不阻塞浮球渲染。
    */
   badge?: () => number | null
+  /**
+   * 徽章的本地化格式（**kit 不写死任何语言的文案**）。
+   *
+   * 2026-09-17：此前 kit 在这里拼死中文后缀「N 项待处理」，英文语言下模块栏
+   * tab 的可访问名（屏幕阅读器会念）与 title 仍是中文 —— 文案归注册方，
+   * 因此整句改成由本回调产出：`{ label, title }` 分别用于 aria-label 与 title。
+   * **连标点也由注册方给**（中文全角逗号与英文半角逗号同为语言的一部分），
+   * kit 只把 label 与计数原样递进来。未提供时徽章只做视觉提示
+   * （可访问名仍是模块 label，不带计数）。
+   */
+  formatBadge?: (context: { count: number; label: string }) => { label: string; title: string }
   /** 注入面：组件 props 会额外获得 `{...inject(), variant, activeId, onSelect}`。 */
   inject: () => I
   /** 内容组件（只在 variant === 'pane' 且该模块激活时被 dock 渲染）。 */
@@ -100,6 +111,9 @@ export function DockModuleTab(props: {
   accent: string
   accentFg: string
   badge?: number | null
+  /** 徽章的本地化文案（由注册方的 formatBadge 产出；缺省则只有视觉徽章）。 */
+  badgeLabel?: string
+  badgeTitle?: string
   onSelect: () => void
 }): ReactNode {
   const badge = typeof props.badge === 'number' && props.badge > 0 ? props.badge : null
@@ -107,7 +121,7 @@ export function DockModuleTab(props: {
     ? createElement('span', {
         className: 'dock-tab-badge',
         role: 'status',
-        'aria-label': String(badge) + ' 项待处理',
+        'aria-label': props.badgeLabel,
         'data-count': String(badge),
       }, badge > 99 ? '99+' : String(badge))
     : null
@@ -118,9 +132,9 @@ export function DockModuleTab(props: {
     // 所以每条 tab 必须带自己的 module id。
     'data-module-id': props.id,
     'aria-selected': props.active,
-    // 待处理徽章并入 a11y 标签（屏幕阅读器会念"Spark，5 项待处理"）。
-    'aria-label': badge !== null ? props.label + '，' + String(badge) + ' 项待处理' : props.label,
-    title: badge !== null ? props.label + ' · ' + String(badge) + ' 项待处理' : props.label,
+    // 待处理徽章并入 a11y 标签（文案由注册方本地化后传入，见 DockModuleSpec.formatBadge）。
+    'aria-label': props.badgeLabel ?? props.label,
+    title: props.badgeTitle ?? props.label,
     tabIndex: props.active ? 0 : -1,
     className: props.active ? 'dock-tab active' : 'dock-tab',
     style: { '--accent': props.accent, '--accent-fg': props.accentFg },
@@ -151,16 +165,24 @@ export function DockModuleHeader(props: { name: string; sub: ReactNode; accent: 
 export function registerDockModule<I extends object>(ctx: ClientContext, spec: DockModuleSpec<I>): () => void {
   const Module: ComponentType<DockModuleOwnerProps & I> = (props) => {
     if (props.variant === 'rail') {
+      // badge 是回调 → 渲染时调一次取当前值；dock 在 stats 流帧到达时会强制
+      // 该模块重渲染（外部 effect 在 inject 里订阅即可），这里只负责读。
+      // 计数与它的本地化文案都由注册方给出（kit 不含任何语言的字符串）。
+      const label = spec.label()
+      const count = spec.badge !== undefined ? spec.badge() : null
+      const badgeText = count !== null && count > 0 && spec.formatBadge !== undefined
+        ? spec.formatBadge({ count, label })
+        : undefined
       return DockModuleTab({
         id: spec.id,
         active: props.activeId === spec.id,
-        label: spec.label(),
+        label,
         icon: spec.icon,
         accent: spec.accent,
         accentFg: spec.accentFg,
-        // badge 是回调 → 渲染时调一次取当前值；dock 在 stats 流帧到达时会强制
-        // 该模块重渲染（外部 effect 在 inject 里订阅即可），这里只负责读。
-        badge: spec.badge !== undefined ? spec.badge() : null,
+        badge: count,
+        badgeLabel: badgeText?.label,
+        badgeTitle: badgeText?.title,
         onSelect: () => props.onSelect(spec.id),
       })
     }
