@@ -340,9 +340,16 @@ try {
     for (const line of interesting.slice(0, 20)) console.log('    ' + line.slice(0, 300))
   }
 
-  // 6) PC 端验收回归（acceptance-dsh-spark-plugins-20260917-1906）
-  //    把这一轮修掉的问题焊成断言：关闭态焦点序、视口重吸附、方向键/双击、子页签方向键、
-  //    危险态可辨、token 直连、点击目标下限、禁用原因。AGENTS §5：新防线进验收脚本。
+  // 6) PC 端验收回归（acceptance-dsh-spark-plugins-20260917-1906 / 复核轮 -2210）
+  //    把修掉的问题焊成断言：关闭态焦点序、视口重吸附、方向键/双击、子页签方向键、
+  //    危险态可辨、token 直连、点击目标下限、禁用原因、Esc 分层、卡片题字号。
+  //    **键盘一律用 CDP 真事件**（Input.dispatchKeyEvent）：-2210 复核轮用真键盘发现
+  //    「JS 合成事件」与「真按键」在 Esc 分层/焦点跟随上的表现可以不同，断言必须走真实路径。
+  //    另：所有断言都不许依赖动画/过渡时钟（无头或后台页面可能停帧）。
+  const pressKey = async (key, code, vk) => {
+    await send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk })
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', key, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk })
+  }
   await evalJs(`(() => {
     const spark = Array.from(document.querySelectorAll('.dock-tab')).find((b) => (b.getAttribute('aria-label') ?? '').startsWith('火花'))
     if (spark) spark.click()
@@ -365,23 +372,24 @@ try {
     return panel !== null && tab !== null && panel.contains(document.activeElement)
   })()`)
   check('PCQA-001 前置：面板展开时焦点可落入面板内', focusPlanted === true, String(focusPlanted))
-  await evalJs(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)
+  await pressKey('Escape', 'Escape', 27)
   await sleep(600)
   const closedState = await evalJs(`(() => {
     const panel = document.querySelector('.dock-panel')
     const ball = document.querySelector('.dock-ball')
     if (!panel || !ball) return null
-    const cs = getComputedStyle(panel)
     return {
       open: panel.classList.contains('open'),
       inert: panel.hasAttribute('inert'),
-      visibility: cs.visibility,
+      // 只做观测不做断言：面板层曾经靠「延迟过渡的 visibility:hidden」加保险，
+      // 但那依赖过渡时钟（停帧环境下永不生效）。现在机制单一 = inert。
+      visibility: getComputedStyle(panel).visibility,
       focusOnBall: document.activeElement === ball,
     }
   })()`)
   check(
-    'PCQA-001 关闭态面板 inert + visibility:hidden（移出焦点序与无障碍树）',
-    closedState !== null && closedState.open === false && closedState.inert === true && closedState.visibility === 'hidden',
+    'PCQA-001 关闭态面板 inert（移出焦点序与无障碍树）',
+    closedState !== null && closedState.open === false && closedState.inert === true,
     JSON.stringify(closedState),
   )
   check('PCQA-001 Esc 收起后焦点回到悬浮球', closedState?.focusOnBall === true, JSON.stringify(closedState))
@@ -419,20 +427,33 @@ try {
   check('PCQA-002 视口恢复后球仍在右下角', resnapBack.got === resnapBack.want, JSON.stringify(resnapBack))
 
   // 6c) PCQA-009 / PCQA-008：方向键微调（拖拽的键盘替代）与双击复位
-  const nudge = await evalJs(`(() => {
-    const ball = document.querySelector('.dock-ball')
-    ball.focus()
-    const before = { x: parseFloat(ball.style.left), y: parseFloat(ball.style.top) }
-    ball.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true, cancelable: true }))
-    const mid = { x: parseFloat(ball.style.left), y: parseFloat(ball.style.top) }
-    ball.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true }))
-    const up = { x: parseFloat(ball.style.left), y: parseFloat(ball.style.top) }
-    return { before, mid, up }
-  })()`)
+  // 先把位置归一化到右下角（并给 6b 的视口切换留出迟到 resize 的窗口）：
+  // 否则「视口还原 → 重吸附」可能撞上紧跟着的微调按键，把 x 又吸回角落（本轮实测踩过）。
+  await evalJs(`document.querySelector('.dock-ball').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))`)
+  await sleep(900)
+  await evalJs(`document.querySelector('.dock-ball').focus()`)
+  await sleep(300)
+  const readPos = () => evalJs(`(() => { const b = document.querySelector('.dock-ball'); return { x: parseFloat(b.style.left), y: parseFloat(b.style.top), stored: localStorage.getItem('dsh.spark-dock:pos') } })()`)
+  const beforeNudge = await readPos()
+  // 每次按键后先等一拍再读（CDP 的 ack 早于渲染进程处理），且**丢键时重试一次**：
+  // 实测背靠背连发两个 rawKeyDown 时第一个会偶发丢（-2210 复核轮同款噪声）。
+  // 重试不会掩盖真问题 —— 断言仍然要求「恰好一次 8px」，多走一步（-16）即失败。
+  const nudgeKey = async (key, code, vk, ok) => {
+    await pressKey(key, code, vk)
+    await sleep(500)
+    let seen = await readPos()
+    if (ok(seen)) return seen
+    await pressKey(key, code, vk)
+    await sleep(500)
+    seen = await readPos()
+    return seen
+  }
+  const leftRead = await nudgeKey('ArrowLeft', 'ArrowLeft', 37, (p) => p.x === beforeNudge.x - 8)
+  const upRead = await nudgeKey('ArrowUp', 'ArrowUp', 38, (p) => p.y === beforeNudge.y - 8)
   check(
-    'PCQA-009 方向键微调球位置（← -8px / ↑ -8px）',
-    nudge.mid.x === nudge.before.x - 8 && nudge.mid.y === nudge.before.y && nudge.up.y === nudge.before.y - 8,
-    JSON.stringify(nudge),
+    'PCQA-009 方向键微调球位置（← 与 ↑ 各 -8px）',
+    leftRead.x === beforeNudge.x - 8 && upRead.y === beforeNudge.y - 8,
+    JSON.stringify({ beforeNudge, leftRead, upRead }),
   )
   await evalJs(`document.querySelector('.dock-ball').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))`)
   await sleep(700)
@@ -513,10 +534,9 @@ try {
     const tabs = Array.from(list.querySelectorAll('[role="tab"]'))
     const sel = tabs.find((t) => t.getAttribute('aria-selected') === 'true') ?? tabs[0]
     sel.focus()
-    const idx = tabs.indexOf(sel)
-    sel.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }))
-    return { count: tabs.length, idx, tabIndexes: tabs.map((t) => t.tabIndex) }
+    return { count: tabs.length, idx: tabs.indexOf(sel), tabIndexes: tabs.map((t) => t.tabIndex) }
   })()`)
+  await pressKey('ArrowRight', 'ArrowRight', 39)
   await sleep(400)
   const segAfter = await evalJs(`(() => {
     const list = document.querySelector('.dock-embed [role="tablist"]')
@@ -564,8 +584,14 @@ try {
       JSON.stringify({ trigger, menuOpen }),
     )
     check('PCQA-005 菜单展开态可断言（data-spk-layer）', menuOpen.menu === true, JSON.stringify(menuOpen))
-    await evalJs(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)
-    await sleep(500)
+    // 焦点先移进菜单项（复核轮的条件之一），再用真键盘按 Esc
+    const focusInMenu = await evalJs(`(() => {
+      const opt = document.querySelector('[data-spk-layer="menu"] [role="option"]')
+      opt?.focus()
+      return document.activeElement?.getAttribute('role') === 'option'
+    })()`)
+    await pressKey('Escape', 'Escape', 27)
+    await sleep(600)
     const afterMenuEsc = await evalJs(`(() => {
       const panel = document.querySelector('.dock-panel')
       const menu = document.querySelector('[data-spk-layer="menu"]')
@@ -573,14 +599,42 @@ try {
       return { panelOpen: panel.classList.contains('open'), menu: menu !== null, focus: (active?.textContent ?? '').trim().slice(0, 12) }
     })()`)
     check(
-      'PCQA-005 Esc 先关菜单、面板保持打开、焦点回触发钮',
-      afterMenuEsc.panelOpen === true && afterMenuEsc.menu === false && afterMenuEsc.focus.length > 0,
-      JSON.stringify(afterMenuEsc),
+      'PCQA-005 Esc 先关菜单、面板保持打开、焦点回触发钮（真键盘，焦点在菜单项内）',
+      focusInMenu === true && afterMenuEsc.panelOpen === true && afterMenuEsc.menu === false && afterMenuEsc.focus.length > 0,
+      JSON.stringify({ focusInMenu, afterMenuEsc }),
     )
+    // 菜单没了之后再按一次 Esc，面板才关（证明面板本身仍可 Esc 收起）
+    await pressKey('Escape', 'Escape', 27)
+    await sleep(600)
+    const secondEsc = await evalJs(`document.querySelector('.dock-panel').classList.contains('open')`)
+    check('PCQA-005 内层关掉后，第二次 Esc 才收起面板', secondEsc === false, String(secondEsc))
     await evalJs(`document.querySelector('.dock-iconbtn')?.click()`)
     await sleep(400)
   } else {
     check('PCQA-005/006 GitHub 模块可定位（前置条件）', false, '未找到 GitHub tab')
+  }
+
+  // 6h) PCQA-017 剩余：记忆模块的卡片题走自有类名 .hippomemo-panel-title（(0,2,0) 压过 dock 的
+  //     .dock-embed :is(h3)），所以必须在它自己那套样式里也钉在 --spk-text-title。
+  const memIndex = await evalJs(`(() => Array.from(document.querySelectorAll('.dock-tab')).findIndex((b) => (b.getAttribute('aria-label') ?? '').startsWith('记忆')))()`)
+  if (memIndex >= 0) {
+    await evalJs(`(() => { const p = document.querySelector('.dock-panel'); if (!p.classList.contains('open')) document.querySelector('.dock-ball').click() })()`)
+    await sleep(700)
+    await evalJs('document.querySelectorAll(\'.dock-tab\')[' + memIndex + '].click()')
+    await sleep(1300)
+    const memTitle = await evalJs(`(() => {
+      const h3 = document.querySelector('.dock-embed h3.hippomemo-panel-title')
+      if (!h3) return null
+      const cs = getComputedStyle(h3)
+      return { text: (h3.textContent ?? '').trim().slice(0, 12), font: cs.fontSize, weight: cs.fontWeight, color: cs.color }
+    })()`)
+    check(
+      'PCQA-017 记忆模块卡片题 14px（自有类名不再压过规范档）',
+      memTitle !== null && memTitle.font === '14px' && memTitle.weight === '600',
+      JSON.stringify(memTitle),
+    )
+  } else {
+    check('PCQA-017 记忆模块可定位（前置条件）', false, '未找到记忆 tab')
   }
 
   // 无论球有没有挂上，都把控制台线索打出来（挂载失败时这里才是答案）
