@@ -109,15 +109,16 @@ function HippomemoSelect({ value, placeholder, options, onChange }: {
 }
 
 function formatDate(value: number): string { return new Date(value).toLocaleString() }
-function formatRelative(ms: number, now: number): string {
+/** 相对时间一律走 locale（中文「3 分钟前」/ 英文 "3 min ago"）——见 UI-UX-SPEC §6。 */
+function formatRelative(ms: number, now: number, t: Translate): string {
   const delta = Math.max(0, now - ms)
   const minute = 60_000, hour = 60 * minute, day = 24 * hour
-  if (delta < minute) return 'just now'
-  if (delta < hour) return Math.floor(delta / minute) + ' min ago'
-  if (delta < day) return Math.floor(delta / hour) + ' h ago'
-  if (delta < 30 * day) return Math.floor(delta / day) + ' d ago'
-  if (delta < 365 * day) return Math.floor(delta / (30 * day)) + ' mo ago'
-  return Math.floor(delta / (365 * day)) + ' y ago'
+  if (delta < minute) return t('timeJustNow')
+  if (delta < hour) return t('timeMinutesAgo', { n: Math.floor(delta / minute) })
+  if (delta < day) return t('timeHoursAgo', { n: Math.floor(delta / hour) })
+  if (delta < 30 * day) return t('timeDaysAgo', { n: Math.floor(delta / day) })
+  if (delta < 365 * day) return t('timeMonthsAgo', { n: Math.floor(delta / (30 * day)) })
+  return t('timeYearsAgo', { n: Math.floor(delta / (365 * day)) })
 }
 type PageItem = number | 'gap'
 function pageItems(page: number, totalPages: number): PageItem[] {
@@ -262,7 +263,7 @@ function TodoQuadrantImpl({ t, items, now, onResolve }: {
                 <div className='hippomemo-todo-desc'>
                   <Pill className={'hippomemo-tag hippomemo-kind-' + item.memoryKind}>{t(kindKeyMap[item.kind])}</Pill>
                   <span className='hippomemo-todo-reason'>{formatTodoReason(item.reason, t)}</span>
-                  <span className='hippomemo-todo-meta'>{formatRelative(item.detectedAt, now)}</span>
+                  <span className='hippomemo-todo-meta' title={formatDate(item.memoryUpdatedAt)}>{formatRelative(item.memoryUpdatedAt, now, t)}</span>
                 </div>
               </div>
               {item.kind === 'observation' ? (
@@ -299,7 +300,7 @@ function ActivityFeed({ t, citations, narrative, now }: {
   if (narrative !== null) {
     rows.push({
       key: 'narrative-' + String(narrative.ts),
-      when: formatRelative(narrative.ts, now),
+      when: formatRelative(narrative.ts, now, t),
       what: <span className='hippomemo-recall-m'>{t('recallTitle')}</span>,
       sub: narrative.text,
       kind: narrative.region === 'pfc' ? 'injected' : 'cited',
@@ -308,7 +309,7 @@ function ActivityFeed({ t, citations, narrative, now }: {
   for (const citation of citations.slice(0, 4)) {
     rows.push({
       key: citation.id,
-      when: formatRelative(citation.ts, now),
+      when: formatRelative(citation.ts, now, t),
       what: <span className='hippomemo-recall-m'>{t('recallCited', { n: 1 })}</span>,
       sub: citation.snippet ?? citation.memoryId.slice(0, 8),
       kind: 'cited',
@@ -368,7 +369,7 @@ function PreferenceQuadrant({ t, items, totalRecall, onAction }: {
                     <span className='hippomemo-pref-hit'>{t('prefHitCount', { n: item.hitCount })}</span>
                     <span> · </span>
                     <span>{item.lastSurfacedAt !== null
-                      ? t('prefLastSurfaced', { when: formatRelative(item.lastSurfacedAt, Date.now()) })
+                      ? t('prefLastSurfaced', { when: formatRelative(item.lastSurfacedAt, Date.now(), t) })
                       : t('prefProven')}</span>
                     {item.decayPercent !== null
                       ? <span className='hippomemo-pref-decay'> · {t('prefDecaying', { n: item.decayPercent })}</span>
@@ -416,7 +417,6 @@ function MemoryListPanel({ t, api, detailId, onDetail, embedded = false }: {
   const [tags, setTags] = useState<MemoryTagCount[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
     const timer = window.setTimeout(() => { setDebouncedQ(q); setPage(1) }, 250);
@@ -538,13 +538,14 @@ function MemoryListPanel({ t, api, detailId, onDetail, embedded = false }: {
       {records.length > 0 ? (
         <div className='hippomemo-list'>
           {records.map(record => {            const archived = record.status === 'archived' || record.status === 'superseded';
-            const meta: string[] = [];
-            meta.push(t(record.scope));
+            /** meta 片段：文本 + 可选 title。相对时间配绝对时间的 title（UI-UX-SPEC §6）。 */
+            const meta: Array<{ text: string; title?: string }> = [];
+            meta.push({ text: t(record.scope) });
             if (record.scope === 'global') {
-              meta.push(record.globalProven ? t('proven') : t('unproven') + '·' + (record.seenWorkspaces?.length ?? 0));
+              meta.push({ text: record.globalProven ? t('proven') : t('unproven') + '·' + (record.seenWorkspaces?.length ?? 0) });
             }
-            meta.push(t('importanceLabel') + ' ' + record.importance.toFixed(2));
-            meta.push(formatDate(record.updatedAt));
+            meta.push({ text: t('importanceLabel') + ' ' + record.importance.toFixed(2) });
+            meta.push({ text: formatRelative(record.updatedAt, Date.now(), t), title: formatDate(record.updatedAt) });
             const scoped = (record.modelIds?.length ?? 0) > 0;
             return (
               <ListRow
@@ -563,9 +564,9 @@ function MemoryListPanel({ t, api, detailId, onDetail, embedded = false }: {
                       </Pill>
                     ) : null}
                     {meta.map((part, index) => (
-                      <span key={index}>
+                      <span key={index} title={part.title}>
                         {index > 0 ? <span className='hippomemo-row-meta-sep'>·</span> : null}
-                        {part}
+                        {part.text}
                       </span>
                     ))}
                   </>
@@ -587,18 +588,8 @@ function MemoryListPanel({ t, api, detailId, onDetail, embedded = false }: {
                       className='hippomemo-icon-btn'
                       onClick={() => { onDetail(record.id); }}
                       icon={<IconEdit size={14} />} />
-                    <Button size='sm' variant='ghost' title={t('delete')} aria-label={t('delete')}
-                      className='hippomemo-icon-btn hippomemo-icon-btn-danger'
-                      disabled={deletingId !== null}
-                      aria-busy={deletingId === record.id}
-                      onClick={async () => {
-                        if (deletingId !== null) return;
-                        if (window.confirm(t('confirmDelete')) === false) return;
-                        setDeletingId(record.id);
-                        try { await api.remove(record.id); } finally { setDeletingId(null); }
-                        reload();
-                      }}
-                      icon={<IconTrash size={14} />} />
+                    {/* 破坏性入口不铺满列表（复核报告 PCQA-015）：行内只留「编辑」，
+                        删除收进详情 modal 页脚（那里有 danger 形制 + 二次确认）。 */}
                   </>
                 )}
               />
@@ -620,7 +611,7 @@ function MemoryListPanel({ t, api, detailId, onDetail, embedded = false }: {
             {pageItems(page, totalPages).map((item, index) => (
               item === 'gap'
                 ? <span key={'gap-' + String(index)} className='hippomemo-pager-gap'>…</span>
-                : <Button key={item} variant={item === page ? 'primary' : 'ghost'} size='sm'
+                : <Button key={item} variant={item === page ? 'secondary' : 'ghost'} size='sm'
                     aria-current={item === page ? 'page' : undefined}
                     onClick={() => { setPage(item); }}>{item}</Button>
             ))}
@@ -1165,7 +1156,7 @@ function OverviewTab({ t, stats, usage, preferences, narrative, citations, now }
           <h3 className='hippomemo-panel-title'>{t('overviewLiveActivity')}</h3>
           <span className='hippomemo-panel-count'>
             {citations.length > 0 || narrative !== null
-              ? formatRelative(narrative?.ts ?? citations[0]?.ts ?? now, now)
+              ? formatRelative(narrative?.ts ?? citations[0]?.ts ?? now, now, t)
               : '—'}
           </span>
         </div>

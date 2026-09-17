@@ -343,8 +343,12 @@ export interface PendingCandidate {
   expiresAt?: number
   /** Importance (so the UI can sort within a kind). */
   importance: number
-  /** When the candidate was first detected (now()). */
-  detectedAt: number
+  /**
+   * 该候选**对应记忆**的最近变动时间（record.updatedAt）。
+   * 不是「本轮扫描时间」—— 候选队列每轮由规则重算，扫描时间对所有行都相同、零信息量
+   * （复核报告 PCQA-017：进化队列 32 行全部显示 "just now"）。用它让用户判断候选新旧。
+   */
+  memoryUpdatedAt: number
 }
 
 export interface PendingCandidateListResult {

@@ -16,7 +16,10 @@
  *  - !important 仅保留于 brain-dot 覆盖 StateDot 内联色（ui-kit 无 props 通道），其余禁用。
  */
 export const HIPPOMEMO_CSS = [
-  '[data-plugin="dsh-hippomemo"] .hippomemo-section { display: flex; flex-direction: column; gap: 14px; padding: 4px 2px 24px; color: var(--spk-label); }',
+  /* 面板内容列：横向内边距归壳（dock .dock-body 已是 var(--spk-pad-panel)），
+     模块自己那 2px 会让页级分栏比火花窄 4px（PCQA-006）；纵向 4px 同理让分栏下沉 4px。
+     分栏→内容的间距改走 --spk-gap-page（PCQA-007 的三档 0/12/14 收成一档）。 */
+  '[data-plugin="dsh-hippomemo"] .hippomemo-section { display: flex; flex-direction: column; gap: var(--spk-gap-page); padding: 0 0 24px; color: var(--spk-label); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-tab { display: flex; flex-direction: column; gap: 12px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-title { margin: 0; font-size: var(--spk-text-xl); line-height: 26px; font-weight: 600; letter-spacing: -0.01em; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-intro { margin: 0; font-size: var(--spk-text-sm); line-height: 18px; color: var(--spk-label-2, var(--spk-label)); }',

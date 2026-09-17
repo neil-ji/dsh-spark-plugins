@@ -370,7 +370,7 @@ export function derivePendingCandidates(
       suggestedAction: 'cancel-probation',
       expiresAt: record.expiresAt,
       importance: record.importance,
-      detectedAt: options.now,
+      memoryUpdatedAt: record.updatedAt,
     })
   }
 
@@ -396,7 +396,7 @@ export function derivePendingCandidates(
       suggestedAction: action.action,
       ...(action.targetId !== undefined ? { targetId: action.targetId } : {}),
       importance: record.importance,
-      detectedAt: options.now,
+      memoryUpdatedAt: record.updatedAt,
     })
   }
   return { items, byKind }
