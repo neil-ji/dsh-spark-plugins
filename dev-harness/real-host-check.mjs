@@ -614,6 +614,129 @@ try {
     check('PCQA-005/006 GitHub 模块可定位（前置条件）', false, '未找到 GitHub tab')
   }
 
+  // 6g2) 复核遗留 #1：GitHub 面板在「权限/身份草稿被改脏」时也必须只有 1 个实心 primary
+  //      （原来页脚的「保存配置」也是 primary，草稿一脏就与「保存令牌」同屏两个实心按钮）。
+  if (githubIndex >= 0) {
+    await evalJs(`(() => { const p = document.querySelector('.dock-panel'); if (!p.classList.contains('open')) document.querySelector('.dock-ball').click() })()`)
+    await sleep(700)
+    await evalJs('document.querySelectorAll(\'.dock-tab\')[' + githubIndex + '].click()')
+    await sleep(1200)
+    const dirty = await evalJs(`(() => {
+      const pane = document.querySelector('.dock-body')
+      const box = pane.querySelector('input[type="checkbox"]')
+      if (!box) return null
+      box.click()
+      return { clicked: true }
+    })()`)
+    await sleep(500)
+    const primaries = await evalJs(`(() => {
+      const pane = document.querySelector('.dock-body')
+      const panel = document.querySelector('.dock-panel')
+      // primary = 品牌实底（Button.primary 就是 background: var(--spk-brand)）—— 用探针取真值，不猜色
+      const probe = document.createElement('span')
+      probe.style.background = 'var(--spk-brand)'
+      panel.appendChild(probe)
+      const brand = getComputedStyle(probe).backgroundColor
+      probe.remove()
+      const btns = [...pane.querySelectorAll('button')]
+      const solid = btns.filter((b) => getComputedStyle(b).backgroundColor === brand)
+      return {
+        dirty: (pane.textContent ?? '').includes('保存配置'),
+        total: btns.length,
+        brand,
+        solid: solid.map((b) => (b.textContent ?? '').trim().slice(0, 10)),
+      }
+    })()`)
+    check(
+      'PCQA-019 复核遗留 #1：GitHub 草稿脏时仍只有一个实心主按钮',
+      dirty !== null && primaries.dirty === true && primaries.solid.length === 1,
+      JSON.stringify({ dirty, primaries }),
+    )
+    // 收尾：丢弃草稿，别把脏态留给后面的步骤
+    await evalJs(`(() => {
+      const pane = document.querySelector('.dock-body')
+      const discard = [...pane.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes('丢弃'))
+      discard?.click()
+    })()`)
+    await sleep(400)
+  }
+
+  // 6i) 复核遗留 #2：还原价格表（回退/破坏性）必须先弹二次确认（UI-UX-SPEC §4.2 模板 4）。
+  //     前置：还原钮只在有价格覆盖层时可用 —— 先点「更新价格表」把覆盖层建出来
+  //     （沙箱内允许，上一轮验收也点过它）。顺带验证 ui-kit Modal 的 Esc 分层。
+  const finIndex = await evalJs(`(() => Array.from(document.querySelectorAll('.dock-tab')).findIndex((b) => (b.getAttribute('aria-label') ?? '').startsWith('财务')))()`)
+  if (finIndex >= 0) {
+    await evalJs(`(() => { const p = document.querySelector('.dock-panel'); if (!p.classList.contains('open')) document.querySelector('.dock-ball').click() })()`)
+    await sleep(700)
+    await evalJs('document.querySelectorAll(\'.dock-tab\')[' + finIndex + '].click()')
+    await sleep(2000)
+    const findRestore = () => evalJs(`(() => {
+      const pane = document.querySelector('.dock-body')
+      const b = [...pane.querySelectorAll('button')].find((x) => (x.getAttribute('aria-label') ?? '').includes('还原'))
+      return b ? { disabled: b.disabled } : null
+    })()`)
+    const clickBtn = (label) => evalJs(`(() => {
+      const pane = document.querySelector('.dock-body')
+      const b = [...pane.querySelectorAll('button')].find((x) => (x.getAttribute('aria-label') ?? '').includes('` + label + `'))
+      if (!b || b.disabled) return false
+      b.click()
+      return true
+    })()`)
+    let restore = await findRestore()
+    if (restore !== null && restore.disabled === true) {
+      // 「更新价格表」→ 社区目录价落库是**异步**的（overlayKeyCount 要等同步写回），
+      // 实测 12s 窗口经常不够；这里给到 30s，并每 10s 切走再切回强制重取状态。
+      await clickBtn('更新价格表')
+      for (let i = 0; i < 30; i += 1) {
+        await sleep(1000)
+        restore = await findRestore()
+        if (restore?.disabled === false) break
+        if (i === 9 || i === 19) {
+          await evalJs(`(() => {
+            const tabs = [...document.querySelectorAll('.dock-tab')]
+            const idx = tabs.findIndex((b) => (b.getAttribute('aria-label') ?? '').startsWith('火花'))
+            if (idx >= 0) tabs[idx].click()
+          })()`)
+          await sleep(800)
+          await evalJs('document.querySelectorAll(\'.dock-tab\')[' + finIndex + '].click()')
+          await sleep(1500)
+        }
+      }
+    }
+    if (restore !== null && restore.disabled === false) {
+      const opened = await clickBtn('还原到发版快照')
+      await sleep(600)
+      const modal = await evalJs(`(() => {
+        const d = document.querySelector('[data-spk-layer="modal"]')
+        if (d === null) return null
+        return {
+          title: (d.querySelector('h4')?.textContent ?? '').trim().slice(0, 24),
+          confirm: [...d.querySelectorAll('button')].some((b) => (b.textContent ?? '').includes('确认还原')),
+        }
+      })()`)
+      check(
+        '复核遗留 #2：还原价格表先弹二次确认（危险动作不裸执行）',
+        opened === true && modal !== null && modal.confirm === true,
+        JSON.stringify({ opened, modal }),
+      )
+      await pressKey('Escape', 'Escape', 27)
+      await sleep(700)
+      const afterModalEsc = await evalJs(`(() => ({
+        modal: document.querySelector('[data-spk-layer="modal"]') !== null,
+        panelOpen: document.querySelector('.dock-panel').classList.contains('open'),
+      }))()`)
+      check(
+        '复核遗留 #2：Modal 内 Esc 只关弹窗（面板保持打开，且未执行还原）',
+        afterModalEsc.modal === false && afterModalEsc.panelOpen === true,
+        JSON.stringify(afterModalEsc),
+      )
+    } else {
+      check('复核遗留 #2：还原二次确认（前置未满足：无价格覆盖层 / 目录价拉取失败）', false, JSON.stringify({ restore, finIndex }))
+    }
+  } else {
+    check('复核遗留 #2 财务模块可定位（前置条件）', false, '未找到财务 tab')
+  }
+
   // 6h) PCQA-017 剩余：记忆模块的卡片题走自有类名 .hippomemo-panel-title（(0,2,0) 压过 dock 的
   //     .dock-embed :is(h3)），所以必须在它自己那套样式里也钉在 --spk-text-title。
   const memIndex = await evalJs(`(() => Array.from(document.querySelectorAll('.dock-tab')).findIndex((b) => (b.getAttribute('aria-label') ?? '').startsWith('记忆')))()`)

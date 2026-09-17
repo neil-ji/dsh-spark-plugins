@@ -19,6 +19,7 @@ import { createServer } from 'node:http'
 import { readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
+import { createRequire } from 'node:module'
 import { dirname, extname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as esbuild from 'esbuild'
@@ -142,11 +143,36 @@ const clientBundleShim = () => ({
   },
 })
 
+/**
+ * react 必须只用仓库根那一份。
+ *
+ * 各包自己的 node_modules 可能装着另一个大版本（实测
+ * `packages/dsh-hippomemo/node_modules/react` = 19.2.8，根 = 18.3.1），
+ * esbuild 默认按**导入文件所在包**解析依赖 —— 源码口径（--source）下组件级画布会拿到
+ * React 19 的 jsx-runtime，而壳/产物口径是 React 18，同一个页面两份 react
+ * （Node 冒烟里的表现是 `useState` 读到 null dispatcher）。
+ * 与 verify.mjs 同一份处置：显式钉到根。
+ */
+const REACT_PACKAGES = ['react', 'react-dom']
+const rootRequire = createRequire(join(REPO_ROOT, 'package.json'))
+function resolveRootReact(request) {
+  try {
+    return rootRequire.resolve(request)
+  } catch {
+    return rootRequire.resolve(request.split('/')[0])
+  }
+}
+
 /** 把仓库内工作区包名指到真实文件（根 node_modules 不 link 工作区包）。 */
 const aliasPlugin = (map) => ({
   name: 'workspace-alias',
   setup(build) {
     build.onResolve({ filter: /^[^./]/ }, (args) => {
+      for (const name of REACT_PACKAGES) {
+        if (args.path === name || args.path.startsWith(name + '/')) {
+          return { path: resolveRootReact(args.path) }
+        }
+      }
       const target = map[args.path]
       if (target === undefined) return null
       if (MODULE_LOADER_ENTRIES.has(args.path)) {

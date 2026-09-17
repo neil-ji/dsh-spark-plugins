@@ -9,8 +9,10 @@
  * 全部不需要 dsh、不需要浏览器、不写 profile。退出码非 0 表示有失败项。
  */
 import { spawn } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
+import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import * as esbuild from 'esbuild'
@@ -19,6 +21,9 @@ import { cssModulesPlugin } from './bundler.mjs'
 const HERE = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(HERE, '..', '..')
 const PORT = Number(process.env.PREVIEW_VERIFY_PORT ?? 5199)
+
+/** 预览/冒烟唯一允许的 react 大版本（与仓库根 devDependencies 对齐）。 */
+const EXPECTED_REACT = '18'
 
 const ALIASES = {
   'dsh-ui-kit': 'packages/dsh-ui-kit/dist/index.js',
@@ -43,12 +48,42 @@ const ALIASES = {
   'dsh-hippomemo/embed': 'packages/dsh-hippomemo/src/client/embed.ts',
 }
 
+/**
+ * React 必须是**仓库根这一份**。
+ *
+ * 各包自己的 `node_modules` 里可能装着另一个大版本（实测
+ * `packages/dsh-hippomemo/node_modules/react` = 19.2.8，根 = 18.3.1），
+ * 而 esbuild 默认按**导入文件所在包**解析依赖 —— 于是 Node 冒烟里出现
+ * 「React 19 的 jsx-runtime 造元素 + React 18 的 renderToString 渲染」，
+ * `useState` 读到 null dispatcher，hippomemo 面板整块渲染不出来（不是它的 bug，
+ * 是预览打包把两份 react 装进了同一个进程）。这里把 react / react-dom
+ * 的入口显式钉到根，两个口径共用同一份。
+ */
+const REACT_PACKAGES = ['react', 'react-dom']
+const rootRequire = createRequire(join(REPO_ROOT, 'package.json'))
+
+/** 解析根 `node_modules` 里的包入口（优先子路径，退回包主入口）。 */
+function resolveRootReact(request) {
+  try {
+    return rootRequire.resolve(request)
+  } catch {
+    const [name] = request.split('/')
+    return rootRequire.resolve(name)
+  }
+}
+
 const aliasPlugin = {
   name: 'workspace-alias',
   setup(build) {
     build.onResolve({ filter: /^[^./]/ }, (args) => {
-      const target = ALIASES[args.path]
-      return target === undefined ? null : { path: join(REPO_ROOT, target) }
+      const direct = ALIASES[args.path]
+      if (direct !== undefined) return { path: join(REPO_ROOT, direct) }
+      for (const name of REACT_PACKAGES) {
+        if (args.path === name || args.path.startsWith(name + '/')) {
+          return { path: resolveRootReact(args.path) }
+        }
+      }
+      return null
     })
   },
 }
@@ -56,7 +91,31 @@ const aliasPlugin = {
 const checks = []
 const check = (name, ok, detail = '') => checks.push({ name, ok, detail })
 
+/**
+ * 防回归：预览只允许一份 react。
+ *
+ * 2026-09-17 实测：`packages/dsh-hippomemo/node_modules/react` 被装成 19.2.8，
+ * esbuild 按导入文件所在包解析 → 同一个 Node 进程里 React 19 的 jsx-runtime 造元素、
+ * React 18 的 renderToString 渲染，`useState` 读到 null dispatcher，
+ * hippomemo 面板整块渲染不出来。这里把「根 react 的版本」变成一条显式断言，
+ * 免得下次某个包改依赖后又静默分叉。
+ */
+function checkReactVersion() {
+  try {
+    const entry = rootRequire.resolve('react/package.json')
+    const version = String(JSON.parse(readFileSync(entry, 'utf8')).version)
+    check(
+      'smoke: 预览只用根 react 一份（版本 ' + EXPECTED_REACT + '.x）',
+      version.startsWith(EXPECTED_REACT + '.'),
+      '根 react 版本 = ' + version,
+    )
+  } catch (error) {
+    check('smoke: 根 react 可解析', false, String(error))
+  }
+}
+
 async function runSmoke() {
+  checkReactVersion()
   const dir = await mkdtemp(join(tmpdir(), 'preview-verify-'))
   const outfile = join(dir, 'smoke.mjs')
   try {
