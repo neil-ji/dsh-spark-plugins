@@ -128,7 +128,7 @@ ok  复核-产物 宿主加载的是当前产物（插件样式零宿主别名 �
 | `617ea17` | fix(finance-client)：去双内边距、表格列不压缩、还原禁用原因、金额 exact | 0.5.10 |
 | `4a2aa20` | test(harness)：real-host-check 增形制/间距/禁用/时间/产物新鲜度断言段 | — |
 | `ab040f6` | docs(agents)：SPEC v4.3 口径（disabled、单视图不分栏、表格、时间） | — |
-| `282e904` | docs(ui)：干净复核报告 + 本报告 | — |
+| `155dd9b` | docs(ui)：干净复核报告 + 本报告 | — |
 
 ---
 
