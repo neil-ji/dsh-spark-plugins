@@ -130,6 +130,12 @@
   主操作就是验收违规（PCQA-019 的实测违规：GitHub「连接」卡里 `保存令牌` + `测试连接` 双实心）。
   跨域并列（如 github 设置页的「连接卡保存」+「页脚保存配置」）属既有例外，评审时须写明理由。
   Don't：ghost 用于破坏性操作；disabled 提交不解释（要给原因文案）。
+- **disabled 形制**（v4.3，2026-09-18 复核 PCQA-011）：实心档（primary/danger）禁用时**换中性底**
+  —— `background: var(--spk-platform)` + `color: var(--spk-label-3)`，不得只压 opacity：
+  半透明的品牌实底看上去仍然是「可以点的主操作」。透明底的 ghost/secondary 保留 opacity 淡出。
+  **所有** disabled 的提交/写操作按钮必须给原因：可见文案（`role="status"`）+ `aria-describedby`
+  挂到按钮上。范本：spark「捕获」→ `spark-capture-hint`；finance「还原到发版快照」→
+  `finance-restore-hint`；github/npm 的保存钮同理。
 
 ### 3.2 Input / SearchInput
 - label 用 `--spk-text-xs` 11px 置于输入框上方；输入文本 `--spk-text-md` 13px，pad `8px 10px`，radius 10，边框 `--spk-border-2`。
@@ -139,6 +145,9 @@
 ### 3.3 Checkbox / SegmentedControl / Disclosure / Menu / Modal / ListRow / Pill / StateDot / Money
 - **Checkbox**：2px 描边选中框（`color-mix(currentColor 30%)` 边），label 走 `t()`。
 - **SegmentedControl**：面板页签/视图切换**唯一合法形制**（fullWidth 栅栏态用于页面级页签）；滑块 `--spk-seg-thumb`；**禁止自绘 tab**。
+  面板**页级分栏**是「多视图模块」的形制：视图 ≥2 时必须用 fullWidth 分段条，且它是内容区的第一件；
+  **单视图模块**（连接/设置页模板 §4.2-2，如 GitHub / npm）**不分栏**，内容直接是 SettingsCard 栈
+  —— 这是模板差异不是违规（复核 PCQA-001 裁决，2026-09-18）；一旦该模块出现第二个视图，就必须改为分栏。
 - **Disclosure**：折叠唯一合法形制；**禁止 `<details>` / 按钮自行切换**的旁路实现。
 - **Menu**：radius 12、border-2、浮层阴影；Esc 关闭、方向键导航、aria-haspopup。
 - **Modal**：surface-float 层 + `--spk-blur`；Esc + 点遮罩关闭；内部密度走 compact。
@@ -146,6 +155,8 @@
 - **Pill**：pad `2px 8px`、radius 999、11px/1.6、字重 500；状态语义色用 `acc-*-fg` 态。
 - **StateDot**：9–10px 圆点 + `acc-*` 实底态；必须配文字标签，不裸用颜色传义。
 - **Money**：数值 + 货币，micros 换算集中在组件内；等宽字体；千分位。
+  两档精度（v4.3）：KPI/Hero 用默认**紧凑规则**（≥1000 取整、≥1 去尾零、<1 两位有效数字）；
+  **表格数字列用 `exact`**（固定两位小数）—— 列内纵向对齐优先于紧凑（复核 PCQA-018）。
 - **TerminalBlock**：永远 `--spk-term-*` 固定深面，任何主题不翻转。
 - **EmptyState**：图标（ui-kit IconXxx）+ 一句"这是什么" + 一个主操作 CTA。
 - **Charts / Sparkline**：实底用 `acc-*`、文字用 `acc-*-fg`；legend 点 9px r3、bar 高 8px r4；hover 高亮 opacity 1 vs 0.35（FinanceAudit 先例）；tooltip 用 `--spk-tooltip-*` 固定面。
@@ -185,7 +196,9 @@
 
 ### 4.5 尺寸与响应
 - dock pane 内容宽 320–420px 设计域；卡片满宽、内部网格自适应（KPI `min` 列宽 + `repeat(auto-fit)`）。
-- 表格：列数 >4 或宽不足时横向滚动，不压缩列；数字列右对齐等宽字体。
+- 表格：列数 >4 或宽不足时**横向滚动**（`.table { overflow-x: auto }`），不压缩列；数字列右对齐等宽字体；
+  每个 `cols*` 网格必须给数字列**最小宽度**（如 `minmax(88px, 1fr)`），文本列配 `.cellWrap` 折行 ——
+  「关键结论数字」与「模型名」都不允许被省略号吃掉（复核 PCQA-008）。
 - 触控/点击目标：**内联控件 ≥26px 高**（Button sm 下限；胶囊 Pill / SegmentedControl 页签
   同线，`--spk-control-h-sm`）；**图标类主入口 ≥44×44**（悬浮球 48px、rail 模块钮 44px）。
   WCAG 2.5.8 的硬下限是 24×24，这里是本仓库更严的自定档 —— 两份文档曾各写一个数（26 vs 44），v4.2 起
@@ -209,7 +222,11 @@
 - 按钮 ≤4 字动词开头（"保存""测试连接""刷新余额"）；禁"确定/取消"泛词做业务主操作。
 - 空态文案 = 是什么 + 下一步（"还没有供应商——添加一个开始追踪成本"）。
 - 时间：列表用相对时间（"3 分钟前"），hover/详情给绝对时间；时区语义明确（成本窗按北京午夜切分要写注释）。
-- 数字：金额千分位 + 货币后缀；token 数用 k/m 缩写。
+  **相对时间必须走 locale 字典**（禁止在组件里拼英文串 —— 复核 PCQA-004 的 "最近 4 d ago" / "just now"）；
+  同一语言的界面只用一种时间措辞。
+- **扫描类时间戳必须逐条有语义**：由规则每轮重算的队列（进化候选等）不得把「本轮扫描时间」当条目标签
+  —— 那会让所有行显示同一个 "just now"（复核 PCQA-017）。队列行的时间应取该条目自身的变动时间。
+- 数字：金额千分位 + 货币后缀；token 数用 k/m 缩写；**表格数字列金额固定两位小数**（Money `exact`）。
 - locale key：`<模块>.<域>.<名>`（如 `finance.sync.staleHint`）；两个语言字典必须同 key 集。
 
 ---
@@ -226,3 +243,9 @@
    - [x] `audit-contrast` 增「插件源码直连宿主 token」段（禁 `--dsw-alias-*`/`--dsw-static-*`，
      字体栈与阴影例外）与 `audit-tokens` 增「字号不得绑定非字号 token」规则（v4.2，2026-09-17）；
    - [ ] `prefers-reduced-motion` 统一 media query 进 ui-kit base（待办）。
+4. **v4.3（2026-09-18，干净真宿主复核轮的修复）**：
+   - disabled 形制（中性底 + 原因文案，§3.1）；单视图模块不分栏的口径（§3.3）；
+     Money `exact` 两档精度（§3.3/§6）；表格列最小宽度 + 折行 + 横向滚动（§4.5）；
+     相对时间一律走 locale、扫描类时间戳不得逐行同值（§6）。
+   - 回归防线：`dev-harness/real-host-check.mjs` 增「形制与间距」断言段（分栏宽度一致、分栏→首块
+     间距一致、禁用钮有原因、中文界面无英文时间串）。
