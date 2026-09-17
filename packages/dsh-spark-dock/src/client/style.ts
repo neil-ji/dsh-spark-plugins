@@ -37,8 +37,12 @@ export const DOCK_CSS = [
   '[data-plugin="dsh-spark-dock"] .dock-tab-badge { position: absolute; top: var(--spk-space-1, 4px); right: var(--spk-space-1, 4px); min-width: var(--spk-text-md); height: var(--spk-text-md); border-radius: var(--spk-radius-sm); padding: 0 var(--spk-space-1, 4px); background: var(--spk-error); color: var(--spk-on-error); font: 700 var(--spk-text-xs)/var(--spk-text-md) var(--dsw-font-family, inherit); text-align: center; box-shadow: 0 0 0 var(--spk-space-1, 4px) var(--spk-platform); pointer-events: none; }',
 
   /* 面板 —— 结构：flex row = 左 rail(56px) + 右主列 */
-  '[data-plugin="dsh-spark-dock"] .dock-panel { position: fixed; z-index: 9100; width: var(--dock-panel-w, 616px); max-width: calc(100vw - 32px); height: var(--dock-panel-h, 680px); max-height: calc(100vh - 32px); display: flex; flex-direction: row; background: var(--spk-platform); border: 1px solid var(--spk-border); border-radius: var(--spk-radius-xl); box-shadow: var(--dsw-shadow-lv3, 0 16px 48px rgba(10,18,38,.28)); overflow: hidden; color: var(--spk-label, #fff); opacity: 0; transform: scale(.94); pointer-events: none; visibility: hidden; transition: transform 220ms cubic-bezier(.34,1.56,.64,1), opacity 220ms ease, visibility 0s linear 220ms; }',
-  '[data-plugin="dsh-spark-dock"] .dock-panel.open { opacity: 1; transform: scale(1); pointer-events: auto; visibility: visible; transition: transform 220ms cubic-bezier(.34,1.56,.64,1), opacity 220ms ease, visibility 0s; }',
+  '[data-plugin="dsh-spark-dock"] .dock-panel { position: fixed; z-index: 9100; width: var(--dock-panel-w, 616px); max-width: calc(100vw - 32px); height: var(--dock-panel-h, 680px); max-height: calc(100vh - 32px); display: flex; flex-direction: row; background: var(--spk-platform); border: 1px solid var(--spk-border); border-radius: var(--spk-radius-xl); box-shadow: var(--dsw-shadow-lv3, 0 16px 48px rgba(10,18,38,.28)); overflow: hidden; color: var(--spk-label, #fff); opacity: 0; transform: scale(.94); pointer-events: none; transition: transform 220ms cubic-bezier(.34,1.56,.64,1), opacity 220ms ease; }',
+  /* 关闭态只用 opacity/pointer-events（动画）+ 组件侧的 inert（可访问性与焦点序）。
+     曾经还加过一层「延迟 transition 的 visibility:hidden」：它依赖过渡时钟，
+     停帧环境（无头/后台）下永远翻不到 hidden，反而让验收口径不可复现（acc-20260917-2210 的 R-04）——
+     inert 已足以让 .focus() 被拒绝、Tab 全部落在 shell，机制保持单一。 */
+  '[data-plugin="dsh-spark-dock"] .dock-panel.open { opacity: 1; transform: scale(1); pointer-events: auto; }',
 
   /* 左侧图标模块栏（activity rail）——用抬起面而非 layer-2：
      layer-2 是「凹陷/轨道」色，亮色下与面板 platform 几乎同色，且模块 accent 文字压上去只有 1.9-3.7:1。 */

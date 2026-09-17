@@ -390,18 +390,19 @@ export function DockOverlay({ channel = null, renderSlot }: DockOverlayProps): J
     if (active instanceof HTMLElement && panel.contains(active)) ballRef.current?.focus()
   }, [open])
 
-  // 面板内还有浮层（下拉菜单 / 弹窗）开着时，Esc 归内层：面板保持打开（PCQA-005）。
-  // 内层浮层用 [data-spk-layer] 自我标记（ui-kit Menu 已加），role 兜底覆盖其它实现。
-  const hasOpenFloatingLayer = (): boolean => {
-    const nodes = document.querySelectorAll<HTMLElement>(
-      '[data-spk-layer], [role="listbox"], [role="menu"], [role="dialog"][aria-modal="true"]',
-    )
-    for (const node of nodes) {
-      const style = window.getComputedStyle(node)
-      if (style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0') return true
-    }
-    return false
-  }
+  /**
+   * 面板内还有浮层（下拉菜单 / 弹窗）开着时，Esc 归内层：面板保持打开（PCQA-005）。
+   *
+   * 两道保险，都不依赖时序与动画帧：
+   *  1. 主机制在浮层那侧 —— ui-kit Menu/Modal 在**捕获阶段**处理 Esc 并 stopPropagation，
+   *     本函数根本收不到那次按键（见 Menu.tsx 的说明）；
+   *  2. 这里做兜底：只要浮层节点还在 DOM 里就算「开着」。**不再探测计算样式**
+   *     （曾经要求 opacity !== '0'，而浮层入场动画在停帧环境里可能停在 opacity:0，
+   *     于是兜底失效、Esc 把整个面板关掉 —— acc-20260917-2210 的 R-02）。
+   */
+  const hasOpenFloatingLayer = (): boolean => document.querySelector(
+    '[data-spk-layer], [role="listbox"], [role="menu"], [role="dialog"][aria-modal="true"]',
+  ) !== null
 
   // Esc 收起（焦点归还由上面的关闭态 effect 统一处理）
   useEffect(() => {
