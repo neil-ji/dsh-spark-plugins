@@ -18,6 +18,7 @@ import { SPARK_REMOTE_CONTRIBUTION } from 'dsh-spark-wire'
 import { sparkChannelOf, type SparkEventChannel } from './spark/remote.ts'
 import { registerSparkDockModule, startSparkAnnouncements } from './spark/SparkDockModule.tsx'
 import { SPARK_DOCK_NS, en, zh, type SparkT } from './spark/locales.ts'
+import { DOCK_SHELL_NS, en as shellEn, zh as shellZh, type DockShellT } from './shell/locales.ts'
 import { DockOverlay } from './DockOverlay.tsx'
 import { DOCK_CSS } from './style.ts'
 
@@ -57,6 +58,14 @@ export async function apply(ctx: ClientContext): Promise<void> {
     return () => { offZh(); offEn() }
   }, SPARK_DOCK_NS + ': dictionaries')
   const t = localeCtx.locale.bind(SPARK_DOCK_NS) as SparkT
+  // 壳文案（悬浮球 / 模块栏 / 关闭钮 / 兜底）：与 spark 模块文案分开一份字典，
+  // 同一注册流程（同上一次 effect 里注册 zh + en）。
+  localeCtx.effect(() => {
+    const offZh = localeCtx.locale.register(DOCK_SHELL_NS, 'zh', shellZh)
+    const offEn = localeCtx.locale.register(DOCK_SHELL_NS, 'en', shellEn)
+    return () => { offZh(); offEn() }
+  }, DOCK_SHELL_NS + ': dictionaries')
+  const tShell = localeCtx.locale.bind(DOCK_SHELL_NS) as DockShellT
   injectPluginStyle(DOCK_CSS, 'dsh-spark-dock', 'dsh-spark-dock')
   // 统一事件通道（ADR-001）：先 mount spark 的 stream 描述符并**等它完成**，
   // 再经 reflect 取回动态命名空间组装通道（`remote.spark` 不能写进 inject，见上）。
@@ -84,7 +93,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
   }
   // 注入面取稳定引用：槽位组件每次渲染都会调 inject，
   // 若返回新对象则 props 身份每次都变 → 订阅 effect 反复重跑（预览走查抓到过一次悬空）。
-  const injected = { channel }
+  const injected = { channel, t: tShell }
   slots.inject('shell.overlay', () => slots.register({
     name: 'shell.overlay',
     id: 'spark-dock',

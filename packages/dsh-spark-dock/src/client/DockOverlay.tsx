@@ -22,6 +22,7 @@ import { IconSparkles } from 'dsh-ui-kit'
 import { useFrames, type DockModuleOwnerProps } from 'dsh-spark-plugin-kit/client'
 import { SPARK_EVENTS_STREAM } from './spark/remote.ts'
 import type { SparkEventChannel } from './spark/remote.ts'
+import type { DockShellT } from './shell/locales.ts'
 import { useFairy } from './fairy/FairyFace.tsx'
 
 /**
@@ -39,7 +40,16 @@ export interface DockOverlayProps {
   channel?: SparkEventChannel | null
   /** 见 {@link DockRenderSlot}；ADR-003 起 dock 的所有模块都从它来。 */
   renderSlot?: DockRenderSlot
+  /**
+   * 壳文案取词函数（`spark.dock.shell` 命名空间，apply 里绑定后经插槽 inject 面下发）。
+   * 缺省时回退到 key 本身：壳文案宁可露出 key 也不能退回硬编码中文 —— 那正是
+   * 「英文语言下仍是中文」这条验收未覆盖项的成因（2026-09-17）。
+   */
+  t?: DockShellT
 }
+
+/** 取词缺省值：直接把 key 原样露出（不猜语言，也不硬编码任何语言的文案）。 */
+const passthroughShellT: DockShellT = (key) => String(key)
 
 const M = 16
 const BALL = 48
@@ -121,7 +131,9 @@ function loadPos(): StoredPos {
  * Spark Dock overlay 组件。`channel` 由插槽 inject 面下发（平台把 inject 结果合成组件 props），
  * 供模块子页与播报层订阅统一事件流 —— 取代此前「dock apply 里设模块级单例」的做法。
  */
-export function DockOverlay({ channel = null, renderSlot }: DockOverlayProps): JSX.Element {
+export function DockOverlay({ channel = null, renderSlot, t }: DockOverlayProps): JSX.Element {
+  /** 壳自己的文案（壳 chrome 归壳，模块文案一律走模块字典 —— AGENTS.md §3.4 / F7）。 */
+  const ts: DockShellT = t ?? passthroughShellT
   const ballRef = useRef<HTMLButtonElement | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
   // 位置只读一次 localStorage（惰性初值），并记住它是不是「角落吸附」态：
@@ -187,10 +199,10 @@ export function DockOverlay({ channel = null, renderSlot }: DockOverlayProps): J
       { variant, activeId, onSelect: selectModule },
       {
         only: activeId,
-        fallback: <div className="dock-empty">模块 {activeId} 未加载：对应插件的 client 半边未激活。</div>,
+        fallback: <div className="dock-empty">{ts('moduleNotLoaded', { id: activeId })}</div>,
       },
     )
-  }, [renderSlot, activeId, selectModule])
+  }, [renderSlot, activeId, selectModule, ts])
 
   // rail 纵向方向键导航（roving tabindex：只有激活 tab 在 Tab 序列里）。
   // 按 DOM 顺序走：模块全部来自子槽，dock 侧没有可查询的模块表。
@@ -441,14 +453,14 @@ export function DockOverlay({ channel = null, renderSlot }: DockOverlayProps): J
         type="button"
         className={'dock-ball' + (mood !== null ? ' mood-' + mood : '') + (ballBadge > 0 ? ' has-badge' : '')}
         aria-label={ballBadge > 0
-          ? '打开 Spark Dock，' + String(ballBadge) + ' 项待处理'
-          : '打开 Spark Dock'}
+          ? ts('ballOpenPending', { n: ballBadge })
+          : ts('ballOpen')}
         aria-expanded={open}
         aria-haspopup="dialog"
         onKeyDown={onBallKeyDown}
         title={ballBadge > 0
-          ? '打开 Spark Dock · ' + String(ballBadge) + ' 项待处理'
-          : '打开 Spark Dock'}
+          ? ts('ballTitlePending', { n: ballBadge })
+          : ts('ballTitle')}
       >
         {/* 静默形态的品牌标识（ui-kit 图标层，尺寸由 .dock-ball svg 接管）；
             BALL_FACE_ENABLED 恢复后这里换回 <FairyFace mood={mood} />。 */}
@@ -483,7 +495,7 @@ export function DockOverlay({ channel = null, renderSlot }: DockOverlayProps): J
         ref={panelRef}
         className={open ? 'dock-panel open' : 'dock-panel'}
         role="dialog"
-        aria-label="Spark Dock"
+        aria-label={ts('panelAria')}
         style={{
           // 模块自己的东西（图标/强调色/标题/子页）全在模块条目里；面板级 accent
           // 只作缺省值（模块头/标签各自带自己的 accent）。
@@ -494,12 +506,12 @@ export function DockOverlay({ channel = null, renderSlot }: DockOverlayProps): J
         } as React.CSSProperties}
       >
         {/* 左：图标模块栏；右：主列（模块头 / 内容）。两处都由子槽条目渲染（ADR-003）。 */}
-        <div ref={railRef} className="dock-rail" role="tablist" aria-label="插件模块" aria-orientation="vertical" onKeyDown={onRailKeyDown}>
+        <div ref={railRef} className="dock-rail" role="tablist" aria-label={ts('railAria')} aria-orientation="vertical" onKeyDown={onRailKeyDown}>
           {renderSlot !== undefined
             ? renderSlot(
               'spark.dock.module',
               { variant: 'rail', activeId, onSelect: selectModule },
-              { fallback: <div className="dock-empty dock-rail-empty">没有已加载的插件模块</div> },
+              { fallback: <div className="dock-empty dock-rail-empty">{ts('railEmpty')}</div> },
             )
             : null}
         </div>
@@ -510,7 +522,7 @@ export function DockOverlay({ channel = null, renderSlot }: DockOverlayProps): J
             <button
               type="button"
               className="dock-iconbtn"
-              aria-label="收起面板"
+              aria-label={ts('collapse')}
               onClick={() => setOpen(false)}
             >
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">

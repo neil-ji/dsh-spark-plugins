@@ -258,6 +258,8 @@ export function SparksPane({ channel, t }: SparkPaneDeps): JSX.Element {
         onClose={() => setConfirmDrop(null)}
         title={t('dropConfirmTitle')}
         closeLabel={t('cancel')}
+        // 关闭钮的可访问名也走字典（ui-kit 只提供中文缺省值，见 ModalProps.closeAriaLabel）
+        closeAriaLabel={t('closeDialog')}
         footer={(
           <>
             <button className="dock-btn ghost" type="button" onClick={() => setConfirmDrop(null)}>{t('cancel')}</button>

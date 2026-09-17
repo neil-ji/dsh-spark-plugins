@@ -19,9 +19,11 @@ import {
 import type { SparkChangedEvent, SparkStreamFrame } from 'dsh-spark-wire'
 import { GraphPane, ProposalsPane, ScriptsPane, SparksPane } from './SparkModule.tsx'
 import { SPARK_EVENTS_STREAM, type SparkEventChannel } from './remote.ts'
-import type { SparkT } from './locales.ts'
+import type { SparkDockLocaleKey, SparkT } from './locales.ts'
 
-/** 模块的注入面：统一事件流通道 + 取词函数（apply 里装配好后下发）。 */
+/** 本包模块取词签名（`spark.dock` 命名空间，支持 {n} / {label} 占位符）。 */
+type SparkTranslate = (key: SparkDockLocaleKey, params?: Record<string, string | number>) => string
+
 export interface SparkModuleInject {
   channel: SparkEventChannel | null
   t: SparkT
@@ -124,21 +126,28 @@ export function registerSparkDockModule(ctx: ClientContext, inject: SparkModuleI
     })
     ctx.effect(() => stopStatsRefresh, 'spark-dock: stats refresh subscription')
   }
+  // 模块取词（含带占位符的形式）：label 仍是闭包，name/sub 在注册时求值（原形制）。
+  const tm = inject.t as unknown as SparkTranslate
   const dispose = registerDockModule<SparkModuleInject>(ctx, {
     id: 'spark',
     order: 10,
     label: () => inject.t('moduleLabel'),
     name: inject.t('moduleName'),
+    // 徽章整句（含标点）由注册方本地化：kit 不再拼死中文后缀（2026-09-17）。
+    formatBadge: ({ count, label }) => ({
+      label: tm('badgeLabel', { label, n: count }),
+      title: tm('badgeTitle', { label, n: count }),
+    }),
     // 动态 sub：把待处理数拼到副标题里，让面板标题行也传达"有几条等你处理"。
     // 0 条时回退到静态描述（不显示 N=0）。
     sub: (() => {
       const total = pending + pendingProposals
-      if (total === 0) return inject.t('moduleSub')
+      if (total === 0) return tm('moduleSub')
       return createElement('span', null,
-        inject.t('moduleSub'),
+        tm('moduleSub'),
         ' · ',
         createElement('strong', { 'data-pending': String(pending), 'data-proposals': String(pendingProposals) },
-          String(total), ' ', inject.t('pendingLabel')),
+          tm('pendingLabel', { n: total })),
       )
     })(),
     icon: createElement(IconSparkles, { size: 14 }),
