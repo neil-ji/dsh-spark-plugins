@@ -236,7 +236,11 @@ export const DOCK_CSS = [
    * `h2 + p` —— 那两处已由组件自己的 `embedded` 属性接管（MemorySection /
    * FinanceAuditSection 直接不渲染；github/npm 的 section 早已无页级标题）。
    * 这里只保留**密度**：设置页 16px 基准 → overlay 13px，不碰组件内部业务样式。 */
-  '.dock-embed { font-size: var(--spk-text-md); line-height: 1.45; }',
+  /* pane 本体是 flex column：分栏与内容同级时补出 --spk-gap-page 这一档
+     （PCQA-007：原来火花/连接器的「分栏→首块」是 0，财务 12、记忆 14 三档并存）。
+     模块把分栏包在自己的容器里时（hippomemo/finance）只有一个直接子元素，
+     这条 gap 不生效，间距由模块自己的容器 gap 负责。 */
+  '.dock-embed { display: flex; flex-direction: column; gap: var(--spk-gap-page); font-size: var(--spk-text-md); line-height: 1.45; }',
   '.dock-embed :is(h1, h2) { font-size: var(--spk-text-lg); line-height: 1.35; margin: 0 0 8px; }',
   '.dock-embed :is(h3) { font-size: var(--spk-text-title); font-weight: 600; margin: 0 0 8px; }',
   '.dock-embed p { font-size: var(--spk-text-md); }',
