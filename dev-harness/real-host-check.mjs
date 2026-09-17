@@ -153,7 +153,8 @@ try {
     await evalJs(`localStorage.removeItem('dsh.spark-dock:active')`)
     await evalJs(`document.querySelector('.dock-ball').click()`)
     await sleep(800)
-    await evalJs(`(() => { const tabs = Array.from(document.querySelectorAll('.dock-tab')); const spark = tabs.find((b) => b.getAttribute('aria-label') === '火花'); if (spark) spark.click() })()`)
+    // 2026-09-16 起 tab aria-label 会带「，N 项待处理」徽章后缀（dock-module.ts），按前缀匹配。
+    await evalJs(`(() => { const tabs = Array.from(document.querySelectorAll('.dock-tab')); const spark = tabs.find((b) => (b.getAttribute('aria-label') ?? '').startsWith('火花')); if (spark) spark.click() })()`)
     await sleep(1000)
     const pane = await evalJs(`(() => {
       const body = document.querySelector('.dock-body')
@@ -224,7 +225,8 @@ try {
     // 5) ADR-003：五个模块全部由插件自注册（dock 不再静态 import 任何插件 UI）——
     //    真宿主里必须五个 tab 都在，且每个模块点开后渲染出内容而不是失败态。
     const expectedTabs = ['火花', '记忆', '财务', 'GitHub', 'npm']
-    check('模块栏含全部自注册模块（ADR-003）', expectedTabs.every((label) => Array.isArray(tabs) && tabs.includes(label)), JSON.stringify(tabs))
+    // 徽章后缀（「火花，N 项待处理」）并入 aria-label 是有意的 a11y 行为，断言按前缀匹配。
+    check('模块栏含全部自注册模块（ADR-003）', expectedTabs.every((label) => Array.isArray(tabs) && tabs.some((tab) => tab.startsWith(label))), JSON.stringify(tabs))
     for (const label of expectedTabs) {
       const index = Array.isArray(tabs) ? tabs.indexOf(label) : -1
       if (index < 0) continue
