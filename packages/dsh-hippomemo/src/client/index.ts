@@ -19,6 +19,9 @@ import { registerHippoDockModule } from './HippoDockModule.tsx'
 import { startHippomemoAnnouncements } from './announce.ts'
 import { en, zh, type HippomemoLocaleKey } from './locales.ts'
 
+/** 本包取词签名（`hippomemo.settings` 命名空间）。 */
+type HippomemoTranslate = (key: HippomemoLocaleKey, params?: Record<string, string | number>) => string
+
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
     'hippomemo.settings': HippomemoLocaleKey
@@ -46,7 +49,9 @@ export async function apply(ctx: ClientContext): Promise<void> {
   // 统一事件通道（ADR-001）：standalone 路径也要装配，否则记忆面板失去实时刷新。
   await startHippomemoEvents(ctx)
   // F7：本模块自己的播报（文案与情绪住在这里，壳只订阅总线呈现）。
-  const stopAnnouncements = startHippomemoAnnouncements()
+  // 取词在 apply 里绑定一次后传入 —— 播报文案同样归本包字典。
+  const tAnnounce = anyCtx.locale.bind(NS) as HippomemoTranslate
+  const stopAnnouncements = startHippomemoAnnouncements(tAnnounce)
   ctx.effect(() => stopAnnouncements, 'hippomemo: announcements')
   // ADR-003：注册 dock 模块（面板 UI 归插件自己）。
   registerHippoDockModule(ctx)

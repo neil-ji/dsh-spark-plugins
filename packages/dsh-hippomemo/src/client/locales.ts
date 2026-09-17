@@ -2,6 +2,17 @@ export const zh = {
   // 显示名规范化（2026-09 五插件统一）：zh = 「中文 + 英文产品名」。
   nav: '记忆 HippoMemo',
   title: '记忆 HippoMemo',
+  // dock 模块 chrome（ADR-003：模块栏名 / 面板标题行 / 副标题归模块自己的字典）。
+  dockLabel: '记忆',
+  dockName: '记忆 HippoMemo',
+  dockSub: '四脑区总览 · 记忆 CRUD · 我的偏好 · 进化引擎',
+  /* 播报气泡文案（announce.ts，用户可见）。 */
+  announcePut: '写入了一条记忆',
+  announceRemove: '删除了一条记忆',
+  announceCrystallize: '结晶写入记忆库',
+  /** 模块栏 tab 徽章的可访问名（{label} = 模块名，{n} = 待处理计数；连标点一起定）。 */
+  badgeLabel: '{label}，{n} 项待处理',
+  badgeTitle: '{label} · {n} 项待处理',
   intro: '统一查看和管理跨会话、跨工作区沉淀下来的共识、决策、事实、偏好与约束。',
   searchPlaceholder: '搜索记忆...',
   search: '搜索',
@@ -248,6 +259,14 @@ export const en: Record<keyof typeof zh, string> = {
   // 显示名规范化：en 只用产品名。
   nav: 'HippoMemo',
   title: 'HippoMemo',
+  dockLabel: 'Memory',
+  dockName: 'HippoMemo',
+  dockSub: 'Four brain regions · memory CRUD · preferences · evolution engine',
+  announcePut: 'A memory was written',
+  announceRemove: 'A memory was removed',
+  announceCrystallize: 'A crystallized memory was stored',
+  badgeLabel: '{label}, {n} pending',
+  badgeTitle: '{label} · {n} pending',
   intro: 'Browse and manage durable consensus, decisions, facts, preferences, and constraints shared across sessions and workspaces.',
   searchPlaceholder: 'Search memories...',
   search: 'Search',

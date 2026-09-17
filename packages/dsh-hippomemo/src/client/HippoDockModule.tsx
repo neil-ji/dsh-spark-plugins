@@ -13,7 +13,11 @@ import type { ClientContext } from 'dsh-spark-plugin-kit/client'
 import { registerDockModule, type DockModuleOwnerProps } from 'dsh-spark-plugin-kit/client'
 import { IconThink } from 'dsh-ui-kit'
 import { MemorySection, type MemorySectionProps } from './MemorySection.tsx'
+import type { HippomemoLocaleKey } from './locales.ts'
 import { createHippomemoApi, type HippomemoApi } from './api.ts'
+
+/** 本包取词签名（`hippomemo.settings` 命名空间）。 */
+type HippomemoTranslate = (key: HippomemoLocaleKey, params?: Record<string, string | number>) => string
 
 /** 单例 api：与事件通道无关（HTTP 同源），跨渲染复用。 */
 const api: HippomemoApi = createHippomemoApi()
@@ -35,16 +39,24 @@ export function HippoDockModule(props: HippoInjected & DockModuleOwnerProps): Re
  * @param ctx - 插件 client 根上下文（`inject` 需含 slots）。
  */
 export function registerHippoDockModule(ctx: ClientContext): void {
+  // 模块 chrome（模块栏名 / 面板标题 / 副标题 / 徽章格式）一律走本包字典 ——
+  // 此前是硬编码中文，英文语言下模块栏与标题行整块仍是中文（2026-09-17 验收未覆盖项）。
+  // label 保持「闭包求值」原形制：平台在渲染/投影时调它，语言切换后取到的是新词。
+  const t = ctx.locale.bind('hippomemo.settings') as HippomemoTranslate
   const dispose = registerDockModule<HippoInjected>(ctx, {
     id: 'hippomemo',
     order: 20,
-    label: () => '记忆',
-    name: '记忆 HippoMemo',
-    sub: '四脑区总览 · 记忆 CRUD · 我的偏好 · 进化引擎',
+    label: () => t('dockLabel'),
+    name: t('dockName'),
+    sub: t('dockSub'),
+    formatBadge: ({ count, label }) => ({
+      label: t('badgeLabel', { label, n: count }),
+      title: t('badgeTitle', { label, n: count }),
+    }),
     icon: createElement(IconThink, { size: 14 }),
     accent: 'var(--spk-acc-hippomemo, #3b82f6)',
     accentFg: 'var(--spk-acc-hippomemo-fg, #1d4ed8)',
-    inject: () => ({ t: ctx.locale.bind('hippomemo.settings') as MemorySectionProps['t'] }),
+    inject: () => ({ t: t as MemorySectionProps['t'] }),
     Content: HippoDockModule,
   })
   ctx.effect(() => dispose, 'hippomemo: dock module')
