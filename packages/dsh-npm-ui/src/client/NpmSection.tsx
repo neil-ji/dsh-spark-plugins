@@ -10,6 +10,13 @@
  *  - 每个功能分组是一张 ui-kit Card，分组标题写在 Card 头；
  *  - 页级 <h2>/intro 已移除（dock 头与设置页侧栏已给出插件名）；
  *  - 令牌行 flex-wrap + min-width：窄面板换行，绝不让 input 溢出压住按钮。
+ *
+ * 按钮形制（docs/UI-UX-SPEC.md §3.1 + §4.2 连接页模板，2026-09-17 收编）：
+ *  - 一屏一个 primary —— 本面板唯一实心主操作是令牌卡的「保存」(primary/md)；
+ *  - 「测试连接」按连接页模板是次操作 = secondary；与同卡的「移除 token」同尺寸
+ *    （md = h32，与 32px 的 Input 同标度），令牌卡内不存在 32/26 混高；
+ *  - Card 头 actions 里的次按钮（注册表「重试」）走 sm = h26，与 StateDot/Pill 同标度，
+ *    且那张卡里只有它一个按钮 —— 同卡同尺寸的前提不被破坏。
  */
 import { useState } from 'react'
 import type { ReactNode } from 'react'
@@ -129,7 +136,6 @@ function Loaded({ injected }: { injected: NpmSectionInjected }): ReactNode {
         <div className={styles.actions}>
           <Button
             variant="secondary"
-            size="sm"
             disabled={busy}
             onClick={() => {
               void (async () => {
