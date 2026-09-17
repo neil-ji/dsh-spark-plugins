@@ -79,6 +79,9 @@ body {
   --spk-text-3xl: 30px;
   /* 卡片题 / 页内区块标题（v4.1：收编 Card.title 的硬编码 14px/22px） */
   --spk-text-title: 14px;
+  /* 控件高度标尺：Button / Input / SearchInput / Select 统一钉在这根线上，
+     避免 padding 推出 35px 的 input 挨着 32px 按钮的错位（2026-09）。 */
+  --spk-control-h: 32px;
   --spk-radius-sm: 7px;
   --spk-radius-md: 10px;
   --spk-radius-card: 12px;

@@ -14,7 +14,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   icon?: ReactNode
 }
 
-/** Spark UI Kit 按钮 — 32px 胶囊实心，dock 形制 */
+/** Spark UI Kit 按钮 — 32px 实心（radius 10，与输入类同标度） */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   { variant = 'primary', size = 'md', loading = false, disabled, className, children, icon, ...rest },
   ref,

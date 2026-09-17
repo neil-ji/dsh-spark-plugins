@@ -2,8 +2,9 @@
 .icon { position: absolute; left: 10px; color: var(--spk-label-3); pointer-events: none; }
 
 .input {
-  height: 32px;
+  height: var(--spk-control-h, 32px);
   width: 100%;
+  box-sizing: border-box;
   min-width: 180px;
   padding: 0 10px 0 30px;
   background: var(--spk-layer-2);

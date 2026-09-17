@@ -13,7 +13,9 @@
 
 .input {
   width: 100%;
-  padding: 8px 10px;
+  /* 真宿主没有全局 border-box 兜底：content-box 下 width:100%+padding 会溢出
+     flex 包装 20px（实测压住相邻按钮 / 溢出 Card），必须显式声明（2026-09）。 */
+  box-sizing: border-box;
   background: var(--spk-layer-2);
   /* 默认就用 border-2：layer-2 底与卡片面只差 1.06:1，控件的可辨轮廓几乎全落在描边上 */
   border: 1px solid var(--spk-border-2);
@@ -21,6 +23,13 @@
   color: var(--spk-label);
   font: 400 var(--spk-text-md, 13px) / 1.4 var(--spk-font);
   transition: border-color var(--spk-dur-fast) var(--spk-ease-out);
+}
+
+/* 单行输入钉在控件高度标尺上（与 Button 同值）；textarea 走内容自适应（2026-09）。 */
+input.input {
+  height: var(--spk-control-h, 32px);
+  padding: 0 10px;
+  line-height: 1;
 }
 .input::placeholder { color: var(--spk-label-3); }
 .input:hover { border-color: var(--spk-label-3); }

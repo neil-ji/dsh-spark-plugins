@@ -4,10 +4,11 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 32px;
+  height: var(--spk-control-h, 32px);
   padding: 0 14px;
   border: none;
-  border-radius: 16px;
+  /* 2026-09 Spec 修订：胶囊 16 收编进控件圆角标度（docs/UI-UX-SPEC.md §2.3/§3.1） */
+  border-radius: var(--spk-radius-md);
   font: 600 var(--spk-text-md, 13px) / 1 var(--spk-font);
   cursor: pointer;
   user-select: none;
@@ -37,7 +38,7 @@
 .danger { background: var(--spk-error); color: var(--spk-on-error); }
 .danger:hover:not(:disabled) { background: color-mix(in srgb, var(--spk-error) 85%, #000); }
 
-.sm { height: 26px; padding: 0 11px; font-size: var(--spk-text-sm, 12px); border-radius: 13px; }
+.sm { height: 26px; padding: 0 11px; font-size: var(--spk-text-sm, 12px); border-radius: var(--spk-radius-md); }
 .loading { pointer-events: none; opacity: 0.85; }
 
 .spinner {
