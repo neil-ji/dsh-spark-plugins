@@ -23,11 +23,12 @@ export const HIPPOMEMO_CSS = [
   '[data-plugin="dsh-hippomemo"] .hippomemo-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }',
   /* 工具栏重做：筛选折叠面板 + 活跃筛选 chips */
   '[data-plugin="dsh-hippomemo"] .hippomemo-filters { border: 1px solid var(--dsw-alias-border-l1); border-radius: var(--spk-radius-md); background: var(--dsw-alias-bg-layer-2); margin-top: 8px; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-filters > summary { cursor: pointer; user-select: none; list-style: none; padding: 8px 12px; font-size: var(--spk-text-sm); font-weight: 600; color: var(--dsw-alias-label-secondary); display: flex; align-items: center; gap: 8px; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-filters > summary::-webkit-details-marker { display: none; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-filters > summary::before { content: "▸"; font-size: var(--spk-text-xs); color: var(--dsw-alias-label-tertiary); transition: transform 160ms ease; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-filters[open] > summary::before { transform: rotate(90deg); }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-filters-badge { min-width: 16px; height: 16px; border-radius: 8px; padding: 0 4px; background: var(--dsw-alias-brand-primary, #3d5af0); color: var(--dsw-alias-label-primary-foreground, #fff); font-size: var(--spk-radius-md); font-weight: 700; line-height: 16px; text-align: center; }',
+  /* 2026-09：details/summary + 字符 ▸ 已退役，折叠统一 ui-kit Disclosure（标准 chevron）。
+     这里只覆写 Disclosure 头部的密度与字重，使其与工具栏其他控件同形。 */
+  '[data-plugin="dsh-hippomemo"] .hippomemo-filters > button { padding: 8px 12px; font-size: var(--spk-text-sm); font-weight: 600; color: var(--dsw-alias-label-secondary); }',
+  '[data-plugin="dsh-hippomemo"] .hippomemo-filters > button:hover { background: var(--dsw-alias-interactive-bg-hover); }',
+  '[data-plugin="dsh-hippomemo"] .hippomemo-filters { border-radius: var(--spk-radius-md); }',
+  '[data-plugin="dsh-hippomemo"] .hippomemo-filters-badge { min-width: 16px; height: 16px; border-radius: 8px; padding: 0 4px; background: var(--dsw-alias-brand-primary, #3d5af0); color: var(--dsw-alias-label-primary-foreground, #fff); font-size: var(--spk-text-xs); font-weight: 700; line-height: 16px; text-align: center; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-filters-body { display: flex; flex-wrap: wrap; gap: 8px; padding: 2px 12px 8px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-filter-chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: var(--spk-radius-full); border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-secondary); font-size: var(--spk-text-xs); cursor: pointer; }',
@@ -45,7 +46,7 @@ export const HIPPOMEMO_CSS = [
   '[data-plugin="dsh-hippomemo"] .hippomemo-brain-panel { display: flex; flex-direction: column; gap: 8px; padding: 8px 12px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-brain-strip { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; border-top: 1px dashed var(--dsw-alias-border-l1); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-brain-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-brain-region { display: inline-flex; align-items: center; gap: 8px; padding: 4px var(--spk-radius-md); border-radius: var(--spk-radius-full); border: 1px solid transparent; background: transparent; color: inherit; font: inherit; font-size: var(--spk-radius-card); line-height: 18px; cursor: pointer; transition: background 160ms, border-color 160ms; }',
+  '[data-plugin="dsh-hippomemo"] .hippomemo-brain-region { display: inline-flex; align-items: center; gap: 8px; padding: 4px var(--spk-space-3); border-radius: var(--spk-radius-full); border: 1px solid transparent; background: transparent; color: inherit; font: inherit; font-size: var(--spk-text-sm); line-height: 18px; cursor: pointer; transition: background 160ms, border-color 160ms; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-brain-region:hover { background: var(--dsw-alias-interactive-bg-hover); border-color: var(--dsw-alias-label-dimmed, var(--dsw-alias-border-l1)); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-brain-name { font-weight: 500; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-brain-val { font-size: var(--spk-text-xs); color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); font-variant-numeric: tabular-nums; }',
@@ -61,7 +62,7 @@ export const HIPPOMEMO_CSS = [
   '[data-plugin="dsh-hippomemo"] .hippomemo-brain-card-desc { font-size: var(--spk-text-xs); line-height: 16px; color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary)); margin: 0 0 4px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-brain-card-role { font-size: var(--spk-text-xs); line-height: 16px; color: var(--dsw-alias-label-tertiary); }',
   /* Focus 可见性：手写交互控件统一 focus-visible 描边（ui-kit Button 自带，无需重复） */
-  '[data-plugin="dsh-hippomemo"] .hippomemo-brain-region:focus-visible, [data-plugin="dsh-hippomemo"] .hippomemo-select:focus-visible, [data-plugin="dsh-hippomemo"] .hippomemo-chip:focus-visible, [data-plugin="dsh-hippomemo"] .hippomemo-filters > summary:focus-visible { outline: 2px solid var(--dsw-alias-brand-foreground, #2f46c8); outline-offset: 2px; }',
+  '[data-plugin="dsh-hippomemo"] .hippomemo-brain-region:focus-visible, [data-plugin="dsh-hippomemo"] .hippomemo-select:focus-visible, [data-plugin="dsh-hippomemo"] .hippomemo-chip:focus-visible, [data-plugin="dsh-hippomemo"] .hippomemo-filters > button:focus-visible { outline: 2px solid var(--dsw-alias-brand-foreground, #2f46c8); outline-offset: 2px; }',
   '@keyframes hippomemo-pulse-pfc { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--dsw-static-blue-500, #2563EB) 55%, transparent); } 100% { box-shadow: 0 0 0 14px transparent; } }',
   '@keyframes hippomemo-pulse-amy { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--dsw-static-red-500, #DC2626) 55%, transparent); } 100% { box-shadow: 0 0 0 16px transparent; } }',
   '@keyframes hippomemo-pulse-hippo { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--dsw-static-violet-500, #7C3AED) 55%, transparent); } 100% { box-shadow: 0 0 0 14px transparent; } }',
@@ -107,7 +108,7 @@ export const HIPPOMEMO_CSS = [
   '[data-plugin="dsh-hippomemo"] .hippomemo-memory-panel { display: flex; flex-direction: column; gap: 8px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-search { flex: 1; min-width: 160px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-search-grow { flex: 1 1 220px; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-select { display: inline-flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 112px; height: 32px; padding: 0 8px 0 var(--spk-radius-md); border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-secondary); font: inherit; font-size: var(--spk-radius-card); line-height: var(--spk-radius-xl); cursor: pointer; }',
+  '[data-plugin="dsh-hippomemo"] .hippomemo-select { display: inline-flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 112px; height: var(--spk-control-h, 32px); padding: 0 8px 0 var(--spk-space-3); border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-secondary); font: inherit; font-size: var(--spk-text-sm); line-height: 1.4; cursor: pointer; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-select:hover { background: var(--dsw-alias-interactive-bg-hover); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-select-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-select-chevron { display: inline-flex; color: var(--dsw-alias-label-tertiary); transition: transform 160ms ease; }',
@@ -156,7 +157,7 @@ export const HIPPOMEMO_CSS = [
   '[data-plugin="dsh-hippomemo"] .hippomemo-lineage { margin-top: 8px; border-top: 1px solid var(--dsw-alias-border-l1); padding-top: 8px; display: flex; flex-direction: column; gap: 8px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-lineage-title { font-size: var(--spk-text-sm); font-weight: 600; margin: 0; display: flex; align-items: center; gap: 8px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-lineage-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: var(--spk-text-sm); }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-lineage-node { padding: 4px var(--spk-radius-md); border-radius: 8px; border: 1px solid var(--dsw-alias-border-l1); font-size: var(--spk-text-xs); }',
+  '[data-plugin="dsh-hippomemo"] .hippomemo-lineage-node { padding: 4px var(--spk-space-3); border-radius: 8px; border: 1px solid var(--dsw-alias-border-l1); font-size: var(--spk-text-xs); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-lineage-spark { color: var(--spk-acc-github-fg, #5b21b6); border-color: var(--dsw-static-violet-500, #7C3AED); background: color-mix(in srgb, var(--dsw-static-violet-500, #7C3AED) 10%, transparent); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-lineage-crystal { color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-2); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-lineage-hippo { color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-border-l2, var(--dsw-alias-border-l1)); background: var(--dsw-alias-bg-layer-1, var(--dsw-alias-bg-layer-2)); }',
@@ -219,6 +220,13 @@ export const HIPPOMEMO_CSS = [
   // 类名全局唯一，无前缀规则安全。dialog 限高 + 内部内容（hippomemo-modal-scope）
   // 独立滚动：header/footer 恒可见，长内容（记忆正文/编辑表单）在 scope 内滚动，
   // 不再撑破视口。detail 正文区另有 360px 内滚（.hippomemo-detail-content）。
-  '.hippomemo-detail-modal, .hippomemo-edit-modal { max-height: min(720px, calc(100vh - 40px)); }',
-  '.hippomemo-detail-modal .hippomemo-modal-scope, .hippomemo-edit-modal .hippomemo-modal-scope { max-height: calc(100vh - 230px); min-height: 0; overflow-y: auto; }',
+  // 2026-09 修复「来源溯源溢出 modal 下边缘」：旧方案 body 预算锚定 100vh-230px，
+  // 而 dialog 封顶 720px 且不裁剪，高视口下 header+body+footer 总高超过 720 → 底部溢出。
+  // 改为 dialog 自身 flex-column：header/footer 恒可见且不收缩，body 独占剩余空间内滚，
+  // 总高永远收敛在 max-height 内。
+  '.hippomemo-detail-modal, .hippomemo-edit-modal { display: flex; flex-direction: column; max-height: min(720px, calc(100vh - 40px)); }',
+  '.hippomemo-detail-modal > header, .hippomemo-edit-modal > header, .hippomemo-detail-modal > footer, .hippomemo-edit-modal > footer { flex: none; }',
+  // modal 内唯一直接子 div 就是 ui-kit body；header/footer 是语义元素，不会被命中
+  '.hippomemo-detail-modal > div, .hippomemo-edit-modal > div { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden; }',
+  '.hippomemo-detail-modal .hippomemo-modal-scope, .hippomemo-edit-modal .hippomemo-modal-scope { flex: 1 1 auto; max-height: none; min-height: 0; overflow-y: auto; }',
 ].join('\n')

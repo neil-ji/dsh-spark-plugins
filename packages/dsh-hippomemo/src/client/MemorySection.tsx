@@ -13,7 +13,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
-  BarChart, Button, DonutChart,
+  BarChart, Button, Disclosure, DonutChart,
   Input, ListRow, Menu, Modal, Pill, SearchInput,
   SegmentedControl, StateDot, Textarea, TrendChart,
 } from 'dsh-ui-kit'
@@ -489,11 +489,9 @@ function MemoryListPanel({ t, api, detailId, onDetail, embedded = false }: {
         <Button variant='primary' size='md' icon={<IconPlus />}
           onClick={() => { onDetail('new'); }}>{t('newMemory')}</Button>
       </div>
-      <details className='hippomemo-filters'>
-        <summary>
-          {filterChips.length > 0 ? t('filtersActive', { n: String(filterChips.length) }) : t('filters')}
-          {filterChips.length > 0 ? <span className='hippomemo-filters-badge'>{String(filterChips.length)}</span> : null}
-        </summary>
+      <Disclosure className='hippomemo-filters'
+        name={filterChips.length > 0 ? t('filtersActive', { n: String(filterChips.length) }) : t('filters')}
+        trailing={filterChips.length > 0 ? <span className='hippomemo-filters-badge'>{String(filterChips.length)}</span> : null}>
         <div className='hippomemo-filters-body'>
           <HippomemoSelect value={kind} placeholder={t('allKinds')}
             options={[{ value: '', label: t('allKinds') }, ...KINDS.map(v => ({ value: v, label: t(v) }))]}
@@ -513,7 +511,7 @@ function MemoryListPanel({ t, api, detailId, onDetail, embedded = false }: {
             options={SORTS.map(option => ({ value: option.value, label: t(option.label) }))}
             onChange={changeSort} />
         </div>
-      </details>
+      </Disclosure>
       {filterChips.length > 0 ? (
         <div className='hippomemo-filter-chips' role='group' aria-label={t('filters')}>
           {filterChips.map((chip, index) => (
