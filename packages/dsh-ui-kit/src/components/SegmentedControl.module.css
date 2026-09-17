@@ -29,7 +29,8 @@
   appearance: none;
   border: none;
   background: transparent;
-  padding: 6px 12px;
+  /* 7px 上下内距 + 12px 行高 = 26px，正好压住 UI-UX-SPEC §4.5 的点击目标下限（原 6px = 24px 不达标）。 */
+  padding: 7px 12px;
   border-radius: 8px;
   font: 500 var(--spk-text-sm, 12px) / 1 var(--spk-font);
   color: var(--spk-label-2);

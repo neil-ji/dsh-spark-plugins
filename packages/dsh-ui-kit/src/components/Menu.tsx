@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { cloneElement, isValidElement, useEffect, useLayoutEffect, useRef, useState, type ReactElement, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { cx } from '../cx.js'
 import css from './Menu.module.css'
@@ -48,7 +48,29 @@ export function Menu({ open, onClose, anchor, items, selectedId, onSelect, side 
       if (anchorRef.current?.contains(target) || listRef.current?.contains(target)) return
       onClose()
     }
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    /** 焦点归还点：anchor 不是 portal，就在它子树里找第一个可聚焦元素（PCQA-005 的口径）。 */
+    const restoreFocus = () => {
+      anchorRef.current
+        ?.querySelector<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+        ?.focus()
+    }
+    const onKey = (e: KeyboardEvent) => {
+      // Esc 只关最内层浮层，并把焦点还给触发钮。
+      // 注意：stopPropagation 挡不住「同样挂在 document 上」的面板级 Esc 处理器
+      // （同一节点上的监听器互不阻断），所以面板那侧靠 [data-spk-layer] 标记自行让路。
+      if (e.key === 'Escape') { onClose(); restoreFocus(); return }
+      // 方向键导航（UI-UX-SPEC §3.3 Menu「方向键导航」）：焦点在触发钮上时按 ArrowDown 也能进菜单。
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return
+      const items = [...(listRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? [])]
+      if (items.length === 0) return
+      e.preventDefault()
+      const at = items.findIndex((el) => el === document.activeElement)
+      const next = e.key === 'Home' ? 0
+        : e.key === 'End' ? items.length - 1
+          : e.key === 'ArrowDown' ? (at + 1 + items.length) % items.length
+            : (at - 1 + items.length) % items.length
+      items[next]?.focus()
+    }
     document.addEventListener('pointerdown', onDown)
     document.addEventListener('keydown', onKey)
     return () => {
@@ -57,10 +79,13 @@ export function Menu({ open, onClose, anchor, items, selectedId, onSelect, side 
     }
   }, [open, onClose])
 
+  // data-spk-layer = 浮层标记：面板级 Esc / 外点处理据此判断「里面还有一层开着」，
+  // 也是验收侧稳定的断言钩子（不依赖 CSS-module 哈希类名）。
   const list = open && pos && (
     <div
       ref={listRef}
       role="listbox"
+      data-spk-layer="menu"
       className={cx(css.menu, className)}
       style={{ top: pos.top, left: pos.left, minWidth: pos.minWidth, transform: pos.flip ? 'translateY(-100%)' : undefined }}
     >
@@ -84,9 +109,18 @@ export function Menu({ open, onClose, anchor, items, selectedId, onSelect, side 
     </div>
   )
 
+  // aria-haspopup / aria-expanded 由 Menu 注入（调用方只管可访问名）：
+  // 否则每个消费者各写一遍，漏写就退化成「读屏不知道这是可展开控件」（PCQA-006）。
+  const trigger = isValidElement(anchor)
+    ? cloneElement(anchor as ReactElement<Record<string, unknown>>, {
+      'aria-haspopup': 'listbox',
+      'aria-expanded': open,
+    })
+    : anchor
+
   return (
     <span ref={anchorRef} className={css.anchorWrap}>
-      {anchor}
+      {trigger}
       {!list ? null : portal ? createPortal(list, document.body) : list}
     </span>
   )

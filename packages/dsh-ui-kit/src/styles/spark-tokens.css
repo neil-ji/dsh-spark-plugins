@@ -82,6 +82,9 @@ body {
   /* 控件高度标尺：Button / Input / SearchInput / Select 统一钉在这根线上，
      避免 padding 推出 35px 的 input 挨着 32px 按钮的错位（2026-09）。 */
   --spk-control-h: 32px;
+  /* sm 档 = 26px（Button sm 的既有高度，也是 UI-UX-SPEC §4.5 的点击目标下限）：
+     胶囊按钮 / 段控等紧凑控件的最低高度直接用这根线，不再各自写 23/24px。 */
+  --spk-control-h-sm: 26px;
   --spk-radius-sm: 7px;
   --spk-radius-md: 10px;
   --spk-radius-card: 12px;

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { cx } from '../cx.js'
 import css from './SegmentedControl.module.css'
 
@@ -29,6 +29,7 @@ export function SegmentedControl<V extends string = string>({
   className,
 }: SegmentedControlProps<V>) {
   const rootRef = useRef<HTMLDivElement>(null)
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([])
   const [thumb, setThumb] = useState<{ left: number; width: number } | null>(null)
 
   useLayoutEffect(() => {
@@ -45,15 +46,43 @@ export function SegmentedControl<V extends string = string>({
     return () => window.removeEventListener('resize', sync)
   }, [value, options])
 
+  /**
+   * 方向键 / Home / End 在页签间移动（ARIA tabs 模式，UI-UX-SPEC §5「SegmentedControl 方向键切换」）。
+   * 采用「自动激活」：焦点与选中态一起走，键盘用户按一次键就完成切换（与鼠标点击等价）。
+   * Tab 序列只保留选中项（roving tabindex），所以这里必须自己把焦点带过去。
+   */
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
+    if (disabled === true) return
+    const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0
+    const jump = e.key === 'Home' ? 0 : e.key === 'End' ? options.length - 1 : -1
+    if (step === 0 && jump < 0) return
+    e.preventDefault()
+    const current = options.findIndex((opt) => opt.value === value)
+    const next = jump >= 0 ? jump : (Math.max(current, 0) + step + options.length) % options.length
+    const opt = options[next]
+    if (opt === undefined) return
+    onChange(opt.value)
+    // 选中态落 DOM 后再聚焦，避免焦点停在已变成 tabindex=-1 的旧页签上
+    requestAnimationFrame(() => tabRefs.current[next]?.focus())
+  }
+
   return (
-    <div ref={rootRef} role="tablist" aria-label={ariaLabel} className={cx(css.seg, fullWidth && css.segFull, className)}>
+    <div
+      ref={rootRef}
+      role="tablist"
+      aria-label={ariaLabel}
+      className={cx(css.seg, fullWidth && css.segFull, className)}
+      onKeyDown={onKeyDown}
+    >
       {thumb && <span className={css.thumb} style={{ left: thumb.left, width: thumb.width }} aria-hidden="true" />}
-      {options.map((opt) => (
+      {options.map((opt, i) => (
         <button
           key={opt.value}
+          ref={(el) => { tabRefs.current[i] = el }}
           type="button"
           role="tab"
           aria-selected={opt.value === value}
+          tabIndex={opt.value === value ? 0 : -1}
           disabled={disabled}
           className={cx(css.tab, disabled && css.disabledTab)}
           onClick={() => onChange(opt.value)}

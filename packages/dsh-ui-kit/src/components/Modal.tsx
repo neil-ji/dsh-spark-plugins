@@ -55,7 +55,9 @@ export function Modal({ open, onClose, title, children, footer, closeLabel, clas
   return createPortal(
     <div className={css.root}>
       <div className={css.backdrop} onClick={onClose} aria-hidden="true" />
-      <div ref={dialogRef} role="dialog" aria-modal="true" className={cx(css.modal, className)}>
+      {/* data-spk-layer：内层浮层标记 —— 面板级 Esc 据此让路（只关最内层，见 DockOverlay 的
+          hasOpenFloatingLayer 与验收 PCQA-005）。 */}
+      <div ref={dialogRef} role="dialog" aria-modal="true" data-spk-layer="modal" className={cx(css.modal, className)}>
         <header className={css.head}>
           <h4 className={css.title}>{title}</h4>
           <button type="button" className={css.close} aria-label="关闭" onClick={onClose}>
