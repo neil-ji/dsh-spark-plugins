@@ -8,7 +8,7 @@
  */
 
 import { useState, type ReactNode } from 'react'
-import { Card, EmptyState, Money, Pill, formatMicros } from 'dsh-ui-kit'
+import { Button, Card, EmptyState, Money, Pill, formatMicros } from 'dsh-ui-kit'
 import type { FinanceLedger } from 'dsh-spark-finance/types'
 import {
   cheapestInGroup,
@@ -63,15 +63,15 @@ export function WhoToUseView({ ledger, t }: WhoToUseViewProps): ReactNode {
                 {best === null
                   ? <Pill accentColor="var(--spk-label-3)">{group.rows.length < 2 ? t('whoSingle') : t('whoNoVerdict')}</Pill>
                   : <Pill accentColor="var(--spk-acc-finance-fg)">{t('whoBest')} · {best.provider}</Pill>}
-                <button
-                  type="button"
-                  className={css.tagMuted}
+                <Button
+                  variant="ghost"
+                  size="sm"
                   aria-expanded={open}
                   aria-label={`${t('detailToggle')}: ${group.model}`}
                   onClick={() => setOpenModel(open ? null : group.model)}
                 >
                   {t('detailToggle')}
-                </button>
+                </Button>
               </div>
               {/* 时间成本放在组头下面常显：慢多少分钟比"谁快"更值得一眼看到。 */}
               {speed === null
