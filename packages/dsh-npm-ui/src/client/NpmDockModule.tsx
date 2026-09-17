@@ -20,6 +20,9 @@ import { NpmSection } from './NpmSection.tsx'
 import { NpmUiStore, type NpmUiState, type NpmNamespace } from './store.ts'
 import type { NpmKey } from './locales.ts'
 
+/** 带占位符替换的取词（平台 Translate 同形：{name} 由第二参数替换）。 */
+type NpmTranslate = (key: NpmKey, params?: Record<string, string | number>) => string
+
 /** 装配成功的注入面。 */
 export interface NpmInjected {
   controller: NpmUiStore
@@ -28,8 +31,13 @@ export interface NpmInjected {
 }
 
 /** 装配失败的注入面：面板显示明确的失败态，而不是永远转圈。 */
+/** 装配失败态的兜底取词：失败发生在能绑字典之前时，露出 key 而不是写死某种语言的文案。 */
+const failT: NpmTranslate = (key) => String(key)
+
 export interface NpmInjectedFailed {
   failed: true
+  /** 装配失败时仍带上字典取词，让失败态文案可被翻译。 */
+  t?: NpmTranslate
 }
 
 export type NpmDockInject = NpmInjected | NpmInjectedFailed
@@ -39,8 +47,9 @@ const isReady = (injected: NpmDockInject): injected is NpmInjected => (injected 
 /** 模块内容：dock 只在 variant === 'pane' 且本模块激活时渲染它。 */
 export function NpmDockModule(props: NpmDockInject & DockModuleOwnerProps): ReactNode {
   if (!isReady(props)) {
-    return createElement('div', { className: 'dock-empty dock-embed-failed' },
-      'npm 连接模块装配失败：宿主未提供 remote.npm。重载插件或检查连接器宿主后重试。')
+    // 装配失败态也要本地化（此前是硬编码中文；失败态是新用户最可能先看到的一屏）。
+    const t = props.t ?? failT
+    return createElement('div', { className: 'dock-empty dock-embed-failed' }, t('setupFailed'))
   }
   return createElement('div', { className: 'dock-embed dock-embed-connector' },
     createElement(NpmSection, { controller: props.controller, useSnapshot: props.useSnapshot, t: props.t }))
@@ -59,29 +68,36 @@ export function NpmDockModule(props: NpmDockInject & DockModuleOwnerProps): Reac
  */
 export async function startNpmDockModule(ctx: ClientContext): Promise<NpmDockInject> {
   let injected: NpmDockInject
+  // 模块 chrome 与失败态文案的取词（本包命名空间；与面板共用同一份字典）。
+  const tr = ctx.locale.bind('settings.npm') as unknown as NpmTranslate
   try {
     const npm = ctx.reflect.get('remote.npm') as NpmNamespace | undefined
     if (npm === undefined) {
-      injected = { failed: true }
+      injected = { failed: true, t: tr }
     } else {
       const controller = new NpmUiStore(ctx, npm)
       const useSnapshot = bindSnapshotSelector(controller.store)
       ctx.remote.$on('credentials/reference-updated', () => controller.refreshIfLoaded())
       ctx.remote.$on('settings/document-updated', () => controller.refreshIfLoaded())
-      injected = { controller, useSnapshot, t: ctx.locale.bind('settings.npm') as (key: NpmKey) => string }
+      injected = { controller, useSnapshot, t: tr }
     }
   } catch (error) {
     console.warn('[dsh-connector-npm-ui] npm remote 装配失败:', error)
-    injected = { failed: true }
+    injected = { failed: true, t: tr }
   }
 
   const ready = injected
   const dispose = registerDockModule<NpmDockInject>(ctx, {
     id: 'npm',
     order: 50,
-    label: () => ctx.locale.bind('settings.npm')('nav'),
-    name: 'npm',
-    sub: '细粒度 Token · 注册表与套件包状态',
+    label: () => tr('dockLabel'),
+    name: tr('dockName'),
+    sub: tr('dockSub'),
+    // 徽章整句（含标点）走字典：kit 不再拼死中文后缀。
+    formatBadge: ({ count, label }) => ({
+      label: tr('badgeLabel', { label, n: count }),
+      title: tr('badgeTitle', { label, n: count }),
+    }),
     icon: createElement(IconPackage, { size: 14 }),
     accent: 'var(--spk-acc-npm, #cb3837)',
     accentFg: 'var(--spk-acc-npm-fg, #991b1b)',
