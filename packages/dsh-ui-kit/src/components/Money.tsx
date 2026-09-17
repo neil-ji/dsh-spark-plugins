@@ -10,6 +10,8 @@ export interface MoneyProps {
   currency: string
   size?: MoneySize
   muted?: boolean
+  /** 表格数字列：固定两位小数（列内对齐）；默认 false = 紧凑规则。 */
+  exact?: boolean
   className?: string
 }
 
@@ -37,11 +39,22 @@ export function formatMicros(micros: number): string {
   return trim(major.toPrecision(2))
 }
 
+/**
+ * 表格数字列专用：固定两位小数 + 千分位。
+ * 为什么单列一个：`formatMicros` 的紧凑规则会去尾零（261.90 → 261.9），
+ * 在**纵向对齐的数字列**里就会出现 261.9 / 72.32 混排（复核报告 PCQA-018）。
+ * 列内对齐优先于紧凑，因此表格单元格用 exact 变体。
+ */
+export function formatMicrosExact(micros: number): string {
+  if (!Number.isFinite(micros)) return '0.00'
+  return (micros / 1e6).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
 /** Spark UI Kit 金额 — micros 主单位换算 + 货币符号 + tabular-nums */
-export function Money({ micros, currency, size = 'md', muted = false, className }: MoneyProps) {
+export function Money({ micros, currency, size = 'md', muted = false, exact = false, className }: MoneyProps) {
   return (
     <span className={cx(css.money, css[size], muted && css.muted, className)}>
-      {currencySymbol(currency)}{formatMicros(micros)}
+      {currencySymbol(currency)}{exact ? formatMicrosExact(micros) : formatMicros(micros)}
     </span>
   )
 }

@@ -38,6 +38,18 @@
 .danger { background: var(--spk-error); color: var(--spk-on-error); }
 .danger:hover:not(:disabled) { background: color-mix(in srgb, var(--spk-error) 85%, #000); }
 
+/* disabled 的**实心**档（primary/danger）：改中性底 + 三档灰字。
+   原实现只压 opacity，实心品牌蓝/错误红会变成「半透明实底」——看上去仍像可点的主操作
+   （复核报告 PCQA-011 实测：GitHub 保存令牌 bg 仍是 rgb(61,90,240)、opacity .45）。
+   对比度由 audit-contrast 的 `label-3 on panel`(底 = --spk-platform) 配对守住。
+   ghost/secondary 本来就是透明底，保留全局 opacity 淡出。 */
+.primary:disabled,
+.danger:disabled {
+  background: var(--spk-platform);
+  color: var(--spk-label-3);
+  opacity: 1;
+}
+
 .sm { height: 26px; padding: 0 11px; font-size: var(--spk-text-sm, 12px); border-radius: var(--spk-radius-md); }
 .loading { pointer-events: none; opacity: 0.85; }
 

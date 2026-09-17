@@ -1,6 +1,6 @@
 {
   "name": "dsh-ui-kit",
-  "version": "0.6.4",
+  "version": "0.6.5",
   "description": "Spark 设计语言的 React 组件库（从 0 复刻 docs/spark-ui-kit-demo）：Button/Input/Pill/Segmented/ListRow/Disclosure/SettingsCard/Modal/Toast/Terminal/Sparkline",
   "keywords": [
     "dsh",
