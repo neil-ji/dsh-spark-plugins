@@ -31,7 +31,8 @@ export function Modal({ open, onClose, title, children, footer, closeLabel, clas
     first?.focus()
 
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      // 捕获阶段接手 Esc：弹窗是最内层，面板/宿主那一层不该同时收到（同 Menu 的说明）
+      if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); onClose(); return }
       if (e.key === 'Tab' && dialogRef.current) {
         const list = Array.from(
           dialogRef.current.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'),
@@ -43,9 +44,9 @@ export function Modal({ open, onClose, title, children, footer, closeLabel, clas
         else if (!e.shiftKey && document.activeElement === lastEl) { firstEl.focus(); e.preventDefault() }
       }
     }
-    document.addEventListener('keydown', onKey)
+    document.addEventListener('keydown', onKey, true)
     return () => {
-      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('keydown', onKey, true)
       lastFocus.current?.focus()
     }
   }, [open, onClose])

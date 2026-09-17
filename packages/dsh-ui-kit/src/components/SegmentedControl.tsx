@@ -62,8 +62,10 @@ export function SegmentedControl<V extends string = string>({
     const opt = options[next]
     if (opt === undefined) return
     onChange(opt.value)
-    // 选中态落 DOM 后再聚焦，避免焦点停在已变成 tabindex=-1 的旧页签上
-    requestAnimationFrame(() => tabRefs.current[next]?.focus())
+    // 同步把焦点带过去：所有页签节点此刻都在 DOM 里，focus() 立即生效；
+    // **不用 rAF** —— 焦点不该依赖动画帧时钟（无头/后台页面可能不产帧，R-01 就是这么来的）。
+    // 重渲染随后把 tabindex 归位（选中项 0、其余 -1），焦点与选中项始终是同一个。
+    tabRefs.current[next]?.focus()
   }
 
   return (

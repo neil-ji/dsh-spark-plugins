@@ -56,9 +56,17 @@ export function Menu({ open, onClose, anchor, items, selectedId, onSelect, side 
     }
     const onKey = (e: KeyboardEvent) => {
       // Esc 只关最内层浮层，并把焦点还给触发钮。
-      // 注意：stopPropagation 挡不住「同样挂在 document 上」的面板级 Esc 处理器
-      // （同一节点上的监听器互不阻断），所以面板那侧靠 [data-spk-layer] 标记自行让路。
-      if (e.key === 'Escape') { onClose(); restoreFocus(); return }
+      // **在捕获阶段接手**：document 的捕获监听先于面板/宿主那批冒泡监听执行，
+      // stopPropagation 让事件根本到不了它们 —— 不依赖「谁的监听器先注册」，
+      // 也不依赖浮层的 opacity/动画是否已经跑完（无头/后台页面可能停帧，
+      // acc-20260917-2210 的 R-02 就是踩了这两点）。
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        e.preventDefault()
+        onClose()
+        restoreFocus()
+        return
+      }
       // 方向键导航（UI-UX-SPEC §3.3 Menu「方向键导航」）：焦点在触发钮上时按 ArrowDown 也能进菜单。
       if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return
       const items = [...(listRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? [])]
@@ -72,10 +80,10 @@ export function Menu({ open, onClose, anchor, items, selectedId, onSelect, side 
       items[next]?.focus()
     }
     document.addEventListener('pointerdown', onDown)
-    document.addEventListener('keydown', onKey)
+    document.addEventListener('keydown', onKey, true)
     return () => {
       document.removeEventListener('pointerdown', onDown)
-      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('keydown', onKey, true)
     }
   }, [open, onClose])
 
