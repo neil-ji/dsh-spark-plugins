@@ -273,6 +273,9 @@ describe('finance views', () => {
     const html = renderToStaticMarkup(createElement(WhoToUseView, { ledger: LEDGER, t }))
     // 组名是模型名（不是 provider/model）：两家供应同一个模型才可能同组比较
     expect(html).toContain('finance-model-llm')
+    // 次要口径隐式化：命中率的算式挂在列头 title，不再是展开区里的段落
+    expect(html).toContain('title="hitRateHint"')
+    expect(html).not.toContain('whoHint')
     expect(html).toContain('whoBest')
     expect(html).toContain('colHitRate')
   })
@@ -305,7 +308,9 @@ describe('finance views', () => {
     const html = renderToStaticMarkup(createElement(SaveMoreView, { ledger: LEDGER, tiers: {}, t }))
     expect(html).toContain('finance-peak-savings')
     expect(html).toContain('finance-cache-savings')
-    expect(html).toContain('cacheSavingsNote')
+    // 口径不再作为段落平铺：以 title 提示贴在数字上（仍在 HTML 里可断言）
+    expect(html).toContain('title="cacheSavingsNote"')
+    expect(html).not.toContain('cacheSavingsLabel')
     expect(html).toContain('estimateTag')
   })
 
@@ -326,7 +331,6 @@ describe('finance views', () => {
       t,
     }))
     expect(withTiers).toContain('finance-context-card')
-    expect(withTiers).toContain('contextSavedUpper')
     expect(withTiers).toContain('estimateTag')
     expect(withTiers).toContain('contextNote')
 

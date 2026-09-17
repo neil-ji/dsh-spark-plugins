@@ -44,13 +44,12 @@ export function WhoToUseView({ ledger, t }: WhoToUseViewProps): ReactNode {
 
   return (
     <Card title={t('whoTitle')} className={css.section}>
-      <p className={css.hint}>{t('whoHint')}</p>
       <div className={css.table}>
         <div className={`${css.tableHead} ${css.colsCompare}`}>
           <span className={css.cell}>{t('colProvider')}</span>
           <span className={`${css.cell} ${css.cellNum}`}>{t('colCost')}</span>
           <span className={`${css.cell} ${css.cellNum}`}>{t('colUnitCost')}</span>
-          <span className={`${css.cell} ${css.cellNum}`}>{t('colHitRate')}</span>
+          <span className={`${css.cell} ${css.cellNum}`} title={t('hitRateHint')}>{t('colHitRate')}</span>
           <span className={`${css.cell} ${css.cellNum}`}>{t('colSpeed')}</span>
         </div>
         {groups.map((group) => {
@@ -78,7 +77,7 @@ export function WhoToUseView({ ledger, t }: WhoToUseViewProps): ReactNode {
               {speed === null
                 ? null
                 : (
-                  <p className={css.detailText} data-testid="finance-time-compare">
+                  <p className={css.detailText} data-testid="finance-time-compare" title={t('timeCompareNote')}>
                     {t('timeCompareSaved', {
                       fast: speed.fastest.provider,
                       slow: speed.slowest.provider,
@@ -86,7 +85,7 @@ export function WhoToUseView({ ledger, t }: WhoToUseViewProps): ReactNode {
                       minutes: speed.atFastestMinutes.toFixed(1),
                       saved: speed.savedMinutes.toFixed(1),
                     })}
-                    {' · '}{t('estimateTag')}
+                    {' '}<span className={css.estimate}>{t('estimateTag')}</span>
                   </p>
                 )}
               {group.rows.map((row) => {
@@ -118,8 +117,6 @@ export function WhoToUseView({ ledger, t }: WhoToUseViewProps): ReactNode {
                         })} · {t('ttftLabel', { ms: formatMs(firstTokenMs(row.rate)) })}
                       </p>
                     ))}
-                    {speed === null ? null : <p className={css.detailText}>{t('timeCompareNote')}</p>}
-                    <p className={css.detailText}>{t('hitRateHint')}</p>
                   </div>
                 )
                 : null}

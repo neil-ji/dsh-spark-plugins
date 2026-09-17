@@ -51,16 +51,15 @@ export function SaveMoreView({ ledger, tiers, t }: SaveMoreViewProps): ReactNode
       <Card title={t('peakCardTitle')} className={css.section}>
         {peak.shiftSavingsMicros > 0
           ? (
-            <div className={css.amount}>
+            <div className={css.amount} title={t('peakCardHint')}>
               <span className={css.amountValue} data-testid="finance-peak-savings">
                 <Money micros={peak.shiftSavingsMicros} currency={currency} />
               </span>
-              <span className={css.tag}>{t('estimateTag')}</span>
+              <span className={css.estimate}>{t('estimateTag')}</span>
               {share === null ? null : <span className={css.tagMuted}>{t('peakShareLabel', { pct: formatPercent(share) })}</span>}
             </div>
           )
           : <p className={css.hint} data-testid="finance-peak-empty">{t('peakCardEmpty')}</p>}
-        <p className={css.hint}>{t('peakCardHint')}</p>
         {bands.length === 0
           ? null
           : (
@@ -77,25 +76,22 @@ export function SaveMoreView({ ledger, tiers, t }: SaveMoreViewProps): ReactNode
           ? <p className={css.hint} data-testid="finance-cache-empty">{t('cacheCardEmpty')}</p>
           : (
             <>
-              <div className={css.amount}>
+              <div className={css.amount} title={t('cacheSavingsNote')}>
                 <span className={css.amountValue} data-testid="finance-cache-savings">
                   <Money micros={Math.round(savings.amountMicros)} currency={currency} />
                 </span>
-                <span className={css.tag}>{t('estimateTag')}</span>
+                <span className={css.estimate}>{t('estimateTag')}</span>
                 <span className={css.tagMuted}>{t('cacheSavingsFrom', { from: savings.from.provider, to: savings.to.provider })}</span>
               </div>
-              <p className={css.hint}>{t('cacheSavingsLabel', { amount: formatMicros(Math.round(savings.amountMicros)) })}</p>
               <div className={css.pillRow}>
                 <span className={css.tagMuted}>{t('cacheBestLabel', { provider: extremes.best.provider, pct: formatPercent(extremes.best.hitRate) })}</span>
                 <span className={css.tagMuted}>{t('cacheWorstLabel', { provider: extremes.worst.provider, pct: formatPercent(extremes.worst.hitRate) })}</span>
               </div>
-              <p className={css.hint}>{t('cacheSavingsNote')}</p>
             </>
           )}
       </Card>
 
       <Card title={t('contextCardTitle')} className={css.section}>
-        <p className={css.hint}>{t('contextCardHint')}</p>
         {contextRows.length === 0
           ? <p className={css.hint} data-testid="finance-context-empty">{t('contextNoData')}</p>
           : (
@@ -103,8 +99,8 @@ export function SaveMoreView({ ledger, tiers, t }: SaveMoreViewProps): ReactNode
               <div className={`${css.tableHead} ${css.colsModels}`}>
                 <span className={css.cell}>{t('colModel')}</span>
                 <span className={css.cell}>{t('colProvider')}</span>
-                <span className={css.cell}>{t('colContextShare')}</span>
-                <span className={css.cell}>{t('colSavingUpper')}</span>
+                <span className={css.cell} title={t('contextCardHint')}>{t('colContextShare')}</span>
+                <span className={css.cell} title={t('contextNote')}>{t('colSavingUpper')}</span>
               </div>
               {contextRows.map((row) => {
                 const buckets = row.context ?? []
@@ -119,14 +115,17 @@ export function SaveMoreView({ ledger, tiers, t }: SaveMoreViewProps): ReactNode
                     <span className={css.cell}>
                       {estimate === null
                         ? (modelTiers.length === 0 ? t('contextNoTiers') : t('contextNoUsage'))
-                        : `${t('contextSavedUpper', { amount: formatMicros(Math.round(estimate.savedMicros)) })} · ${t('estimateTag')}`}
+                        : (
+                          <span className={css.tagMuted}>
+                            {formatMicros(Math.round(estimate.savedMicros))} · <span className={css.estimate}>{t('estimateTag')}</span>
+                          </span>
+                        )}
                     </span>
                   </div>
                 )
               })}
             </div>
           )}
-        <p className={css.hint}>{t('contextNote')}</p>
       </Card>
     </>
   )

@@ -41,7 +41,6 @@ export function ProjectsView({ ledger, t }: ProjectsViewProps): ReactNode {
 
   return (
     <Card title={t('projectsTitle')} className={css.section}>
-      <p className={css.hint}>{t('projectsHint')}</p>
       <div className={css.table} data-testid="finance-projects">
         {projects.map((row) => (
           <ListRow
@@ -106,7 +105,7 @@ function SessionRow({ session, currency, t }: { session: FinanceSessionRow; curr
         {session.title === null || session.title === '' ? t('untitledSession') : session.title}
       </span>
       <span className={css.cell}>{new Date(session.createdAt).toLocaleDateString()}</span>
-      <span className={`${css.cell} ${css.modelKey}`}>{session.modelKeys.length === 0 ? t('noData') : session.modelKeys[0]}</span>
+      <span className={`${css.cell} ${css.modelKey}`} title={session.modelKeys[0]}>{session.modelKeys.length === 0 ? t('noData') : session.modelKeys[0]}</span>
       <span className={`${css.cell} ${css.cellNum}`}><Money micros={session.costMicros} currency={currency} /></span>
     </div>
   )

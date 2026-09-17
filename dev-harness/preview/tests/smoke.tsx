@@ -200,13 +200,15 @@ export async function run(): Promise<{ checks: Check[] }> {
       html.indexOf('finance-tabs') > -1 && html.indexOf('finance-tabs') < html.indexOf('finance-stat-cost'),
       'tabs@' + html.indexOf('finance-tabs') + ' stats@' + html.indexOf('finance-stat-cost'),
     )
-    expectContains('finance: 余额行按已接入 provider 渲染', html, 'finance-balance-deepseek')
+    // 按量付费卡只列有余额接口的厂商；openai 宿主建议值是订阅 → 落订阅卡。
+    expectContains('finance: 余额行按已接入 provider 渲染', html, 'finance-metered-deepseek')
     expectContains('finance: 四个决策视图页签（zh 字典）', html, '怎么调度更省')
     expectContains('finance: 订阅 vs 按量卡存在', html, 'finance-plan-card')
-    expectContains('finance: 套餐行只列用过的厂商', html, 'finance-plan-deepseek')
-    // 写回路径真的通：填一次月费 → 落到 settings 的 plans，并推出「省了多少」结论。
-    await injected.controller.savePlan({ provider: 'deepseek', monthlyMicros: 10_000_000, currency: 'CNY', periodLabel: 'month', effectiveFrom: 0 })
+    // 写回路径真的通：给有用量、无显式标记的 openai 填一次月费 → 落到 settings 的
+    // plans，并推出「省了多少」结论（deepseek/tencent 已显式标记为按量，不进订阅卡）。
+    await injected.controller.savePlan({ provider: 'openai', monthlyMicros: 1, currency: 'CNY', periodLabel: 'month', effectiveFrom: 0 })
     const afterPlan = renderToString(<FinancePanel {...injected.panel} /> as ReactElement)
+    expectContains('finance: 填过月费的厂商进入订阅卡', afterPlan, 'finance-plan-openai')
     expectContains('finance: 填月费后给出「比按量省」结论', afterPlan, '比按量省')
     // P1-B：该用谁 —— 输出速率列 + 同一模型跨供应商的时间成本比较。
     check('finance: 账本带上了速率样本', state.ledger?.byModel.some((row) => row.rate !== undefined) === true, '')
@@ -231,11 +233,12 @@ export async function run(): Promise<{ checks: Check[] }> {
       JSON.stringify((injected.scope as unknown as { getSnapshot(): { user: unknown } }).getSnapshot().user).includes('monthlyMicros'),
       '',
     )
-    // 产品原则回归线：配置面（价格表 / 供应商默认价 / 视图偏好）必须不存在。
+    // 产品原则回归线：配置面（供应商默认价 / 视图偏好）必须不存在。
+    // 价格表「操作」（更新 / 还原，SPEC §5.1）是脚注里的动作而非配置表单，允许存在。
     check(
-      'finance: 已无配置面（价格表 / 供应商默认价 / 视图偏好全部删除）',
-      !html.includes('价格表') && !html.includes('供应商默认价') && !html.includes('仪表盘视图'),
-      html.includes('价格表') ? 'still has 价格表' : '',
+      'finance: 已无配置面（供应商默认价 / 视图偏好全部删除），价格表只剩脚注操作',
+      !html.includes('供应商默认价') && !html.includes('仪表盘视图') && html.includes('价格表操作'),
+      html.includes('供应商默认价') ? 'still has 供应商默认价' : '',
     )
   }
 

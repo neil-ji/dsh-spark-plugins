@@ -193,7 +193,7 @@ export function ThisMonthView({
                           <span className={cx(css.cell, css.cellNum)}>
                             <Money micros={insight?.equivalentMicros ?? 0} currency={currency} />
                           </span>
-                          <span className={cx(css.cell, css.balanceNote)}>{verdictText(insight, currency, t)}</span>
+                          <span className={cx(css.cell, css.cellWrap, css.balanceNote)}>{verdictText(insight, currency, t)}</span>
                           <span className={css.planActions}>
                             {/* 计费方式标记（provider 级）：按量 / 订阅 / 免费。锁定的 provider 只读。 */}
                             {!plansWritable || billingLocked.has(providerKey(provider))
@@ -291,7 +291,7 @@ export function ThisMonthView({
 
             <Card
               title={t('trendTitle')}
-              actions={<span className={css.tagMuted}>{t('trendRange', { days: ledger.byDay.length })}</span>}
+              actions={<span className={css.tagMuted} title={t('trendHint')}>{t('trendRange', { days: ledger.byDay.length })}</span>}
               className={css.section}
             >
               {trendPoints.length === 0
@@ -304,7 +304,6 @@ export function ThisMonthView({
                     gradientId="finance-trend"
                   />
                 )}
-              <p className={css.hint}>{t('trendHint')}</p>
             </Card>
 
             <Card title={t('topModelsTitle')} className={css.section}>
@@ -313,7 +312,7 @@ export function ThisMonthView({
                   <span className={css.cell}>{t('colModel')}</span>
                   <span className={css.cell}>{t('colProvider')}</span>
                   <span className={cx(css.cell, css.cellNum)}>{t('colCost')}</span>
-                  <span className={cx(css.cell, css.cellNum)}>{t('colUnitCost')}</span>
+                  <span className={cx(css.cell, css.cellNum)} title={t('topModelsHint')}>{t('colUnitCost')}</span>
                 </div>
                 {topModels.length === 0
                   ? <p className={css.hint}>{t('noData')}</p>
@@ -328,7 +327,6 @@ export function ThisMonthView({
                     </div>
                   ))}
               </div>
-              <p className={css.hint}>{t('topModelsHint')}</p>
             </Card>
           </>
         )}
@@ -485,17 +483,4 @@ function balanceValue(ledger: FinanceLedger, balance: FinanceProviderBalance, t:
   if (balance.status === 'missing-credential') return t('balanceMissingKey')
   if (balance.status === 'unsupported') return t('balanceUnsupported')
   return t('balanceError')
-}
-
-/** 余额那一行的说明列：能推算就说还能用几天（估算），不能就直说为什么不能。 */
-function balanceNote(provider: string, balance: FinanceProviderBalance, ledger: FinanceLedger, t: FinanceTranslate): string {
-  if (balance.status !== 'ok' || balance.totalMicros === undefined) {
-    if (balance.code !== undefined) return balance.code
-    return t('balanceDaysUnknown')
-  }
-  const daily = providerDailyMicros(ledger, provider)
-  const days = balanceDaysLeft(balance.totalMicros, daily)
-  if (days === null) return t('balanceDaysUnknown')
-  const shown = days >= 10 ? days.toFixed(0) : days.toFixed(1)
-  return `${t('balanceDaysLeft', { days: shown })} · ${t('estimateTag')}`
 }
