@@ -131,7 +131,9 @@ export function ThisMonthView({
         <span className={css.toolbarMeta} data-testid="finance-updated">
           {ledger.generatedAt > 0 ? t('lastUpdated', { minutes: minutesSince(ledger.generatedAt) }) : t('lastUpdatedNever')}
         </span>
-        <Button onClick={onRefresh} disabled={refreshing} aria-label={t('refresh')}>
+        {/* 刷新是**次操作**（UI-UX-SPEC §4.2 仪表盘模板：刷新类动作归次形制），
+            本 tab 唯一 primary 是页脚的价格表主操作。 */}
+        <Button variant="secondary" size="sm" onClick={onRefresh} disabled={refreshing} aria-label={t('refresh')}>
           {refreshing ? t('refreshing') : t('refresh')}
         </Button>
       </div>
@@ -209,6 +211,8 @@ export function ThisMonthView({
                             {plansWritable
                               ? (
                                 <Button
+                                  variant="secondary"
+                                  size="sm"
                                   onClick={() => setEditing(open ? null : provider)}
                                   aria-label={`${existing === undefined ? t('planFill') : t('planEdit')}: ${provider}`}
                                 >
@@ -219,6 +223,8 @@ export function ThisMonthView({
                             {plansWritable && existing !== undefined
                               ? (
                                 <Button
+                                  variant="danger"
+                                  size="sm"
                                   onClick={() => { void removePlan(provider) }}
                                   aria-label={`${t('planRemove')}: ${provider}`}
                                 >
@@ -333,12 +339,17 @@ export function ThisMonthView({
 
       <div className={css.footer}>
         <p className={css.footerNote}>{priceNote(lastSyncAppliedAt, t)}</p>
-        {/* 价格表操作（SPEC §5.1）：用户自行决定何时更新，并可一键还原到发版快照。 */}
+        {/* 价格表操作（SPEC §5.1 / UI-UX-SPEC §3.1「一屏一个 primary」）：
+            · 「更新价格表」= 本视图唯一 primary（拉最新目录价 → 原子替换覆盖层，真写操作）；
+            · 「还原到发版快照」= 回退/破坏性操作，实心 primary 会让两个写操作抢同一视觉层级，
+              故按 §4.2 危险操作取 danger；disabled 语义原样保留（没有覆盖层时不给点）。
+              两枚按钮同属一个 group ⇒ 同尺寸（md），组内不混高。 */}
         <div className={css.planActions} role="group" aria-label={t('priceActionsLabel')}>
-          <Button disabled={priceBusy} onClick={() => { void onUpdatePrices() }} aria-label={t('updatePrices')}>
+          <Button variant="primary" disabled={priceBusy} onClick={() => { void onUpdatePrices() }} aria-label={t('updatePrices')}>
             {t('updatePrices')}
           </Button>
           <Button
+            variant="danger"
             disabled={priceBusy || (priceTable !== undefined && priceTable.overlayKeyCount + priceTable.userKeyCount === 0)}
             onClick={() => { void onRestorePrices() }}
             aria-label={t('restorePrices')}
@@ -404,7 +415,13 @@ function verdictText(insight: { savingsMicros: number; equivalentMicros: number;
   return `${t('planLost', { amount })}${progress}`
 }
 
-/** 行内套餐编辑器：月费 + 币种 + 计费形态，保存写回 settings 的 `plans`。 */
+/**
+ * 行内套餐编辑器：月费 + 币种 + 计费形态，保存写回 settings 的 `plans`。
+ *
+ * 按钮形制：这是**卡片内的行内表单**，与页脚的价格表主操作同处一个图层 ——
+ * 按 UI-UX-SPEC §3.1「一屏一个 primary」，它的「保存」是次形制（secondary），
+ * 「取消」更是无底（ghost，hippomemo 编辑弹窗同规）；两枚同尺寸（md），行内不混高。
+ */
 function PlanEditor({ provider, initial, t, onSave, onCancel }: {
   provider: string
   initial: FinancePlanEntry | undefined
@@ -449,6 +466,7 @@ function PlanEditor({ provider, initial, t, onSave, onCancel }: {
       />
       <span className={css.planActions}>
         <Button
+          variant="secondary"
           disabled={micros === null}
           onClick={() => {
             void onSave({
@@ -462,7 +480,7 @@ function PlanEditor({ provider, initial, t, onSave, onCancel }: {
         >
           {t('planSave')}
         </Button>
-        <Button onClick={onCancel}>{t('planCancel')}</Button>
+        <Button variant="ghost" onClick={onCancel}>{t('planCancel')}</Button>
       </span>
       {invalid ? <span className={css.tag}>{t('planInvalidFee')}</span> : null}
     </div>

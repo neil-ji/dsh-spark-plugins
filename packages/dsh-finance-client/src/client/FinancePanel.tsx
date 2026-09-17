@@ -66,7 +66,9 @@ function ErrorState({ message, t, onRetry }: { message: string | null; t: Financ
     <div className={css.state} role="status" aria-live="polite" data-testid="finance-error">
       <p className={css.stateTitle}>{t('errorTitle')}</p>
       {message === null ? null : <p className={`${css.stateBody} ${css.error}`}>{message}</p>}
-      <Button onClick={onRetry}>{t('retry')}</Button>
+      {/* 整面板错误态里唯一可点的动作 —— UI-UX-SPEC §4.4「行内 error 文案 + 重试主按钮」，
+          显式写成 primary 是为了让「面板里不出现隐式 primary」这条口径可 grep。 */}
+      <Button variant="primary" onClick={onRetry}>{t('retry')}</Button>
     </div>
   )
 }

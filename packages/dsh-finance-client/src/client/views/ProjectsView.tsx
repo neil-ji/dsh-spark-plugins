@@ -71,7 +71,9 @@ function ProjectDetail({ row, ledger, currency, t, onBack }: {
     <Card
       title={
         <span className={css.backRow}>
-          <Button onClick={onBack} aria-label={t('projectBack')}>{t('projectBack')}</Button>
+          {/* 返回是导航动作，不是本视图的主操作：按 UI-UX-SPEC §3.1「一屏一个 primary」
+              取次形制（卡片题头内用 sm，与 22px 的题头行同阶）。 */}
+          <Button variant="secondary" size="sm" onClick={onBack} aria-label={t('projectBack')}>{t('projectBack')}</Button>
           <span className={css.projectTitle}>{title}</span>
         </span>
       }
