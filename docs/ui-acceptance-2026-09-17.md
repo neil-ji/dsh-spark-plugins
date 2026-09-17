@@ -180,3 +180,23 @@ ok  PCQA-005 Esc 先关菜单、面板不关                 {"panelOpen":true,"
 **顺带修掉 harness 自身两处脆弱读数**（不是产品缺陷，如实记录）：
 1. 方向键微调原本「每次按键后紧读」，读到的是上一帧旧值 → 改为每次按键各等 500ms 再读，并在**丢键时重试一次**（CDP 背靠背连发两个 rawKeyDown 时第一个偶发丢失，复核轮与本机都遇到过）；断言仍要求「恰好一次 8px」，多走一步（-16）即失败，不会掩盖真问题。
 2. 视口还原后的「重吸附」可能撞上紧跟着的微调按键（x 被吸回角落）→ 微调前先双击归一化并等 900ms。
+
+---
+
+## 9. 复核轮遗留项收口（-2210 §7 的三条，2026-09-17 深夜第二轮）
+
+| 复核轮 §7 项 | 处置 | 证据 |
+|---|---|---|
+| GitHub 页脚「保存配置」与卡片保存同屏（草稿脏态） | 页脚草稿结算行改 **secondary**，SPEC §4.2 写清口径（连接页模板的「保存(primary)」指卡片级；页级草稿结算行取次形制） | 真宿主：勾选一个权限 checkbox 造出脏草稿 → 面板内实心 primary 仍只有 `保存令牌` 1 个（`solid:["保存令牌"]`） |
+| 「还原到发版快照」缺二次确认 Modal | 加确认 Modal（标题/正文/确认钮全走 locale，zh+en 同 key 集）；按 §4.2 模板 4 的「danger Button + 二次确认」补齐 | 真宿主：点还原 → 弹「还原到发版快照？」+ 确认钮；Modal 内 Esc **只关弹窗**（面板保持打开、未执行还原）。前置（存在价格覆盖层）由「更新价格表」建立 —— 社区目录价是**异步落库**，等待窗口放到 30s 并每 10s 切模块强制重取状态 |
+| 英文语言下的插件 UI（未覆盖） | 从「未覆盖」变成**可跑断言**：`dev-harness/preview/tests/smoke.tsx` 新增 en 渲染通道（dock 壳 + 五模块元数据 + 五个 pane + 三个装配失败态 + 徽章文案；判定 = 文本节点与 `aria-label`/`title`/`alt` 里不得出现 CJK，class/style/SVG 几何属性不参与），`preview:verify` 87 → **117 项** | 据断言收掉 13 处硬编码中文：壳 6 条（球 aria/title、模块栏名、关闭钮、空态、未加载兜底）、模块元数据 4 条（hippomemo/finance 的 label+name+sub、github/npm 的 sub）、kit 徽章后缀、装配失败态 3 条、hippomemo 播报 3 条、ui-kit 4 个缺省值改可选 prop |
+
+**顺带修掉的测试基建阻断**：预览打包把两份 React（根 18.3.1 + `packages/dsh-hippomemo/node_modules` 的 19.2.8）装进同一进程，hippomemo pane 整块渲染失败（`Objects are not valid as a React child`）。已把 `verify.mjs`/`server.mjs` 两个 esbuild 入口的 react/react-dom 钉到仓库根，并加了一条「预览只用根 react 一份」的断言。
+
+**验证**：`pnpm -r build / typecheck / test` 0 · `pnpm check:all` PASS · `pnpm preview:verify` **117/117** · 真宿主 `real-host-check` **55/55 退出码 0**。
+版本：plugin-kit 0.5.1 · ui-kit 0.6.4 · dock 0.3.5 · hippomemo 0.3.3 · github-ui 0.2.9 · npm-ui 0.2.11 · finance-client 0.5.9。
+
+**有意保留（如实记录，不算已修）**：
+1. **ui-kit 四个组件的中文缺省值**（Modal 关闭 / TerminalBlock 终端输出 / Sparkline 趋势图 / SearchInput 清除）：ui-kit 是零 workspace 依赖包、拿不到插件 locale，规范动作是「可选 prop + 缺省中文 + 调用方传 t()」。后果是新调用方若忘记传，英文界面会露出中文 —— 目前没有机械防线。
+2. `MemorySection.tsx` 的 `formatRelative()` 返回英文硬编码（`3 min ago`），**中文界面也显示英文** —— 不含 CJK，en 断言抓不到，属另一类 i18n 欠账（本轮未动）。
+3. 模块元数据的 `name`/`sub` 是注册时求值：宿主运行中切语言时只有 `label` 这类闭包会立刻换词（未改形制）。
