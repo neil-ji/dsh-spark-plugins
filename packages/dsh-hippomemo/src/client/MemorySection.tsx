@@ -32,6 +32,18 @@ import type {
 } from '../types.ts'
 
 type Translate = (key: HippomemoLocaleKey, vars?: Record<string, string | number>) => string
+
+/**
+ * 宿主进化引擎产出的 reason 是英文机器串（memory-evolve.ts 生成，不归 UI 字典）；
+ * 这里按已知模式做客户端本地化，未匹配的原样透出 —— 引擎新增模式不会被吞。
+ */
+function formatTodoReason(reason: string, t: Translate): string {
+  const cited = reason.match(/^near-duplicate of cited memory \(title overlap (\d+)%\), human review$/)
+  if (cited) return t('todoReasonNearDupCited').replaceAll('{pct}', cited[1])
+  const unused = reason.match(/^near-duplicate of (.+) \(title overlap (\d+)%\), unused$/)
+  if (unused) return t('todoReasonNearDupUnused').replaceAll('{title}', unused[1]).replaceAll('{pct}', unused[2])
+  return reason
+}
 export interface MemorySectionProps {
   api: HippomemoApi
   t: Translate
@@ -249,7 +261,7 @@ function TodoQuadrantImpl({ t, items, now, onResolve }: {
                 <div className='hippomemo-todo-title'>{item.title}</div>
                 <div className='hippomemo-todo-desc'>
                   <Pill className={'hippomemo-tag hippomemo-kind-' + item.memoryKind}>{t(kindKeyMap[item.kind])}</Pill>
-                  <span className='hippomemo-todo-reason'>{item.reason}</span>
+                  <span className='hippomemo-todo-reason'>{formatTodoReason(item.reason, t)}</span>
                   <span className='hippomemo-todo-meta'>{formatRelative(item.detectedAt, now)}</span>
                 </div>
               </div>
