@@ -13,7 +13,7 @@
 
 | ID | 级 | 问题 | 处置 | 关闭口径（这一条解决了什么） |
 |---|---|---|---|---|
-| PCQA-001 | P1 | 关闭态面板仍在 Tab 序与焦点里 | 修 | 关闭态 = `inert` + CSS `visibility:hidden`（延迟到退出动画结束）；收起时焦点回球。真宿主断言：关闭态 inert/visibility、Tab 不落进面板、Esc 后焦点在球上 |
+| PCQA-001 | P1 | 关闭态面板仍在 Tab 序与焦点里 | 修 | 关闭态 = `inert`（**单一机制**；v2 曾加一层「延迟过渡的 visibility:hidden」，因依赖过渡时钟而不可复现，见 §8 已删除）；收起时焦点回球。真宿主断言：关闭态 inert、Tab 不落进面板、Esc 后焦点在球上 |
 | PCQA-002 | P2 | 视口变化后球停在旧坐标 | 修 | 位置记忆加 `snapped` 标记：吸附态 resize 时重吸附最近角，方向键微调过的自由位置只夹回视口 |
 | PCQA-003 | P2 | GitHub 把宿主英文错误直抛用户 | 修 | 客户端前置判空直出本地化文案 + 已知错误形态映射到 locale key + 未知错误「本地化前缀 + 原始 message（进 title）」，与 npm 模块同风格 |
 | PCQA-004 | P2 | 子页签不支持方向键、4 个 Tab 停靠点 | 修 | ui-kit SegmentedControl：ArrowLeft/Right + Home/End 自动激活，roving tabindex（只有选中项 tabindex=0） |
@@ -159,3 +159,24 @@ ok  PCQA-005 Esc 先关菜单、面板不关                 {"panelOpen":true,"
    github-ui 另有 12 项单测（SSR 渲染 + 纯函数映射）作为组件级防线。
 5. **`dev-harness/` 下 4 个未跟踪探针脚本**（`panel-sweep*.mjs` / `probe*.mjs`）是上轮验收留下的，
    基线报告已如实记录；本轮未动、未提交。
+
+---
+
+## 8. 复核轮回修（acc-20260917-2210，2026-09-17 深夜）
+
+外部复核轮在真宿主重放了全部 18 条：**15 条确认已修、1 条未修（R-02 = PCQA-005）、1 条部分修（R-03 = PCQA-017 剩余）、2 条观察（R-01/R-04）**。四条里有三条**同一个根因**：本轮修复中有三处依赖了浏览器的**动画帧/过渡时钟**，而复核环境（无头 + 桌面会话不可交互）里那个时钟是停的。
+
+| 复核项 | 复核现象 | 根因 | 回修 |
+|---|---|---|---|
+| **R-02**（P2，PCQA-005 未修） | 菜单开着按 Esc 仍关掉整个面板（3/3） | 面板的「内层浮层」判定是 `querySelector` + `getComputedStyle().opacity !== '0'`；菜单入场动画在停帧环境停在 opacity:0 → 判定成「没有浮层」 | ① ui-kit Menu/Modal 改为**捕获阶段**接手 Esc 并 `stopPropagation`（面板那侧根本收不到这次按键，与监听器注册顺序无关）；② dock 的兜底改为**只看节点是否存在**，不再读计算样式 |
+| **R-01**（P3，新发现） | 段控方向键切换后焦点不跟随 | 焦点写在 `requestAnimationFrame` 里，停帧环境下 rAF 不跑 | 改为**同步** `focus()`：所有页签节点此刻都在 DOM 里，重渲染随后归位 tabindex |
+| **R-04**（观察） | 关闭态面板 `visibility` 始终 visible | `transition: visibility 0s linear 220ms` 同样依赖过渡时钟 | **删掉这层保险**：把面板移出焦点序/无障碍树的机制只剩 `inert`（复核轮自己也实测证实 inert 足够：程序化 `.focus()` 被拒、10 次 Tab 全落 shell），口径里不再有 half-verified 的部分 |
+| **R-03**（P3，PCQA-017 剩余） | 记忆模块卡片题仍 13px | `.hippomemo-panel-title` 是 (0,2,0)，压过 dock 的 `.dock-embed :is(h3)` (0,1,1) 兜底 | hippomemo 自己那套样式里改 `--spk-text-title`（14px/600） |
+
+**采纳复核轮的方法学建议**：harness 的键盘断言从「JS 合成 KeyboardEvent」**全部换成 CDP 真按键**（`Input.dispatchKeyEvent`）—— 这正是 R-02 在本轮 harness 里「通过」而复核轮「失败」的原因（合成事件走的是简化路径）。同时补三条断言：真键盘下焦点在菜单项内时 Esc 只关菜单、内层关掉后第二次 Esc 才收面板、记忆模块卡片题 14px。
+
+**回修后的验收**：`pnpm -r build / typecheck / test` 0 · `pnpm check:all` PASS（对比度 156 项）· `pnpm preview:verify` 87/87 · 真宿主 `real-host-check` **52/52 退出码 0**。版本：ui-kit 0.6.3 / dock 0.3.4 / hippomemo 0.3.2。
+
+**顺带修掉 harness 自身两处脆弱读数**（不是产品缺陷，如实记录）：
+1. 方向键微调原本「每次按键后紧读」，读到的是上一帧旧值 → 改为每次按键各等 500ms 再读，并在**丢键时重试一次**（CDP 背靠背连发两个 rawKeyDown 时第一个偶发丢失，复核轮与本机都遇到过）；断言仍要求「恰好一次 8px」，多走一步（-16）即失败，不会掩盖真问题。
+2. 视口还原后的「重吸附」可能撞上紧跟着的微调按键（x 被吸回角落）→ 微调前先双击归一化并等 900ms。
