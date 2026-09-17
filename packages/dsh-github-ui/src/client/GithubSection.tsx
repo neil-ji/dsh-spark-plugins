@@ -110,7 +110,7 @@ function Loaded({ injected }: { injected: GithubSectionInjected }): ReactNode {
         <p className={styles.muted}>
           {credentialConfigured ? t('tokenConfigured') : t('tokenMissing')}
           {state.credential?.source !== undefined
-            ? ' · ' + t('tokenSource') + ': ' + state.credential.source
+            ? ' · ' + t('tokenSource') + state.credential.source
             : ''}
         </p>
         <div className={styles.row}>
@@ -124,6 +124,7 @@ function Loaded({ injected }: { injected: GithubSectionInjected }): ReactNode {
           <Button
             variant="primary"
             disabled={busy || tokenDraft === ''}
+            aria-describedby={tokenDraft === '' ? 'github-save-hint' : undefined}
             onClick={() => { void run(() => controller.saveToken(tokenDraft).then((f) => { if (f === undefined) setTokenDraft(''); return f })) }}
           >
             {t('saveToken')}
@@ -132,6 +133,9 @@ function Loaded({ injected }: { injected: GithubSectionInjected }): ReactNode {
             ? <Button variant="secondary" disabled={busy} onClick={() => { void run(() => controller.removeToken()) }}>{t('removeToken')}</Button>
             : null}
         </div>
+        {tokenDraft === ''
+          ? <p id='github-save-hint' className={styles.muted}>{t('saveTokenHint')}</p>
+          : null}
       </Card>
 
       {/* 连接状态 */}
@@ -284,6 +288,7 @@ function Loaded({ injected }: { injected: GithubSectionInjected }): ReactNode {
                 <Button
                   variant="secondary"
                   disabled={busy || config.gitProxy === ''}
+                  aria-describedby={config.gitProxy === '' ? 'github-proxy-hint' : undefined}
                   onClick={() => {
                     void (async () => {
                       setBusy(true)
@@ -296,6 +301,9 @@ function Loaded({ injected }: { injected: GithubSectionInjected }): ReactNode {
                   {busy ? t('proxyTesting') : t('testProxy')}
                 </Button>
               </div>
+              {config.gitProxy === ''
+                ? <p id='github-proxy-hint' className={styles.muted}>{t('testProxyHint')}</p>
+                : null}
               {proxyTest !== undefined
                 ? (
                   <p className={proxyTest.ok ? styles.notice : styles.error} role={proxyTest.ok ? 'status' : 'alert'}>

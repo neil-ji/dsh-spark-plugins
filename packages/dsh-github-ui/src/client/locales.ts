@@ -17,7 +17,12 @@ export const zh = {
   tokenTitle: '访问令牌',
   tokenConfigured: '已配置',
   tokenMissing: '未配置',
-  tokenSource: '来源',
+  /** 标点随语言走（中文全角冒号 / 英文半角 + 空格）。 */
+  tokenSource: '来源：',
+  /** 空输入时「保存令牌」禁用的原因（aria-describedby 指向它，UI-UX-SPEC §3.1）。 */
+  saveTokenHint: '粘贴访问令牌后才能保存',
+  /** 代理为空时「测试代理」禁用的原因。 */
+  testProxyHint: '先填写 Git 代理地址再测试',
   tokenPlaceholder: '粘贴 GitHub 访问令牌（PAT）',
   saveToken: '保存令牌',
   removeToken: '移除令牌',
@@ -105,7 +110,9 @@ export const en: Record<GithubKey, string> = {
   tokenTitle: 'Access token',
   tokenConfigured: 'Configured',
   tokenMissing: 'Missing',
-  tokenSource: 'Source',
+  tokenSource: 'Source: ',
+  saveTokenHint: 'Paste an access token to enable saving',
+  testProxyHint: 'Enter a Git proxy URL first',
   tokenPlaceholder: 'Paste a GitHub access token (PAT)',
   saveToken: 'Save token',
   removeToken: 'Remove token',
