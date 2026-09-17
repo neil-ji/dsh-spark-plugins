@@ -99,6 +99,16 @@ check(
   },
 )
 
+// 4) 字号不得绑定非字号 token（跨类误用）。
+//    范本：dock .dock-prop-type 曾经 font-size: var(--spk-radius-md) —— 实测字号 10px，
+//    比标度小 1px，且日后改圆角会静默改字号（acc-20260917 的 PCQA-012）。
+const NON_TYPE_TOKEN = /--spk-(?:radius|space|gap|pad|control)[a-z0-9-]*/
+check(files, /font(?:-size)?:[^;{}\n]*/g, (m) => {
+  const hit = m[0].match(NON_TYPE_TOKEN)
+  if (!hit) return null
+  return { rule: 'font-size-cross-token', detail: hit[0] }
+})
+
 if (process.argv.includes('--json')) {
   console.log(JSON.stringify({ ok: violations.length === 0, count: violations.length, violations }, null, 2))
 } else if (violations.length === 0) {

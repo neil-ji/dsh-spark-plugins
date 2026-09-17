@@ -278,6 +278,8 @@ export const THEMED_PAIRS = /** @type {Pair[]} */ ([
   { id: 'warn on card', source: 'finance staleSyncHint / hippomemo tag-warn', min: 4.5, fg: '--spk-warn', bg: CARD },
   { id: 'warn on warn-soft', source: 'hippomemo tag-warn tint', min: 4.5, fg: '--spk-warn', bg: 'mix(--spk-warn, 10, ' + CARD + ')' },
   { id: 'error on card', source: 'github/npm .error / Input.error', min: 4.5, fg: '--spk-error', bg: CARD },
+  // 危险态胶囊（dock .dock-pill.danger 的「丢弃」）躺在 layer-2 槽面上，不是卡面
+  { id: 'error on layer-2', source: 'dock .dock-pill.danger（PCQA-015）', min: 4.5, fg: '--spk-error', bg: L2 },
   { id: 'error on error-soft', source: 'hippomemo tag-error tint', min: 4.5, fg: '--spk-error', bg: 'mix(--spk-error, 10, ' + CARD + ')' },
   { id: 'info on card', source: 'finance balanceRowSource host-known', min: 4.5, fg: '--spk-info', bg: CARD },
   { id: 'on-error on error fill', source: 'ui-kit Button.danger', min: 4.5, fg: '--spk-on-error', bg: '--spk-error' },
@@ -561,6 +563,43 @@ export function auditPreviewParity(tables) {
   return findings
 }
 
+/* ──────────────── 插件源码禁直连宿主 token（acc-20260917） ──────────────── */
+
+/**
+ * 允许直连的宿主 token 前缀：字体栈与阴影。
+ * 两者不参与对比度判定，且「和 shell 同源」正是设计意图（spark-dock-design §4）。
+ */
+const DSW_DIRECT_ALLOWED = ['--dsw-font-', '--dsw-shadow-']
+
+/**
+ * 扫描插件源码里对宿主 token 的直接引用。
+ *
+ * 背景（PC 端验收 20260917 的 PCQA-007/016）：真宿主里 `--dsw-*` 这些名字**由宿主自己
+ * 定义**，取值与 ui-kit 的桥接段（dsw-bridge.css）不同 —— 实测 light 主题
+ * `--dsw-alias-label-tertiary` 宿主给 #81858C，桥接给 #5F6A7D。于是同一个组件
+ * 「预览/闸门按桥接值算，真宿主按宿主值渲染」：对比度表 154 项全绿，真宿主上
+ * dock 副标题只有 3.42:1。语义色必须直连 `--spk-*`（仓库自己的 token 层），
+ * 闸门与预览才和真宿主一致。
+ */
+export function auditHostAliasUsage() {
+  const files = walk(path.join(ROOT, 'packages')).filter((f) => /.(css|ts|tsx)$/.test(f))
+  const findings = []
+  for (const file of files) {
+    if (file.includes(`dsh-ui-kit${path.sep}src${path.sep}styles${path.sep}`)) continue
+    const text = readFileSync(file, 'utf8')
+    const re = /var\(\s*(--dsw-[a-z0-9-]+)/g
+    let m
+    while ((m = re.exec(text))) {
+      const name = m[1]
+      if (DSW_DIRECT_ALLOWED.some((p) => name.startsWith(p))) continue
+      findings.push({ file: path.relative(ROOT, file), line: text.slice(0, m.index).split('\n').length, name })
+    }
+  }
+  const byKey = new Map()
+  for (const f of findings) byKey.set(`${f.file}|${f.name}`, f)
+  return [...byKey.values()].sort((a, b) => (a.file + a.name).localeCompare(b.file + b.name))
+}
+
 /* ──────────────────────────── CLI ──────────────────────────── */
 
 function fmt(n) { return n == null ? '  n/a ' : n.toFixed(2).padStart(5) }
@@ -573,6 +612,7 @@ function main() {
   const coverage = auditTokenCoverage(tables)
   const docDrift = auditDesignDocs()
   const parity = auditPreviewParity(tables)
+  const hostAlias = auditHostAliasUsage()
 
   const pairFails = pairs.filter((p) => !p.ok && !p.soft)
   const pairSoft = pairs.filter((p) => !p.ok && p.soft)
@@ -580,8 +620,8 @@ function main() {
   const covWarns = coverage.filter((c) => c.severity === 'warn')
 
   if (asJson) {
-    console.log(JSON.stringify({ pairFails, pairSoft, pairTotal: pairs.length, covErrors, covWarns, docDrift, parity }, null, 2))
-    process.exit(pairFails.length + covErrors.length + docDrift.length + parity.length > 0 ? 1 : 0)
+    console.log(JSON.stringify({ pairFails, pairSoft, pairTotal: pairs.length, covErrors, covWarns, docDrift, parity, hostAlias }, null, 2))
+    process.exit(pairFails.length + covErrors.length + docDrift.length + parity.length + hostAlias.length > 0 ? 1 : 0)
   }
 
   console.log('\n══ 对比度（WCAG 2.1 AA：正文 4.5 / 大字·非文本 3.0）══')
@@ -603,6 +643,10 @@ function main() {
   console.log(`  未定义但有写死 fallback（暗色不跟随）：${covWarns.length}`)
   for (const f of covWarns) console.log(`  ! ${f.file}:${f.line}  ${f.name}`)
 
+  console.log('\n══ 插件源码直连宿主 token（语义色必须走 --spk-*）══')
+  if (hostAlias.length === 0) console.log('  ok  插件源码零处直连 --dsw-*（仅字体栈/阴影例外）')
+  for (const f of hostAlias) console.log('  ✗ ' + f.file + ':' + String(f.line) + '  ' + f.name)
+
   console.log('\n══ 设计系统文档色值一致性 ══')
   if (docDrift.length === 0) console.log('  ok  Source of Truth 文档里的颜色都来自 token 层')
   for (const f of docDrift) console.log(`  ✗ ${f.file}:${f.line}  ${f.hex} 不在该家族的 token 层里（文档自造颜色）`)
@@ -611,8 +655,8 @@ function main() {
   if (parity.length === 0) console.log('  ok  docs/spark-dock-preview 的语义值与产品逐值一致')
   for (const f of parity) console.log(`  ✗ [${f.theme}] ${f.name}：${f.issue}`)
 
-  console.log(`\n合计：对比度硬性不达标 ${pairFails.length} 项（共 ${pairs.filter((p) => !p.soft).length} 项，另 ${pairSoft.length} 项参考）· token 硬失效 ${covErrors.length} 处 · token 静态回退 ${covWarns.length} 处 · 文档自造色 ${docDrift.length} 处 · 设计稿漂移 ${parity.length} 处`)
-  const failed = pairFails.length > 0 || covErrors.length > 0 || docDrift.length > 0 || parity.length > 0
+  console.log(`\n合计：对比度硬性不达标 ${pairFails.length} 项（共 ${pairs.filter((p) => !p.soft).length} 项，另 ${pairSoft.length} 项参考）· token 硬失效 ${covErrors.length} 处 · token 静态回退 ${covWarns.length} 处 · 文档自造色 ${docDrift.length} 处 · 设计稿漂移 ${parity.length} 处 · 直连宿主 token ${hostAlias.length} 处`)
+  const failed = pairFails.length > 0 || covErrors.length > 0 || docDrift.length > 0 || parity.length > 0 || hostAlias.length > 0
   console.log(failed ? '结果：FAIL\n' : '结果：PASS\n')
   process.exit(failed ? 1 : 0)
 }
