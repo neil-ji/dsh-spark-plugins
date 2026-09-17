@@ -13,3 +13,5 @@ dist/
 .pack-profile/
 .dev/
 dist-release/
+# dev-harness 临时 CDP 探针不入库（路径 dev-harness/tmp-*.mjs）
+dev-harness/tmp-*.mjs
