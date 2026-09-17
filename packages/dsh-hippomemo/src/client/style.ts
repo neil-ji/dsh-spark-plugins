@@ -42,7 +42,10 @@ export const HIPPOMEMO_CSS = [
   '[data-plugin="dsh-hippomemo"] .hippomemo-section-card, [data-plugin="dsh-hippomemo"] .hippomemo-pref-zone, [data-plugin="dsh-hippomemo"] .hippomemo-memory-panel { display: flex; flex-direction: column; gap: 8px; padding: 8px 12px; min-width: 0; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-quadrant { display: flex; flex-direction: column; gap: 8px; min-width: 0; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-panel-head { display: flex; align-items: center; gap: 8px; padding-bottom: 4px; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-panel-title { margin: 0; font-size: var(--spk-text-md); line-height: 20px; font-weight: 600; }',
+  /* 卡片题统一 --spk-text-title（14px/600，与 ui-kit Card.title 同档）。
+     注意本选择器是 (0,2,0)，比 dock 的 `.dock-embed :is(h3)` 更specific —— 面板层兜不住它，
+     所以这一档必须在自己这套样式里写对（PCQA-017 的剩余就是这条）。 */
+  '[data-plugin="dsh-hippomemo"] .hippomemo-panel-title { margin: 0; font-size: var(--spk-text-title); line-height: 20px; font-weight: 600; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-panel-count { margin-left: auto; font-size: var(--spk-text-xs); line-height: 16px; color: var(--spk-label-3, var(--spk-label-2)); font-variant-numeric: tabular-nums; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-brain-panel { display: flex; flex-direction: column; gap: 8px; padding: 8px 12px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-brain-strip { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; border-top: 1px dashed var(--spk-border); }',
