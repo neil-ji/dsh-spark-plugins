@@ -233,11 +233,17 @@ export function SparksPane({ channel, t }: SparkPaneDeps): JSX.Element {
           </div>
         </details>
         <div className="dock-capture-bar">
-          <span className="dock-hint" aria-live="polite">
-            {busy ? t('capturing') : captured ? t('captured') : `${draft.length} ${t('charsUnit')}`}
+          {/* PCQA-014：按钮禁用时必须说清原因（UI-UX-SPEC §3.1 Don't：disabled 提交不解释）。
+              输入为空时这一行给的就是「为什么点不了」；非空时退回字数计数。 */}
+          <span className="dock-hint" id="spark-capture-hint" aria-live="polite">
+            {busy ? t('capturing')
+              : captured ? t('captured')
+                : draft.trim().length === 0 ? t('captureNeedText')
+                  : `${draft.length} ${t('charsUnit')}`}
           </span>
           <span className="grow-spacer" />
-          <button className="dock-btn" type="submit" disabled={busy || draft.trim().length === 0} aria-busy={busy}>
+          <button className="dock-btn" type="submit" disabled={busy || draft.trim().length === 0} aria-busy={busy}
+            aria-describedby="spark-capture-hint">
             <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="btn-ico">
               <path d="M12 2.6c.7 5.2 4.2 8.7 9.4 9.4-5.2.7-8.7 4.2-9.4 9.4-.7-5.2-4.2-8.7-9.4-9.4 5.2-.7 8.7-4.2 9.4-9.4z" />
             </svg>

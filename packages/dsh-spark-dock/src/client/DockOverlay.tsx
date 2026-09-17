@@ -9,8 +9,15 @@
  * 2026-09-16 徽章：球右上叠 `pending + pendingProposals` 红点。仅在
  * channel 可用时订阅 `spark/events` 帧，事件驱动刷新而非轮询
  * （AGENTS.md §1.3 禁轮询）；首帧前先拉一次 `/sparks/stats` 给到非零初值。
+ *
+ * 2026-09-17 PC 端验收修复（acc-20260917-1906）：
+ *  - PCQA-001 关闭态面板 `inert` + CSS `visibility:hidden`，双保险移出 Tab 序与无障碍树；
+ *    收起时若焦点仍在面板内，把焦点还给球（spark-dock-design §3）。
+ *  - PCQA-002 视口变化后按「最近角重吸附」而不是只夹回视口（球必须常驻角落，不压正文）。
+ *  - PCQA-005 面板内还有浮层（`[data-spk-layer]` / listbox / menu）开着时，Esc 让给内层。
+ *  - PCQA-008 双击球复位默认右下角（此前只有注释承诺）。PCQA-009 方向键微调（拖拽的键盘替代）。
  */
-import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { IconSparkles } from 'dsh-ui-kit'
 import { useFrames, type DockModuleOwnerProps } from 'dsh-spark-plugin-kit/client'
 import { SPARK_EVENTS_STREAM } from './spark/remote.ts'
@@ -58,6 +65,15 @@ const BALL_BUBBLE_ENABLED: boolean = true
 
 interface Pt { x: number; y: number }
 
+/**
+ * 位置记忆。`snapped` = 当前坐标是「角落吸附」的结果（首次加载 / 拖拽松手 / 双击复位）。
+ * 方向键微调会把它置 false —— 用户手动挪到的位置不该在视口变化时被重新吸走。
+ */
+interface StoredPos extends Pt { snapped?: boolean }
+
+/** 方向键微调步长（按住 Shift 走大步）。 */
+const NUDGE = 8
+
 function defaultPos(): Pt {
   return { x: window.innerWidth - BALL - M, y: window.innerHeight - BALL - M }
 }
@@ -69,13 +85,36 @@ function clampToView(p: Pt): Pt {
   }
 }
 
-function loadPos(): Pt {
+/** 视口四角（各留 M 安全距）——拖拽吸附与 resize 重吸附共用同一份角落定义。 */
+function corners(): Pt[] {
+  return [
+    { x: M, y: M },
+    { x: window.innerWidth - BALL - M, y: M },
+    { x: M, y: window.innerHeight - BALL - M },
+    { x: window.innerWidth - BALL - M, y: window.innerHeight - BALL - M },
+  ]
+}
+
+/** 按球心距离吸到最近的角（PCQA-002：视口变大/变小后球回到角落而不是停在旧坐标）。 */
+function snapToNearestCorner(p: Pt): Pt {
+  const cx = p.x + BALL / 2
+  const cy = p.y + BALL / 2
+  let best = corners()[0] ?? defaultPos()
+  let bd = Infinity
+  for (const c of corners()) {
+    const d = Math.hypot(c.x + BALL / 2 - cx, c.y + BALL / 2 - cy)
+    if (d < bd) { bd = d; best = c }
+  }
+  return best
+}
+
+function loadPos(): StoredPos {
   try {
     const raw = localStorage.getItem(POS_KEY)
-    const p = raw ? (JSON.parse(raw) as Pt) : null
-    if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) return clampToView(p)
+    const p = raw ? (JSON.parse(raw) as StoredPos) : null
+    if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) return { ...clampToView(p), snapped: p.snapped !== false }
   } catch { /* ignore */ }
-  return defaultPos()
+  return { ...defaultPos(), snapped: true }
 }
 
 /**
@@ -85,7 +124,11 @@ function loadPos(): Pt {
 export function DockOverlay({ channel = null, renderSlot }: DockOverlayProps): JSX.Element {
   const ballRef = useRef<HTMLButtonElement | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
-  const posRef = useRef<Pt>(loadPos())
+  // 位置只读一次 localStorage（惰性初值），并记住它是不是「角落吸附」态：
+  // 只有吸附态在视口变化时重新吸附，方向键微调过的自由位置只做夹取（PCQA-002 / 009）。
+  const [initialPos] = useState<StoredPos>(loadPos)
+  const posRef = useRef<Pt>(initialPos)
+  const snappedRef = useRef<boolean>(initialPos.snapped !== false)
   const [open, setOpen] = useState(() => localStorage.getItem(OPEN_KEY) === '1')
   const [activeId, setActiveId] = useState(() => localStorage.getItem(ACTIVE_KEY) ?? 'spark')
   // 订阅只需一层开着；mood 只服务球的表情层，气泡只取文本（互不牵连）。
@@ -174,6 +217,28 @@ export function DockOverlay({ channel = null, renderSlot }: DockOverlayProps): J
     ball.style.top = posRef.current.y + 'px'
   }, [])
 
+  /** 位置持久化（含 snapped 标记，见 StoredPos）。 */
+  const persistPos = useCallback(() => {
+    try {
+      localStorage.setItem(POS_KEY, JSON.stringify({
+        x: posRef.current.x, y: posRef.current.y, snapped: snappedRef.current,
+      }))
+    } catch { /* ignore */ }
+  }, [])
+
+  /** 带过渡地落到新位置（拖拽松手 / 双击复位共用）。 */
+  const settleTo = useCallback((next: Pt, snapped: boolean) => {
+    const ball = ballRef.current
+    snappedRef.current = snapped
+    posRef.current = next
+    if (ball) {
+      ball.style.transition = 'left 240ms cubic-bezier(.2,.8,.2,1), top 240ms cubic-bezier(.2,.8,.2,1)'
+      layoutBall()
+      setTimeout(() => { ball.style.transition = '' }, 250)
+    }
+    persistPos()
+  }, [layoutBall, persistPos])
+
   const layoutPanel = useCallback((panelOpen: boolean) => {
     const panel = panelRef.current
     const ball = ballRef.current
@@ -210,24 +275,48 @@ export function DockOverlay({ channel = null, renderSlot }: DockOverlayProps): J
     panel.style.transformOrigin = `${openRight ? 'left' : 'right'} ${openUp ? 'bottom' : 'top'}`
   }, [])
 
+  /**
+   * 方向键微调球位置（拖拽的键盘替代，WCAG 2.2 AA dragging-alternative / PCQA-009）。
+   * Shift 走大步（24px）。微调后标记为「自由位置」：视口变化时只夹取，不再吸回角落。
+   */
+  const onBallKeyDown = useCallback((e: ReactKeyboardEvent) => {
+    const step = e.shiftKey ? NUDGE * 3 : NUDGE
+    let dx = 0
+    let dy = 0
+    if (e.key === 'ArrowLeft') dx = -step
+    else if (e.key === 'ArrowRight') dx = step
+    else if (e.key === 'ArrowUp') dy = -step
+    else if (e.key === 'ArrowDown') dy = step
+    else return
+    e.preventDefault()
+    snappedRef.current = false
+    posRef.current = clampToView({ x: posRef.current.x + dx, y: posRef.current.y + dy })
+    layoutBall()
+    persistPos()
+    if (open) layoutPanel(true)
+  }, [layoutBall, layoutPanel, open, persistPos])
+
   // 开合状态持久化 + 面板定位（宽模块切换会改面板宽度，需重定位）
   useEffect(() => {
     localStorage.setItem(OPEN_KEY, open ? '1' : '0')
     layoutPanel(open)
   }, [open, activeId, layoutPanel])
 
-  // 初始定位 + resize（resize 时把球夹回视口）
+  // 初始定位 + resize。
+  // resize：吸附态重吸附到最近角（球必须常驻角落、不压正文），自由位置只夹回视口（PCQA-002）。
   useEffect(() => {
     layoutBall()
     const onResize = () => {
-      posRef.current = clampToView(posRef.current)
+      posRef.current = snappedRef.current
+        ? snapToNearestCorner(posRef.current)
+        : clampToView(posRef.current)
       layoutBall()
-      try { localStorage.setItem(POS_KEY, JSON.stringify(posRef.current)) } catch { /* ignore */ }
+      persistPos()
       layoutPanel(open)
     }
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
-  }, [layoutBall, layoutPanel, open])
+  }, [layoutBall, layoutPanel, open, persistPos])
 
   // 拖拽（阈值 4px；拖拽中收面板；结束吸附最近角）
   useEffect(() => {
@@ -259,26 +348,15 @@ export function DockOverlay({ channel = null, renderSlot }: DockOverlayProps): J
       if (!wasDrag) return
       suppressClick = true
       setTimeout(() => { suppressClick = false }, 0)
-      const cx = posRef.current.x + BALL / 2
-      const cy = posRef.current.y + BALL / 2
-      const corners: Pt[] = [
-        { x: M, y: M },
-        { x: window.innerWidth - BALL - M, y: M },
-        { x: M, y: window.innerHeight - BALL - M },
-        { x: window.innerWidth - BALL - M, y: window.innerHeight - BALL - M },
-      ]
-      let best = corners[0]
-      let bd = Infinity
-      for (const c of corners) {
-        const d = Math.hypot(c.x + BALL / 2 - cx, c.y + BALL / 2 - cy)
-        if (d < bd) { bd = d; best = c }
-      }
-      posRef.current = best
-      ball.style.transition = 'left 240ms cubic-bezier(.2,.8,.2,1), top 240ms cubic-bezier(.2,.8,.2,1)'
-      layoutBall()
-      setTimeout(() => { ball.style.transition = '' }, 250)
-      try { localStorage.setItem(POS_KEY, JSON.stringify(posRef.current)) } catch { /* ignore */ }
+      // 松手吸附最近角，并把位置标记为「吸附态」（resize 时跟着角落走）
+      settleTo(snapToNearestCorner(posRef.current), true)
       if (open) { setOpen(false); layoutPanel(false) }
+    }
+    // 双击复位默认右下角（PCQA-008）。两次 click 会各自 toggle 一次开合，净效果不变，
+    // 这里只负责把球送回右下角并重新吸附。
+    const onDblClick = () => {
+      settleTo(defaultPos(), true)
+      layoutPanel(open)
     }
     const onClick = (e: ReactMouseEvent | MouseEvent) => {
       if (suppressClick) { suppressClick = false; e.preventDefault(); return }
@@ -290,20 +368,48 @@ export function DockOverlay({ channel = null, renderSlot }: DockOverlayProps): J
     ball.addEventListener('pointerup', onUp)
     ball.addEventListener('pointercancel', onUp)
     ball.addEventListener('click', onClick as (e: MouseEvent) => void)
+    ball.addEventListener('dblclick', onDblClick)
     return () => {
       ball.removeEventListener('pointerdown', onDown)
       ball.removeEventListener('pointermove', onMove)
       ball.removeEventListener('pointerup', onUp)
       ball.removeEventListener('pointercancel', onUp)
       ball.removeEventListener('click', onClick as (e: MouseEvent) => void)
+      ball.removeEventListener('dblclick', onDblClick)
     }
-  }, [layoutBall, layoutPanel, open])
+  }, [layoutBall, layoutPanel, open, settleTo])
 
-  // Esc 收起
+  // 关闭态：面板移出 Tab 序与无障碍树（inert），CSS 再补一层 visibility:hidden；
+  // 收起时若焦点还在面板里，按 spark-dock-design §3 把焦点还给球（PCQA-001）。
+  useEffect(() => {
+    const panel = panelRef.current
+    if (!panel) return
+    if (open) { panel.removeAttribute('inert'); return }
+    panel.setAttribute('inert', '')
+    const active = document.activeElement
+    if (active instanceof HTMLElement && panel.contains(active)) ballRef.current?.focus()
+  }, [open])
+
+  // 面板内还有浮层（下拉菜单 / 弹窗）开着时，Esc 归内层：面板保持打开（PCQA-005）。
+  // 内层浮层用 [data-spk-layer] 自我标记（ui-kit Menu 已加），role 兜底覆盖其它实现。
+  const hasOpenFloatingLayer = (): boolean => {
+    const nodes = document.querySelectorAll<HTMLElement>(
+      '[data-spk-layer], [role="listbox"], [role="menu"], [role="dialog"][aria-modal="true"]',
+    )
+    for (const node of nodes) {
+      const style = window.getComputedStyle(node)
+      if (style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0') return true
+    }
+    return false
+  }
+
+  // Esc 收起（焦点归还由上面的关闭态 effect 统一处理）
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false)
+      if (e.key !== 'Escape') return
+      if (hasOpenFloatingLayer()) return
+      setOpen(false)
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
@@ -338,6 +444,7 @@ export function DockOverlay({ channel = null, renderSlot }: DockOverlayProps): J
           : '打开 Spark Dock'}
         aria-expanded={open}
         aria-haspopup="dialog"
+        onKeyDown={onBallKeyDown}
         title={ballBadge > 0
           ? '打开 Spark Dock · ' + String(ballBadge) + ' 项待处理'
           : '打开 Spark Dock'}

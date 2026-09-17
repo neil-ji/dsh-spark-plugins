@@ -52,6 +52,8 @@ export const zh = {
   capturing: '捕获中…',
   captured: '已捕获 ✦',
   charsUnit: '字',
+  /* PCQA-014：禁用态的「为什么点不了」 */
+  captureNeedText: '输入内容后可捕获',
   capture: '捕获',
 
   crystallizedBadge: '已结晶',
@@ -159,6 +161,7 @@ export const en: Record<SparkDockLocaleKey, string> = {
   capturing: 'Capturing…',
   captured: 'Captured ✦',
   charsUnit: 'chars',
+  captureNeedText: 'Type something to capture',
   capture: 'Capture',
 
   crystallizedBadge: 'Crystallized',
