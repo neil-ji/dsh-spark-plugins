@@ -11,6 +11,12 @@ export interface TerminalLine {
 
 export interface TerminalBlockProps {
   title?: string
+  /**
+   * 无 title 时的可访问名（缺省 '终端输出'）。
+   *
+   * ui-kit 零 workspace 依赖、拿不到插件 locale，所以缺省值保留中文、由使用方传本地化文案。
+   */
+  ariaLabel?: string
   lines: TerminalLine[]
   /** 行尾闪烁光标 */
   cursor?: boolean
@@ -27,9 +33,9 @@ const toneClass: Record<TerminalTone, string> = {
 }
 
 /** Spark UI Kit 终端块 — 深底代码块 + 品牌提示符 */
-export function TerminalBlock({ title, lines, cursor = false, className }: TerminalBlockProps) {
+export function TerminalBlock({ title, ariaLabel, lines, cursor = false, className }: TerminalBlockProps) {
   return (
-    <div role="log" aria-label={title ?? '终端输出'} className={cx(css.terminal, className)}>
+    <div role="log" aria-label={title ?? ariaLabel ?? '终端输出'} className={cx(css.terminal, className)}>
       <div className={css.bar} aria-hidden="true">
         <span /><span /><span />
         {title && <em>{title}</em>}

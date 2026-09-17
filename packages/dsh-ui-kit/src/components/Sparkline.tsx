@@ -15,6 +15,12 @@ export interface SparklineProps {
   onHoverValue?: (value: number | null) => void
   className?: string
   ariaLabel?: string
+  /**
+   * 未显式给 ariaLabel 时的可访问名（缺省 '趋势图'）。
+   *
+   * ui-kit 零 workspace 依赖、拿不到插件 locale，所以缺省值保留中文、由使用方传本地化文案。
+   */
+  defaultAriaLabel?: string
 }
 
 const PAD = 8
@@ -29,6 +35,7 @@ export function Sparkline({
   onHoverValue,
   className,
   ariaLabel,
+  defaultAriaLabel,
 }: SparklineProps) {
   const svgRef = useRef<SVGSVGElement>(null)
   const lineRef = useRef<SVGPathElement>(null)
@@ -87,7 +94,7 @@ export function Sparkline({
       viewBox={`0 0 ${width} ${height}`}
       preserveAspectRatio="none"
       role="img"
-      aria-label={ariaLabel ?? '趋势图'}
+      aria-label={ariaLabel ?? defaultAriaLabel ?? '趋势图'}
       onMouseMove={onMove}
       onMouseLeave={() => onHoverValue?.(null)}
     >

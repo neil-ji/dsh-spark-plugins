@@ -13,6 +13,13 @@ export interface ModalProps {
   footer?: ReactNode
   /** 提供时在底部渲染一个 ghost 取消按钮（旧 API 兼容） */
   closeLabel?: string
+  /**
+   * 关闭钮的可访问名。
+   *
+   * ui-kit 不能依赖插件 locale（角色规范：零 workspace 依赖），所以这里保留中文缺省值、
+   * 由使用方传本地化文案（dock 的丢弃确认等）；未传时缺省值仍是 '关闭'。
+   */
+  closeAriaLabel?: string
   /** dialog 面板类名（限高/皮肤） */
   className?: string
   /** 内容区类名（布局/内滚） */
@@ -20,7 +27,7 @@ export interface ModalProps {
 }
 
 /** Spark UI Kit 模态 — dock .dock-panel 形制：platform 底 / 20px 圆角 / 弹簧缩放入场 / 焦点陷阱 */
-export function Modal({ open, onClose, title, children, footer, closeLabel, className, contentClassName }: ModalProps) {
+export function Modal({ open, onClose, title, children, footer, closeLabel, closeAriaLabel = '关闭', className, contentClassName }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null)
   const lastFocus = useRef<HTMLElement | null>(null)
 
@@ -61,7 +68,7 @@ export function Modal({ open, onClose, title, children, footer, closeLabel, clas
       <div ref={dialogRef} role="dialog" aria-modal="true" data-spk-layer="modal" className={cx(css.modal, className)}>
         <header className={css.head}>
           <h4 className={css.title}>{title}</h4>
-          <button type="button" className={css.close} aria-label="关闭" onClick={onClose}>
+          <button type="button" className={css.close} aria-label={closeAriaLabel} onClick={onClose}>
             <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
               <path d="m4 4 8 8M12 4l-8 8" />
             </svg>

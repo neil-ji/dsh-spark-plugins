@@ -7,7 +7,12 @@ export interface SearchInputProps extends Omit<InputHTMLAttributes<HTMLInputElem
   label: string
   /** 提供时在非空文本右侧渲染清除按钮（旧 API 兼容） */
   onClear?: () => void
-  /** 清除按钮的无障碍名（配 onClear 使用） */
+  /**
+   * 清除按钮的无障碍名（配 onClear 使用）。
+   *
+   * ui-kit 零 workspace 依赖、拿不到插件 locale，所以缺省值保留中文（'清除'）、
+   * 由使用方传本地化文案（如 hippomemo 的 clearSearch）。
+   */
   clearLabel?: string
 }
 
