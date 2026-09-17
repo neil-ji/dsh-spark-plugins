@@ -55,20 +55,29 @@
 
 - **打开**：从球为原点 scale 0.94 → 1 + fade，220ms 弹簧曲线（enter）。
 - **关闭**：140ms（exit 约为 enter 60–70%，`exit-faster-than-enter`）。全部只动 `transform/opacity`。
-- 默认尺寸 **560×680**（插件内容密度大，放大留白）；**≤520px 视口**退化为贴底 sheet（`width: 100vw-16; height: 74vh`）。
+- 默认尺寸 **616×680**（实现值，2026-09-17 对齐代码；插件内容密度大，放大留白）；视口不足时
+  `max-width: calc(100vw - 32px)` / `max-height: calc(100vh - 32px)`；**≤520px 视口**退化为贴底 sheet（待办）。
 - **随球反向弹 + 视口夹取**：球在右半屏→面板向左弹、左半屏→向右弹，上半屏→向下弹、下半屏→向上弹，且整块夹回视口内（永不越出左右/上下边缘）；`transform-origin` 跟随弹向，缩放动画从球侧长出。
-- 结构：`Header(48px, Dock 条 + 模块标题 + 操作簇) → Content(可滚动, overscroll-behavior:contain)`。
-- **操作簇**：固定/浮窗切换（pin）、折叠。`Esc` 关闭并把焦点还给球。面板内 Tab 自然顺序、命中路由时焦点入 content。
+- 结构：`Header(~56px: 模块标题 + 关闭钮) → Content(可滚动, overscroll-behavior:contain, scrollbar-gutter:stable)`；
+  模块栏（rail）在左，宽 56px、按钮 44×44。
+- **操作簇**：折叠（关闭钮）。**「固定/浮窗切换（pin）」未实现**，已从本文档删除 —— 实现以代码为准。
+- `Esc` 关闭并把焦点还给球；**面板内还有浮层（下拉菜单）开着时，Esc 只关最内层**。
+  关闭态面板挂 `inert` + CSS `visibility:hidden`（移出 Tab 序与无障碍树），动画仍只走 transform/opacity。
 - 布局 = 面板容器 `--dsw-shadow-lv3` + `--dsw-alias-border-l1` + `--dsw-alias-bg-module-platform`（与 shell 侧栏同源，融入感）。
 
-## 4. 视觉系统（全部复用 DSH token，不新建色板）
+## 4. 视觉系统（直连 spark token 层 `--spk-*`，不新建色板）
 
-- 表面：球/面板 `background: var(--dsw-alias-bg-module-platform)`；边框 `var(--dsw-alias-border-l1)`；
-  投影 `var(--dsw-shadow-lv3)`（面板）/ `var(--dsw-shadow-lv2)`（球）。
-- 文字：标题 `var(--dsw-font-s-strong-14)` / `var(--dsw-font-l-20)`；正文 `var(--dsw-font-s-14)`；
-  说明 `var(--dsw-font-xxs-12)`、次级色 `var(--dsw-alias-label-tertiary)`。
-- 指示色：`--dsw-alias-brand-primary`（球字形/激活描边）、`--dsw-alias-state-success/warn/error-primary`（状态）、
-  静态 ramp（`--dsw-static-blue/amber/green/violet/red-*`）只用于 5 个模块 accent。
+> 2026-09-17 修订：本节原先写「全部复用 DSH token」，实践里证明是坑 —— 真宿主下 `--dsw-alias-*`
+> 由宿主自己定义，取值与 ui-kit 的桥接段不同，闸门/预览测不到（验收 PCQA-007/016）。
+> 现在**语义色一律直连 `--spk-*`**，只有字体栈（`--dsw-font-family`）与阴影（`--dsw-shadow-lv3`）
+> 仍走宿主 token（刻意与 shell 同源、且不参与对比度判定）。
+
+- 表面：球/面板 `background: var(--spk-platform)`；边框 `var(--spk-border)`；球面 `--spk-surface-float`；
+  投影 `var(--dsw-shadow-lv3)`（面板）/ `--spk-shadow-2`（球）。
+- 文字：模块名 `--spk-label` + `--spk-text-lg`；副标题 `--spk-label-3` + `--spk-text-sm`；
+  正文 `--spk-text-md`、次级 `--spk-label-2`、元信息 `--spk-label-3`（口径见 UI-UX-SPEC §2.1）。
+- 指示色：`--spk-brand`（实底/激活描边）、`--spk-brand-fg`（球字形）、
+  `--spk-success` / `--spk-warn` / `--spk-error`（状态）、模块 accent 走 `--spk-acc-*`。
 - 图标：16px、1.5px 描边、与 `dsh-ui-kit` 图标族同一光学网格；除 Spark(Branch 已有) 外新增
   记忆脑子 / 成本币 / npm 立方体 3 枚（**SVG，禁 emoji**，`pro-rules`）。
 
@@ -129,7 +138,8 @@ registerDockModule({
 
 - 无障碍：焦点环保留、图标钮有 `aria-label`、`aria-expanded`（球/面板态）、`aria-live` 播报徽标、
   拖拽有键盘替代、色彩不单独表意、对比度 ≥4.5:1 双主题各自验证。
-- 触控/交互：命中区 ≥44×44（球 48px）、8px 间距、`touch-action: manipulation`、按压 0.95 缩放反馈（80–150ms）。
+- 触控/交互：图标类主入口（球 48×48、rail 模块钮 44×44）≥44×44；内联控件（胶囊 Pill、
+  收件箱筛选）≥26px 高（口径见 UI-UX-SPEC §4.5）；8px 间距、`touch-action: manipulation`。
 - 动效：transform/opacity 专用、motion token（220/140ms）、enter 自下而上、`prefers-reduced-motion` 全灭。
 - 层级：`z-index` 令牌化（球 9000、面板 9100、panel 内 tooltip 更高），不写魔法值。
 - 布局：≤520px 退底 sheet、`min-h-dvh`、无横向滚动、8px 栅格节奏。

@@ -28,6 +28,21 @@
 - **成功/警告/错误**：文字态与实底态各自成对，禁止"一个色值走天下"（#16a34a 在亮灰底只有 2.8:1 的教训）。
 - **固定面**：终端块（`--spk-term-*`）与 tooltip（`--spk-tooltip-*`）永远深底，**禁止借用会随主题翻转的语义色**。
 - 允许 `color-mix(in srgb, var(--spk-token) N%, var(--spk-token2))` 做 token 间混合（Card.brand 先例）；禁止 mix 进字面量色值。
+- **插件 UI 一律直连 `--spk-*`，禁 `--dsw-alias-*`**（v4.2，2026-09-17 决定）：真宿主里 `--dsw-*`
+  由**宿主自己定义**，取值与 ui-kit 的桥接段（dsw-bridge.css）不同 —— 实测 light 主题
+  `--dsw-alias-label-tertiary` 宿主给 #81858C、桥接给 #5F6A7D。于是同一个组件变成
+  「闸门/预览按桥接值算，真宿主按宿主值渲染」：对比度表 154 项全绿，真宿主上 dock 副标题只有 3.42:1
+  （验收 PCQA-007）。例外只有 **字体栈与阴影**（不参与对比度判定，且刻意与 shell 同源）。
+  闸门：`pnpm check:contrast` 的「插件源码直连宿主 token」段，非零即失败。
+- **次要文字的灰度只用三档语义 token**（跨模块统一，v4.2）：
+
+  | 角色 | token |
+  |---|---|
+  | 正文 / 标题 / 行主文 | `--spk-label` |
+  | 12–13px 次要正文（说明、副题、空态提示） | `--spk-label-2` |
+  | ≤11px 元信息（时间、计数、单位、来源） | `--spk-label-3` |
+
+  同屏不得混入宿主灰阶（PCQA-016 的根因），也不得靠 `opacity` 造第四档灰。
 - 暗色信号：宿主 `body[data-ds-dark-theme]`、预览 `body[data-theme="dark"]`，两选择器都必须覆盖。
 
 ### 2.2 间距与布局
@@ -110,7 +125,11 @@
 - variant：`primary`（品牌实底）/ `secondary`（描边）/ `ghost`（无底）/ `danger`（错误实底）。
 - size：md = h32、pad 0 14px、radius 10（`--spk-radius-md`）；sm = h26、pad 0 11px、radius 10、字 12。触控目标 ≥26px 高。
 - loading：内置 spinner + `aria-busy`，并 disabled 点击；icon 在 children 之前。
-- Do：一屏一个 primary。Don't：ghost 用于破坏性操作；disabled 提交不解释（要给原因文案）。
+- Do：**一屏一个 primary**。操作性定义（v4.2）：以「操作域」为单位 —— 一张 Card、一个
+  `role="group"`、页脚操作组各算一个域，**每个域至多一个 primary**；同一域内出现第二个实心
+  主操作就是验收违规（PCQA-019 的实测违规：GitHub「连接」卡里 `保存令牌` + `测试连接` 双实心）。
+  跨域并列（如 github 设置页的「连接卡保存」+「页脚保存配置」）属既有例外，评审时须写明理由。
+  Don't：ghost 用于破坏性操作；disabled 提交不解释（要给原因文案）。
 
 ### 3.2 Input / SearchInput
 - label 用 `--spk-text-xs` 11px 置于输入框上方；输入文本 `--spk-text-md` 13px，pad `8px 10px`，radius 10，边框 `--spk-border-2`。
@@ -164,7 +183,12 @@
 ### 4.5 尺寸与响应
 - dock pane 内容宽 320–420px 设计域；卡片满宽、内部网格自适应（KPI `min` 列宽 + `repeat(auto-fit)`）。
 - 表格：列数 >4 或宽不足时横向滚动，不压缩列；数字列右对齐等宽字体。
-- 触控/点击目标高度 ≥26px（Button sm 下限）。
+- 触控/点击目标：**内联控件 ≥26px 高**（Button sm 下限；胶囊 Pill / SegmentedControl 页签
+  同线，`--spk-control-h-sm`）；**图标类主入口 ≥44×44**（悬浮球 48px、rail 模块钮 44px）。
+  WCAG 2.5.8 的硬下限是 24×24，这里是本仓库更严的自定档 —— 两份文档曾各写一个数（26 vs 44），v4.2 起
+  按「内联控件 / 图标入口」两类分别取值，不再冲突。
+- ui-kit 组件内部的**嵌套圆角 6–8px 与 2–3px 内距**属「内层 = 外层半径 − 内边距」推导，
+  豁免字面量审计（§7 落地治理）。
 
 ---
 
@@ -196,4 +220,6 @@
      155 处字号字面量全量迁移；291→0 过闸；
    - [x] `audit-tokens` 闸门（间距/圆角/字号字面量检查；豁免：ui-kit 组件定义源、
      图表微元素 3/4、嵌套推导 6/8/9、密度 token 定义行；胶囊 13/16 已于 2026-09 收编为 `--spk-radius-md`，不再是合法字面量）；
+   - [x] `audit-contrast` 增「插件源码直连宿主 token」段（禁 `--dsw-alias-*`/`--dsw-static-*`，
+     字体栈与阴影例外）与 `audit-tokens` 增「字号不得绑定非字号 token」规则（v4.2，2026-09-17）；
    - [ ] `prefers-reduced-motion` 统一 media query 进 ui-kit base（待办）。

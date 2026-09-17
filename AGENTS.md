@@ -142,8 +142,12 @@ dock 声明子槽并用平台 `renderSlot(key, { variant, activeId, onSelect }, 
 1. **组件唯一来源是 `dsh-ui-kit`**（角色 ui-kit，零反向依赖）。客户端可依赖 ui-kit；
    宿主永远不碰 react / ui-kit（见 2.1）。
 2. **颜色只允许来自设计 token**，禁止自造色与静态回退——`pnpm check:contrast` 逐项审计：
-   对比度硬性不达标、token 硬失效、token 静态回退、文档自造色、设计稿漂移，
-   任一非零即失败。UI 改动必须重跑该闸门。
+   对比度硬性不达标、token 硬失效、token 静态回退、文档自造色、设计稿漂移、
+   **插件源码直连宿主 token**，任一非零即失败。UI 改动必须重跑该闸门。
+   **插件 UI 直连 `--spk-*`，禁直连 `--dsw-alias-*` / `--dsw-static-*`**：真宿主里这些名字由宿主
+   自己定义，取值与 ui-kit 桥接段不同 —— 闸门与预览按桥接值算、真宿主按宿主值渲染，
+   于是出现「对比度全绿而真宿主 3.42:1」（PCQA-007）；例外只有字体栈与阴影。细则见
+   `docs/UI-UX-SPEC.md` §2.1。
 3. React 18 函数组件 + hooks；客户端产物经各包 `lib/client.js` 出 embed 形态供 dock 内嵌。
    SSR 安全：不要引入依赖 window 的模块级副作用（useLayoutEffect 的 SSR 告警可忽略）。
 4. **文案必须走 locale 字典**（各 client 注册 `locale`，`t(key)` 取词），文案归模块所有，
