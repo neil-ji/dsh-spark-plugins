@@ -43,7 +43,7 @@
   gap: var(--spk-gap-card, var(--spk-space-3));
 }
 
-`.section {
+.section {
   display: flex;
   flex-direction: column;
   gap: var(--spk-space-3);
@@ -63,7 +63,7 @@
   flex-direction: column;
 }
 
-`.tableHead,
+.tableHead,
 .tableRow {
   display: grid;
   align-items: center;
@@ -151,7 +151,7 @@
 
 /* ── 分组（同一模型跨供应商） ─────────────────────────────── */
 
-`.group {
+.group {
   display: flex;
   flex-direction: column;
   gap: var(--spk-space-2);
@@ -189,7 +189,7 @@
   padding: 8px 0 0 0;
 }
 
-`.detailText {
+.detailText {
   color: var(--spk-label-3);
   font-size: var(--spk-text-xs);
   line-height: 1.5;
@@ -230,7 +230,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-`.tag {
+.tag {
   color: var(--spk-warn);
   font-size: var(--spk-text-xs);
 }
