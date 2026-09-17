@@ -7,7 +7,7 @@
  */
 
 import { useState, type ReactNode } from 'react'
-import { Button, Card, EmptyState, Input, Money, SegmentedControl, Stat, StatGrid, TrendChart, formatMicros } from 'dsh-ui-kit'
+import { Button, Card, EmptyState, Input, Modal, Money, SegmentedControl, Stat, StatGrid, TrendChart, formatMicros } from 'dsh-ui-kit'
 import type {
   FinanceLedger,
   FinanceListProvidersResult,
@@ -78,6 +78,8 @@ export function ThisMonthView({
 }: ThisMonthViewProps): ReactNode {
   const currency = ledger.currency === '' ? 'CNY' : ledger.currency
   const [editing, setEditing] = useState<string | null>(null)
+  /** 还原价格表（回退/破坏性）的二次确认；确认后才真调 onRestorePrices。 */
+  const [confirmRestore, setConfirmRestore] = useState(false)
   const trendPoints = ledger.byDay.map((row) => ({ key: row.day, label: row.day.slice(5), value: row.costMicros }))
   const topModels = modelComparisonRows(ledger)
     .filter((row) => row.unitCostMicros !== null)
@@ -351,12 +353,33 @@ export function ThisMonthView({
           <Button
             variant="danger"
             disabled={priceBusy || (priceTable !== undefined && priceTable.overlayKeyCount + priceTable.userKeyCount === 0)}
-            onClick={() => { void onRestorePrices() }}
+            onClick={() => { setConfirmRestore(true) }}
             aria-label={t('restorePrices')}
           >
             {t('restorePrices')}
           </Button>
         </div>
+        {/* 破坏性操作二次确认（UI-UX-SPEC §4.2 模板 4「危险区 … danger Button + 二次确认（Modal）」）。
+            文案走 locale；Modal 自己负责焦点圈闭，Esc 由它这层接管（不会连带收掉指挥舱）。 */}
+        <Modal
+          open={confirmRestore}
+          onClose={() => { setConfirmRestore(false) }}
+          title={t('restoreConfirmTitle')}
+          footer={(
+            <>
+              <Button variant="ghost" onClick={() => { setConfirmRestore(false) }}>{t('cancel')}</Button>
+              <Button
+                variant="danger"
+                disabled={priceBusy}
+                onClick={() => { setConfirmRestore(false); void onRestorePrices() }}
+              >
+                {t('restoreConfirmAction')}
+              </Button>
+            </>
+          )}
+        >
+          <p>{t('restoreConfirmBody')}</p>
+        </Modal>
         {priceTable?.base.ok === false
           ? <p className={css.footerNote} role="status">{t('priceTampered')}</p>
           : null}
