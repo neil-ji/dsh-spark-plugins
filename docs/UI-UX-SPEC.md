@@ -55,7 +55,7 @@
 |---|---|---|
 | 输入类控件、行、Disclosure | 10 | `--spk-radius-md` |
 | 卡片、Menu | 12 | `--spk-radius-card`（v4.1 新增，已全量迁移） |
-| Button | 高度一半（md 32→16，sm 26→13） | pill 形制推导，合法白名单，不进 token |
+| Button | 10（md 与 sm 同值） | `--spk-radius-md`（2026-09 修订：胶囊 16/13 与输入类 10 落差过大，按钮收编进控件圆角标度） |
 | tag / Pill / 状态点 | 999 或 50% | `--spk-radius-full` |
 | 图表微元素 / 嵌套内层推导 | 3–4 / 6–8 / 9 | 允许字面量（非控件语义；内层 = 外层半径 − 内边距） |
 | `--spk-radius-sm 7 / lg 14 / xl 20` | — | 保留给浮层与大容器 |
@@ -106,9 +106,9 @@
 通用状态矩阵（所有交互组件）：`default / hover / active / focus-visible / disabled / loading`，表单类追加 `readonly / error`。
 **focus-visible 一律可见**（描边或 2px 环），键盘可达是验收项。
 
-### 3.1 Button — 32px 胶囊实心
+### 3.1 Button — 32px 实心（radius 10）
 - variant：`primary`（品牌实底）/ `secondary`（描边）/ `ghost`（无底）/ `danger`（错误实底）。
-- size：md = h32、pad 0 14px、radius 16；sm = h26、pad 0 11px、radius 13、字 12。触控目标 ≥26px 高。
+- size：md = h32、pad 0 14px、radius 10（`--spk-radius-md`）；sm = h26、pad 0 11px、radius 10、字 12。触控目标 ≥26px 高。
 - loading：内置 spinner + `aria-busy`，并 disabled 点击；icon 在 children 之前。
 - Do：一屏一个 primary。Don't：ghost 用于破坏性操作；disabled 提交不解释（要给原因文案）。
 
@@ -195,5 +195,5 @@
    - [x] 新增 `--spk-radius-card: 12px` 与 `--spk-text-title: 14px`；面板层 29 处 radius、
      155 处字号字面量全量迁移；291→0 过闸；
    - [x] `audit-tokens` 闸门（间距/圆角/字号字面量检查；豁免：ui-kit 组件定义源、
-     图表微元素 3/4、嵌套推导 6/8/9、胶囊推导 13/16、密度 token 定义行）；
+     图表微元素 3/4、嵌套推导 6/8/9、密度 token 定义行；胶囊 13/16 已于 2026-09 收编为 `--spk-radius-md`，不再是合法字面量）；
    - [ ] `prefers-reduced-motion` 统一 media query 进 ui-kit base（待办）。
