@@ -34,7 +34,10 @@ export const zh = {
   testDone: '测试完成',
   saveToken: '保存',
   removeToken: '移除',
-  tokenSource: '凭据来源',
+  /** 标点随语言走：中文用全角冒号，英文用半角 + 空格（复核报告 PCQA-019 的半角冒号混排）。 */
+  tokenSource: '凭据来源：',
+  /** 空输入时「保存」禁用的原因（aria-describedby 指向它，UI-UX-SPEC §3.1）。 */
+  saveTokenHint: '粘贴 granular token 后才能保存',
   readOnly: '只读',
   tokenHintOk: 'granular token 就绪：npm_publish / npm_dist_tag / npm_deprecate / npm_trust 全自动可用；npm_launch 一键首发 + trust + tag。',
   tokenHintMissing: '未配置 NPM_TOKEN：到 npmjs.com → Access Tokens 生成 granular token（All packages + Read and write + bypass 2FA），在上方填入并保存后即可全自动。',
@@ -97,7 +100,8 @@ export const en: Record<NpmKey, string> = {
   testDone: 'Test done',
   saveToken: 'Save',
   removeToken: 'Remove',
-  tokenSource: 'Credential source',
+  tokenSource: 'Credential source: ',
+  saveTokenHint: 'Paste a granular token to enable saving',
   readOnly: 'read-only',
   tokenHintOk: 'Granular token ready: npm_publish / npm_dist_tag / npm_deprecate / npm_trust fully automatic; npm_launch does first publish + trust + tag in one call.',
   tokenHintMissing: 'No NPM_TOKEN set: create a granular token (All packages + Read and write + bypass 2FA) at npmjs.com → Access Tokens, paste it above and save.',

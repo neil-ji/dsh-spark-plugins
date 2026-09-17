@@ -97,7 +97,7 @@ function Loaded({ injected }: { injected: NpmSectionInjected }): ReactNode {
           </span>
           {tokenLogin !== null && tokenLogin !== undefined ? <Pill>{tokenLogin}</Pill> : null}
           {state.token?.source !== undefined
-            ? <span className={styles.muted}>{t('tokenSource') + ': ' + state.token.source}</span>
+            ? <span className={styles.muted}>{t('tokenSource') + state.token.source}</span>
             : null}
         </div>
 
@@ -113,6 +113,7 @@ function Loaded({ injected }: { injected: NpmSectionInjected }): ReactNode {
           <Button
             variant="primary"
             disabled={busy || tokenDraft === ''}
+            aria-describedby={tokenDraft === '' ? 'npm-save-hint' : undefined}
             onClick={() => { void run(() => controller.saveToken(tokenDraft).then((f) => { if (f === undefined) setTokenDraft(''); return f })) }}
           >
             {t('saveToken')}
@@ -121,6 +122,10 @@ function Loaded({ injected }: { injected: NpmSectionInjected }): ReactNode {
             ? <Button variant="secondary" disabled={busy} onClick={() => { void run(() => controller.removeToken()) }}>{t('removeToken')}</Button>
             : null}
         </div>
+
+        {tokenDraft === ''
+          ? <p id='npm-save-hint' className={styles.muted}>{t('saveTokenHint')}</p>
+          : null}
 
         {state.test !== undefined
           ? (
