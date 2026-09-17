@@ -16,14 +16,18 @@ import { Button, Card, Checkbox, Input, Menu, Pill, StateDot } from 'dsh-ui-kit'
 import type { SnapshotSelectorHook } from 'dsh-spark-plugin-kit/client'
 import type { GithubSettingsState, GithubSettingsStore } from './store.ts'
 import type { GithubConfigView, GithubProxyTestValue } from 'dsh-connector-wire'
-import type { GithubKey } from './locales.ts'
+import type { GithubTranslate } from './locales.ts'
+import {
+  HOST_MISSING_TOKEN_ERROR, describeActionFailure, describeConnectionFailure, succeeded,
+  type Feedback,
+} from './connectionFailure.ts'
 import styles from './GithubSection.module.css'
 
 /** Injected dependencies of {@link GithubSection} (slot inject). */
 export interface GithubSectionInjected {
   controller: GithubSettingsStore
   useSnapshot: SnapshotSelectorHook<GithubSettingsState>
-  t: (key: GithubKey) => string
+  t: GithubTranslate
 }
 
 /** Props delivered by the slot outlet (inject face spread flat). */
@@ -54,8 +58,9 @@ function Loaded({ injected }: { injected: GithubSectionInjected }): ReactNode {
   const state = injected.useSnapshot(snapshot => snapshot)
   const [tokenDraft, setTokenDraft] = useState('')
   const [busy, setBusy] = useState(false)
-  const [notice, setNotice] = useState<string | undefined>(undefined)
-  const [testError, setTestError] = useState<string | undefined>(undefined)
+  // 反馈是**一条**本地化文案（不再是宿主原始英文串），且是成功/失败二选一的联合
+  // —— 同屏不可能出现「错误 + 已保存」两条互相矛盾的播报（PCQA-013）。
+  const [feedback, setFeedback] = useState<Feedback | undefined>(undefined)
   const [configDraft, setConfigDraft] = useState<GithubConfigView | undefined>(undefined)
   const [proxyTest, setProxyTest] = useState<GithubProxyTestValue | undefined>(undefined)
   const [visibilityOpen, setVisibilityOpen] = useState(false)
@@ -64,14 +69,20 @@ function Loaded({ injected }: { injected: GithubSectionInjected }): ReactNode {
   if (state.status === 'idle') void controller.load()
   const config = configDraft ?? state.config
   const configDirty = configDraft !== undefined && configDraft !== state.config
+  /** 「默认可见性」按钮的可见文本（也是可访问名 `{默认可见性}：{值}` 的值部）。 */
+  const visibilityLabel = config?.defaultVisibility === 'private' ? t('private') : t('public')
 
+  /**
+   * 页面级动作骨架：成功播报「已保存」，失败就地显示本地化文案。
+   * 结果**整体替换**那一条反馈 —— 之前用 notice + testError 两个 state，
+   * 「测试连接」失败会走成 notice='已保存' 与错误行同时上屏（PCQA-013 的根因）。
+   */
   const run = async (action: () => Promise<string | undefined>): Promise<void> => {
     setBusy(true)
-    setNotice(undefined)
-    const failure = await action()
+    setFeedback(undefined)
+    const raw = await action()
     setBusy(false)
-    if (failure !== undefined) setTestError(failure)
-    else setNotice(t('saved'))
+    setFeedback(raw !== undefined ? describeActionFailure(raw, t) : succeeded(t('saved')))
   }
 
   if (state.status === 'error') {
@@ -150,20 +161,46 @@ function Loaded({ injected }: { injected: GithubSectionInjected }): ReactNode {
             </div>
           )
           : null}
-        {testError !== undefined ? <p className={styles.error}>{testError}</p> : null}
+        {/* 失败文案自己就是动态状态区（PCQA-013）：role=status + aria-live=polite。
+            反馈只有一条（成功 / 失败二选一），所以这里与页面底部的成功播报不可能同屏。
+            title 保留原始宿主串，未知错误仍可追查。 */}
+        {feedback !== undefined && !feedback.ok
+          ? (
+            <p
+              className={styles.error}
+              role="status"
+              aria-live="polite"
+              title={feedback.detail}
+              data-testid="github-connection-error"
+            >
+              {feedback.text}
+            </p>
+          )
+          : null}
         <p className={styles.muted}>{t('testConnectionHint')}</p>
         <div className={styles.actions}>
+          {/* 连接页模板（UI-UX-SPEC §4.2）：`测试连接` 是 secondary，本屏 primary 只留给
+              「保存令牌」——之前两个实心主按钮同屏（PCQA-019）。 */}
           <Button
-            variant="primary"
+            variant="secondary"
             disabled={busy}
             onClick={() => {
-              void run(async () => {
-                setTestError(undefined)
-                const failure = await controller.testConnection(tokenDraft === '' ? undefined : tokenDraft)
-                if (failure !== undefined) { setTestError(failure); return undefined }
-                setNotice(t('saved'))
-                return undefined
-              })
+              void (async () => {
+                setBusy(true)
+                setFeedback(undefined)
+                try {
+                  // 前置判空（PCQA-003）：未填且未保存令牌时本地化文案直出，不发无谓请求；
+                  // 走的仍是宿主 MISSING_CREDENTIAL 的同一条映射，说法不会两样。
+                  if (tokenDraft === '' && !credentialConfigured) {
+                    setFeedback(describeConnectionFailure(HOST_MISSING_TOKEN_ERROR, t))
+                    return
+                  }
+                  const raw = await controller.testConnection(tokenDraft === '' ? undefined : tokenDraft)
+                  setFeedback(raw !== undefined ? describeConnectionFailure(raw, t) : succeeded(t('saved')))
+                } finally {
+                  setBusy(false)
+                }
+              })()
             }}
           >
             {t('testConnection')}
@@ -210,11 +247,18 @@ function Loaded({ injected }: { injected: GithubSectionInjected }): ReactNode {
                     <Button
                       ref={visibilityRef}
                       variant="secondary"
-                      size="sm"
-                      aria-label={t('defaultVisibility')}
+                      // WCAG 2.5.3 Label in Name：可访问名必须含可见文本（「私有」/「公开」）。
+                      // 取词走 `{value}` 占位符，值不拼进 JSX 字面量。
+                      aria-label={t('defaultVisibilityAria', { value: visibilityLabel })}
+                      // 展开语义：ui-kit Menu 的浮层是 role=listbox + role=option。
+                      // 当前发布的 ui-kit 产物（0.6.1 dist）不在 anchor 上注入 haspopup/expanded，
+                      // 所以本包显式设置——值同源（同一个 visibilityOpen），
+                      // 将来 ui-kit 在 Menu 里 cloneElement 注入同值时这里的声明会被同值覆盖，不冲突。
+                      aria-haspopup="listbox"
+                      aria-expanded={visibilityOpen}
                       onClick={() => { setVisibilityOpen(v => !v) }}
                     >
-                      {config.defaultVisibility === 'private' ? t('private') : t('public')}
+                      {visibilityLabel}
                     </Button>
                   )}
                   items={[
@@ -287,7 +331,10 @@ function Loaded({ injected }: { injected: GithubSectionInjected }): ReactNode {
           </div>
         )
         : null}
-      {notice !== undefined ? <p className={styles.notice} role="status">{notice}</p> : null}
+      {/* 页级成功播报。反馈是二选一的联合，失败时这条根本不渲染（PCQA-013）。 */}
+      {feedback !== undefined && feedback.ok
+        ? <p className={styles.notice} role="status" data-testid="github-section-notice">{feedback.text}</p>
+        : null}
     </div>
   )
 }

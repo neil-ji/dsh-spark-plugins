@@ -15,6 +15,14 @@ export const zh = {
   testConnection: '测试连接',
   testConnectionHint: '用已保存或下方新填的令牌验证连通性。',
   testing: '测试中…',
+  /** 失败前缀（PCQA-003）：任何失败文案都不得裸抛宿主英文技术串。 */
+  testFail: '连接失败',
+  /** 缺令牌（客户端前置判空与宿主 MISSING_CREDENTIAL 共用这一条）。 */
+  errTokenMissing: '未配置 GitHub 访问令牌——请先粘贴 PAT 并测试连接',
+  /** 宿主拒绝令牌（Bad credentials / 401）。 */
+  errInvalidToken: 'GitHub 拒绝了这个令牌——请检查 PAT 是否有效、未过期且权限足够',
+  /** 非连接类的页面动作（保存 / 移除 / 保存配置）失败前缀。 */
+  actionFail: '操作失败',
   connectedAs: '已连接为',
   notConnected: '未连接',
   loadFailed: '加载失败',
@@ -36,6 +44,8 @@ export const zh = {
   gitName: '用户名',
   gitEmail: '邮箱',
   defaultVisibility: '默认可见性',
+  /** 「默认可见性」按钮的可访问名：值由 locale 运行时替换（WCAG 2.5.3：必须含可见文本）。 */
+  defaultVisibilityAria: '默认可见性：{value}',
   gitProxy: 'Git 代理',
   gitProxyPlaceholder: '如 http://127.0.0.1:7897（VPN/Clash），留空直连',
   testProxy: '测试代理',
@@ -87,6 +97,10 @@ export const en: Record<GithubKey, string> = {
   testConnection: 'Test connection',
   testConnectionHint: 'Verify connectivity with the saved token or the draft below.',
   testing: 'Testing…',
+  testFail: 'Connection failed',
+  errTokenMissing: 'No GitHub access token configured — paste a PAT and test the connection first',
+  errInvalidToken: 'GitHub rejected this token — check that the PAT is valid, unexpired, and has enough scopes',
+  actionFail: 'Action failed',
   connectedAs: 'Connected as',
   notConnected: 'Not connected',
   loadFailed: 'Failed to load',
@@ -108,6 +122,7 @@ export const en: Record<GithubKey, string> = {
   gitName: 'Name',
   gitEmail: 'Email',
   defaultVisibility: 'Default visibility',
+  defaultVisibilityAria: 'Default visibility: {value}',
   gitProxy: 'Git proxy',
   gitProxyPlaceholder: 'e.g. http://127.0.0.1:7897 (VPN/Clash); empty = direct',
   testProxy: 'Test proxy',
@@ -146,3 +161,10 @@ export const en: Record<GithubKey, string> = {
 }
 
 export type GithubKey = keyof typeof zh
+
+/**
+ * 本命名空间的取词函数。第二参数替换字典串里的 `{name}` 占位符
+ * （与 dsh locale 运行时的 `Translate` 同形）——组合式可访问名走它，
+ * 避免把值拼进 JSX 字面量。
+ */
+export type GithubTranslate = (key: GithubKey, params?: Record<string, unknown>) => string

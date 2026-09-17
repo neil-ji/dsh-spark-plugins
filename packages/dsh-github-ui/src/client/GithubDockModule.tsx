@@ -17,12 +17,12 @@ import {
 import { IconGithub } from 'dsh-ui-kit'
 import { GithubSection } from './GithubSection.tsx'
 import { GithubSettingsStore, type GithubNamespace, type GithubSettingsState } from './store.ts'
-import type { GithubKey } from './locales.ts'
+import type { GithubTranslate } from './locales.ts'
 
 export interface GithubInjected {
   controller: GithubSettingsStore
   useSnapshot: SnapshotSelectorHook<GithubSettingsState>
-  t: (key: GithubKey) => string
+  t: GithubTranslate
 }
 
 export interface GithubInjectedFailed {
@@ -58,7 +58,7 @@ export function startGithubDockModule(ctx: ClientContext): GithubDockInject {
       const useSnapshot = bindSnapshotSelector(controller.store)
       ctx.remote.$on('credentials/reference-updated', () => controller.refreshIfLoaded())
       ctx.remote.$on('settings/document-updated', () => controller.refreshIfLoaded())
-      injected = { controller, useSnapshot, t: ctx.locale.bind('settings.github') as (key: GithubKey) => string }
+      injected = { controller, useSnapshot, t: ctx.locale.bind('settings.github') as GithubTranslate }
     }
   } catch (error) {
     console.warn('[dsh-connector-github-ui] github remote 装配失败:', error)
