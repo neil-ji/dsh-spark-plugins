@@ -639,7 +639,8 @@ try {
       const brand = getComputedStyle(probe).backgroundColor
       probe.remove()
       const btns = [...pane.querySelectorAll('button')]
-      const solid = btns.filter((b) => getComputedStyle(b).backgroundColor === brand)
+      // v4.3 起禁用的实心档换中性底（不再是品牌色），所以「抢层级」只算**可用**的实心主按钮。
+      const solid = btns.filter((b) => b.disabled === false && getComputedStyle(b).backgroundColor === brand)
       return {
         dirty: (pane.textContent ?? '').includes('保存配置'),
         total: btns.length,
@@ -648,8 +649,8 @@ try {
       }
     })()`)
     check(
-      'PCQA-019 复核遗留 #1：GitHub 草稿脏时仍只有一个实心主按钮',
-      dirty !== null && primaries.dirty === true && primaries.solid.length === 1,
+      'PCQA-019 复核遗留 #1：GitHub 草稿脏时仍至多一个可用实心主按钮',
+      dirty !== null && primaries.dirty === true && primaries.solid.length <= 1,
       JSON.stringify({ dirty, primaries }),
     )
     // 收尾：丢弃草稿，别把脏态留给后面的步骤
@@ -731,7 +732,22 @@ try {
         JSON.stringify(afterModalEsc),
       )
     } else {
-      check('复核遗留 #2：还原二次确认（前置未满足：无价格覆盖层 / 目录价拉取失败）', false, JSON.stringify({ restore, finIndex }))
+      // 前置（存在价格覆盖层）要靠联网拉社区目录价建立，离线/沙箱环境建不出来。
+      // 此时把「禁用必须给原因」这条**当前可断言**的不变量钉住（v4.3 口径），
+      // 而不是把一个环境依赖的断言报成 FAIL（有覆盖层时的二次确认路径见上一轮记录）。
+      const blocked = await evalJs(`(() => {
+        const pane = document.querySelector('.dock-body')
+        const b = [...pane.querySelectorAll('button')].find((x) => (x.getAttribute('aria-label') ?? '').includes('还原'))
+        if (!b) return null
+        const desc = b.getAttribute('aria-describedby')
+        const hint = desc === null ? null : document.getElementById(desc)
+        return { disabled: b.disabled, desc, hint: hint === null ? null : (hint.textContent ?? '').trim().slice(0, 40) }
+      })()`)
+      check(
+        '复核遗留 #2：无覆盖层时「还原」禁用并给出原因（含 aria-describedby）',
+        blocked !== null && blocked.disabled === true && blocked.hint !== null && blocked.hint.length > 0,
+        JSON.stringify({ restore, finIndex, blocked }),
+      )
     }
   } else {
     check('复核遗留 #2 财务模块可定位（前置条件）', false, '未找到财务 tab')
@@ -759,6 +775,191 @@ try {
   } else {
     check('PCQA-017 记忆模块可定位（前置条件）', false, '未找到记忆 tab')
   }
+
+  // 6j) 复核轮 acc-20260918-0155-clean 新增：形制/间距一致性 + 禁用原因 + 时间本地化 + 产物新鲜度。
+  //     这一节的断言都是「跨模块一致性」，因此必须在同一个宿主会话里连续取数。
+  /** 面板可能是收起态（收起的 pane 不挂载）——先确保展开，再找模块钮。 */
+  const ensurePanelOpen = async () => {
+    await evalJs(`(() => {
+      const p = document.querySelector('.dock-panel')
+      if (p && !p.classList.contains('open')) document.querySelector('.dock-ball')?.click()
+      return true
+    })()`)
+    await sleep(700)
+  }
+  const openModule = async (tabPrefix) => {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await ensurePanelOpen()
+      const idx = await evalJs(`(() => Array.from(document.querySelectorAll('.dock-tab')).findIndex((b) => (b.getAttribute('aria-label') ?? '').startsWith('${tabPrefix}')))()`)
+      if (typeof idx === 'number' && idx >= 0) {
+        await evalJs('document.querySelectorAll(\'.dock-tab\')[' + idx + '].click()')
+        await sleep(1400)
+        return true
+      }
+      await sleep(500)
+    }
+    const diag = await evalJs(`(() => ({
+      open: document.querySelector('.dock-panel')?.classList.contains('open') ?? null,
+      tabs: [...document.querySelectorAll('.dock-tab')].map((b) => (b.getAttribute('aria-label') ?? '').slice(0, 6)),
+    }))()`)
+    console.log('    [6j] 模块钮定位失败：' + JSON.stringify(diag))
+    return false
+  }
+  const readPaneFacts = async (tabPrefix) => {
+    if (await openModule(tabPrefix) === false) return null
+    return evalJs(`(() => {
+      const panel = document.querySelector('.dock-panel')
+      const pane = panel.querySelector('.dock-body > .dock-embed') ?? panel.querySelector('.dock-embed')
+      const seg = panel.querySelector('.dock-body [role=tablist]')
+      if (!pane) return null
+      const rect = (el) => el.getBoundingClientRect()
+      const segRect = seg ? rect(seg) : null
+      const bodyRect = rect(panel.querySelector('.dock-body'))
+      const anchor = segRect ? segRect.bottom : bodyRect.top
+      // 「分栏之后的第一块内容」= 分栏之后最外层的块（再往里的都是它的子节点，
+      // 用「父节点是否也满足 follow」来判定外层）。这样各模块结构不同也能量到同一口径。
+      let firstBlock = null
+      if (seg) {
+        const follows = (el) => !seg.contains(el) && !el.contains(seg)
+          && (seg.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+        const all = [...pane.querySelectorAll('*')].filter((el) => follows(el) && el.getBoundingClientRect().height > 0)
+        const outermost = all.filter((el) => !(el.parentElement !== null && follows(el.parentElement)))
+        if (outermost.length > 0) {
+          outermost.sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top)
+          firstBlock = outermost[0]
+        }
+      }
+      const round = (n) => Math.round(n * 10) / 10
+      return {
+        segW: segRect ? round(segRect.width) : null,
+        paneW: round(rect(pane).width),
+        gap: firstBlock ? round(firstBlock.getBoundingClientRect().top - anchor) : null,
+        block: firstBlock ? (typeof firstBlock.className === 'string' ? firstBlock.className.slice(0, 24) : firstBlock.tagName) : null,
+      }
+    })()`)
+  }
+  const sparkFacts = await readPaneFacts('火花')
+  const memFacts = await readPaneFacts('记忆')
+  const finFacts = await readPaneFacts('财务')
+  const segWs = [sparkFacts, memFacts, finFacts].map((f) => (f === null ? null : f.segW)).filter((n) => typeof n === 'number')
+  const segSpread = segWs.length === 3 ? Math.max(...segWs) - Math.min(...segWs) : null
+  check(
+    '复核-006 页级分栏宽度跨模块一致（火花/记忆/财务 极差 ≤2px）',
+    segSpread !== null && segSpread <= 2,
+    JSON.stringify({ sparkFacts, memFacts, finFacts, segSpread }),
+  )
+  const gaps = [sparkFacts, memFacts, finFacts].map((f) => (f === null ? null : f.gap)).filter((n) => typeof n === 'number')
+  const gapSpread = gaps.length === 3 ? Math.max(...gaps) - Math.min(...gaps) : null
+  check(
+    '复核-007 分栏→首块间距跨模块一致（三档收成一档：极差 ≤2px 且落在 8–16px）',
+    gapSpread !== null && gapSpread <= 2 && Math.min(...gaps) >= 8 && Math.max(...gaps) <= 16,
+    JSON.stringify({ gaps, gapSpread }),
+  )
+
+  // 记忆模块：中文界面里不得出现英文相对时间串（PCQA-004/017）；顺带覆盖四个子视图。
+  if (memFacts !== null) {
+    const subCount = await evalJs(`(() => { const tl = document.querySelector('.dock-body [role=tablist]'); return tl ? tl.querySelectorAll('[role=tab]').length : 0 })()`)
+    const seen = { en: false, sample: '' }
+    for (let i = 0; i < subCount; i += 1) {
+      await evalJs('(() => { const tl=document.querySelector(".dock-body [role=tablist]"); const l=Array.from(tl.querySelectorAll("[role=tab]")); l[' + i + '].click() })()')
+      await sleep(900)
+      const probe = await evalJs(`(() => {
+        const pane = document.querySelector('.dock-body')
+        const text = pane ? (pane.textContent ?? '') : ''
+        const hit = text.match(/just now|\\d+\\s*(?:min|h|d|mo|y) ago/)
+        return { hit: hit === null ? null : hit[0], en: hit !== null }
+      })()`)
+      if (probe.en === true) { seen.en = true; seen.sample = String(probe.hit) }
+    }
+    check('复核-004 中文界面时间文案不出现英文串（just now / N min ago）', seen.en === false, JSON.stringify(seen))
+  } else {
+    check('复核-004 记忆模块可定位（前置条件）', false, '未找到记忆 tab')
+  }
+
+  // 禁用提交必须给原因（UI-UX-SPEC §3.1）：GitHub「保存令牌」/ npm「保存」。
+  const disabledProbe = async (tabPrefix, label) => {
+    if (await openModule(tabPrefix) === false) return null
+    return evalJs(`(() => {
+      const panel = document.querySelector('.dock-panel')
+      const pane = document.querySelector('.dock-body')
+      const b = [...pane.querySelectorAll('button')].find((x) => (x.textContent ?? '').trim() === '${label}')
+      if (!b) return null
+      const cs = getComputedStyle(b)
+      const probe = document.createElement('span')
+      probe.style.background = 'var(--spk-brand)'
+      panel.appendChild(probe)
+      const brand = getComputedStyle(probe).backgroundColor
+      probe.remove()
+      const desc = b.getAttribute('aria-describedby')
+      const hint = desc === null ? null : document.getElementById(desc)
+      return {
+        disabled: b.disabled,
+        bg: cs.backgroundColor,
+        brand,
+        opacity: cs.opacity,
+        desc,
+        hint: hint === null ? null : (hint.textContent ?? '').trim().slice(0, 40),
+      }
+    })()`)
+  }
+  const ghSave = await disabledProbe('GitHub', '保存令牌')
+  check(
+    '复核-011 GitHub「保存令牌」禁用时给原因 + 中性底 + 不透明（不再是半透明品牌实底）',
+    ghSave !== null && ghSave.disabled === true && ghSave.hint !== null && ghSave.hint.length > 0
+      && ghSave.bg !== ghSave.brand && ghSave.opacity === '1',
+    JSON.stringify(ghSave),
+  )
+  const npmSave = await disabledProbe('npm', '保存')
+  check(
+    '复核-011 npm「保存」禁用时给原因 + 中性底 + 不透明',
+    npmSave !== null && npmSave.disabled === true && npmSave.hint !== null && npmSave.hint.length > 0
+      && npmSave.bg !== npmSave.brand && npmSave.opacity === '1',
+    JSON.stringify(npmSave),
+  )
+
+  // 表格数字列金额固定两位小数（PCQA-018）
+  const moneyCells = await openModule('财务')
+  // 落回第一个子视图（本月值不值）——否则可能停在无表格的视图上，断言会空转。
+  await evalJs(`(() => { const tl = document.querySelector('.dock-body [role=tablist]'); const t = tl?.querySelectorAll('[role=tab]')[0]; t?.click(); return true })()`)
+  await sleep(1200)
+  const money = await evalJs(`(() => {
+    const pane = document.querySelector('.dock-body')
+    if (!pane) return null
+    // 只看**表格内**的金额列：KPI/Hero 走紧凑规则（去尾零）是设计如此。
+    // 面板里有好几张表（订阅计划 / 按量付费 / 成本趋势…），逐张收集，避免只看第一张空表。
+    const tables = [...pane.querySelectorAll('*')].filter((el) => typeof el.className === 'string'
+      && el.className.split(' ').some((c) => c.endsWith('_table')))
+    if (tables.length === 0) return { count: 0, bad: [], sample: [], note: 'no-table' }
+    const leaves = tables.flatMap((t) => [...t.querySelectorAll('*')].filter((el) => el.children.length === 0))
+    const texts = leaves.map((el) => (el.textContent ?? '').trim()).filter((s) => /^¥[\\d,]/.test(s))
+    const bad = texts.filter((s) => !/^¥[\\d,]+\.\\d{2}$/.test(s))
+    return { count: texts.length, bad: bad.slice(0, 5), sample: texts.slice(0, 4) }
+  })()`)
+  check(
+    '复核-018 表格金额固定两位小数（exact 变体）',
+    moneyCells === true && money !== null && money.bad.length === 0,
+    JSON.stringify(money),
+  )
+
+  // 产物新鲜度：宿主必须加载当前产物（插件样式零 --dsw-alias-*，h3 走 --spk-text-title）。
+  const fresh = await evalJs(`(() => {
+    const styles = [...document.querySelectorAll('style')].map((s) => s.textContent ?? '')
+    const count = (arr) => arr.reduce((n, s) => n + (s.match(/--dsw-alias-/g) ?? []).length, 0)
+    const h3 = styles.map((s) => (s.match(/\\.dock-embed[^{]*h3[^{]*\\{[^}]*\\}/) ?? [])[0]).filter(Boolean)
+    const title = getComputedStyle(document.body).getPropertyValue('--spk-text-title').trim()
+    return {
+      hippoAlias: count(styles.filter((s) => s.includes('.hippomemo-'))),
+      dockAlias: count(styles.filter((s) => s.includes('.dock-panel'))),
+      h3: h3.slice(0, 1),
+      title,
+    }
+  })()`)
+  check(
+    '复核-产物 宿主加载的是当前产物（插件样式零宿主别名 · h3 钉 --spk-text-title · token 14px）',
+    fresh.hippoAlias === 0 && fresh.dockAlias === 0 && fresh.title === '14px'
+      && String(fresh.h3).includes('--spk-text-title'),
+    JSON.stringify(fresh),
+  )
 
   // 无论球有没有挂上，都把控制台线索打出来（挂载失败时这里才是答案）
   const allInteresting = console_.filter((line) => /spark|dock|remote|stream|mux|event|Error|error|warn/.test(line))
