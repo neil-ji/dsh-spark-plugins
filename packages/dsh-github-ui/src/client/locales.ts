@@ -3,6 +3,15 @@ export const zh = {
   // 显示名规范化（2026-09 五插件统一）：连接器用产品名的规范拼写本身。
   nav: 'GitHub',
   title: 'GitHub',
+  // dock 模块 chrome（ADR-003：模块栏名 / 面板标题行 / 副标题归模块自己的字典）。
+  dockLabel: 'GitHub',
+  dockName: 'GitHub',
+  dockSub: '令牌 · 操作权限 · Git 身份与代理',
+  /** 模块栏 tab 徽章的可访问名（{label} = 模块名，{n} = 待处理计数；连标点一起定）。 */
+  badgeLabel: '{label}，{n} 项待处理',
+  badgeTitle: '{label} · {n} 项待处理',
+  /** 装配失败（宿主没提供 remote.github）：面板兜底文案，不是控制台日志。 */
+  setupFailed: 'GitHub 连接模块装配失败：宿主未提供 remote.github。重载插件或检查连接器宿主后重试。',
   intro: '配置 GitHub 访问令牌与操作权限。令牌只写入本机凭据存储，永不会回显。',
   /** 分组卡标题（2026-09：分组标题写在 ui-kit Card 头上）。 */
   tokenTitle: '访问令牌',
@@ -86,6 +95,12 @@ export const zh = {
 export const en: Record<GithubKey, string> = {
   nav: 'GitHub',
   title: 'GitHub',
+  dockLabel: 'GitHub',
+  dockName: 'GitHub',
+  dockSub: 'Token · permissions · git identity and proxy',
+  badgeLabel: '{label}, {n} pending',
+  badgeTitle: '{label} · {n} pending',
+  setupFailed: 'The GitHub connector module failed to assemble: the host provides no remote.github. Reload the plugin or check the connector host and retry.',
   intro: 'Configure your GitHub access token and operation permissions. The token is written only to the local credential store and never read back.',
   tokenTitle: 'Access token',
   tokenConfigured: 'Configured',

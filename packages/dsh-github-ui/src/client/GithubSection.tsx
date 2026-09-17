@@ -310,13 +310,15 @@ function Loaded({ injected }: { injected: GithubSectionInjected }): ReactNode {
         )
         : null}
 
-      {/* 保存行：权限与身份共用同一份 config 草稿，所以是页级动作（与财务面板同形）。 */}
+      {/* 保存行：权限与身份共用同一份 config 草稿，所以是页级动作（与财务面板同形）。
+          形制：本面板唯一 primary 归「连接」卡的保存令牌（UI-UX-SPEC §4.2 连接页模板），
+          这条草稿结算行取 secondary —— 否则草稿脏时同屏两个实心主按钮（复核口径 §4.2 的遗留 #1）。 */}
       {configDirty
         ? (
           <div className={styles.footer}>
             <Button variant="secondary" disabled={busy} onClick={() => { setConfigDraft(undefined) }}>{t('discardChanges')}</Button>
             <Button
-              variant="primary"
+              variant="secondary"
               disabled={busy}
               onClick={() => {
                 void run(async () => {
