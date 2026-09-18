@@ -234,4 +234,56 @@ describe('FinanceService.getBalance providers map', () => {
       code: 'http',
     })
   })
+
+  it('INV-9: manual balance surfaces as ok/source=manual when auto-fetch is off', async () => {
+    const ctx = new Context()
+    stubCredentials(ctx, 'sk-test')
+    const service = new FinanceService(ctx as never, {
+      providers: [dsEntry({ autoFetchBalance: false, manualBalanceMicros: 25_000_000 })],
+    })
+    const view = await service.getBalance()
+    expect(view.providers!['deepseek-official']).toMatchObject({
+      status: 'ok',
+      provider: 'deepseek-official',
+      totalMicros: 25_000_000,
+      currency: 'CNY',
+      source: 'manual',
+    })
+    expect(fake).not.toHaveBeenCalled()
+  })
+
+  it('INV-9: manual balance covers unsupported providers (no balance endpoint)', async () => {
+    const ctx = new Context()
+    stubCredentials(ctx, 'sk-test')
+    const service = new FinanceService(ctx as never, {
+      providers: [{
+        provider: 'minimax-cn',
+        billingMode: 'metered',
+        totalPriceMicros: 0,
+        manualBalanceMicros: 4_200_000,
+        currency: 'CNY',
+        autoFetchBalance: false,
+      }],
+    })
+    const view = await service.getBalance()
+    expect(view.providers!['minimax-cn']).toMatchObject({
+      status: 'ok',
+      totalMicros: 4_200_000,
+      source: 'manual',
+    })
+  })
+
+  it('INV-9: auto-fetch wins over manual balance when enabled and capable', async () => {
+    const ctx = new Context()
+    stubCredentials(ctx, 'sk-test')
+    const service = new FinanceService(ctx as never, {
+      providers: [dsEntry({ autoFetchBalance: true, manualBalanceMicros: 25_000_000 })],
+    })
+    const view = await service.getBalance()
+    expect(view.providers!['deepseek-official']).toMatchObject({
+      status: 'ok',
+      totalMicros: 110_000_000,
+    })
+    expect(fake).toHaveBeenCalledOnce()
+  })
 })

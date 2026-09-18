@@ -345,6 +345,12 @@ export interface FinanceProviderEntry {
   /** Currency micros; UI displays in major units (元 / $). Capped at 100,000. */
   totalPriceMicros: number
   /**
+   * INV-9 (FINANCE-PRICING-SPEC §5.4)：用户自报余额（micros）。仅当自动获取
+   * 不可用（厂商不支持 / autoFetch 关闭 / 拉取失败）时作为余额呈现；从不进账本
+   * 成本口径。optional = 旧数据无此字段，行为不变。
+   */
+  manualBalanceMicros?: number
+  /**
    * Account currency for this provider. Free-form string — the host-known
    * metadata seeds it for recognized providers (deepseek-official = CNY by
    * default), but anything the upstream API emits is allowed through.
@@ -373,6 +379,11 @@ export interface FinanceProviderBalance {
    * BalanceGrid's currency-aware formatter falls back to "—" for unknown
    * codes so a typo doesn't crash the UI. */
   currency?: string
+  /**
+   * INV-9（FINANCE-PRICING-SPEC §5.4）：余额来源。'auto' = 接口拉取（缺省，
+   * 兼容旧快照），'manual' = 用户自报（`manualBalanceMicros`）。UI 据此区分呈现。
+   */
+  source?: 'auto' | 'manual'
   /** Stable lower-kebab code (e.g. 'auth', 'http', 'unsupported-provider'). */
   code?: string
   /** Human-readable message; UI may show or hide depending on the code. */

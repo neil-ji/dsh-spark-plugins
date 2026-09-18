@@ -71,6 +71,8 @@ export const financeProviderBalanceSchema = z.object({
   provider: z.string(),
   totalMicros: z.number().optional(),
   currency: z.string().optional(),
+  // INV-9：余额来源。'auto' = 接口拉取（缺省，兼容旧 host），'manual' = 用户自报。
+  source: z.enum(['auto', 'manual']).optional(),
   code: z.string().optional(),
   message: z.string().optional(),
   fetchedAt: z.number(),
@@ -104,6 +106,8 @@ export const financeProviderEntrySchema = z.object({
   provider: z.string(),
   billingMode: z.enum(['metered', 'plan', 'free']),
   totalPriceMicros: z.number().min(0).max(100_000_000_000),
+  // INV-9：用户自报余额。自动获取成功值优先于它；不支持自动获取的厂商以它呈现。
+  manualBalanceMicros: z.number().min(0).max(100_000_000_000).optional(),
   currency: z.string(),
   autoFetchBalance: z.boolean(),
   validity: z.object({
@@ -669,8 +673,8 @@ export const FINANCE_REFLECTION: TypertPackageModel = {
         // these in `getBalance`, but the types are published now so the client
         // UI / future @Remote can consume them without a manifest bump.
         { name: 'FinanceProviderBillingMode', declaration: "export type FinanceProviderBillingMode = 'metered' | 'plan' | 'free';" },
-        { name: 'FinanceProviderEntry', declaration: 'export interface FinanceProviderEntry { provider: string; billingMode: FinanceProviderBillingMode; totalPriceMicros: number; currency: "CNY" | "USD"; autoFetchBalance: boolean; validity?: { startMs?: number; endMs?: number }; }' },
-        { name: 'FinanceProviderBalance', declaration: 'export interface FinanceProviderBalance { status: "ok" | "missing-credential" | "unsupported" | "error"; provider: string; totalMicros?: number; currency?: "CNY" | "USD"; code?: string; message?: string; fetchedAt: number; }' },
+        { name: 'FinanceProviderEntry', declaration: 'export interface FinanceProviderEntry { provider: string; billingMode: FinanceProviderBillingMode; totalPriceMicros: number; manualBalanceMicros?: number; currency: "CNY" | "USD"; autoFetchBalance: boolean; validity?: { startMs?: number; endMs?: number }; }' },
+        { name: 'FinanceProviderBalance', declaration: 'export interface FinanceProviderBalance { status: "ok" | "missing-credential" | "unsupported" | "error"; provider: string; totalMicros?: number; currency?: "CNY" | "USD"; source?: "auto" | "manual"; code?: string; message?: string; fetchedAt: number; }' },
         // Client-side Form List uses this to seed defaults + lock fields.
         { name: 'FinanceHostProviderMeta', declaration: 'export interface FinanceHostProviderMeta { provider: string; defaultBillingMode: "metered" | "plan" | "free"; defaultCurrency: "CNY" | "USD"; supportsBalanceFetch: boolean; lockBillingModeAndCurrency?: boolean; }' },
       ],

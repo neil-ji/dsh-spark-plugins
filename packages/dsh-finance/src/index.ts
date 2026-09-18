@@ -778,6 +778,18 @@ export class FinanceService extends TypertRemoteService {
     // 余额默认自动获取：宿主已知且支持余额接口的 provider（白名单，当前仅 deepseek-official）
     // 即使用户没有 per-provider 条目也直接抓取 —— 这就是「自动尝试获取、同步最新余额」。
     const autoFetchOn = forceFetch || (entry?.autoFetchBalance ?? isFetchCapable)
+    // INV-9：自动获取不可用（不支持 / 关闭 / 无拉取路径）时回落用户自报余额。
+    // 手动值只改呈现、不进账本成本口径；source: 'manual' 让 UI 与拉取值可区分。
+    if (entry?.manualBalanceMicros !== undefined && !(isFetchCapable && autoFetchOn)) {
+      return {
+        status: 'ok',
+        provider,
+        totalMicros: entry.manualBalanceMicros,
+        currency: entry.currency || meta?.defaultCurrency,
+        source: 'manual',
+        fetchedAt,
+      }
+    }
     if (isFetchCapable && autoFetchOn) {
       // Only deepseek-official has a registered fetch path today. Other
       // fetch-capable providers would slot in here as their APIs land.
