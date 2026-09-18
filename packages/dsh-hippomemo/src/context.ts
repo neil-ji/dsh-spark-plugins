@@ -112,13 +112,12 @@ export function apply(ctx: Context, config: HippomemoContextConfig = {}): void {
       }
     }
 
-    const recall = renderRecallMessage(query, filtered.map(hit => ({ record: hit.record, reason: hit.matchedReason })), maxRecallChars)
+    const recall = renderRecallMessage(filtered.map(hit => ({ record: hit.record, reason: hit.matchedReason })), maxRecallChars)
     if (recall === undefined) return decision
 
-    const injectedIds = (recall.source as { memoryIds?: string[] }).memoryIds
-    if (injectedIds !== undefined) trackExposure(agent.session.id, injectedIds)
+    trackExposure(agent.session.id, recall.memoryIds)
 
-    return { kind: 'enter', messages: [...decision.messages, recall] }
+    return { kind: 'enter', messages: [...decision.messages, recall.message] }
   })
 
   ctx.on('session/event', (session, event) => {
@@ -203,7 +202,7 @@ interface RenderItem {
   reason: string[]
 }
 
-function renderRecallMessage(query: string, items: readonly RenderItem[], maxChars: number): UserMessage | undefined {
+function renderRecallMessage(items: readonly RenderItem[], maxChars: number): { message: UserMessage; memoryIds: string[] } | undefined {
   let budget = maxChars
   const lines: string[] = []
   const memoryIds: string[] = []
@@ -235,14 +234,19 @@ function renderRecallMessage(query: string, items: readonly RenderItem[], maxCha
     '</system-reminder>',
   ].join('\n')
 
-  return createUserMessage({
-    content: [{ type: 'text', text }],
-    source: {
-      kind: 'plugin',
-      plugin: name,
-      form: 'recall',
-      query,
-      memoryIds,
-    },
-  })
+  // Session-log source must stay inside the released v0 plugin-source
+  // whitelist ({kind, plugin, form}); extra members make the official
+  // v0->v1 migrator reject the whole session. memoryIds travels via the
+  // return value instead.
+  return {
+    message: createUserMessage({
+      content: [{ type: 'text', text }],
+      source: {
+        kind: 'plugin',
+        plugin: name,
+        form: 'recall',
+      },
+    }),
+    memoryIds,
+  }
 }
