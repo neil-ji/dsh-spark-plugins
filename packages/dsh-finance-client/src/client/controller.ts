@@ -12,6 +12,7 @@ import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 // F12：失败文案与信封拆解只从 kit 取一处实现。
 import { messageOf, remoteFailureOf } from 'dsh-spark-plugin-kit/client'
+import type { FinanceProviderEntryPatch } from './plans.ts'
 import type {
   FinanceBackfillProgress,
   FinanceLedger,
@@ -64,6 +65,11 @@ export interface FinancePlanSeam {
    * `providers[i].billingMode` 这一个字段，其余字段原样保留。
    */
   writeBillingMode(provider: string, mode: FinanceProviderBillingMode): Promise<void>
+  /**
+   * 待定池打标（SPEC §5.4）：计费方式 + 可选手动余额 / autoFetch 勾选，
+   * 一次 settings 原子写。新建条目时补齐宿主要求的默认字段。
+   */
+  writeProviderEntry(provider: string, patch: FinanceProviderEntryPatch): Promise<void>
 }
 
 /** 一个面板实例一个控制器；不做模块级单例。 */
@@ -182,6 +188,17 @@ export class FinancePanelController {
   async setBillingMode(provider: string, mode: FinanceProviderBillingMode): Promise<void> {
     if (this.seam === undefined) return
     await this.seam.writeBillingMode(provider, mode)
+    await this.load()
+  }
+
+  /**
+   * 待定池打标（SPEC §5.4）：订阅带月费走 plans 写入，按量带手动余额走
+   * providers 条目写入；写完重拉账本与余额刷新三池归属。
+   */
+  async tagPendingProvider(provider: string, patch: FinanceProviderEntryPatch, monthlyPlan?: FinancePlanEntry): Promise<void> {
+    if (this.seam === undefined) return
+    await this.seam.writeProviderEntry(provider, patch)
+    if (patch.mode === 'plan' && monthlyPlan !== undefined) await this.savePlan(monthlyPlan)
     await this.load()
   }
 

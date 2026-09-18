@@ -244,9 +244,9 @@ describe('finance views', () => {
       onRefresh: () => {},
       lastSyncAppliedAt: undefined,
     }))
-    // 等价按量价 10_000_000 > 月费 1_000_000 → 「省了」
-    expect(withPlan).toContain('planSaved')
-    expect(withPlan).toContain('planDiscount')
+    // 等价按量价 10_000_000 > 月费 1_000_000 → 节省列 + 超值 tag（SPEC §5.4 三池列）
+    expect(withPlan).toContain('planSavingsCol')
+    expect(withPlan).toContain('superValue')
   })
 
   it('设置只读时套餐卡明确说明不能改，且不给编辑入口', () => {

@@ -297,7 +297,8 @@ export async function run(): Promise<{ checks: Check[] }> {
     await injected.controller.savePlan({ provider: 'openai', monthlyMicros: 1, currency: 'CNY', periodLabel: 'month', effectiveFrom: 0 })
     const afterPlan = renderToString(<FinancePanel {...injected.panel} /> as ReactElement)
     expectContains('finance: 填过月费的厂商进入订阅卡', afterPlan, 'finance-plan-openai')
-    expectContains('finance: 填月费后给出「比按量省」结论', afterPlan, '比按量省')
+    // SPEC §5.4：结论列改为「按量等价节省 + 超值 tag」。
+    expectContains('finance: 填月费后给出按量等价节省与超值 tag', afterPlan, '超值')
     // P1-B：该用谁 —— 输出速率列 + 同一模型跨供应商的时间成本比较。
     check('finance: 账本带上了速率样本', state.ledger?.byModel.some((row) => row.rate !== undefined) === true, '')
     const whoHtml = renderToString(

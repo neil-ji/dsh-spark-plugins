@@ -7,7 +7,7 @@
  */
 
 import { useState, type ReactNode } from 'react'
-import { Button, Card, EmptyState, Input, Modal, Money, SegmentedControl, Stat, StatGrid, TrendChart, formatMicros } from 'dsh-ui-kit'
+import { Button, Card, Checkbox, Disclosure, EmptyState, Input, Modal, Money, Pill, SegmentedControl, Stat, StatGrid, TrendChart, formatMicros } from 'dsh-ui-kit'
 import type {
   FinanceLedger,
   FinanceListProvidersResult,
@@ -40,6 +40,15 @@ export interface ThisMonthViewProps {
   removePlan: (provider: string) => Promise<void>
   /** 打 provider 级计费方式标记（订阅 / 按量 / 免费）。 */
   onSetBillingMode: (provider: string, mode: FinanceProviderBillingMode) => Promise<void>
+  /**
+   * 待定池打标（SPEC §5.4）：计费方式 + 可选手动余额 / autoFetch，订阅可附带月费
+   * 条目；保存后 provider 落入对应池。
+   */
+  onTagPending: (
+    provider: string,
+    patch: { mode: FinanceProviderBillingMode; manualBalanceMicros?: number; autoFetchBalance?: boolean },
+    plan?: FinancePlanEntry,
+  ) => Promise<void>
   refreshing: boolean
   onRefresh: () => void
   lastSyncAppliedAt: number | undefined
@@ -67,6 +76,7 @@ export function ThisMonthView({
   savePlan,
   removePlan,
   onSetBillingMode,
+  onTagPending,
   refreshing,
   onRefresh,
   lastSyncAppliedAt,
@@ -78,6 +88,8 @@ export function ThisMonthView({
 }: ThisMonthViewProps): ReactNode {
   const currency = ledger.currency === '' ? 'CNY' : ledger.currency
   const [editing, setEditing] = useState<string | null>(null)
+  /** 待定池行内表单：正在打标的 provider + 已选计费方式（null = 收起）。 */
+  const [pendingTag, setPendingTag] = useState<{ provider: string; mode: FinanceProviderBillingMode } | null>(null)
   /** 还原价格表（回退/破坏性）的二次确认；确认后才真调 onRestorePrices。 */
   const [confirmRestore, setConfirmRestore] = useState(false)
   /** 没有覆盖层时「还原」没有可回退的东西 —— 禁用必须给原因（UI-UX-SPEC §3.1 Don't）。 */
@@ -116,7 +128,8 @@ export function ThisMonthView({
   const { withPlan } = planRows(ledger, plans)
   const planByProvider = new Map(withPlan.map((insight) => [insight.provider, insight]))
   const planEntries = [...plans]
-  // 两张卡：订阅计划 = 打了订阅标记的厂商；按量付费 = 其余（含免费）。
+  // 三池分类（SPEC §5.4）：订阅 / 按量 / 待定。生效计费方式 = 显式标记 > 已有月费条目 > 宿主默认。
+  // 待定 = 未打标且非宿主锁定（锁定的宿主已知厂商按默认直接进按量池、标记只读）。
   const knownProviders = [...new Set([
     ...ledger.byProvider.map((row) => row.provider),
     ...planEntries.map((plan) => plan.provider),
@@ -124,10 +137,16 @@ export function ThisMonthView({
   ])]
   const spendByProvider = new Map(ledger.byProvider.map((row) => [providerKey(row.provider), row.costMicros]))
   const providerRowOf = new Map(allProviders.map((row) => [providerKey(row.provider), row]))
-  const subscriptionProviders = knownProviders.filter((provider) => billingFor(provider) === 'plan')
-  // 按量付费卡只列**有余额接口**的厂商（白名单）：没有接口的整行去掉，不占版面。
-  const meteredProviders = knownProviders.filter((provider) => billingFor(provider) !== 'plan'
-    && providerRowOf.get(providerKey(provider))?.hostMeta?.supportsBalanceFetch === true)
+  const supportsFetch = (provider: string): boolean =>
+    providerRowOf.get(providerKey(provider))?.hostMeta?.supportsBalanceFetch === true
+  const planPool = knownProviders.filter((provider) => billingFor(provider) === 'plan')
+  // 按量池 = 显式标按量，或宿主已知默认按量（hostMeta 存在 = 类型已知，如 deepseek-official）。
+  const meteredPool = knownProviders.filter((provider) => {
+    if (billingFor(provider) !== 'metered') return false
+    return billingExplicit.get(providerKey(provider)) === 'metered' || providerRowOf.get(providerKey(provider))?.hostMeta !== undefined
+  })
+  // 待定池：其余 —— 无宿主元数据且未打标（「不知道是什么类型」），free 打标者也留在这里呈现。
+  const pendingPool = knownProviders.filter((provider) => !planPool.includes(provider) && !meteredPool.includes(provider))
   const empty = ledger.sessionCount === 0
 
   return (
@@ -175,21 +194,94 @@ export function ThisMonthView({
         )
         : (
           <>
+            {/* 待定池（SPEC §5.4）：未打标且非锁定的厂商。抽屉默认收起，计数徽标提示。 */}
+            {pendingPool.length > 0
+              ? (
+                <Disclosure
+                  name={`${t('pendingCardTitle')} · ${pendingPool.length}`}
+                  description={plansWritable ? t('pendingHint') : t('planReadOnly')}
+                  className={css.section}
+                >
+                  <div data-testid="finance-pending-card">
+                  <div className={css.table}>
+                    {pendingPool.map((provider) => {
+                      const tag = pendingTag?.provider === provider ? pendingTag : null
+                      const row = providerRowOf.get(providerKey(provider))
+                      const canAutoFetch = row?.hostMeta?.supportsBalanceFetch === true
+                      return (
+                        <div key={provider} className={css.group}>
+                          <div className={cx(css.tableRow, css.colsBalance)} data-testid={`finance-pending-${provider}`}>
+                            <span className={cx(css.cell, css.balanceName)}>{provider}</span>
+                            <span className={cx(css.cell, css.cellNum, css.balanceNote)}>—</span>
+                            <span className={css.planActions}>
+                              <SegmentedControl<FinanceProviderBillingMode>
+                                options={BILLING_MODES.map((mode) => ({ value: mode, label: billingLabel(mode, t) }))}
+                                value={tag?.mode ?? 'metered'}
+                                onChange={(next) => {
+                                  if (next === 'free') {
+                                    // 免费无表单：一键落标（不进订阅/按量池，留在待定区呈现标签）。
+                                    void onTagPending(provider, { mode: 'free' })
+                                    setPendingTag(null)
+                                    return
+                                  }
+                                  setPendingTag(tag?.mode === next ? null : { provider, mode: next })
+                                }}
+                                ariaLabel={`${t('billingMark')}: ${provider}`}
+                              />
+                            </span>
+                          </div>
+                          {tag?.mode === 'plan'
+                            ? (
+                              <PlanEditor
+                                provider={provider}
+                                initial={undefined}
+                                t={t}
+                                onCancel={() => setPendingTag(null)}
+                                onSave={async (plan) => {
+                                  await onTagPending(provider, { mode: 'plan' }, plan)
+                                  setPendingTag(null)
+                                }}
+                              />
+                            )
+                            : null}
+                          {tag?.mode === 'metered'
+                            ? (
+                              <MeteredTagEditor
+                                provider={provider}
+                                canAutoFetch={canAutoFetch}
+                                t={t}
+                                onCancel={() => setPendingTag(null)}
+                                onSave={async (patch) => {
+                                  await onTagPending(provider, { mode: 'metered', ...patch })
+                                  setPendingTag(null)
+                                }}
+                              />
+                            )
+                            : null}
+                        </div>
+                      )
+                    })}
+                  </div>
+                  </div>
+                </Disclosure>
+              )
+              : null}
+
             <Card title={t('planCardTitle')} className={css.section}>
               <div className={css.table} data-testid="finance-plan-card">
                 <div className={cx(css.tableHead, css.colsPlan)}>
                   <span className={css.cell}>{t('colProvider')}</span>
                   <span className={cx(css.cell, css.cellNum)}>{t('planMonthly')}</span>
-                  <span className={cx(css.cell, css.cellNum)}>{t('planEquivalent')}</span>
-                  <span className={css.cell}>{t('planVerdict')}</span>
+                  <span className={cx(css.cell, css.cellNum)}>{t('planSavingsCol')}</span>
                   <span className={css.cell} />
                 </div>
-                {subscriptionProviders.length === 0
+                {planPool.length === 0
                   ? <p className={css.hint}>{t('planEmpty')}</p>
-                  : subscriptionProviders.map((provider) => {
+                  : planPool.map((provider) => {
                     const insight = planByProvider.get(provider)
                     const existing = planEntries.find((plan) => plan.provider === provider)
                     const open = editing === provider
+                    const savings = insight?.savingsMicros
                     return (
                       <div key={provider} className={css.group}>
                         <div className={cx(css.tableRow, css.colsPlan)} data-testid={`finance-plan-${provider}`}>
@@ -198,17 +290,23 @@ export function ThisMonthView({
                             {insight === undefined ? '—' : <Money micros={insight.monthlyMicros} currency={insight.currency} exact />}
                           </span>
                           <span className={cx(css.cell, css.cellNum)}>
-                            <Money micros={insight?.equivalentMicros ?? 0} currency={currency} exact />
+                            {savings === undefined
+                              ? '—'
+                              : (
+                                <>
+                                  <Money micros={savings} currency={currency} exact />
+                                  {/* 按量等价 > 月费 = 订阅真省了（SPEC §5.4 三池列）。 */}
+                                  {savings > 0 ? <Pill tone="success" className={css.cellNum}>{t('superValue')}</Pill> : null}
+                                </>
+                              )}
                           </span>
-                          <span className={cx(css.cell, css.cellWrap, css.balanceNote)}>{verdictText(insight, currency, t)}</span>
                           <span className={css.planActions}>
-                            {/* 计费方式标记（provider 级）：按量 / 订阅 / 免费。锁定的 provider 只读。 */}
-                            {!plansWritable || billingLocked.has(providerKey(provider))
-                              ? <span className={css.tagMuted}>{billingLabel(billingFor(provider), t)}</span>
+                            {!plansWritable
+                              ? <span className={css.tagMuted}>{billingLabel('plan', t)}</span>
                               : (
                                 <SegmentedControl<FinanceProviderBillingMode>
                                   options={BILLING_MODES.map((mode) => ({ value: mode, label: billingLabel(mode, t) }))}
-                                  value={billingFor(provider)}
+                                  value="plan"
                                   onChange={(next) => { void onSetBillingMode(provider, next) }}
                                   ariaLabel={`${t('billingMark')}: ${provider}`}
                                 />
@@ -256,49 +354,45 @@ export function ThisMonthView({
               </div>
             </Card>
 
-            {meteredProviders.length === 0
-              ? null
-              : (
             <Card title={t('meteredCardTitle')} className={css.section}>
               <div className={css.table}>
                 <div className={cx(css.tableHead, css.colsBalance)}>
                   <span className={css.cell}>{t('colProvider')}</span>
-                  <span className={cx(css.cell, css.cellNum)}>{t('meteredSpend')}</span>
                   <span className={cx(css.cell, css.cellNum)}>{t('balanceLabel')}</span>
+                  <span className={cx(css.cell, css.cellNum)}>{t('meteredSpend')}</span>
                   <span className={css.cell} />
                 </div>
-                {meteredProviders.map((provider) => {
-                  const row = providerRowOf.get(providerKey(provider))
-                  const spend = spendByProvider.get(providerKey(provider)) ?? 0
-                  const mark = billingFor(provider)
-                  const supportsBalance = row?.hostMeta?.supportsBalanceFetch === true
-                  return (
-                    <div className={cx(css.tableRow, css.colsBalance)} key={provider} data-testid={`finance-metered-${provider}`}>
-                      <span className={cx(css.cell, css.balanceName)}>{provider}</span>
-                      <span className={cx(css.cell, css.cellNum, css.balanceValue)}>
-                        {mark === 'free' ? t('billing_free') : <Money micros={spend} currency={currency} exact />}
-                      </span>
-                      <span className={cx(css.cell, css.cellNum)}>
-                        {supportsBalance && row !== undefined ? balanceValue(ledger, row.balance, t) : ''}
-                      </span>
-                      <span className={css.planActions}>
-                        {!plansWritable || billingLocked.has(providerKey(provider))
-                          ? <span className={css.tagMuted}>{billingLabel(mark, t)}</span>
-                          : (
-                            <SegmentedControl<FinanceProviderBillingMode>
-                              options={BILLING_MODES.map((mode) => ({ value: mode, label: billingLabel(mode, t) }))}
-                              value={mark}
-                              onChange={(next) => { void onSetBillingMode(provider, next) }}
-                              ariaLabel={`${t('billingMark')}: ${provider}`}
-                            />
-                          )}
-                      </span>
-                    </div>
-                  )
-                })}
+                {meteredPool.length === 0
+                  ? <p className={css.hint}>{t('meteredEmpty')}</p>
+                  : meteredPool.map((provider) => {
+                    const row = providerRowOf.get(providerKey(provider))
+                    const spend = spendByProvider.get(providerKey(provider)) ?? 0
+                    return (
+                      <div className={cx(css.tableRow, css.colsBalance)} key={provider} data-testid={`finance-metered-${provider}`}>
+                        <span className={cx(css.cell, css.balanceName)}>{provider}</span>
+                        <span className={cx(css.cell, css.cellNum)}>
+                          {row !== undefined ? balanceValue(ledger, row.balance, t) : ''}
+                        </span>
+                        <span className={cx(css.cell, css.cellNum, css.balanceValue)}>
+                          <Money micros={spend} currency={currency} exact />
+                        </span>
+                        <span className={css.planActions}>
+                          {!plansWritable || billingLocked.has(providerKey(provider))
+                            ? <span className={css.tagMuted}>{billingLabel('metered', t)}</span>
+                            : (
+                              <SegmentedControl<FinanceProviderBillingMode>
+                                options={BILLING_MODES.map((mode) => ({ value: mode, label: billingLabel(mode, t) }))}
+                                value="metered"
+                                onChange={(next) => { void onSetBillingMode(provider, next) }}
+                                ariaLabel={`${t('billingMark')}: ${provider}`}
+                              />
+                            )}
+                        </span>
+                      </div>
+                    )
+                  })}
               </div>
             </Card>
-              )}
 
             <Card
               title={t('trendTitle')}
@@ -432,19 +526,6 @@ export function priceNote(lastSyncAppliedAt: number | undefined, t: FinanceTrans
   return t('priceNote', { when })
 }
 
-/** 结论列：省了多少 / 亏了多少 / 还没有用量 —— 全是账本观测值相减，不含估算。 */
-function verdictText(insight: { savingsMicros: number; equivalentMicros: number; discountRate: number | null; breakEvenRatio: number | null } | undefined, currency: string, t: FinanceTranslate): string {
-  if (insight === undefined) return ''
-  if (insight.equivalentMicros <= 0) return t('planNoUsage')
-  const amount = `${formatMicros(Math.abs(insight.savingsMicros))} ${currency}`
-  if (insight.savingsMicros >= 0) {
-    const discount = insight.discountRate === null ? '' : ` · ${t('planDiscount', { pct: `${Math.round(insight.discountRate * 100)}%` })}`
-    return `${t('planSaved', { amount })}${discount}`
-  }
-  const progress = insight.breakEvenRatio === null ? '' : ` ${t('planBreakEven', { pct: `${Math.round(insight.breakEvenRatio * 100)}%` })}`
-  return `${t('planLost', { amount })}${progress}`
-}
-
 /**
  * 行内套餐编辑器：月费 + 币种 + 计费形态，保存写回 settings 的 `plans`。
  *
@@ -517,6 +598,63 @@ function PlanEditor({ provider, initial, t, onSave, onCancel }: {
   )
 }
 
+/**
+ * 待定池「按量」打标表单：手动余额（INV-9 用户自报）+ autoFetch 勾选。
+ * 厂商不支持自动获取 → 勾选 disable + 悬浮提示（当前仅 deepseek-official 支持）。
+ */
+function MeteredTagEditor({ provider, canAutoFetch, t, onSave, onCancel }: {
+  provider: string
+  canAutoFetch: boolean
+  t: FinanceTranslate
+  onSave: (patch: { manualBalanceMicros?: number; autoFetchBalance?: boolean }) => Promise<void>
+  onCancel: () => void
+}): ReactNode {
+  const [balance, setBalance] = useState('')
+  const [autoFetch, setAutoFetch] = useState(canAutoFetch)
+  const micros = balance.trim() === '' ? 0 : majorToMicros(balance)
+  const invalid = balance.trim() !== '' && micros === null
+  return (
+    <div className={css.planForm} data-testid={`finance-pending-form-${provider}`}>
+      <label className={css.section}>
+        <span className={css.balanceNote}>{t('manualBalanceLabel')}</span>
+        <Input
+          className={css.planInput}
+          type="text"
+          inputMode="decimal"
+          aria-label={`${t('manualBalanceLabel')}: ${provider}`}
+          value={balance}
+          aria-invalid={invalid}
+          onChange={(event) => setBalance(event.currentTarget.value)}
+        />
+      </label>
+      <span title={canAutoFetch ? undefined : t('autoFetchUnsupported')}>
+        <Checkbox
+          label={t('autoFetchLabel')}
+          checked={canAutoFetch && autoFetch}
+          disabled={!canAutoFetch}
+          onChange={setAutoFetch}
+        />
+      </span>
+      <span className={css.planActions}>
+        <Button
+          variant="secondary"
+          disabled={invalid}
+          onClick={() => {
+            void onSave({
+              manualBalanceMicros: micros ?? 0,
+              autoFetchBalance: canAutoFetch && autoFetch,
+            })
+          }}
+        >
+          {t('planSave')}
+        </Button>
+        <Button variant="ghost" onClick={onCancel}>{t('planCancel')}</Button>
+      </span>
+      {invalid ? <span className={css.tag}>{t('planInvalidBalance')}</span> : null}
+    </div>
+  )
+}
+
 function periodLabel(period: FinancePlanPeriod, t: FinanceTranslate): string {
   if (period === 'month-week') return t('periodMonthWeek')
   if (period === 'month-week-5h') return t('periodMonthWeek5h')
@@ -526,7 +664,13 @@ function periodLabel(period: FinancePlanPeriod, t: FinanceTranslate): string {
 function balanceValue(ledger: FinanceLedger, balance: FinanceProviderBalance, t: FinanceTranslate): ReactNode {
   if (balance.status === 'ok' && balance.totalMicros !== undefined) {
     const currency = balance.currency === undefined || balance.currency === '' ? ledger.currency : balance.currency
-    return <Money micros={balance.totalMicros} currency={currency} />
+    // INV-9：手填值与自动获取值可区分（悬浮提示 + 「手填」角标）。
+    return (
+      <span title={balance.source === 'manual' ? t('manualBalanceLabel') : undefined}>
+        <Money micros={balance.totalMicros} currency={currency} />
+        {balance.source === 'manual' ? <Pill className={css.cellNum}>{t('balanceManual')}</Pill> : null}
+      </span>
+    )
   }
   if (balance.status === 'missing-credential') return t('balanceMissingKey')
   if (balance.status === 'unsupported') return t('balanceUnsupported')

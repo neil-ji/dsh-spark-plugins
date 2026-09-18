@@ -13,8 +13,15 @@ import type { FinancePlanSeam } from './controller.ts'
 export interface FinanceSettingsSection {
   plans?: unknown
   tiers?: unknown
-  /** provider 条目（含用户打的计费方式标记）。 */
+  /** provider 条目（含用户打的计费方式标记与手动余额）。 */
   providers?: unknown
+}
+
+/** 待定池打标补丁（SPEC §5.4）：mode 必填，手动余额 / autoFetch 可选。 */
+export interface FinanceProviderEntryPatch {
+  mode: 'metered' | 'plan' | 'free'
+  manualBalanceMicros?: number
+  autoFetchBalance?: boolean
 }
 
 /**
@@ -132,6 +139,22 @@ export function createPlanSeam(scope: SettingsScope<FinanceSettingsSection>): Fi
       const index = list.findIndex((entry) => sameProvider(entry, provider))
       const next: Record<string, unknown> = index >= 0 ? { ...list[index] } : { provider, currency: 'CNY' }
       next.billingMode = mode
+      const merged = [...list]
+      if (index >= 0) merged[index] = next
+      else merged.push(next)
+      await scope.set('providers', merged)
+    },
+    // 待定池打标（SPEC §5.4）：计费方式 + 可选手动余额 / autoFetch 一次原子写。
+    writeProviderEntry: async (provider, patch) => {
+      const list: Array<Record<string, unknown>> = snapshotProviders(scope)
+      const index = list.findIndex((entry) => sameProvider(entry, provider))
+      const next: Record<string, unknown> = index >= 0 ? { ...list[index] } : { provider, currency: 'CNY', totalPriceMicros: 0 }
+      next.billingMode = patch.mode
+      if (patch.manualBalanceMicros !== undefined) {
+        next.manualBalanceMicros = patch.manualBalanceMicros
+        if (next.autoFetchBalance === undefined) next.autoFetchBalance = false
+      }
+      if (patch.autoFetchBalance !== undefined) next.autoFetchBalance = patch.autoFetchBalance
       const merged = [...list]
       if (index >= 0) merged[index] = next
       else merged.push(next)

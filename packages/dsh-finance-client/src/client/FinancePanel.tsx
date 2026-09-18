@@ -11,6 +11,7 @@ import { Button, SegmentedControl } from 'dsh-ui-kit'
 import type { SnapshotSelectorHook } from 'dsh-spark-plugin-kit/client'
 import type { FinancePlanEntry, FinanceProviderBillingMode } from 'dsh-spark-finance/types'
 import type { FinancePanelState } from './controller.ts'
+import type { FinanceProviderEntryPatch } from './plans.ts'
 import type { FinanceTranslate } from './locales.ts'
 import { ProjectsView } from './views/ProjectsView.tsx'
 import { SaveMoreView } from './views/SaveMoreView.tsx'
@@ -30,6 +31,12 @@ export interface FinancePanelInjected {
   removePlan: (provider: string) => Promise<void>
   /** 计费方式标记：订阅 / 按量 / 免费（provider 级）。 */
   setBillingMode: (provider: string, mode: FinanceProviderBillingMode) => Promise<void>
+  /** 待定池打标（SPEC §5.4）：计费方式 + 手动余额 / autoFetch + 可选月费条目。 */
+  tagPendingProvider: (
+    provider: string,
+    patch: FinanceProviderEntryPatch,
+    plan?: FinancePlanEntry,
+  ) => Promise<void>
   /** 价格表：一键更新（拉最新目录价）与还原（丢弃用户侧覆盖，回到发版快照）。 */
   updatePrices: () => Promise<void>
   restorePrices: () => Promise<void>
@@ -119,6 +126,7 @@ export function FinancePanel(props: FinancePanelInjected): ReactNode {
               savePlan={props.savePlan}
               removePlan={props.removePlan}
               onSetBillingMode={props.setBillingMode}
+              onTagPending={props.tagPendingProvider}
               refreshing={state.status === 'loading'}
               onRefresh={props.refresh}
               lastSyncAppliedAt={state.lastSyncAppliedAt}

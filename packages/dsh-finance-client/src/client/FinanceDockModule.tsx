@@ -110,6 +110,7 @@ export function startFinanceDockModule(ctx: ClientContext): FinanceDockInject {
           savePlan: (plan) => controller.savePlan(plan),
           removePlan: (provider) => controller.removePlan(provider),
   setBillingMode: (provider, mode) => controller.setBillingMode(provider, mode),
+  tagPendingProvider: (provider, patch, plan) => controller.tagPendingProvider(provider, patch, plan),
   updatePrices: () => controller.updatePrices(),
   restorePrices: () => controller.restorePrices(),
         },
