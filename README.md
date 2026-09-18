@@ -34,8 +34,15 @@ sh install.sh --profile main         # 指定目标 dsh profile（默认 web）
 sh install.sh --only dsh-spark,dsh-connector-npm   # 只装部分插件
 sh install.sh --home /tmp/dev-home   # 目标 DSH_HOME（隔离安装/沙箱试用）
 sh install.sh --from-source          # 开发路径：clone + pnpm install + build
+```
 
-# Windows 对应参数
+`--only` 装的是子集，profile 里的 `dsh.profile.bundles` 会跟着收敛到「实际装了什么」——
+`dsh` 对这份清单是严格解析的，留一行指向没装的包，下次 `dsh web` 会直接报
+`cannot resolve profile bundle` 起不来。所以缺的插件要用 `--only` 补装或直接整体重装。
+
+**Windows 对应参数**
+
+```powershell
 .\install.ps1 -Version v0.2.0
 .\install.ps1 -DshHome .\.dev\home -Profile devweb
 .\install.ps1 -FromSource -LocalDir F:\path\to\checkout

@@ -13,12 +13,22 @@
  *   3. 可选：把声明了 dsh.bundle.patch 的包登记进 dsh.profile.bundles
  *      （dsh 的 loader 只按这个列表组合补丁层，不会自动发现已安装的包）
  *   4. 在 profile 目录跑 pnpm install --prod
+ *   5. 按 dsh-app-boot 的口径复核每条 bundle 行（见 inspectBundleRow）
  *
  * 不挂载 monorepo、不产生 file:/link: 指向源码的活链接。
+ *
+ * **bundle 行永远与实际依赖对账**（不受 registerBundles 门控）：`dsh` 的 loadProfileDirectory
+ * 对 dsh.profile.bundles 是严格解析 —— 任何一行指向没装的包，下次启动就 fail-loud
+ * （`cannot resolve profile bundle "..."`），而且它的解析锚是 dsh 安装目录优先、profile 目录兜底，
+ * 所以官方 @deepseek-ai/* 的行放行、其余必须能在 profile 里解析到。历史事故：一次
+ * `install-profile.mjs --only <子集>`（registerBundles 默认 false）把依赖正确清到了子集，
+ * 却把 bundle 行原样留着，于是真 home 的 `dsh web` 直接起不来。所以回收逻辑不能挂在
+ * registerBundles 上，registerBundles 只决定「要不要**新增**行」。
  */
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { execSync } from 'node:child_process'
+import { createRequire } from 'node:module'
 
 export const OFFICIAL_BUNDLE_PREFIX = '@deepseek-ai/'
 
@@ -39,6 +49,73 @@ const WORKSPACE_YAML = 'packages:\n  - .\n\nnodeLinker: hoisted\nautoInstallPeer
 function writeWorkspaceYaml(file, overrides) {
   const lines = Object.entries(overrides).map(([name, spec]) => `  ${JSON.stringify(name)}: ${JSON.stringify(spec)}`)
   writeFileSync(file, WORKSPACE_YAML + (lines.length === 0 ? '' : 'overrides:\n' + lines.join('\n') + '\n'))
+}
+
+/**
+ * 纯函数：bundle 行对账（可单测）。规则见文件头注释 —— 官方前缀的行一律保留
+ * （解析锚是 dsh 安装目录），其余行必须在**本次安装后的依赖集**里，否则摘掉。
+ *
+ * `added` 里已经存在的行不重复追加，也不改变它原有的位置。
+ * @param {{previous: string[], dependencies: string[], added: string[], officialPrefix?: string}} input
+ * @returns {{bundles: string[], removed: string[], added: string[]}} added 为真正新登记的行
+ */
+export function reconcileBundleRows({ previous, dependencies, added, officialPrefix = OFFICIAL_BUNDLE_PREFIX }) {
+  const installed = new Set(dependencies)
+  const keep = (name) => String(name).startsWith(officialPrefix) || installed.has(name)
+  const resolvable = previous.filter(keep)
+  return {
+    bundles: [...resolvable.filter((name) => !added.includes(name)), ...added],
+    removed: previous.filter((name) => !resolvable.includes(name)),
+    added: added.filter((name) => !resolvable.includes(name)),
+  }
+}
+
+/**
+ * 按 Node 自己的 node_modules 查找顺序，从 profile 目录解析一个包的根目录。
+ * 与 dsh-app-boot 的 packageDirFromAnchor 同口径（它用 createRequire(anchor).resolve.paths），
+ * 这样这里的判断和宿主启动时的判断不会漂移。
+ * @returns 包的绝对目录，解析不到为 undefined
+ */
+export function packageDirFromProfile(profileRoot, packageName) {
+  let searchPaths
+  try {
+    searchPaths = createRequire(join(profileRoot, 'package.json')).resolve.paths(packageName) ?? []
+  } catch {
+    return undefined
+  }
+  for (const searchPath of searchPaths) {
+    const candidate = join(searchPath, packageName)
+    if (existsSync(join(candidate, 'package.json'))) return candidate
+  }
+  return undefined
+}
+
+/**
+ * 一条 bundle 行能否被宿主当成补丁层加载 —— 复刻 loadProfileDirectory 的三道检查：
+ * 包能解析、声明了 dsh.bundle.patch、该补丁文件存在。任一不过，dsh 下次启动就抛。
+ *
+ * 官方包（@deepseek-ai/*）一律放行：它们的解析锚是 dsh 安装目录，不归本工具链管，
+ * 真解析不到那是 dsh 自己坏了。
+ * @returns {{ok: true, official?: true, dir?: string, patch?: string} | {ok: false, reason: string}}
+ */
+export function inspectBundleRow(profileRoot, packageName) {
+  const name = String(packageName)
+  if (name.startsWith(OFFICIAL_BUNDLE_PREFIX)) return { ok: true, official: true }
+  const dir = packageDirFromProfile(profileRoot, name)
+  if (dir === undefined) return { ok: false, reason: '在 profile 里解析不到（没安装）' }
+  let declared
+  try {
+    declared = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')).dsh?.bundle?.patch
+  } catch (error) {
+    return { ok: false, reason: `package.json 读不了：${String(error?.message ?? error)}` }
+  }
+  if (typeof declared !== 'string' || declared === '') {
+    return { ok: false, reason: '未声明 dsh.bundle.patch（bundle 行只能指向声明了补丁的包）' }
+  }
+  if (!existsSync(join(dir, declared))) {
+    return { ok: false, reason: `补丁文件不存在：${declared}（tarball 里大概率没带上）` }
+  }
+  return { ok: true, dir, patch: declared }
 }
 
 /**
@@ -122,22 +199,31 @@ export function installIntoProfile(options) {
   const overrides = {}
   for (const pkg of packages) overrides[pkg.name] = 'file:' + pkg.file
 
-  if (registerBundles) {
-    const bundleNames = packages.filter((pkg) => pkg.bundle === true).map((pkg) => pkg.name)
-    const previous = manifest.dsh?.profile?.bundles ?? []
-    const installed = new Set(Object.keys(dependencies))
-    const kept = previous.filter((name) => String(name).startsWith(OFFICIAL_BUNDLE_PREFIX) || installed.has(name))
-    manifest.dsh = manifest.dsh ?? {}
-    manifest.dsh.profile = {
-      ...manifest.dsh.profile,
-      bundles: [...kept.filter((name) => !bundleNames.includes(name)), ...bundleNames],
-    }
+  // bundle 行对账：**不受 registerBundles 门控**（见文件头注释）。上面刚把 dependencies 收敛成
+  // 本次安装的形态，这里就必须同步收敛 bundle 行 —— 留着指向没装的包的行 = 留一个下次启动
+  // 必然 fail-loud 的 profile。
+  const reconciled = reconcileBundleRows({
+    previous: manifest.dsh?.profile?.bundles ?? [],
+    dependencies: Object.keys(dependencies),
+    // registerBundles 只决定「要不要新增行」：新增的必须是本次安装且声明了 bundle 补丁的包。
+    added: registerBundles ? packages.filter((pkg) => pkg.bundle === true).map((pkg) => pkg.name) : [],
+  })
+  const bundles = reconciled.bundles
+  for (const name of reconciled.removed) {
+    changes.push(`${name} (bundle 行指向未安装的包 → 移除，留着会让 dsh 下次启动 fail-loud)`)
   }
+  for (const name of reconciled.added) changes.push(`${name} (登记为 bundle 行)`)
+
   manifest.dsh = manifest.dsh ?? { profile: {} }
-  manifest.dsh.profile = { ...manifest.dsh.profile, patchReload: manifest.dsh.profile.patchReload ?? 'live' }
+  manifest.dsh.profile = {
+    ...manifest.dsh.profile,
+    patchReload: manifest.dsh.profile.patchReload ?? 'live',
+    // 原本没有 bundle 行、本次也不登记时保持 undefined，不去凭空写一个空列表。
+    ...(registerBundles || manifest.dsh.profile.bundles !== undefined ? { bundles } : {}),
+  }
 
   if (dryRun) {
-    log(`[dry-run] 将写入 ${paths.manifest}（${packages.length} 个 file: 依赖，bundles=${registerBundles ? '登记' : '不动'}）`)
+    log(`[dry-run] 将写入 ${paths.manifest}（${packages.length} 个 file: 依赖，bundle 行对账后 ${bundles.length} 条${registerBundles ? '，含本次新登记' : ''}）`)
     for (const change of changes) log(`[dry-run]   ${change}`)
     return { profileRoot: paths.profileRoot, dependencies, bundles: manifest.dsh.profile.bundles ?? [], changes }
   }
@@ -166,10 +252,31 @@ export function installIntoProfile(options) {
   run('install --lockfile-only --config.confirmModulesPurge=false')
   run('install --prod --config.confirmModulesPurge=false')
 
+  // 装完按宿主口径复核：前面只能按 dependencies 对账，装不上 / tarball 里没带补丁文件
+  // 这两件事只有落盘后才知道。坏行既不能留下（下次启动必炸），也不能默默吞掉
+  // （用户明确登记过），所以「摘掉坏行保证 profile 能启动」+「抛错让本次安装显式失败」两样都做。
+  const finalBundles = manifest.dsh.profile.bundles ?? []
+  const broken = finalBundles
+    .map((name) => ({ name, verdict: inspectBundleRow(paths.profileRoot, name) }))
+    .filter((row) => row.verdict.ok !== true)
+  if (broken.length > 0) {
+    const survivors = finalBundles.filter((name) => !broken.some((row) => row.name === name))
+    manifest.dsh.profile = { ...manifest.dsh.profile, bundles: survivors }
+    writeFileSync(paths.manifest, JSON.stringify(manifest, null, 2) + '\n')
+    throw new Error(
+      [
+        `已安装的包里有 ${broken.length} 条 bundle 行不能作为补丁层加载，已从 ${paths.manifest} 摘掉：`,
+        ...broken.map((row) => `  - ${row.name}：${row.verdict.reason}`),
+        `保留的 bundle 行：${survivors.join(', ') || '（无）'}`,
+        'profile 现在能启动，但上面这些包不会被加载；修掉包的 dsh.bundle.patch 后重跑安装器即可登记回来。',
+      ].join('\n'),
+    )
+  }
+
   return {
     profileRoot: paths.profileRoot,
     dependencies,
-    bundles: manifest.dsh.profile.bundles ?? [],
+    bundles: finalBundles,
     changes,
   }
 }

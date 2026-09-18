@@ -109,7 +109,14 @@ export function packClosure({ packDir, closure, selected = [], log = console.log
   return packed
 }
 
-/** 产物完整性预检：声明了入口就必须有产物，声明了 dsh.client 就必须有客户端 bundle。 */
+/**
+ * 产物完整性预检：声明了入口就必须有产物，声明了 dsh.client 就必须有客户端 bundle，
+ * 声明了 dsh.bundle.patch 就必须有补丁文件。
+ *
+ * 最后一条是防「bundle 行指向一个补丁文件没打进 tarball 的包」——dsh 的 loadProfileDirectory
+ * 解析得到包之后还会去读 dsh.bundle.patch 指向的文件，缺了就 fail-loud，而那时已经装到
+ * 用户 profile 里了。在这里拦下来比让用户的宿主起不来便宜得多。
+ */
 export function missingArtifacts(closure) {
   const missing = []
   for (const [name, record] of closure) {
@@ -124,6 +131,10 @@ export function missingArtifacts(closure) {
     if (entry !== undefined && !existsSync(join(record.dir, entry))) missing.push(`${name}(${entry})`)
     if (record.pkg.dsh?.client?.platform === 'web' && client !== undefined && !existsSync(join(record.dir, client))) {
       missing.push(`${name}(${client})`)
+    }
+    const bundlePatch = record.pkg.dsh?.bundle?.patch
+    if (typeof bundlePatch === 'string' && !existsSync(join(record.dir, bundlePatch))) {
+      missing.push(`${name}(${bundlePatch} dsh.bundle.patch)`)
     }
   }
   return missing
