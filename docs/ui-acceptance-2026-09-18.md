@@ -142,3 +142,40 @@ ok  复核-产物 宿主加载的是当前产物（插件样式零宿主别名 �
    `node scripts/install-profile.mjs web --no-build` + 重启 `dsh web`（重启会中断当前会话，需用户决定）。
 4. **`prefers-reduced-motion`** 统一 media query 仍待办（SPEC §7）。
 5. `dev-harness/` 下 4 个未跟踪探针脚本（`panel-sweep*.mjs` / `probe*.mjs`）仍是上轮遗留，本轮未动。
+
+---
+
+## 8. 复核后补修（P1）：价格动作后 `priceBusy` 不复位
+
+**发现**：2026-09-18 workspace review 轮跑真宿主验收得到 **60/61、退出码 1**，唯一 FAIL 是
+「复核遗留 #2：无覆盖层时「还原」禁用并给出原因（含 aria-describedby）」。
+
+**现象**（CDP 实测 3997）：点一次「更新价格表」后，「更新价格表」与「还原到发版快照」两枚按钮
+disabled **≥29s**，`aria-describedby` / 原因文案 / `aria-busy` 全空，切子页签不恢复（须整页刷新）；
+同时脚注显示「上次同步 更新于 0 分钟前」—— **写操作其实成功了**。
+
+**根因**：`dsh-finance-client` 的 `FinancePanelController.runPriceAction` 成功路径里
+`await this.load()`，而 `load()` 自己 `++this.generation`；`finally` 的守卫
+`if (generation === this.generation)` 因此**恒为假**，`priceBusy` 永不复位。
+失败路径因为提前 `return`（generation 未变）反而正常 —— 只有成功会泄漏。
+
+**修法**：`finally` 里**原地复位** `priceBusy`（动作结束即业务结束，与快照代次无关）。
+
+**防线**：`packages/dsh-finance-client/tests/controller.test.ts` 新增两例 ——
+「价格动作结束后 priceBusy 必须复位」（update → restore 连做）与
+「失败时同样复位并把失败写进 priceError」。修前实测该断言 FAIL（`priceBusy` 停在 true，无需网络即可复现）。
+
+**验收证据（补修轮）**：
+
+| 面 | 结果 |
+|---|---|
+| `pnpm -r build` / `typecheck` / `test` | 退出码 0（finance-client 60 例，含新增 2 例） |
+| `pnpm check:all` | PASS（架构 0 硬失败 · 价格 0 处 · 对比度 156 项 0 不达标 · token 0 失效 · 版本 0 漏 bump） |
+| `pnpm preview:verify` | 117/117 |
+| `pnpm sandbox:install` + 重启宿主 + `real-host-check` | **62/62，退出码 0**，控制台 0 告警；6i 本轮走到二次确认分支 `{"opened":true,"modal":{"title":"还原到发版快照？","confirm":true}}` |
+
+**遗留（本轮未动）**：6i 断言仍把「busy 禁用」与「无覆盖层禁用」混为一谈 —— 修好后不再误报，
+但建议后续拆成 `aria-busy`（进行中）与 `aria-describedby`（不可用原因）两条；
+沙箱 `.dev/home` 是持久化的，同一 commit 两次运行可能走不同分支，验收前建议 `pnpm sandbox:reset`。
+
+**版本**：`dsh-spark-finance-client` 0.5.10 → **0.5.11**。

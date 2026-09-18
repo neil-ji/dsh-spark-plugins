@@ -205,6 +205,29 @@ describe('FinancePanelController', () => {
     expect(remote.syncCommunityPrices).toHaveBeenCalledWith({})
   })
 
+  it('价格动作结束后 priceBusy 必须复位（成功路径不得永久禁用两枚价格按钮）', async () => {
+    // 回归：runPriceAction 成功时会 await this.load()，而 load() 自己 ++generation；
+    // 若 finally 用动作开始时的 generation 做守卫，priceBusy 就永远停在 true，
+    // 「更新价格表」「还原到发版快照」两枚按钮从此 disabled 且不给原因（UI-UX-SPEC §3.1）。
+    const controller = new FinancePanelController(fakeRemote() as never)
+    await controller.load()
+    expect(controller.store.getSnapshot().priceBusy).toBe(false)
+    await controller.updatePrices()
+    expect(controller.store.getSnapshot().priceBusy).toBe(false)
+    await controller.restorePrices()
+    expect(controller.store.getSnapshot().priceBusy).toBe(false)
+  })
+
+  it('价格动作失败时同样复位 priceBusy，并把失败写进 priceError', async () => {
+    const remote = fakeRemote({ syncCommunityPrices: vi.fn().mockResolvedValue({ ok: false, error: { message: 'sync down' } }) })
+    const controller = new FinancePanelController(remote as never)
+    await controller.load()
+    await controller.updatePrices()
+    const state = controller.store.getSnapshot()
+    expect(state.priceBusy).toBe(false)
+    expect(state.priceError).toBe('sync down')
+  })
+
   it('records the last successful community sync for the price footnote', async () => {
     const remote = fakeRemote({ getPriceTableStatus: vi.fn().mockResolvedValue({ ok: true, value: { ...STUB_PRICE_TABLE, overlay: { source: 'models.dev', appliedAt: 123, kept: 1, providers: [], fx: 7.2 } } }) })
     const controller = new FinancePanelController(remote as never)

@@ -251,7 +251,11 @@ export class FinancePanelController {
         this.store.update((state) => { state.priceError = error instanceof Error ? error.message : String(error) })
       }
     } finally {
-      if (generation === this.generation) this.store.update((state) => { state.priceBusy = false })
+      // priceBusy 必须**原地复位**，不能用上面 load 的代次守卫：成功路径里 `await this.load()`
+      // 自己会 ++generation（见 load()），守卫恒为假 —— 于是「更新一次价格表」之后两枚价格按钮
+      // 永久 disabled 且不给原因（2026-09-18 真宿主实测 ≥29s 不复位，切页签也不恢复，违反
+      // UI-UX-SPEC §3.1「禁用必须给原因」）。动作结束即业务结束，与快照代次无关。
+      this.store.update((state) => { state.priceBusy = false })
     }
   }
 
