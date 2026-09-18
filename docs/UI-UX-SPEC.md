@@ -165,6 +165,15 @@
 - 模块一律调 kit `publishAnnouncement({ mood, text, src })`（mood：happy/alert/think/sad/cheer），**禁止模块自建气泡 / 直接写 aria-live 节点**。
 - 壳（fairy 层）统一渲染气泡；kit 4s 去重防事件风暴；baseline 帧不播报（防重连误报）。
 
+### 3.5 表格通用规则（Table，2026-09-19 全插件生效）
+- **Action 列**：某行的操作 **>1 项时必须收敛为「…」下拉菜单**（kit `RowActions` = ellipsis
+  触发钮 + `Menu`），禁止把一排按钮/分段控件平铺在行尾——行尾空间是表格最稀缺的资源
+  （finance 本月页：打标 + 编辑 + 删除三操作全部进菜单，先例）。
+  单一操作可以保留行内控件；菜单触发钮必须有 `aria-label`（"操作：{行名}"式可访问名）。
+- **文本列**：单元格文本**允许换行，但最多两行**，超出截断（kit `CellText`，
+  `-webkit-line-clamp: 2`）；**必须提供悬浮全文**（原生 `title` 即可）。
+  禁止单行 `nowrap + ellipsis` 截掉换行信息，也禁止无上限的长文本撑破列宽。
+
 ---
 
 ## 4. 页面与布局规范
