@@ -130,7 +130,7 @@ export function ThisMonthView({
   const planEntries = [...plans]
   // 两池分类（SPEC §5.4，2026-09-19 修订）：订阅 / 按量。生效计费方式 = 显式标记 > 已有月费条目 > 宿主默认。
   // 待选池已退役：未打标且无宿主元数据的厂商按宿主默认（无则 metered）直接落入按量池；
-  // free 打标者不进任何池（零成本无呈现），可随时经「…」菜单改标。
+  // free 收归订阅计划卡呈现（强制月费 0，SPEC §5.4），可随时经「…」菜单改标。
   const knownProviders = [...new Set([
     ...ledger.byProvider.map((row) => row.provider),
     ...planEntries.map((plan) => plan.provider),
@@ -140,19 +140,26 @@ export function ThisMonthView({
   const providerRowOf = new Map(allProviders.map((row) => [providerKey(row.provider), row]))
   const supportsFetch = (provider: string): boolean =>
     providerRowOf.get(providerKey(provider))?.hostMeta?.supportsBalanceFetch === true
-  const planPool = knownProviders.filter((provider) => billingFor(provider) === 'plan')
+  // 订阅池 = plan + free（free 是「月费为 0 的订阅」）；按量池 = metered。
+  const isPlanSide = (provider: string): boolean => {
+    const mode = billingFor(provider)
+    return mode === 'plan' || mode === 'free'
+  }
+  const planPool = knownProviders.filter(isPlanSide)
   const meteredPool = knownProviders.filter((provider) => billingFor(provider) === 'metered')
   /** Action 列「…」菜单（UI-UX-SPEC §3.5）：操作 >1 项必须收敛进下拉。 */
   const modeMenuId = (mode: FinanceProviderBillingMode): string => `mode:${mode}`
   const menuItems = (provider: string, kind: 'plan' | 'metered') => {
+    const mode = billingFor(provider)
     const existing = planEntries.find((plan) => plan.provider === provider)
-    const items = BILLING_MODES.map((mode) => ({ id: modeMenuId(mode), label: billingLabel(mode, t) }))
-    if (kind === 'plan') {
+    const items = BILLING_MODES.map((m) => ({ id: modeMenuId(m), label: billingLabel(m, t) }))
+    if (kind === 'plan' && mode === 'plan') {
+      // free 行月费强制 0：不提供月费编辑 / 移除（改标即可离开）。
       items.push(
         { id: 'edit-plan', label: existing === undefined ? t('planFill') : t('planEdit') },
         ...(existing !== undefined ? [{ id: 'remove-plan', label: t('planRemove') }] : []),
       )
-    } else {
+    } else if (kind === 'metered') {
       items.push({ id: 'edit-balance', label: t('manualBalanceLabel') })
     }
     return items
@@ -224,18 +231,23 @@ export function ThisMonthView({
                 {planPool.length === 0
                   ? <p className={css.hint}>{t('planEmpty')}</p>
                   : planPool.map((provider) => {
+                    const mode = billingFor(provider)
+                    const isFree = mode === 'free'
                     const insight = planByProvider.get(provider)
                     const existing = planEntries.find((plan) => plan.provider === provider)
                     const open = editing === provider
-                    const savings = insight?.savingsMicros
+                    const savings = isFree ? undefined : insight?.savingsMicros
                     return (
                       <div key={provider} className={css.group}>
                         <div className={cx(css.tableRow, css.colsPlan)} data-testid={`finance-plan-${provider}`}>
                           <span className={cx(css.cell, css.balanceName)}>
-                              <CellText text={provider} />
-                            </span>
+                            <CellText text={provider} />
+                          </span>
                           <span className={cx(css.cell, css.cellNum)}>
-                            {insight === undefined ? '—' : <Money micros={insight.monthlyMicros} currency={insight.currency} exact />}
+                            {/* free 强制月费 0（SPEC §5.4）；其余显示已填套餐或「—」。 */}
+                            {isFree
+                              ? <Money micros={0} currency={currency} exact />
+                              : insight === undefined ? '—' : <Money micros={insight.monthlyMicros} currency={insight.currency} exact />}
                           </span>
                           <span className={cx(css.cell, css.cellNum)}>
                             {savings === undefined
@@ -251,12 +263,12 @@ export function ThisMonthView({
                           <span className={css.planActions}>
                             {/* Action 列「…」菜单（UI-UX-SPEC §3.5）：打标/编辑/移除收敛进下拉。 */}
                             {!plansWritable || billingLocked.has(providerKey(provider))
-                              ? <span className={css.tagMuted}>{billingLabel('plan', t)}</span>
+                              ? <span className={css.tagMuted}>{billingLabel(mode, t)}</span>
                               : (
                                 <RowActions
                                   label={`${t('actionsMenu')}: ${provider}`}
                                   items={menuItems(provider, 'plan')}
-                                  selectedId={modeMenuId('plan')}
+                                  selectedId={modeMenuId(mode)}
                                   onSelect={(id) => onMenuSelect(provider, 'plan', id)}
                                 />
                               )}

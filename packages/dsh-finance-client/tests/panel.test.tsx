@@ -249,6 +249,42 @@ describe('finance views', () => {
     expect(withPlan).toContain('superValue')
   })
 
+  it('free 厂商收归订阅卡：强制月费 0、不给节省列与月费编辑入口', () => {
+    const freeProviders: FinanceListProvidersResult = {
+      generatedAt: 1,
+      providers: [
+        {
+          provider: 'free-guy',
+          sources: ['ledger-observed'],
+          userEntry: { provider: 'free-guy', billingMode: 'free', totalPriceMicros: 0 },
+          balance: { status: 'unsupported', provider: 'free-guy' },
+        },
+      ],
+    }
+    const html = renderToStaticMarkup(createElement(ThisMonthView, {
+      ledger: LEDGER,
+      providerList: freeProviders,
+      t,
+      refreshProvider: async () => {},
+      plans: [],
+      plansWritable: true,
+      savePlan: async () => {},
+      removePlan: async () => {},
+      refreshing: false,
+      onRefresh: () => {},
+      lastSyncAppliedAt: undefined,
+      onSetBillingMode: async () => {},
+      onTagProvider: async () => {},
+    }))
+    // free 进订阅计划卡（不是按量卡），月费强制 0
+    expect(html).toContain('finance-plan-free-guy')
+    expect(html).not.toContain('finance-metered-free-guy')
+    // 月费列强制 0（¥0.00），节省列无比较意义
+    expect(html).toContain('¥0.00')
+    // 不提供月费编辑/移除入口（改标即可离开）
+    expect(html).not.toContain('finance-plan-form-free-guy')
+  })
+
   it('设置只读时套餐卡明确说明不能改，且不给编辑入口', () => {
     const html = renderToStaticMarkup(createElement(ThisMonthView, {
       ledger: LEDGER,
