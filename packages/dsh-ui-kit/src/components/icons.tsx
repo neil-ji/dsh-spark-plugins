@@ -21,6 +21,7 @@ import * as ChevronLeftModule from 'lucide-react/dist/esm/icons/chevron-left.mjs
 import * as ChevronRightModule from 'lucide-react/dist/esm/icons/chevron-right.mjs';
 import * as ChevronUpModule from 'lucide-react/dist/esm/icons/chevron-up.mjs';
 import * as CircleDollarSignModule from 'lucide-react/dist/esm/icons/circle-dollar-sign.mjs';
+import * as EllipsisModule from 'lucide-react/dist/esm/icons/ellipsis.mjs';
 import * as GitBranchModule from 'lucide-react/dist/esm/icons/git-branch.mjs';
 import * as GitForkModule from 'lucide-react/dist/esm/icons/git-fork.mjs';
 import * as PackageModule from 'lucide-react/dist/esm/icons/package.mjs';
@@ -78,6 +79,7 @@ export const IconSparkles = icon(SparklesModule);
 export const IconDollar = icon(CircleDollarSignModule);
 export const IconGithub = icon(GitForkModule);
 export const IconPackage = icon(PackageModule);
+export const IconEllipsis = icon(EllipsisModule);
 
 // ---- 遗留命名（0.3.x）：手绘 SVG Outline 集合已移除，名称保留指向新图标。
 /** @deprecated 改用 IconChevronDown */

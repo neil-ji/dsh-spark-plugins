@@ -1,0 +1,10 @@
+.wrap {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* 触发钮收窄为方形图标钮：Action 列只留「…」本身，不再占文案宽度。 */
+.trigger {
+  padding-inline: 8px;
+  min-width: 28px;
+}

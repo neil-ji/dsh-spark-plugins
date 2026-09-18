@@ -1,0 +1,9 @@
+.cellText {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--cell-lines, 2);
+  line-clamp: var(--cell-lines, 2);
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}

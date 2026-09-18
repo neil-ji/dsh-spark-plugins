@@ -36,6 +36,9 @@ export { Card, type CardProps } from './components/Card.tsx'
 export { EmptyState, type EmptyStateProps } from './components/EmptyState.tsx'
 
 export { Menu, type MenuProps, type MenuItem } from './components/Menu.tsx'
+// 表格通用件（UI-UX-SPEC §3.5）：Action 列「…」下拉 + 文本列两行截断
+export { RowActions, type RowActionsProps, type RowActionsItem } from './components/RowActions.tsx'
+export { CellText, type CellTextProps } from './components/CellText.tsx'
 
 // 浮层与反馈
 export { Modal, type ModalProps } from './components/Modal.tsx'
@@ -57,7 +60,7 @@ export { Sparkline, type SparklineProps } from './components/Sparkline.tsx'
 // 图标：lucide-react 驱动的工作区唯一图标层（规范见 components/icons.tsx 头注释）
 export {
   IconBranch, IconChevronDown, IconChevronLeft, IconChevronRight, IconChevronUp,
-  IconDollar, IconEdit, IconGithub, IconPackage, IconPlus, IconSparkles,
+  IconDollar, IconEdit, IconEllipsis, IconGithub, IconPackage, IconPlus, IconSparkles,
   IconThink, IconTrash, IconWarning, type IconProps,
 } from './components/icons.tsx'
 
