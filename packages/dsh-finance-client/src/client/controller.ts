@@ -192,10 +192,10 @@ export class FinancePanelController {
   }
 
   /**
-   * 待定池打标（SPEC §5.4）：订阅带月费走 plans 写入，按量带手动余额走
-   * providers 条目写入；写完重拉账本与余额刷新三池归属。
+   * 打标（SPEC §5.4 两池）：订阅带月费走 plans 写入，按量带手动余额走
+   * providers 条目写入；写完重拉账本与余额刷新两池归属。
    */
-  async tagPendingProvider(provider: string, patch: FinanceProviderEntryPatch, monthlyPlan?: FinancePlanEntry): Promise<void> {
+  async tagProvider(provider: string, patch: FinanceProviderEntryPatch, monthlyPlan?: FinancePlanEntry): Promise<void> {
     if (this.seam === undefined) return
     await this.seam.writeProviderEntry(provider, patch)
     if (patch.mode === 'plan' && monthlyPlan !== undefined) await this.savePlan(monthlyPlan)

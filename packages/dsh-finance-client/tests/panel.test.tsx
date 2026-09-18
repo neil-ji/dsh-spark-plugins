@@ -114,7 +114,7 @@ const PROVIDERS: FinanceListProvidersResult = {
       balance: { status: 'ok', provider: 'deepseek-official', totalMicros: 128_000_000, currency: 'CNY', fetchedAt: 1 },
     },
     {
-      // 有余额接口的第二家：按量付费卡才会列它（无接口的整行不显示）
+      // 第二家：按量付费卡列它（两池化后所有 metered 厂商都进本卡，SPEC §5.4 修订）
       provider: 'a',
       sources: ['ledger-observed'],
       hostMeta: { defaultBillingMode: 'metered', defaultCurrency: 'CNY', supportsBalanceFetch: true },
@@ -223,10 +223,10 @@ describe('finance views', () => {
       lastSyncAppliedAt: undefined,
       onSetBillingMode: async () => {},
     }))
-    // 按量付费卡：有余额接口的 a 显示；无接口的 b 整行不显示
+    // 按量付费卡：a、b 都进本卡（待选池已退役，未打标默认按量）；操作收敛为「…」菜单
     expect(noPlan).toContain('finance-metered-a')
-    expect(noPlan).not.toContain('finance-metered-b')
-    expect(noPlan).toContain('billingMark: a')
+    expect(noPlan).toContain('finance-metered-b')
+    expect(noPlan).toContain('actionsMenu: a')
     // 订阅计划卡此时为空态，且不再默认摆出「填月费」
     expect(noPlan).toContain('planEmpty')
     expect(noPlan).not.toContain('planFill')

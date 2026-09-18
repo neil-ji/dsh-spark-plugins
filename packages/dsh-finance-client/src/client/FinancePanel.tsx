@@ -31,8 +31,8 @@ export interface FinancePanelInjected {
   removePlan: (provider: string) => Promise<void>
   /** 计费方式标记：订阅 / 按量 / 免费（provider 级）。 */
   setBillingMode: (provider: string, mode: FinanceProviderBillingMode) => Promise<void>
-  /** 待定池打标（SPEC §5.4）：计费方式 + 手动余额 / autoFetch + 可选月费条目。 */
-  tagPendingProvider: (
+  /** 打标（SPEC §5.4 两池）：计费方式 + 手动余额 / autoFetch + 可选月费条目。 */
+  tagProvider: (
     provider: string,
     patch: FinanceProviderEntryPatch,
     plan?: FinancePlanEntry,
@@ -126,7 +126,7 @@ export function FinancePanel(props: FinancePanelInjected): ReactNode {
               savePlan={props.savePlan}
               removePlan={props.removePlan}
               onSetBillingMode={props.setBillingMode}
-              onTagPending={props.tagPendingProvider}
+              onTagProvider={props.tagProvider}
               refreshing={state.status === 'loading'}
               onRefresh={props.refresh}
               lastSyncAppliedAt={state.lastSyncAppliedAt}
