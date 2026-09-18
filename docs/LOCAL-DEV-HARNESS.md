@@ -586,6 +586,8 @@ pnpm sandbox:reset     # 删除 .dev/home
 | `dev-harness/dev-plugin/index.js` | 控制平面插件（`/__dev/*`），只由沙箱 home 补丁挂载 |
 | `dev-harness/dev-plugin/panel.html` | 控制面板页面（零依赖、单文件） |
 | `dev-harness/scenarios/index.mjs` | 场景注册表（线 1/线 2 共用）：ping / entries / client-graph / touch-client-bundle / touch-host-bundle / restore-artifacts / clear-storage / write-fixture |
+| `dev-harness/finance-panel-shots.mjs` | 财务专项走查：四个决策视图逐个点开 + 截图 + 报告（`pnpm shots:finance`） |
+| `dev-harness/panel-sweep.mjs` | 全模块 × 全子视图走查：PC-QA 视觉证据集（`pnpm shots:panels`） |
 
 ### 9.3 验收矩阵现状
 
@@ -628,7 +630,26 @@ profile 的 `node_modules`（Windows 上混用 junction 与拷贝会让 pnpm 在
 一个包失败会中断整轮，其它包的 `lib/` 已被删却未重建。`pnpm sandbox:list` 的 `host✗` 能一眼看出来，
 用 `pnpm --filter <pkg> build` 逐个补齐；`dev-profile install` 也会在产物不全时提前报错。
 
-### 9.5 下一步
+### 9.5 走查工具（视觉证据生成）
+
+`preview:verify` / `real-host-check` 断言「对不对」；走查工具产出「长什么样」的证据集，供 PC-QA
+视觉评审使用。两者都是 CDP 驱动 headless Edge，**本机（Windows）专用，不进 CI**。
+
+```bash
+pnpm sandbox:up                                   # 真宿主（先 pnpm sandbox:install）
+pnpm shots:finance                                # 财务四个决策视图 → .dev/finance-shots/run
+pnpm shots:panels                                 # 全模块 × 全子视图 → .dev/panel-sweep/run
+node dev-harness/panel-sweep.mjs --url "<sandbox:up 当次打印的带 token 地址>" --out .dev/panel-sweep/run2
+```
+
+- 产物：`<out>/*.png`（面板本体，scale 2）+ `<out>/report.json`（模块清单、每个视图的 pane 文本、
+  控制台条目按「当时在哪个视图」归属）。
+- 子视图发现是**启发式**：`.dock-embed` 内可见、命中测试（`elementFromPoint`）通过、文本 ≤12 字的按钮
+  都算一个子视图 —— 「刷新」这类小按钮会多留一张图，**不要拿它的数量当断言**，断言归 `real-host-check.mjs`。
+- 坑：`.dev/state.json` 的 url/token 在宿主重启后失效，缺省 url 可能打不开面板（表现为
+  「dsh web authentication required」），用 `sandbox:up` 当次打印的地址最稳。
+
+### 9.6 下一步
 
 - P3：dsh 版本矩阵（沙箱 + 指定 dsh 版本 + 同一套断言）
 - 仅在确需 React Fast Refresh 时才把线 1 升级为 Vite harness；线 1 的**组件级预览已落地**（§2.6），永久排除在验收门之外
