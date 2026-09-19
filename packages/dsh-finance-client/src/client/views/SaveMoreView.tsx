@@ -96,9 +96,8 @@ export function SaveMoreView({ ledger, tiers, t }: SaveMoreViewProps): ReactNode
           ? <p className={css.hint} data-testid="finance-context-empty">{t('contextNoData')}</p>
           : (
             <div className={css.table} data-testid="finance-context-card">
-              <div className={`${css.tableHead} ${css.colsModels}`}>
+              <div className={`${css.tableHead} ${css.colsContext}`}>
                 <span className={css.cell}>{t('colModel')}</span>
-                <span className={css.cell}>{t('colProvider')}</span>
                 <span className={css.cell} title={t('contextCardHint')}>{t('colContextShare')}</span>
                 <span className={css.cell} title={t('contextNote')}>{t('colSavingUpper')}</span>
               </div>
@@ -108,9 +107,11 @@ export function SaveMoreView({ ledger, tiers, t }: SaveMoreViewProps): ReactNode
                 const profile = contextProfile(buckets, CONTEXT_SHARE_CEILING)
                 const estimate = splitEstimate(buckets, modelTiers)
                 return (
-                  <div className={`${css.tableRow} ${css.colsModels}`} key={`context:${row.modelKey}`} data-testid={`finance-context-${row.modelKey}`}>
-                    <span className={`${css.cell} ${css.modelKey} ${css.cellWrap}`} title={row.modelKey}>{row.model}</span>
-                    <span className={css.cell}>{row.provider}</span>
+                  <div className={`${css.tableRow} ${css.colsContext}`} key={`context:${row.modelKey}`} data-testid={`finance-context-${row.modelKey}`}>
+                    {/* 模型 + 厂商合并为一列 provider/model：可换行、两行截断、悬浮全文。 */}
+                    <span className={`${css.cell} ${css.modelKey} ${css.clamp2}`} title={`${row.provider}/${row.model}`}>
+                      {row.provider}/{row.model}
+                    </span>
                     <span className={`${css.cell} ${css.cellWrap}`}>{t('contextAboveShare', { pct: formatPercent(profile.shareAbove) })}</span>
                     <span className={`${css.cell} ${css.cellWrap}`}>
                       {estimate === null

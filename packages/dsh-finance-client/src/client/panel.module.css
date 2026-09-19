@@ -99,6 +99,20 @@
   grid-template-columns: minmax(120px, 2fr) minmax(88px, 1fr) minmax(96px, 1fr) minmax(96px, 1fr);
 }
 
+/* 拆分会话表：provider/model | 界外输入 | 上限可省（模型厂商已并入第一列） */
+.colsContext {
+  grid-template-columns: minmax(160px, 1.4fr) minmax(110px, 1fr) minmax(140px, 1.2fr);
+}
+
+/* provider/model 两行截断：超出两行省略号，悬浮 title 看全文。 */
+.clamp2 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
 .colsBalance {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr) auto;
 }
