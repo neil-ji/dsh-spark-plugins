@@ -343,7 +343,6 @@ export function ThisMonthView({
           </>
         )}
 
-      <div className={css.footer}>
         {/* 破坏性操作二次确认（UI-UX-SPEC §4.2 模板 4「危险区 … danger Button + 二次确认（Modal）」）。
             文案走 locale；Modal 自己负责焦点圈闭，Esc 由它这层接管（不会连带收掉指挥舱）。 */}
         <Modal
@@ -396,23 +395,29 @@ export function ThisMonthView({
             />
           )
           : null}
-        {priceTable?.base.ok === false
-          ? <p className={css.footerNote} role="status">{t('priceTampered')}</p>
-          : null}
-        {priceTable !== undefined && priceTable.rejected.length > 0
+        {/* 页脚只剩异常态提示：没有可说的就不渲染（无意义的分割线也不给）。 */}
+        {priceTable?.base.ok === false || (priceTable !== undefined && priceTable.rejected.length > 0) || priceError != null
           ? (
-            <p className={css.footerNote} role="status">
-              {t('priceRejected', { count: priceTable.rejected.length, keys: priceTable.rejected.map(row => row.key).join(', ') })}
-            </p>
+            <div className={css.footer}>
+              {priceTable?.base.ok === false
+                ? <p className={css.footerNote} role="status">{t('priceTampered')}</p>
+                : null}
+              {priceTable !== undefined && priceTable.rejected.length > 0
+                ? (
+                  <p className={css.footerNote} role="status">
+                    {t('priceRejected', { count: priceTable.rejected.length, keys: priceTable.rejected.map(row => row.key).join(', ') })}
+                  </p>
+                )
+                : null}
+              {priceError != null
+                ? <p className={css.footerNote} role="status">{t('priceActionFailed', { message: priceError })}</p>
+                : null}
+            </div>
           )
           : null}
-        {priceError != null
-          ? <p className={css.footerNote} role="status">{t('priceActionFailed', { message: priceError })}</p>
-          : null}
-      </div>
-    </>
-  )
-}
+      </>
+    )
+  }
 
 /** 计费方式标签（面板只暴露三态；宿主回落的 mixed 归到按量展示）。 */
 export function billingLabel(mode: FinanceProviderBillingMode, t: FinanceTranslate): string {
