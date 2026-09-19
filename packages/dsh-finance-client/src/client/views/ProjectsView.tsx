@@ -40,7 +40,6 @@ export function ProjectsView({ ledger, plans, t }: ProjectsViewProps): ReactNode
   if (current !== undefined) {
     return <ProjectDetail row={current} ledger={ledger} currency={currency} t={t} onBack={() => setSelected(null)} />
   }
-
   return (
     <Card title={t('projectsTitle')} className={css.section}>
       <div className={css.table} data-testid="finance-projects">
@@ -67,13 +66,8 @@ export function ProjectsView({ ledger, plans, t }: ProjectsViewProps): ReactNode
               <span className={css.detailText}>{t('projectSessions', { count: row.sessionCount })}</span>
             </span>
             <span className={cx(css.cell, css.cellNum)}>
-              {/* 合并渲染：合计主行 + 按量/订阅估价拆分副行。 */}
-              <span><Money micros={row.totalMicros} currency={currency} exact /></span>
-              <span className={css.detailText}>
-                {t('consumeMetered')} <Money micros={row.meteredMicros} currency={currency} exact />
-                {' · '}
-                {t('planEstimateShort')} <Money micros={row.planEstimateMicros} currency={currency} exact />
-              </span>
+              {/* 列表只给总成本；按量/订阅估价拆分进详情看。 */}
+              <Money micros={row.totalMicros} currency={currency} exact />
             </span>
             <span className={cx(css.cell, css.cellNum)}>{row.totalTokens.toLocaleString()}</span>
             <span className={cx(css.cell, css.cellNum)}>{formatDuration(row.durationSeconds, t)}</span>
@@ -85,7 +79,7 @@ export function ProjectsView({ ledger, plans, t }: ProjectsViewProps): ReactNode
 }
 
 function ProjectDetail({ row, ledger, currency, t, onBack }: {
-  row: { workspaceId: string | null; title: string }
+  row: { workspaceId: string | null; title: string; meteredMicros: number; planEstimateMicros: number; totalMicros: number }
   ledger: FinanceLedger
   currency: string
   t: FinanceTranslate
@@ -106,6 +100,16 @@ function ProjectDetail({ row, ledger, currency, t, onBack }: {
       }
       className={css.section}
     >
+      {/* 消耗拆分（列表只显示总额；按量/订阅估价在这里看）。 */}
+      <div className={css.projectCostSplit} data-testid="finance-project-cost-split" title={t('projectCostHint')}>
+        <span className={css.detailText}>
+          {t('consumeMetered')} <Money micros={row.meteredMicros} currency={currency} exact />
+          {' · '}
+          {t('planEstimateShort')} <Money micros={row.planEstimateMicros} currency={currency} exact />
+          {' · '}
+          {t('colCost')} <Money micros={row.totalMicros} currency={currency} exact />
+        </span>
+      </div>
       <div className={css.section} data-testid="finance-project-detail">
         <p className={css.hint}>{t('projectTrendTitle', { title })}</p>
         {/* 数据不足（<2 天）画不出趋势：给空占位而不是一块空白画布。 */}
