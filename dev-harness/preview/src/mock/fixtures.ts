@@ -322,7 +322,10 @@ export const FINANCE_BASE_CONFIG = {
   prices: {},
   /**
    * context 阶梯价（P2，可选）：只给部分模型填 —— 预览画布因此能同时看到
-   * "有阶梯价 → 给上限估算"和"没填 → 拆分不改变单价"两种形态。
+   * 三种形态：
+   * 1. 旧形状（裸数组）→ 给上限估算；
+   * 2. 没填 → 「拆分不改变单价」；
+   * 3. 新形状 + 币种不匹配（tencent 的模型按 USD 报价，账本按 CNY）→ 不换算、明说原因。
    */
   tiers: {
     'deepseek/deepseek-v4.1-flash': [
@@ -330,10 +333,20 @@ export const FINANCE_BASE_CONFIG = {
       { maxPromptTokens: 128_000, inputMicrosPerMtok: 4_000_000, cacheReadMicrosPerMtok: 400_000, outputMicrosPerMtok: 16_000_000 },
       { maxPromptTokens: 0, inputMicrosPerMtok: 8_000_000, cacheReadMicrosPerMtok: 800_000, outputMicrosPerMtok: 32_000_000 },
     ],
-    'deepseek/deepseek-reasoner': [
-      { maxPromptTokens: 128_000, inputMicrosPerMtok: 3_000_000, cacheReadMicrosPerMtok: 300_000, outputMicrosPerMtok: 12_000_000 },
-      { maxPromptTokens: 0, inputMicrosPerMtok: 6_000_000, cacheReadMicrosPerMtok: 600_000, outputMicrosPerMtok: 24_000_000 },
-    ],
+    // 新形状 + 错峰折扣：金额旁会带出「已按错峰折扣缩放」。
+    'deepseek/deepseek-reasoner': {
+      currency: 'CNY',
+      offPeakDiscount: 0.5,
+      tiers: [
+        { maxPromptTokens: 128_000, inputMicrosPerMtok: 3_000_000, cacheReadMicrosPerMtok: 300_000, outputMicrosPerMtok: 12_000_000 },
+        { maxPromptTokens: 0, inputMicrosPerMtok: 6_000_000, cacheReadMicrosPerMtok: 600_000, outputMicrosPerMtok: 24_000_000 },
+      ],
+    },
+    // 币种不匹配：档位按 USD 计价，账本按 CNY → 面板不换算，只说明没计入。
+    'tencent/deepseek-reasoner': {
+      currency: 'USD',
+      tiers: [{ maxPromptTokens: 128_000, inputMicrosPerMtok: 500_000, outputMicrosPerMtok: 2_000_000 }],
+    },
   },
   providers: [
     { provider: 'deepseek', billingMode: 'metered', currency: 'CNY', totalPriceMicros: 0, autoFetchBalance: true },

@@ -14,6 +14,15 @@ import type { FinancePanelState } from '../src/client/controller.ts'
 /** 取词直接回 key：断言渲染结构，不断言文案（文案归 locale）。 */
 const t = ((key: string) => key) as unknown as FinanceTranslate
 
+/**
+ * 截出「上限可省」那一格的内容：卡片别处（峰谷 / 缓存卡）也渲染 `estimateTag`，
+ * 所以断言"没有出金额"必须限定在上下文表的成本格里。
+ */
+const contextCells = (html: string): string => {
+  const cells = [...html.matchAll(/data-testid="finance-context-cost-[^"]*"[^>]*>([\s\S]*?)<\/span><\/div>/g)]
+  return cells.map((match) => match[1]).join('')
+}
+
 const buckets = (input: number, cacheRead: number, cacheWrite: number, output: number): FinanceTokenBuckets => ({
   uncachedInputTokens: input,
   cacheReadTokens: cacheRead,
@@ -383,10 +392,17 @@ describe('finance views', () => {
   })
 
   it('拆分卡：有上下文分布 + 阶梯价时给出上限估算，没阶梯价时明说拆分不改变单价', () => {
+    const group = {
+      key: 'acme/llm',
+      modelKey: 'acme/llm',
+      currency: 'CNY',
+      offPeakDiscount: 1,
+      // 最小档 128k：把长上下文逐步压进这一档的费率
+      tiers: [{ maxPromptTokens: 128_000, inputMicrosPerMtok: 1_000_000, outputMicrosPerMtok: 4_000_000 }],
+    }
     const withTiers = renderToStaticMarkup(createElement(SaveMoreView, {
       ledger: LEDGER,
-      // 最小档 128k：把长上下文逐步压进这一档的费率
-      tiers: { 'acme/llm': [{ maxPromptTokens: 128_000, inputMicrosPerMtok: 1_000_000, outputMicrosPerMtok: 4_000_000 }] },
+      tiers: { 'acme/llm': [group] },
       t,
     }))
     expect(withTiers).toContain('finance-context-card')
@@ -396,6 +412,60 @@ describe('finance views', () => {
     const withoutTiers = renderToStaticMarkup(createElement(SaveMoreView, { ledger: LEDGER, tiers: {}, t }))
     expect(withoutTiers).toContain('finance-context-card')
     expect(withoutTiers).toContain('contextNoTiers')
+  })
+
+  it('拆分卡：币种不匹配的阶梯价不参与估算（宁可不算，不可算错）', () => {
+    const usdGroup = {
+      key: 'acme/llm#USD',
+      modelKey: 'acme/llm',
+      suffix: 'USD',
+      currency: 'USD',
+      offPeakDiscount: 1,
+      tiers: [{ maxPromptTokens: 128_000, inputMicrosPerMtok: 1_000_000, outputMicrosPerMtok: 4_000_000 }],
+    }
+    // 账本币种是 CNY，档位按 USD 计价 → 不给金额，只说明原因。
+    const html = renderToStaticMarkup(createElement(SaveMoreView, {
+      ledger: { ...LEDGER, currency: 'CNY' },
+      tiers: { 'acme/llm': [usdGroup] },
+      t,
+    }))
+    expect(html).toContain('finance-context-cost-acme/llm')
+    expect(html).toContain('contextCurrencyMismatch')
+    // 上下文那一格**没有**出金额（页面别处（峰谷/缓存卡）的 estimateTag 不算）。
+    expect(contextCells(html)).not.toContain('estimateTag')
+
+    // 币种一致（账本也按 USD）时正常给估算。
+    const matched = renderToStaticMarkup(createElement(SaveMoreView, {
+      ledger: { ...LEDGER, currency: 'USD' },
+      tiers: { 'acme/llm': [usdGroup] },
+      t,
+    }))
+    expect(matched).toContain('estimateTag')
+    expect(matched).not.toContain('contextCurrencyMismatch')
+  })
+
+  it('拆分卡：生效窗口外的阶梯价不参与估算，错峰折扣在金额旁标注', () => {
+    const base = {
+      key: 'acme/llm',
+      modelKey: 'acme/llm',
+      currency: 'CNY',
+      tiers: [{ maxPromptTokens: 128_000, inputMicrosPerMtok: 1_000_000, outputMicrosPerMtok: 4_000_000 }],
+    }
+    const expired = renderToStaticMarkup(createElement(SaveMoreView, {
+      ledger: LEDGER,
+      // 账本 generatedAt 是"一分钟前"，这里把窗口收在过去 → 已失效。
+      tiers: { 'acme/llm': [{ ...base, offPeakDiscount: 1, effectiveTo: LEDGER.generatedAt - 86_400_000 }] },
+      t,
+    }))
+    expect(expired).toContain('contextEraMismatch')
+
+    const discounted = renderToStaticMarkup(createElement(SaveMoreView, {
+      ledger: LEDGER,
+      tiers: { 'acme/llm': [{ ...base, offPeakDiscount: 0.5 }] },
+      t,
+    }))
+    expect(discounted).toContain('finance-context-discount-acme/llm')
+    expect(discounted).toContain('contextOffPeakApplied')
   })
 
   it('拆分卡：没有上下文分布的旧会话不假装上下文很短', () => {

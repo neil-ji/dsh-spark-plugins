@@ -21,7 +21,7 @@ import type {
   FinanceProviderBalance,
   FinanceProviderBillingMode,
   FinancePriceTableStatus,
-  FinanceTierEntry,
+  FinanceTierGroup,
 } from 'dsh-spark-finance/types'
 import { providerKey } from './derive.ts'
 
@@ -47,8 +47,8 @@ export interface FinancePanelState {
   priceError?: string | null
   /** 静态套餐定义（`finance.plans`，用户填一次）。 */
   plans: readonly FinancePlanEntry[]
-  /** context 阶梯价（`finance.tiers`，按 modelKey）；空 = 没有阶梯价可算。 */
-  tiers: Record<string, readonly FinanceTierEntry[]>
+  /** context 阶梯价分组（`finance.tiers`，按剥净后缀的 modelKey）；空 = 没有阶梯价可算。 */
+  tiers: Record<string, readonly FinanceTierGroup[]>
   /** 设置文档是否接受写入；memory 模式下为 false（面板显示只读提示）。 */
   plansWritable: boolean
 }
@@ -61,7 +61,7 @@ type FinanceRemote = ClientRemote['finance']
  * 阶梯价是只读的（它属于价格事实，不是面板该编辑的东西）。
  */
 export interface FinancePlanSeam {
-  getSnapshot(): { plans: readonly FinancePlanEntry[]; tiers: Record<string, readonly FinanceTierEntry[]>; writable: boolean }
+  getSnapshot(): { plans: readonly FinancePlanEntry[]; tiers: Record<string, readonly FinanceTierGroup[]>; writable: boolean }
   subscribe(listener: () => void): () => void
   /** 整体写回 `plans` 字段（settings 的一次原子写）。 */
   write(plans: readonly FinancePlanEntry[]): Promise<void>

@@ -7,7 +7,7 @@
 
 import type { ReactNode } from 'react'
 import { BarChart, Card, CHART_PALETTE, Money, formatMicros } from 'dsh-ui-kit'
-import type { FinanceLedger, FinanceTierEntry } from 'dsh-spark-finance/types'
+import type { FinanceLedger, FinanceTierGroup } from 'dsh-spark-finance/types'
 import {
   cacheExtremes,
   contextProfile,
@@ -15,20 +15,38 @@ import {
   formatPercent,
   modelComparisonRows,
   peakShare,
-  splitEstimate,
+  splitEstimateForModel,
 } from '../derive.ts'
+import type { SplitEstimateOutcome } from '../derive.ts'
 import type { FinanceTranslate } from '../locales.ts'
 import css from '../panel.module.css'
 
 export interface SaveMoreViewProps {
   ledger: FinanceLedger
-  /** context 阶梯价（按 modelKey）；空 = 该模型没有阶梯价，拆分不改变单价。 */
-  tiers: Record<string, readonly FinanceTierEntry[]>
+  /** context 阶梯价分组（按剥净后缀的 modelKey）；空 = 该模型没有阶梯价，拆分不改变单价。 */
+  tiers: Record<string, readonly FinanceTierGroup[]>
   t: FinanceTranslate
 }
 
 /** "界外"的参考上界：与常见阶梯阈值 128k 对齐（只用于分布展示）。 */
 const CONTEXT_SHARE_CEILING = 128_000
+
+/** 非 ok 的取数结果 → 文案。四个状态各有各的说法，别合并成"暂无数据"。 */
+function contextOutcomeText(outcome: SplitEstimateOutcome, t: FinanceTranslate): string {
+  switch (outcome.status) {
+    case 'currency-mismatch':
+      return t('contextCurrencyMismatch', { currency: outcome.tierCurrency })
+    case 'era-mismatch':
+      return t('contextEraMismatch')
+    case 'no-tiers':
+      return t('contextNoTiers')
+    case 'no-usage':
+      return t('contextNoUsage')
+    case 'ok':
+      // 调用点只在非 ok 时调这里；显式列全是为了让新增状态编译期报错。
+      return t('noData')
+  }
+}
 
 export function SaveMoreView({ ledger, tiers, t }: SaveMoreViewProps): ReactNode {
   const currency = ledger.currency === '' ? 'CNY' : ledger.currency
@@ -103,9 +121,10 @@ export function SaveMoreView({ ledger, tiers, t }: SaveMoreViewProps): ReactNode
               </div>
               {contextRows.map((row) => {
                 const buckets = row.context ?? []
-                const modelTiers = tiers[row.modelKey] ?? []
                 const profile = contextProfile(buckets, CONTEXT_SHARE_CEILING)
-                const estimate = splitEstimate(buckets, modelTiers)
+                // 选组 + 币种/生效窗口守卫 + 错峰折扣都在 derive 里（可单测），
+                // 视图只负责把 status 翻成文案。
+                const outcome = splitEstimateForModel(buckets, tiers, row.modelKey, ledger.currency, ledger.generatedAt)
                 return (
                   <div className={`${css.tableRow} ${css.colsContext}`} key={`context:${row.modelKey}`} data-testid={`finance-context-${row.modelKey}`}>
                     {/* 模型 + 厂商合并为一列 provider/model：可换行、两行截断、悬浮全文。 */}
@@ -113,14 +132,19 @@ export function SaveMoreView({ ledger, tiers, t }: SaveMoreViewProps): ReactNode
                       {row.provider}/{row.model}
                     </span>
                     <span className={`${css.cell} ${css.cellWrap}`}>{t('contextAboveShare', { pct: formatPercent(profile.shareAbove) })}</span>
-                    <span className={`${css.cell} ${css.cellWrap}`}>
-                      {estimate === null
-                        ? (modelTiers.length === 0 ? t('contextNoTiers') : t('contextNoUsage'))
-                        : (
+                    <span className={`${css.cell} ${css.cellWrap}`} data-testid={`finance-context-cost-${row.modelKey}`}>
+                      {outcome.status === 'ok'
+                        ? (
                           <span className={css.tagMuted}>
-                            {formatMicros(Math.round(estimate.savedMicros))} · <span className={css.estimate}>{t('estimateTag')}</span>
+                            {formatMicros(Math.round(outcome.estimate.savedMicros))} · <span className={css.estimate}>{t('estimateTag')}</span>
+                            {outcome.estimate.discountApplied === 1 ? null : (
+                              <span data-testid={`finance-context-discount-${row.modelKey}`}>
+                                {' · '}{t('contextOffPeakApplied', { pct: formatPercent(outcome.estimate.discountApplied) })}
+                              </span>
+                            )}
                           </span>
-                        )}
+                        )
+                        : <span className={css.hint}>{contextOutcomeText(outcome, t)}</span>}
                     </span>
                   </div>
                 )

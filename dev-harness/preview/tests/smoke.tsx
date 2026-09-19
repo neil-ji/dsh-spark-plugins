@@ -308,15 +308,19 @@ export async function run(): Promise<{ checks: Check[] }> {
     expectContains('finance: 速率渲染为 tok/s', whoHtml, 'tok/s')
     expectContains('finance: 同一模型跨供应商给出时间成本比较', whoHtml, 'finance-time-compare')
     // P2：拆分会话 —— 上下文分布 + 按阶梯价的上限估算（估算必须标注）。
-    const tiers = ((injected.scope as unknown as { getSnapshot(): { value: { tiers?: Record<string, never> } } })
-      .getSnapshot().value.tiers ?? {})
+    // 走与真面板同一条路：seam 归一化后的 `state.tiers`（分组形状），不是 settings 里的
+    // 原始值 —— 两者的形状差异正是 S1 归一化契约所在，这里顺带把它也冒烟了。
     const saveHtml = renderToString(
-      <SaveMoreView ledger={state.ledger!} tiers={tiers} t={ctx.locale.bind('settings.finance')} /> as ReactElement,
+      <SaveMoreView ledger={state.ledger!} tiers={state.tiers} t={ctx.locale.bind('settings.finance')} /> as ReactElement,
     )
     expectContains('finance: 拆分卡有上下文分布', saveHtml, 'finance-context-card')
     expectContains('finance: 有阶梯价的模型给出上限估算', saveHtml, '上限可省')
     expectContains('finance: 没有阶梯价时明说拆分不改变单价', saveHtml, '拆分不改变单价')
     expectContains('finance: 拆分口径写明是估算上限', saveHtml, '估算口径')
+    // S2/S3：币种不匹配的档位不参与估算（宁可不算，不可硬换汇）。
+    expectContains('finance: 币种不匹配的阶梯价不参与估算', saveHtml, '币种不匹配')
+    // 新形状的错峰折扣在金额旁标注，且确实把金额缩了。
+    expectContains('finance: 错峰折扣在金额旁标注', saveHtml, '错峰')
     check(
       'finance: 套餐写回 settings 的 plans 字段',
       JSON.stringify((injected.scope as unknown as { getSnapshot(): { user: unknown } }).getSnapshot().user).includes('monthlyMicros'),

@@ -62,6 +62,8 @@ import type {
   FinanceSyncStatus,
   FinanceClearOverlayResult,
   FinancePriceTableStatus,
+  FinanceTierEntryInput,
+  FinanceTierSpec,
 } from './types.ts'
 
 export type * from './types.ts'
@@ -191,6 +193,43 @@ const priceEntries = z.union([
 ])
 
 /**
+ * 一档 context 阶梯价（SPEC §2.3）。绝对价与倍率两种写法并存：绝对价优先，
+ * 倍率作为兜底（Anthropic / Qwen 官方给的就是倍率，硬换算易错）。
+ */
+const tierEntryInput: z<FinanceTierEntryInput> = z.object({
+  maxPromptTokens: z.number().step(1).min(0).required(),
+  inputMicrosPerMtok: z.number().step(1).min(0).required(),
+  outputMicrosPerMtok: z.number().step(1).min(0).required(),
+  cacheReadMicrosPerMtok: z.number().step(1).min(0),
+  cacheWriteMicrosPerMtok: z.number().step(1).min(0),
+  cacheReadMultiplier: z.number().min(0).max(1000),
+  cacheWriteMultiplier: z.number().min(0).max(1000),
+  cacheWriteTtl: z.object({
+    m5: z.number().step(1).min(0),
+    h1: z.number().step(1).min(0),
+  }),
+})
+
+/**
+ * 一组阶梯价（新形状）：币种 + 档位 + 时段折扣 + 生效窗口 + 区域标签。
+ * 旧形状（裸档位数组）仍被 union 接受，双方由 `normalizeFinanceTiers` 按形状分流。
+ *
+ * 两处显式注解是**必需的**：union 的输出类型经 `Config` 的 `meta.default` 推断链
+ * 会被展宽成 `ObjectT<...>[]`，失去与 `FinanceConfigInput` 的兼容（实测 TS2322）。
+ */
+const tierSpec: z<FinanceTierSpec> = z.object({
+  currency: z.string(),
+  tiers: z.array(tierEntryInput).required(),
+  offPeakDiscount: z.number().min(0).max(1),
+  effectiveFrom: z.union([z.string(), z.number()]),
+  effectiveTo: z.union([z.string(), z.number()]),
+  region: z.string(),
+  serviceTier: z.string(),
+})
+
+const tierEntryInputs: z<FinanceTierEntryInput[]> = z.array(tierEntryInput)
+
+/**
  * One row in the per-provider configuration list (commit 11, additive).
  * Mirrors `FinanceProviderEntry` from types.ts. The schemastery validator
  * rejects unknown fields via its default 'remove' mode; nothing here has
@@ -243,14 +282,13 @@ export class FinanceService extends TypertRemoteService {
     /**
      * context 阶梯价（P2，可选）：按 modelKey 声明升序档位，maxPromptTokens 为 0 表示兜底档。
      * 只服务面板的"拆分会话能省多少"估算，不参与账本既有成本口径。
+     *
+     * 两种形状（SPEC §2.3 规则 4，向后兼容）：
+     * - 旧：`{ 'a/llm': [{ maxPromptTokens, inputMicrosPerMtok, ... }] }`（隐式 CNY）
+     * - 新：`{ 'a/llm': { currency?, tiers: [...], offPeakDiscount?, effectiveFrom/To?, region?, serviceTier? } }`
+     * key 允许带 `#suffix` 限定后缀表达币种/地域变体（如 `openai/gpt-5.6#USD`）。
      */
-    tiers: z.dict(z.array(z.object({
-      maxPromptTokens: z.number().step(1).min(0).required(),
-      inputMicrosPerMtok: z.number().step(1).min(0).required(),
-      outputMicrosPerMtok: z.number().step(1).min(0).required(),
-      cacheReadMicrosPerMtok: z.number().step(1).min(0),
-      cacheWriteMicrosPerMtok: z.number().step(1).min(0),
-    }))).default({}),
+    tiers: z.dict(z.union([tierEntryInputs, tierSpec])).default({}),
     plans: z.array(z.object({
       provider: z.string().required(),
       monthlyMicros: z.number().step(1).min(0).max(100_000_000_000).required(),

@@ -31,8 +31,14 @@ import {
   sessionsOfWorkspace,
   relativeTime,
   sessionsTrend,
+  resolveCacheReadMicros,
+  resolveCacheWriteMicros,
+  splitEstimateForModel,
+  tierGroupFor,
+  tierGroupUsability,
   totalTokens,
 } from '../src/client/derive.ts'
+import type { FinanceTierGroup } from 'dsh-spark-finance/types'
 
 const buckets = (input: number, cacheRead: number, cacheWrite: number, output: number): FinanceTokenBuckets => ({
   uncachedInputTokens: input,
@@ -233,7 +239,97 @@ describe('derive: 上下文分布与阶梯价（P2）', () => {
     expect(splitEstimate(buckets1, [{ maxPromptTokens: 0, inputMicrosPerMtok: 1, outputMicrosPerMtok: 1 }])).toBeNull()
     expect(splitEstimate([bucket(32_000, buckets(0, 0, 0, 0), 0)], tiers)).toBeNull()
   })
+
+  it('prices a tier by the whole request, not by segments (SPEC §2.3 规则 7)', () => {
+    // 落在 128k 档的桶：**全部** token 按 128k 档算，不是"前 32k 便宜、超出部分贵"。
+    // 这条断言锁死「全量按所在档」；改成分段累计会立刻红。
+    const entry = { maxPromptTokens: 128_000, inputMicrosPerMtok: 1_000_000, outputMicrosPerMtok: 4_000_000 }
+    const usage = buckets(100_000, 0, 0, 0)
+    expect(usageCostMicros(usage, entry)).toBeCloseTo(100_000)
+    // 若误按分段累计（32k@便宜档 + 68k@贵档）会得到别的数——这里直接比对全量口径。
+    const segmented = 32_000 * 1 + 68_000 * 2
+    expect(usageCostMicros(usage, entry)).not.toBeCloseTo(segmented)
+  })
+
+  it('resolves cache prices: absolute > multiplier × input > TTL m5 > input (SPEC §2.3 规则 1–2)', () => {
+    const base = { maxPromptTokens: 32_000, inputMicrosPerMtok: 1_000_000, outputMicrosPerMtok: 4_000_000 }
+    // 都没有 → 继承输入价。
+    expect(resolveCacheReadMicros(base)).toBe(1_000_000)
+    expect(resolveCacheWriteMicros(base)).toBe(1_000_000)
+    // 倍率生效（Anthropic 读 0.1x）。
+    expect(resolveCacheReadMicros({ ...base, cacheReadMultiplier: 0.1 })).toBeCloseTo(100_000)
+    // 绝对价压过倍率。
+    expect(resolveCacheReadMicros({ ...base, cacheReadMultiplier: 0.1, cacheReadMicrosPerMtok: 7 })).toBe(7)
+    // 写：倍率 > TTL m5。
+    expect(resolveCacheWriteMicros({ ...base, cacheWriteMultiplier: 2, cacheWriteTtl: { m5: 3 } })).toBe(2_000_000)
+    // 写：只有 TTL 时取 m5（保守），不取 h1。
+    expect(resolveCacheWriteMicros({ ...base, cacheWriteTtl: { m5: 20, h1: 40 } })).toBe(20)
+  })
+
+  it('picks the exact suffixed group first, then falls back to the bare modelKey (规则 3)', () => {
+    const groups: Record<string, readonly FinanceTierGroup[]> = {
+      'openai/gpt-5.6': [group('openai/gpt-5.6', 'CNY')],
+      'openai/gpt-5.6#USD': [group('openai/gpt-5.6#USD', 'USD', 'USD')],
+    }
+    expect(tierGroupFor(groups, 'openai/gpt-5.6#USD')?.currency).toBe('USD')
+    // 没写后缀的模型键回退到通用组。
+    expect(tierGroupFor(groups, 'openai/gpt-5.6')?.currency).toBe('CNY')
+    // 查一个带后缀但没登记的 key → 剥后缀回退。
+    expect(tierGroupFor(groups, 'openai/gpt-5.6#intl')?.currency).toBe('CNY')
+    expect(tierGroupFor(groups, 'nobody/else')).toBeNull()
+  })
+
+  it('refuses to price a group in another currency or outside its era (规则 5)', () => {
+    const at = Date.parse('2026-09-19')
+    expect(tierGroupUsability(group('a/b', 'CNY'), 'CNY', at)).toBe('usable')
+    // 币种大小写/空白不敏感，但不同币种一律拒绝（禁止硬换汇）。
+    expect(tierGroupUsability(group('a/b', 'usd'), 'USD', at)).toBe('usable')
+    expect(tierGroupUsability(group('a/b', 'USD'), 'CNY', at)).toBe('currency-mismatch')
+    // 生效窗口。
+    expect(tierGroupUsability({ ...group('a/b', 'CNY'), effectiveFrom: at + 1 }, 'CNY', at)).toBe('era-mismatch')
+    expect(tierGroupUsability({ ...group('a/b', 'CNY'), effectiveTo: at - 1 }, 'CNY', at)).toBe('era-mismatch')
+    expect(tierGroupUsability({ ...group('a/b', 'CNY'), effectiveFrom: at - 1, effectiveTo: at + 1 }, 'CNY', at)).toBe('usable')
+  })
+
+  it('scales both sides by the off-peak discount so the ratio is unchanged (规则 6)', () => {
+    const full = splitEstimate(buckets1, tiers)
+    const half = splitEstimate(buckets1, tiers, { offPeakDiscount: 0.5 })
+    expect(full).not.toBeNull()
+    expect(half).not.toBeNull()
+    if (full !== null && half !== null) {
+      expect(half.savedMicros).toBeCloseTo(full.savedMicros * 0.5)
+      expect(half.discountApplied).toBe(0.5)
+      // 比例不变：省额 ÷ 观测成本 两侧一致。
+      expect(half.savedMicros / half.observedMicros).toBeCloseTo(full.savedMicros / full.observedMicros)
+      // 不可信的折扣（0 / >1）回落成 1，不静默打折。
+      expect(splitEstimate(buckets1, tiers, { offPeakDiscount: 0 })?.discountApplied).toBe(1)
+      expect(splitEstimate(buckets1, tiers, { offPeakDiscount: 2 })?.discountApplied).toBe(1)
+    }
+  })
+
+  it('reports why a model has no estimate instead of collapsing every reason into one', () => {
+    const groups: Record<string, readonly FinanceTierGroup[]> = { 'a/llm': [group('a/llm', 'CNY')] }
+    expect(splitEstimateForModel(buckets1, groups, 'a/llm', 'CNY', Date.now()).status).toBe('ok')
+    expect(splitEstimateForModel(buckets1, {}, 'a/llm', 'CNY', Date.now()).status).toBe('no-tiers')
+    expect(splitEstimateForModel(buckets1, { 'a/llm': [group('a/llm', 'USD')] }, 'a/llm', 'CNY', Date.now()))
+      .toEqual({ status: 'currency-mismatch', tierCurrency: 'USD' })
+    expect(splitEstimateForModel(buckets1, { 'a/llm': [{ ...group('a/llm', 'CNY'), effectiveTo: 1 }] }, 'a/llm', 'CNY', Date.now()).status)
+      .toBe('era-mismatch')
+    expect(splitEstimateForModel([], groups, 'a/llm', 'CNY', Date.now()).status).toBe('no-usage')
+  })
 })
+
+/** 造一组最简阶梯价分组（一档 128k），只关心组级字段时用它。 */
+function group(key: string, currency: string, suffix?: string): FinanceTierGroup {
+  return {
+    key,
+    modelKey: suffix === undefined ? key : key.slice(0, key.lastIndexOf('#')),
+    ...suffix !== undefined ? { suffix } : {},
+    currency,
+    offPeakDiscount: 1,
+    tiers: [{ maxPromptTokens: 128_000, inputMicrosPerMtok: 1_000_000, outputMicrosPerMtok: 4_000_000 }],
+  }
+}
 
 describe('derive: 速率与时间成本', () => {
   const fast = { modelKey: 'acme/llm', provider: 'a', model: 'llm', usage: buckets(1_000_000, 0, 0, 100_000), costMicros: 10_000_000 }

@@ -1,6 +1,7 @@
 # 财务价格体系 · Spec（规范）
 
-> 状态：**已定案（2026-09-16），实现未开始**。本文是该领域的**唯一规范源**——
+> 状态：**§1–§9 已定案（2026-09-16），实现未开始；§10 额度触达检测已定案（2026-09-19），
+> 实现未开始**。本文是该领域的**唯一规范源**——
 > 任何实现、评审、闸门脚本与本文件冲突时，以本文件为准；要改规范，先改本文件
 > （commit 用 `docs(finance):` 或 `feat(finance)!:` 并在 body 写明迁移路径）。
 
@@ -49,6 +50,7 @@
 | **INV-7 失败原子性** | 拉取失败 / 哈希不符 / schemaVersion 不认识 → **保留上一份 + 明确报错**（不静默换、不静默留）。 | 用户以为更新了，实际是旧值 |
 | **INV-8 生成物幂等** | CI 里重跑生成器必须得到**逐字节相同**的产物。 | 生成器退化成另一种手抄 |
 | **INV-9 余额来源优先级** | 每个厂商的余额呈现必须能回答来源：自动获取成功值 > 手动填写 > 「—」；自动获取开启且支持时忽略手动值。手动值不进账本成本口径。 | 手填值静默覆盖真实余额，对账错乱 |
+| **INV-10 额度与成本正交** | 额度触达（§10）是**容量事实**，成本是**金额事实**：`quota` 数据**不得**进入 `totalCostMicros` / `byModel` / `byProvider` / `peakValley` 任一金额口径，也不得静默改写 `plans[].quotaTokens`（用户字段，只可由用户显式采纳）。 | 触达次数被算成钱、"额度"冒充成本，两个账互相污染 |
 
 ---
 
@@ -70,6 +72,48 @@ type PriceEra = {
   tiers?: FinanceTierEntry[]     // 按单次请求输入 token 档；0 = 兜底档（现有语义）
 }
 ```
+
+### 2.3 阶梯价解析规则（2026-09-19 增补，S1–S3 落地依据）
+
+阶梯价当前落在 settings（`finance.tiers`），而 INV-1 把 `tiers` 列为 releaseBase 的**结构维度**——
+这是**已知的、被显式接受的临时偏离**：S1–S3 先用 settings 形态落地，`tiers` 迁入生成物
+（`prices.series.json`）作为独立的后续任务 B。迁移完成前，settings 里的 `tiers` 就是
+该结构维度的唯一来源，不视为 INV-1 违规。
+
+**形状（两种并存，向后兼容）**：值可以是旧的裸数组（隐式 `CNY`、无折扣、无生效窗口），
+也可以是新对象：
+
+```ts
+type FinanceTierSpec = {
+  currency?: string            // 缺省 'CNY'
+  tiers: FinanceTierEntryInput[]
+  offPeakDiscount?: number     // 0 < r <= 1；缺省 1
+  effectiveFrom?: number       // epoch ms 或可 Date.parse 的字符串；缺省 = 无下界
+  effectiveTo?: number
+  region?: string              // 仅标签
+  serviceTier?: string         // 仅标签
+}
+```
+
+**key 后缀**：`modelKey#suffix`（如 `openai/gpt-5.6#USD`、`qwen/qwen3-max#cn-beijing`）
+表达币种 / 站点 / 地域变体，按**最后一个** `#` 切分。禁止跨币种合并或硬换汇。
+
+**七条解析规则**（实现与评审按此逐条对照）：
+
+1. **缓存读单价**：`cacheReadMicrosPerMtok` > `cacheReadMultiplier × inputMicrosPerMtok` > 继承 `inputMicrosPerMtok`
+2. **缓存写单价**：`cacheWriteMicrosPerMtok` > `cacheWriteMultiplier × inputMicrosPerMtok` > `cacheWriteTtl.m5` > 继承 `inputMicrosPerMtok`。
+   只取 `m5`（保守，命中率假设最低）；`h1` 仅在用户显式声明 TTL 档位时才用，当前不参与解析
+3. **选组**：`modelKey#suffix` 精确匹配 → 剥净后缀回退 `modelKey` → 都没有则该模型无阶梯价
+4. **形状分流**：值为数组 = 旧形状；值为对象 = 新形状。新形状缺 `tiers` 或档位全不可信 → **整组丢弃**（不猜），旧形状同理
+5. **币种 / 生效窗口守卫**：组 `currency` 与账本 `ledger.currency` 不一致 → **不换算、不参与估算**，UI 标注「币种不匹配，未计入估算」；
+   `effectiveFrom/To` 不覆盖当前时刻 → 同样不参与估算并标注。宁可不算，不可算错
+6. **错峰折扣**：`offPeakDiscount` 作用于该组的估算金额。桶数据无小时维度，故对观测值与压缩值**两侧同乘**该系数——
+   绝对省额随之缩放（5 折线路省一半），**比例不变**。这是刻意的保守选择
+7. **落档语义**：**全量按所在档**（不是分段累计）——7 家官方原文一致（OpenAI / xAI / Gemini / Qwen / GLM / MiniMax / 豆包）。
+   `tierForBucket` 是这条语义的唯一实现，**已有单测锁死**；改成「分段累计」前先改本 Spec
+
+**边界**：阶梯价只服务面板的「拆分会话能省多少」估算，**不进入账本成本口径**
+（账本仍走 `prices` / `providerDefaults` / `defaultPrice`）。
 
 **窗口语法扩展（必须实现）**：`peakHours: [[start, end]]` 中 **`start > end` 表示跨零点区间**
 （如阿里错峰 22:00–08:00，表达为 peak=[[8,22]] 或保留原义由生成器归一）。
@@ -344,6 +388,105 @@ for key of union(base, overlay):
 - 区域乘数（阿里部署范围、Bedrock 跨区档、OpenAI regional uplift）。
 - 促销/活动价 —— 厂商文档明确不写（阿里：活动优惠见控制台），只能标注"估算不含活动价"。
 - 积分制套餐（GLM Coding Plan 的输入/缓存/输出系数 + MCP 按次）。
+
+---
+
+## 10. 额度触达检测（2026-09-19 定案，实现未开始）
+
+> 产品设计全文见 `docs/plans/2026-09-19-finance-quota-detection-design.md`；
+> 本节是该设计**进入规范口径**的部分——实现与评审以本节为准。
+
+### 10.1 定位
+
+一次「额度触达」= 厂商亲口承认"该窗口到顶了"，是本插件唯一的**额度观测锚点**：
+`plans[].quotaTokens` 与 `manualBalanceMicros`（INV-9）都是用户自报，触达是实测。
+它把额度从自报升级为观测，并补上账本缺失的"失败"维度（被拒请求不产 token，但一轮时间全废）。
+
+**能力边界（必须在 UI 与文档同时写明，禁止过度承诺）**：只给**二值触达信号 + 窗口粒度**
+（5h / 周 / 月 / 余额 / 免费额度），**给不出剩余额度的精确值**——DSH 路线元数据无任何 quota 字段。
+
+### 10.2 信号源与实测约束（2026-09-19，390 会话 / 504 条真实载荷）
+
+信号已由内核归一化，**不解析厂商原始报文**：`turn/end.reason.error: LlmFailure`
+（终态）与 `llm/retry.failure: LlmFailure`（过程，自带 `provider`），字段
+`{ message, code, status?, providerRetryAfterMs?, requestId? }`；内核另有 canonical
+`QUOTA_EXCEEDED_CODE = 'QUOTA'` 与 `isQuotaExceededError()`，适配器顺序是"先判额度、再判 429→RATE_LIMIT"。
+
+四条**实测约束**（决定实现形态，违反即返工）：
+
+| # | 实测 | 规范要求 |
+|---|---|---|
+| C1 | 504 条载荷中**仅 1 条**带 `status` | **禁 `status`-only 判定**；`code` + `message` 是唯一可用面 |
+| C2 | `code` 单独用会漏也会错：`2067` 与两条声明式窗口**无 code**（落 `RATE_LIMIT`）；`402/401008` 是额度但非 429；`429006`/`RequestBurstTooFast`/`Throttling` 是 429 但**非额度** | **禁 429-only、禁 `code==='QUOTA'`-only**；判定必须是 message 词表 + code 的**有序组合** |
+| C3 | 同一次断供 = `n× llm/retry` + `1× turn/end`（典型 5+1）；原始事件 123 → 真实断供 **21**（**~6× 放大**） | 计数口径**必须是 episode（去重后）**，另记 `attempts` 供解释 |
+| C4 | 123 条中仅 65 条可解析 reset 时刻，且三种格式（带/不带时区） | `resetAtMs` 为**可选增强**；无时区一律置 null 并保留原文，**禁止假设本机时区补值** |
+
+### 10.3 判定口径（顺序即语义，不可调换）
+
+纯函数 `classifyQuotaFailure(failure: LlmFailure)` → `quota{window}` / `capacity` / `throttle` / `other`：
+
+1. **容量/突发词表**（`429006` / `serving capacity` / `RequestBurstTooFast` / `"Throttling"` / `busy or has reached` / `请求频率`）→ `capacity`。
+   **必须先于 429 判定**：这是瞬时问题，记成额度会误导"该充钱"。
+2. **余额词表**（`1113` / `insufficient balance` / `no resource package` / `recharge`）→ `quota:balance`。
+3. **免费额度词表**（`401008` / `free trial quota` / `免费体验额度`）→ `quota:trial`（非 429 也要认）。
+4. **周/月**（`1310` / `1-week quota` / `Weekly/Monthly` / `weekly limit`）→ `quota:week`。
+5. **5 小时**（`1308` / `5-hour` / `5 hour` / `5h quota`）→ `quota:5h`。
+6. **月度套餐**（`2067` / `Token Plan 用量上限` / `monthly limit`）→ `quota:month`。
+7. `code === 'QUOTA'` → `quota:unknown`（内核已判过额度；窗口未知不猜）。
+8. `code === 'RATE_LIMIT'` 且含 `429` 但**无任何额度措辞** → `throttle`。
+9. 其余 → `other`。
+
+**不确定一律 `other`**，另立 `capacity`/`throttle` 两个"明确不是额度"的类，禁止硬塞进 quota
+（§3 同构：宁可不算，不可算错）。
+
+**去重键**：`(modelKey, window, resetAtMs ?? resetRaw ?? messageSignature)`；
+同键连续失败合并为一个 episode，`turn/end` 命中同键则标 `final: true`。
+`messageSignature` = 剥掉 request-id / 时间戳 / UUID 后取前 120 字符。
+
+`capacity` / `throttle` / `other` **不写任何状态**——分类器保留这三类只为让 A9 能断言分离成立。
+
+### 10.4 数据落点
+
+- **采集**：新增会话投影 `financeQuota`（**新 key、新 unit、`stateVersion: 1`**）。
+  **严禁**修改既有 `financeUsage` / `financeUsageHourly` / `financeRate` / `financeContext`
+  的 `stateVersion`——缓存对版本不匹配是**丢弃而非迁移**，一次 bump = 全会话重放。
+  边界同 `financeRate`：**forward-only**，旧会话无该键，不重放补造，不退化为错误。
+- **聚合**：`FinanceLedger.quota.rows`（按 provider、当月）：`hits`（episode 数）、`attempts`、
+  `lastHitAtMs`、`nextResetAtMs`、`windows[]`。
+- **wire 零改动**（`getLedger` 返回整个 `FinanceLedger`）；实时刷新复用既有
+  `session/event` → 2s 防抖 → `finance/ledgerUpdated` 广播，**在既有钩子补 `turn/end` 分支**
+  （额度触达由 `turn/end` 触发，不是 `assistant/message`）。
+- **INV-10 硬约束**：`quota` 不参与任何金额口径；窗口用量估算（`resetAtMs − windowLength`
+  内的 token）只作**下界/估算**呈现，**不得**静默写入 `plans[].quotaTokens`。
+
+### 10.5 UI
+
+- **不新增表格列**（供应商表已有 5 列，列宽是稀缺资源）：在供应商名右侧挂 Pill，
+  **仅 `hits > 0` 时渲染**——无命中什么都不显示，不显示"正常"、不摆绿点。
+- 有 `resetAtMs` → `额度触达 2 次 · 3h12m 后重置`；无 → `额度触达 2 次 · 重置 <原文>`。
+- 逐条 episode 明细进**已有的供应商详情弹窗**，只读不可编辑。Pill tone = `warning`
+  （额度是"受限"，不是"错误"）。必须带 `aria-label` + `data-testid="finance-quota-{provider}"`。
+- 订阅与按量同一套机制：订阅触达 = 容量不足，按量触达 = 钱包/资源包触底。
+- **反例写进 UI**：触达次数 ≠ 额度大小，不同窗口不可比；`unknown` 窗口必须显式显示"窗口未知"。
+
+### 10.6 验收（追加至 §7）
+
+| 编号 | 断言 | 落点 |
+|---|---|---|
+| **A9** | 分类器一致性：真实载荷脱敏 fixture 逐条断言；**其中 49 条 capacity 一条都不许落进 quota** | `dsh-finance/tests/quota-classify.test.ts` |
+| **A10** | 去重正确性：`5× llm/retry + 1× turn/end` → `hits=1, attempts=5, final=true`；不同 reset 时刻 → 2 条 | 投影单测 |
+| **A11** | INV-10 正交性：注入额度触达后，`totalCostMicros` 与全部金额聚合**逐字节不变** | 账本单测 |
+| **A12** | 投影兼容性：新增 `financeQuota` 后既有 4 个 unit 的 `stateVersion` 未变、既有 checkpoint 不失效 | 投影单测 |
+
+**闸门新增防线**（反模式进脚本，不只写文档）：扫 `dsh-finance/src/quota.ts`，
+禁止 `status === 429` 式单一判据，禁止 quota 结果进入 `costOf` 调用链。
+
+### 10.7 非目标
+
+- 精确剩余额度（需厂商 quota API，DSH 无此面）。
+- 容量繁忙 / 请求限流的**记账**（分类已能识别，仅用于"不被误记成额度"）。
+- 自动改套餐 / 充钱 / 降频（只呈现，不动作）。
+- 跨厂商额度归一（窗口语义不可比，不造统一标尺）。
 
 ---
 

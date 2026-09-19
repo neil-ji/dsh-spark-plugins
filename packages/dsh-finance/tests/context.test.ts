@@ -92,7 +92,7 @@ describe('financeContext projection', () => {
 })
 
 describe('normalizeFinanceTiers', () => {
-  it('sorts by ceiling and keeps the catch-all last', () => {
+  it('sorts by ceiling and keeps the catch-all last (legacy bare-array shape)', () => {
     const tiers = normalizeFinanceTiers({
       'a/llm': [
         { maxPromptTokens: 0, inputMicrosPerMtok: 3_000_000, outputMicrosPerMtok: 9_000_000 },
@@ -100,7 +100,10 @@ describe('normalizeFinanceTiers', () => {
         { maxPromptTokens: 32_000, inputMicrosPerMtok: 1_000_000, outputMicrosPerMtok: 4_000_000 },
       ],
     })
-    expect(tiers['a/llm'].map((tier) => tier.maxPromptTokens)).toEqual([32_000, 200_000, 0])
+    expect(tiers['a/llm'][0].tiers.map((tier) => tier.maxPromptTokens)).toEqual([32_000, 200_000, 0])
+    // 旧形状：隐式 CNY、无折扣 —— 这条断言就是向后兼容的契约。
+    expect(tiers['a/llm'][0].currency).toBe('CNY')
+    expect(tiers['a/llm'][0].offPeakDiscount).toBe(1)
   })
 
   it('drops rows it cannot trust and keeps the optional cache rates', () => {
@@ -113,14 +116,58 @@ describe('normalizeFinanceTiers', () => {
       'b/llm': [],
     } as never)
     expect(Object.keys(tiers)).toEqual(['a/llm'])
-    expect(tiers['a/llm'][0].cacheReadMicrosPerMtok).toBe(100_000)
+    expect(tiers['a/llm'][0].tiers[0].cacheReadMicrosPerMtok).toBe(100_000)
+  })
+
+  it('accepts the new spec shape and keeps currency / discount / era fields', () => {
+    const tiers = normalizeFinanceTiers({
+      'openai/gpt-5.6#USD': {
+        currency: 'USD',
+        tiers: [{ maxPromptTokens: 272_000, inputMicrosPerMtok: 1, outputMicrosPerMtok: 2 }],
+        offPeakDiscount: 0.5,
+        effectiveFrom: '2027-01-01',
+        effectiveTo: 1_893_456_000_000,
+        region: 'us',
+        serviceTier: 'batch',
+      },
+    })
+    // key 带后缀 → 归到剥净后的 modelKey，原始 key 与 suffix 都保留。
+    const group = tiers['openai/gpt-5.6'][0]
+    expect(group.key).toBe('openai/gpt-5.6#USD')
+    expect(group.suffix).toBe('USD')
+    expect(group.currency).toBe('USD')
+    expect(group.offPeakDiscount).toBe(0.5)
+    expect(group.effectiveFrom).toBe(Date.parse('2027-01-01'))
+    expect(group.effectiveTo).toBe(1_893_456_000_000)
+    expect(group.region).toBe('us')
+    expect(group.serviceTier).toBe('batch')
+  })
+
+  it('drops an implausible discount and a spec with no usable tiers', () => {
+    const tiers = normalizeFinanceTiers({
+      'a/llm': { currency: 'CNY', tiers: [], offPeakDiscount: 0 },
+      'b/llm': { currency: 'CNY', offPeakDiscount: 2, tiers: [{ maxPromptTokens: 0, inputMicrosPerMtok: 1, outputMicrosPerMtok: 1 }] },
+      'c/llm': 'not-an-object',
+    } as never)
+    // 全坏档的组整组丢弃；0 与 >1 的折扣都不可信，回落成 1（不打折）。
+    expect(Object.keys(tiers).sort()).toEqual(['b/llm'])
+    expect(tiers['b/llm'][0].offPeakDiscount).toBe(1)
+  })
+
+  it('keeps several groups under one modelKey (currency / region variants)', () => {
+    const tiers = normalizeFinanceTiers({
+      'qwen/qwen3-max': { currency: 'CNY', tiers: [{ maxPromptTokens: 0, inputMicrosPerMtok: 1, outputMicrosPerMtok: 1 }] },
+      'qwen/qwen3-max#intl': { currency: 'USD', tiers: [{ maxPromptTokens: 0, inputMicrosPerMtok: 2, outputMicrosPerMtok: 2 }] },
+    })
+    expect(tiers['qwen/qwen3-max']).toHaveLength(2)
+    expect(tiers['qwen/qwen3-max'].map((group) => group.currency)).toEqual(['CNY', 'USD'])
   })
 
   it('flows into the resolved config', () => {
     const config = normalizeFinanceConfig({
       tiers: { 'a/llm': [{ maxPromptTokens: 32_000, inputMicrosPerMtok: 1, outputMicrosPerMtok: 2 }] },
     })
-    expect(config.tiers['a/llm']).toHaveLength(1)
+    expect(config.tiers['a/llm'][0].tiers).toHaveLength(1)
     expect(normalizeFinanceConfig({}).tiers).toEqual({})
   })
 })

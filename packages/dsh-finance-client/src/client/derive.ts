@@ -19,6 +19,7 @@ import type {
   FinanceRateStats,
   FinanceSessionRow,
   FinanceTierEntry,
+  FinanceTierGroup,
   FinanceTokenBuckets,
   FinanceWorkspaceRow,
 } from 'dsh-spark-finance/types'
@@ -276,15 +277,80 @@ export function peakShare(ledger: FinanceLedger): number | null {
 
 /* ─────────────────────── 上下文分布与阶梯价（P2，全部标注估算） ─────────────────────── */
 
+/**
+ * 缓存单价解析（SPEC §2.3 规则 1）：绝对价 > 倍率 × 输入价 > 继承输入价。
+ * 缓存写多一层 TTL（规则 2）：`cacheWriteMicrosPerMtok` > `cacheWriteMultiplier` >
+ * `cacheWriteTtl.m5`（保守，命中率假设最低；不取 `h1`）> 继承输入价。
+ */
+export function resolveCacheReadMicros(rate: FinanceTierEntry): number {
+  if (rate.cacheReadMicrosPerMtok !== undefined) return rate.cacheReadMicrosPerMtok
+  if (rate.cacheReadMultiplier !== undefined) return rate.cacheReadMultiplier * rate.inputMicrosPerMtok
+  return rate.inputMicrosPerMtok
+}
+
+export function resolveCacheWriteMicros(rate: FinanceTierEntry): number {
+  if (rate.cacheWriteMicrosPerMtok !== undefined) return rate.cacheWriteMicrosPerMtok
+  if (rate.cacheWriteMultiplier !== undefined) return rate.cacheWriteMultiplier * rate.inputMicrosPerMtok
+  const ttl = rate.cacheWriteTtl?.m5
+  if (ttl !== undefined) return ttl
+  return rate.inputMicrosPerMtok
+}
+
 /** 一份用量按某个费率档折算成本（micros）。缓存读/写缺省时按输入价算。 */
 export function usageCostMicros(usage: FinanceTokenBuckets, rate: FinanceTierEntry): number {
   const input = rate.inputMicrosPerMtok
-  const cacheRead = rate.cacheReadMicrosPerMtok ?? input
-  const cacheWrite = rate.cacheWriteMicrosPerMtok ?? input
+  const cacheRead = resolveCacheReadMicros(rate)
+  const cacheWrite = resolveCacheWriteMicros(rate)
   return (usage.uncachedInputTokens / 1_000_000) * input
     + (usage.cacheReadTokens / 1_000_000) * cacheRead
     + (usage.cacheWriteTokens / 1_000_000) * cacheWrite
     + (usage.outputTokens / 1_000_000) * rate.outputMicrosPerMtok
+}
+
+/**
+ * 选组（SPEC §2.3 规则 3）：按 `useKey` 精确匹配 → 剥净 `#suffix` 回退 → 都没有则 null。
+ *
+ * 精确匹配优先，因为带后缀的组表达的是**币种 / 站点变体**（`openai/gpt-5.6#USD`），
+ * 它比通用组更贴用户实际在用的那条线路。
+ */
+export function tierGroupFor(
+  groups: Record<string, readonly FinanceTierGroup[]>,
+  useKey: string,
+): FinanceTierGroup | null {
+  const exact = groups[useKey]
+  if (exact !== undefined && exact.length > 0) return pickTierGroup(exact)
+  const hash = useKey.lastIndexOf('#')
+  const base = hash > 0 ? useKey.slice(0, hash) : useKey
+  const fallback = groups[base]
+  if (fallback !== undefined && fallback.length > 0) return pickTierGroup(fallback)
+  return null
+}
+
+/** 同一 key 上的多组（币种/地域变体）：取第一组，顺序由 settings 决定（先写先赢）。 */
+function pickTierGroup(groups: readonly FinanceTierGroup[]): FinanceTierGroup | null {
+  return groups.length === 0 ? null : groups[0]
+}
+
+/** 一组阶梯价是否可用于账本币种 / 当前时刻（SPEC §2.3 规则 5）。 */
+export type TierGroupUsability =
+  /** 币种一致且落在生效窗口内，可参与估算。 */
+  | 'usable'
+  /** 计价币种与账本币种不一致：不换算、不参与估算。 */
+  | 'currency-mismatch'
+  /** 生效窗口已过或未到。 */
+  | 'era-mismatch'
+
+export function tierGroupUsability(group: FinanceTierGroup, ledgerCurrency: string, atMs: number): TierGroupUsability {
+  if (normalizeCurrency(group.currency) !== normalizeCurrency(ledgerCurrency)) return 'currency-mismatch'
+  if (group.effectiveFrom !== undefined && atMs < group.effectiveFrom) return 'era-mismatch'
+  if (group.effectiveTo !== undefined && atMs > group.effectiveTo) return 'era-mismatch'
+  return 'usable'
+}
+
+/** 币种比对：大小写与空白不敏感；空串按缺省 CNY 处理。 */
+function normalizeCurrency(value: string): string {
+  const trimmed = value.trim().toUpperCase()
+  return trimmed === '' ? 'CNY' : trimmed
 }
 
 /** 上下文画像：以某个 prompt 上界为界，把用量劈成"界内 / 界外"。 */
@@ -365,6 +431,20 @@ export interface SplitEstimate {
   smallestCeiling: number
   /** 落在最小档之上的输入侧 token 占比。 */
   shareAbove: number | null
+  /** 已套用的错峰折扣（1 = 没打折）。见 `splitEstimate` 的口径说明。 */
+  discountApplied: number
+}
+
+/** `splitEstimate` 的可选口径参数。 */
+export interface SplitEstimateOptions {
+  /**
+   * 组声明的错峰折扣（SPEC §2.3 规则 6）。缺省 1。
+   *
+   * 桶数据没有小时维度，所以无法只给"空闲时段"那一半打折；这里对**两侧**都
+   * 套同一个系数：绝对省额随之缩放（5 折的线路省得只有一半），比例不变。
+   * 这是刻意的保守选择 —— 宁可少承诺，也不按全价虚报省额。
+   */
+  offPeakDiscount?: number
 }
 
 /**
@@ -375,14 +455,21 @@ export interface SplitEstimate {
  * 差额就是"如果每个请求的上下文都能压进最小档"的上限。它**不含**拆分会话的代价
  * （重发前缀、打掉 prompt cache 命中），所以实际省额一定更小 —— 这也是为什么
  * 卡片文案写的是"上限"。没有阶梯价、或没有最小档时返回 null。
+ *
+ * 落档语义（SPEC §2.3 规则 7）：**全量按所在档**，不是分段累计 —— 与 7 家官方原文一致。
+ * `tierForBucket` 是这条语义的唯一实现，改动它前先读 SPEC。
  */
 export function splitEstimate(
   buckets: readonly FinanceContextBucket[],
   tiers: readonly FinanceTierEntry[],
+  options: SplitEstimateOptions = {},
 ): SplitEstimate | null {
   if (buckets.length === 0 || tiers.length === 0) return null
   const smallest = tiers.find((tier) => tier.maxPromptTokens > 0)
   if (smallest === undefined) return null
+  const discount = options.offPeakDiscount !== undefined && options.offPeakDiscount > 0 && options.offPeakDiscount <= 1
+    ? options.offPeakDiscount
+    : 1
   let observedMicros = 0
   let tokens = emptyBuckets()
   for (const bucket of buckets) {
@@ -394,12 +481,48 @@ export function splitEstimate(
   const compressedMicros = usageCostMicros(tokens, smallest)
   const profile = contextProfile(buckets, smallest.maxPromptTokens)
   return {
-    observedMicros,
-    compressedMicros,
-    savedMicros: Math.max(0, observedMicros - compressedMicros),
+    observedMicros: observedMicros * discount,
+    compressedMicros: compressedMicros * discount,
+    savedMicros: Math.max(0, (observedMicros - compressedMicros) * discount),
     smallestCeiling: smallest.maxPromptTokens,
     shareAbove: profile.shareAbove,
+    discountApplied: discount,
   }
+}
+
+/** 面板要能区分"没有阶梯价"与"有价但不可用"——两者文案完全不同（SPEC §2.3 规则 5）。 */
+export type SplitEstimateOutcome =
+  | { status: 'ok'; estimate: SplitEstimate }
+  /** 该模型没有任何阶梯价组。 */
+  | { status: 'no-tiers' }
+  /** 有价，但计价币种与账本币种不一致：不换算、不参与估算。 */
+  | { status: 'currency-mismatch'; tierCurrency: string }
+  /** 有价，但生效窗口不覆盖当前时刻。 */
+  | { status: 'era-mismatch' }
+  /** 有价，但没有可用的上下文用量（或没有最小档，如只有兜底档）。 */
+  | { status: 'no-usage' }
+
+/**
+ * 面向面板的取数：先按 `useKey` 选组（规则 3），再过币种 / 生效窗口守卫（规则 5），
+ * 最后套错峰折扣（规则 6）交给 `splitEstimate`。
+ *
+ * `atMs` 由调用方给（面板传 `ledger.generatedAt`），保持本函数是纯函数、可单测。
+ */
+export function splitEstimateForModel(
+  buckets: readonly FinanceContextBucket[],
+  groups: Record<string, readonly FinanceTierGroup[]>,
+  useKey: string,
+  ledgerCurrency: string,
+  atMs: number,
+): SplitEstimateOutcome {
+  const group = tierGroupFor(groups, useKey)
+  if (group === null) return { status: 'no-tiers' }
+  const usability = tierGroupUsability(group, ledgerCurrency, atMs)
+  if (usability === 'currency-mismatch') return { status: 'currency-mismatch', tierCurrency: group.currency }
+  if (usability === 'era-mismatch') return { status: 'era-mismatch' }
+  const estimate = splitEstimate(buckets, group.tiers, { offPeakDiscount: group.offPeakDiscount })
+  if (estimate === null) return { status: 'no-usage' }
+  return { status: 'ok', estimate }
 }
 
 /* ─────────────────────────── 速率与时间成本（P1-B） ─────────────────────────── */

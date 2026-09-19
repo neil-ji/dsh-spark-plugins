@@ -1,11 +1,13 @@
 # 阶梯计价 Schema 变更方案
 
-- 状态：**待裁决**（4 个决策点见 §7）
+- 状态：**S1–S3 已落地（2026-09-19）**；§7 四条决策已裁决，S4（走 B）待做
 - 日期：2026-09-19
 - 依据：`docs/pricing-research-llm-tiered-pricing.md`（11 家官方定价调研 + 阿里百炼官方页复核）
 - 范围：P0（OpenAI 272K / xAI 200K / Gemini 200K）+ P1（Qwen plus 线、qwen3.7-flash）
 
 > 本方案**只做 schema 与语义**，不含阶梯价编辑 UI（见 §7 决策点 4）。
+> **解析规则已沉淀进规范源**：`docs/FINANCE-PRICING-SPEC.md` §2.3（七条规则 + 形状 + 边界），
+> 实现与本文件冲突时以 Spec 为准。
 
 ---
 
@@ -20,7 +22,7 @@
 | 消费者 | `derive.ts:379` `splitEstimate` | 只算「拆分会话的上限节省」估算，**不进账本成本口径** |
 | Spec 落点 | `FINANCE-PRICING-SPEC.md:43` INV-1 | 规定 `tiers` 属**结构维度，只能由 releaseBase 产出**，用户覆盖不得新增/替换结构 |
 
-### ⚠️ 一个必须先裁决的冲突
+### ⚠️ 一个必须先裁决的冲突（已裁决：走 A，Spec 已记为显式偏离）
 
 **实现把 `tiers` 放在 settings（用户手填），但 Spec 的 INV-1 把 `tiers` 定义为 releaseBase 结构维度**。
 这不是笔误——Spec §2.1 明确把 `tiers?` 列在 `PriceEra` 里。
@@ -29,6 +31,9 @@
 
 - **A. 维持 settings**（现状）：改动最小，但与 INV-1 冲突；「用户填的阶梯价」永远只是估算、无法随发版更新
 - **B. 迁入 releaseBase**（生成物 `prices.series.json` → `cordis.patch.yml` → host 配置）：合规、可随发版更新官方阶梯价，但需新增一条 host→client 的只读通路（**动 wire**）
+
+**裁决（2026-09-19）：先 A 后 B。** S1–S3 已按 A 落地；Spec §2.3 已把该偏离写成
+「已知的、被显式接受的临时偏离」，迁移完成后即闭合。
 
 ---
 
@@ -129,27 +134,63 @@ export interface FinanceTierEntryInput {
 
 ## 6. 实施阶段
 
-| 阶段 | 内容 | 验收 |
-|---|---|---|
-| **S1** | schema 扩展（G1–G5）+ `normalizeTierMap` 双形状兼容 + 三条解析规则 | 单测：倍率解析优先级、TTL 选取、币种不匹配跳过、落档语义锁死 |
-| **S2** | `splitEstimate` / UI 接入新 spec（币种守卫、`offPeakDiscount` 参与） | 单测 + `preview:verify` |
-| **S3** | 「拆分会话」卡的**币种不匹配**提示文案 | 真宿主截图 |
-| **S4**（走 B 才做） | 生成器产出官方阶梯价 + host 端点 + 面板读取 | `check:all` + `real-host-check` 注册面断言 |
+| 阶段 | 内容 | 验收 | 状态 |
+|---|---|---|---|
+| **S1** | schema 扩展（G1–G5）+ `normalizeTierMap` 双形状兼容 + 三条解析规则 | 单测：倍率解析优先级、TTL 选取、币种不匹配跳过、落档语义锁死 | ✅ 已落地 |
+| **S2** | `splitEstimate` / UI 接入新 spec（币种守卫、`offPeakDiscount` 参与） | 单测 + `preview:verify` | ✅ 已落地 |
+| **S3** | 「拆分会话」卡的**币种不匹配**提示文案 | 真宿主截图 | ✅ 文案已落地（真宿主截图待补） |
+| **S4**（走 B 才做） | 生成器产出官方阶梯价 + host 端点 + 面板读取 | `check:all` + `real-host-check` 注册面断言 | ⬜ 待做 |
+
+### 落地摘要（2026-09-19）
+
+- **形状**：`settings.finance.tiers` 的值新增 `FinanceTierSpec`（对象）形状，旧的裸数组仍被接受；
+  归一化产物统一为 `FinanceTierGroup`（按**剥净后缀**的 modelKey 分桶，一键可挂多组）。
+- **类型面**：`dsh-finance/src/types.ts` 新增 `FinanceTierSpec` / `FinanceTierGroup` /
+  `FinanceTierCacheWriteTtl`；`FinanceConfig.tiers` 与 `FinanceConfigInput.tiers` 同步换型。
+- **宿主编译陷阱**（已踩，勿回退）：`z.union([...])` 的输出类型经 `Config.meta.default`
+  推断链会被展宽，必须在 `tierEntryInput` / `tierSpec` / `tierEntryInputs` 三处写显式注解，
+  否则 `Schema<FinanceConfigInput>` 整体不兼容（TS2322）。
+- **客户端**：`derive.ts` 新增 `resolveCacheReadMicros` / `resolveCacheWriteMicros` /
+  `tierGroupFor` / `tierGroupUsability` / `splitEstimateForModel`；`splitEstimate` 增加
+  `offPeakDiscount`（两侧同乘，比例不变）与 `discountApplied`。
+- **UI**：拆分卡成本列区分四态 —— 有估算 / 无阶梯价 / 币种不匹配 / 生效窗口外；
+  错峰折扣在金额旁标注。文案 `contextCurrencyMismatch` / `contextEraMismatch` /
+  `contextOffPeakApplied`（zh + en 同步）。
+- **wire 未动**（决策点 1 = A）。
+
+### 验收记录（2026-09-19）
+
+| 项 | 结果 |
+|---|---|
+| `pnpm -r build` → `typecheck` → `test`（顺序执行） | 全绿（finance 238、finance-client 75） |
+| `pnpm check:all`（架构 / 价格 / 对比度 / token / 版本） | 全 PASS，硬失败 0 |
+| `pnpm preview:verify` | **119/119 项通过**（新增：币种不匹配不参与估算、错峰折扣标注） |
+| `real-host-check` | 未跑（本次未动 host 注册面 / wire；S4 时必跑） |
+| 版本 bump | `dsh-finance` 0.4.13 → 0.4.14、`dsh-finance-client` 0.5.43 → 0.5.44 |
+
+### 与 §3.1 草案的差异（实现时按 Spec 收敛）
+
+1. **生效窗口类型**：草案写 `number`，实现按输入面需要放宽为 `string | number`
+   （与既有 `plans.effectiveFrom` 同口径，接受可 `Date.parse` 的日期串）。
+2. **键的组织方式**：草案说"key 允许带后缀"，实现进一步把后缀**拆出来**做精确匹配 +
+   剥后缀回退（Spec 规则 3），而不是把整串当一个 key。
+3. **`offPeakDiscount` 的作用位置**：草案未定义，实现定为"观测值与压缩值两侧同乘"
+   （Spec 规则 6）——桶数据无小时维度，只能整体缩放，比例不变。这是保守选择，需评审确认。
 
 ---
 
-## 7. 待裁决（4 条，决定工程量）
+## 7. 决策裁决结果（2026-09-19）
 
-| # | 决策 | 选项 | 建议 |
+| # | 决策 | 裁决 | 落地情况 |
 |---|---|---|---|
-| **1** | `tiers` 落点 | A 维持 settings / **B 迁 releaseBase** | **先 A 后 B**：S1–S3 用 A 落地（今天就能用），B 作为独立后续任务——否则会被生成器 + wire 的大工程拖住 |
-| **2** | 币种策略 | **per-key 后缀（`#USD`）** / `currency` 字段 / 强制统一 CNY | **`currency` 字段 + 后缀 key 双管**：字段表达币种，后缀表达地域/站点变体 |
-| **3** | cacheRead 表达 | **绝对价优先 + 倍率兜底** / 只存绝对价 | 双写法（Anthropic/Qwen 官方给倍率，硬换算易错） |
-| **4** | 本次是否做阶梯价编辑 UI | 是 / 否（仍手填 YAML） | **否**：先把 schema 与语义做对；编辑 UI 等 B 之后再谈（那时数据来自生成物，用户只需选「我要用哪套」） |
+| **1** | `tiers` 落点 | **A 维持 settings**，B 迁 releaseBase 作为独立后续任务（S4） | A 已落地；wire 未动；Spec §2.3 已写明这是**被显式接受的临时偏离** |
+| **2** | 币种策略 | **`currency` 字段 + 后缀 key 双管**（字段表达币种，后缀表达地域/站点变体） | ✅ 已落地（规则 3 + 规则 5） |
+| **3** | cacheRead 表达 | **绝对价优先 + 倍率兜底**（Anthropic/Qwen 官方给倍率） | ✅ 已落地（规则 1，另加 cacheWrite 倍率与 TTL，规则 2） |
+| **4** | 本次是否做阶梯价编辑 UI | **否** —— 先做对 schema 与语义；编辑 UI 等 B 之后（那时数据来自生成物，用户只需选「用哪套」） | ✅ 未做（仍手填 YAML/settings） |
 
 ---
 
 ## 8. 相关文档
 
 - 调研报告（11 家官方定价 + 复核修正）：[`docs/pricing-research-llm-tiered-pricing.md`](./pricing-research-llm-tiered-pricing.md)
-- 价格体系唯一规范源：[`docs/FINANCE-PRICING-SPEC.md`](./FINANCE-PRICING-SPEC.md)（INV-1..9 / §2 数据模型）
+- 价格体系唯一规范源：[`docs/FINANCE-PRICING-SPEC.md`](./FINANCE-PRICING-SPEC.md)（INV-1..9 / §2 数据模型 / **§2.3 阶梯价七条解析规则**）

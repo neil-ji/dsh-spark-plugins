@@ -189,6 +189,28 @@ export interface FinanceTierEntryInput {
   cacheReadMicrosPerMtok?: number
   cacheWriteMicrosPerMtok?: number
   outputMicrosPerMtok: number
+  /**
+   * G2：缓存读倍率（相对该档 `inputMicrosPerMtok`，Anthropic 0.1 / Qwen 0.1–0.2）。
+   * 绝对价 `cacheReadMicrosPerMtok` 优先；两者都缺省则继承输入价。语义见 SPEC §2.3 规则 1。
+   */
+  cacheReadMultiplier?: number
+  /**
+   * G3：缓存写倍率（Anthropic 5m=1.25 / 1h=2）。绝对价 `cacheWriteMicrosPerMtok` 优先。
+   * 语义见 SPEC §2.3 规则 1。
+   */
+  cacheWriteMultiplier?: number
+  /**
+   * G3：缓存写 TTL 绝对价（Kimi 5min=¥20 / 1h=¥40，micros/Mtok）。
+   * 仅当 `cacheWriteMicrosPerMtok` / `cacheWriteMultiplier` 都缺省时参与解析，
+   * 且只取 `m5`（保守）；语义见 SPEC §2.3 规则 2。
+   */
+  cacheWriteTtl?: { m5?: number; h1?: number }
+}
+
+/** 缓存写 TTL 绝对价（micros/Mtok）。只声明实际用到的档位。 */
+export interface FinanceTierCacheWriteTtl {
+  m5?: number
+  h1?: number
 }
 
 /** 归一化后的阶梯档（按 `maxPromptTokens` 升序，兜底档恒在最后）。 */
@@ -198,6 +220,51 @@ export interface FinanceTierEntry {
   cacheReadMicrosPerMtok?: number
   cacheWriteMicrosPerMtok?: number
   outputMicrosPerMtok: number
+  /** 归一化后仍保留的倍率写法（绝对价缺省时由消费者解析）；绝对价存在则不写入。 */
+  cacheReadMultiplier?: number
+  cacheWriteMultiplier?: number
+  cacheWriteTtl?: FinanceTierCacheWriteTtl
+}
+
+/**
+ * 一组阶梯价（一个 `modelKey` 的价表，可含币种/区域限定）。
+ *
+ * 这是 settings 里的**新形状**；旧形状（裸 `FinanceTierEntryInput[]`）仍被接受并按
+ * `currency = 'CNY'` 归一化（SPEC §2.3 规则 4）。
+ */
+export interface FinanceTierSpec {
+  /** G1：计价币种。缺省 'CNY'。与账本币种不一致时整组不参与估算。 */
+  currency?: string
+  /** 档位列表（至少一档；`maxPromptTokens = 0` 为兜底档）。 */
+  tiers: FinanceTierEntryInput[]
+  /** G5：时段折扣，0 < r < 1（DeepSeek 空闲 5 折 = 0.5）。缺省 1 = 不打折。 */
+  offPeakDiscount?: number
+  /** G4：生效窗口。数字 = epoch ms，字符串 = 可 `Date.parse` 的日期；缺省 = 无界。 */
+  effectiveFrom?: string | number
+  effectiveTo?: string | number
+  /** G6：区域 / 服务档，仅作标签与去重，不参与计算。 */
+  region?: string
+  serviceTier?: string
+}
+
+/**
+ * 归一化后的一组阶梯价。`key` 保留原始 modelKey（可能带 `#suffix` 限定），
+ * 由消费者按「精确匹配 → 剥后缀回退」解析（SPEC §2.3 规则 3）。
+ */
+export interface FinanceTierGroup {
+  /** 组 key：原始 modelKey，含 `#suffix` 时后缀表达币种/地域变体。 */
+  key: string
+  /** 剥净 `#suffix` 后的 modelKey。 */
+  modelKey: string
+  /** 限定后缀（`#` 之后的部分）；无后缀时为 undefined。 */
+  suffix?: string
+  currency: string
+  tiers: readonly FinanceTierEntry[]
+  offPeakDiscount: number
+  effectiveFrom?: number
+  effectiveTo?: number
+  region?: string
+  serviceTier?: string
 }
 
 /**
@@ -307,8 +374,11 @@ export interface FinanceConfigInput {
   /**
    * 按 modelKey 声明的 context 阶梯价（可选）。只在"拆分会话能省多少"这张卡里用，
    * **不改动**账本已有的成本口径（那仍然走 prices / providerDefaults / defaultPrice）。
+   *
+   * 值有两种形状：旧的裸 `FinanceTierEntryInput[]`（隐式 CNY）、新的 `FinanceTierSpec`
+   * （可带币种 / 时段折扣 / 生效窗口）。key 允许带 `#suffix` 限定后缀。
    */
-  tiers?: Record<string, FinanceTierEntryInput[]>
+  tiers?: Record<string, FinanceTierEntryInput[] | FinanceTierSpec>
   /**
    * Per-provider configuration entries — one row per provider the user wants
    * to track (DeepSeek-official, MiniMax-M3, OpenAI, ...). Each row carries
@@ -446,8 +516,12 @@ export interface FinanceConfig {
   prices: Record<string, readonly FinancePriceEntry[]>
   /** Resolved static subscription plans (defaults to [] when settings omit them). */
   plans: readonly FinancePlanEntry[]
-  /** Resolved context tier cards, keyed by modelKey (defaults to {} when settings omit them). */
-  tiers: Record<string, readonly FinanceTierEntry[]>
+  /**
+   * Resolved context tier groups, keyed by the **stripped** modelKey (defaults to {}
+   * when settings omit them). One key may carry several groups (currency / region
+   * variants); consumers pick by currency + era (SPEC §2.3).
+   */
+  tiers: Record<string, readonly FinanceTierGroup[]>
   /** Resolved per-provider list (defaults to [] when settings omit it). */
   providers: readonly FinanceProviderEntry[]
 }

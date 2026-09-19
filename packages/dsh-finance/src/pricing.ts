@@ -24,8 +24,10 @@ import type {
   FinancePriceEntry,
   FinancePlanEntry,
   FinancePlanEntryInput,
+  FinanceTierCacheWriteTtl,
   FinanceTierEntry,
   FinanceTierEntryInput,
+  FinanceTierGroup,
   FinancePriceEntryInput,
   FinancePriceRate,
   FinanceProviderBillingMode,
@@ -655,41 +657,144 @@ function financePlanEffectiveFrom(value: string | number | undefined): number {
 }
 
 /**
- * context 阶梯价归一化：丢掉不可信的档（不猜），按 `maxPromptTokens` 升序排列，
- * `0`（兜底档）恒排最后。空列表的 modelKey 不写入 —— 客户端据此判断"这个模型
- * 没有阶梯价，拆分不改变单价"。
+ * 拆分 `modelKey#suffix`：后缀表达币种 / 站点 / 地域变体（SPEC §2.3 规则 3）。
+ * 只按**最后一个** `#` 切分，因为 modelKey 本身（`provider/model`）不含 `#`。
+ */
+export function splitTierKey(key: string): { modelKey: string; suffix?: string } {
+  const index = key.lastIndexOf('#')
+  if (index <= 0) return { modelKey: key }
+  const suffix = key.slice(index + 1).trim()
+  if (suffix === '') return { modelKey: key }
+  return { modelKey: key.slice(0, index), suffix }
+}
+
+/** 一条档位里的可选缓存价：绝对价优先，倍率次之，TTL 最后（彼此不覆盖）。 */
+function normalizeTierCacheFields(raw: FinanceTierEntryInput): Partial<FinanceTierEntry> {
+  const out: Partial<FinanceTierEntry> = {}
+  const absoluteRead = Number(raw.cacheReadMicrosPerMtok)
+  if (Number.isFinite(absoluteRead) && absoluteRead >= 0) out.cacheReadMicrosPerMtok = Math.round(absoluteRead)
+  const absoluteWrite = Number(raw.cacheWriteMicrosPerMtok)
+  if (Number.isFinite(absoluteWrite) && absoluteWrite >= 0) out.cacheWriteMicrosPerMtok = Math.round(absoluteWrite)
+  const readMultiplier = Number(raw.cacheReadMultiplier)
+  if (Number.isFinite(readMultiplier) && readMultiplier >= 0) out.cacheReadMultiplier = readMultiplier
+  const writeMultiplier = Number(raw.cacheWriteMultiplier)
+  if (Number.isFinite(writeMultiplier) && writeMultiplier >= 0) out.cacheWriteMultiplier = writeMultiplier
+  const ttl = normalizeTierWriteTtl(raw.cacheWriteTtl)
+  if (ttl !== undefined) out.cacheWriteTtl = ttl
+  return out
+}
+
+/** 缓存写 TTL 绝对价：只保留可信档位；一个都没有时返回 undefined（不留空壳对象）。 */
+function normalizeTierWriteTtl(value: unknown): FinanceTierCacheWriteTtl | undefined {
+  if (value === null || typeof value !== 'object') return undefined
+  const record = value as Record<string, unknown>
+  const out: FinanceTierCacheWriteTtl = {}
+  const m5 = Number(record.m5)
+  if (Number.isFinite(m5) && m5 >= 0) out.m5 = Math.round(m5)
+  const h1 = Number(record.h1)
+  if (Number.isFinite(h1) && h1 >= 0) out.h1 = Math.round(h1)
+  return out.m5 === undefined && out.h1 === undefined ? undefined : out
+}
+
+/** 一组档位：坏档跳过、升序、兜底档（0）恒排最后。空数组返回 undefined。 */
+function normalizeTierEntries(list: unknown): readonly FinanceTierEntry[] | undefined {
+  if (!Array.isArray(list)) return undefined
+  const entries: FinanceTierEntry[] = []
+  for (const raw of list) {
+    if (raw === null || typeof raw !== 'object') continue
+    const record = raw as FinanceTierEntryInput
+    const maxPromptTokens = Number(record.maxPromptTokens)
+    const input = Number(record.inputMicrosPerMtok)
+    const output = Number(record.outputMicrosPerMtok)
+    if (!Number.isFinite(maxPromptTokens) || maxPromptTokens < 0) continue
+    if (!Number.isFinite(input) || input < 0) continue
+    if (!Number.isFinite(output) || output < 0) continue
+    entries.push({
+      maxPromptTokens: Math.round(maxPromptTokens),
+      inputMicrosPerMtok: Math.round(input),
+      outputMicrosPerMtok: Math.round(output),
+      ...normalizeTierCacheFields(record),
+    })
+  }
+  if (entries.length === 0) return undefined
+  const bounded = entries.filter((entry) => entry.maxPromptTokens > 0).sort((a, b) => a.maxPromptTokens - b.maxPromptTokens)
+  const catchAll = entries.filter((entry) => entry.maxPromptTokens === 0)
+  return [...bounded, ...catchAll]
+}
+
+/** 生效窗口折算：数字 = epoch ms；日期串 = Date.parse；无法解析 / 缺省 = undefined（无界）。 */
+function normalizeTierBound(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Date.parse(value.trim())
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return undefined
+}
+
+/** 时段折扣：0 < r <= 1 才可信（0 = 免费不是折扣，当噪声丢掉）。 */
+function normalizeOffPeakDiscount(value: unknown): number {
+  const ratio = Number(value)
+  if (!Number.isFinite(ratio) || ratio <= 0 || ratio > 1) return 1
+  return ratio
+}
+
+/** 非空字符串标签，否则 undefined。 */
+function normalizeTierLabel(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed === '' ? undefined : trimmed
+}
+
+/**
+ * context 阶梯价归一化（SPEC §2.3）：两种形状都吃，一律收敛成 `FinanceTierGroup`。
+ *
+ * - **旧形状**（裸数组）：隐式 `currency = 'CNY'`、`offPeakDiscount = 1`、无生效窗口；
+ * - **新形状**（`{ currency?, tiers, ... }`）：字段逐个校验，不可信的一律回落到缺省；
+ * - **坏组**（档位不是数组 / 全是坏档 / 新形状缺 `tiers`）：整组丢弃，不猜。
+ *
+ * key 允许带 `#suffix` 限定后缀，由 `splitTierKey` 拆出，消费者据此精确匹配后再回退。
  */
 export function normalizeFinanceTiers(
-  tiers: Record<string, readonly FinanceTierEntryInput[]> | undefined,
-): Record<string, readonly FinanceTierEntry[]> {
-  const out: Record<string, readonly FinanceTierEntry[]> = {}
-  for (const [modelKey, list] of Object.entries(tiers ?? {})) {
-    if (!Array.isArray(list)) continue
-    const entries: FinanceTierEntry[] = []
-    for (const raw of list) {
-      if (raw === null || typeof raw !== 'object') continue
-      const maxPromptTokens = Number(raw.maxPromptTokens)
-      const input = Number(raw.inputMicrosPerMtok)
-      const output = Number(raw.outputMicrosPerMtok)
-      if (!Number.isFinite(maxPromptTokens) || maxPromptTokens < 0) continue
-      if (!Number.isFinite(input) || input < 0) continue
-      if (!Number.isFinite(output) || output < 0) continue
-      const cacheRead = Number(raw.cacheReadMicrosPerMtok)
-      const cacheWrite = Number(raw.cacheWriteMicrosPerMtok)
-      entries.push({
-        maxPromptTokens: Math.round(maxPromptTokens),
-        inputMicrosPerMtok: Math.round(input),
-        outputMicrosPerMtok: Math.round(output),
-        ...Number.isFinite(cacheRead) && cacheRead >= 0 ? { cacheReadMicrosPerMtok: Math.round(cacheRead) } : {},
-        ...Number.isFinite(cacheWrite) && cacheWrite >= 0 ? { cacheWriteMicrosPerMtok: Math.round(cacheWrite) } : {},
-      })
-    }
-    if (entries.length === 0) continue
-    const bounded = entries.filter((entry) => entry.maxPromptTokens > 0).sort((a, b) => a.maxPromptTokens - b.maxPromptTokens)
-    const catchAll = entries.filter((entry) => entry.maxPromptTokens === 0)
-    out[modelKey] = [...bounded, ...catchAll]
+  tiers: Record<string, unknown> | undefined,
+): Record<string, readonly FinanceTierGroup[]> {
+  const out: Record<string, readonly FinanceTierGroup[]> = {}
+  for (const [key, value] of Object.entries(tiers ?? {})) {
+    const group = normalizeTierGroup(key, value)
+    if (group === undefined) continue
+    const list = out[group.modelKey] ?? []
+    out[group.modelKey] = [...list, group]
   }
   return out
+}
+
+/** 一个 key 的原始值 → 归一化分组；不可信时 undefined（整组丢弃）。 */
+function normalizeTierGroup(key: string, value: unknown): FinanceTierGroup | undefined {
+  // 旧形状：裸档位数组。
+  if (Array.isArray(value)) {
+    const entries = normalizeTierEntries(value)
+    if (entries === undefined) return undefined
+    return { ...splitTierKey(key), key, currency: 'CNY', tiers: entries, offPeakDiscount: 1 }
+  }
+  if (value === null || typeof value !== 'object') return undefined
+  const record = value as Record<string, unknown>
+  const entries = normalizeTierEntries(record.tiers)
+  if (entries === undefined) return undefined
+  const effectiveFrom = normalizeTierBound(record.effectiveFrom)
+  const effectiveTo = normalizeTierBound(record.effectiveTo)
+  const region = normalizeTierLabel(record.region)
+  const serviceTier = normalizeTierLabel(record.serviceTier)
+  return {
+    ...splitTierKey(key),
+    key,
+    currency: normalizeTierLabel(record.currency) ?? 'CNY',
+    tiers: entries,
+    offPeakDiscount: normalizeOffPeakDiscount(record.offPeakDiscount),
+    ...effectiveFrom !== undefined ? { effectiveFrom } : {},
+    ...effectiveTo !== undefined ? { effectiveTo } : {},
+    ...region !== undefined ? { region } : {},
+    ...serviceTier !== undefined ? { serviceTier } : {},
+  }
 }
 
 export function normalizeFinanceConfig(
