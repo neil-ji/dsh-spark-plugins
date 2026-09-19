@@ -40,7 +40,9 @@
 
 .statGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .stat {
-  background: var(--spk-layer-2);
+  /* 与 Card 同一个表面 token —— Stat 常与 Card 同屏，两者底色必须一致
+     （2026-09-29 真宿主截图：layer-2 比 surface-card 深一档，被判为样式不一致）。 */
+  background: var(--spk-surface-card);
   border: 1px solid var(--spk-border);
   border-radius: 12px;
   padding: 12px;
