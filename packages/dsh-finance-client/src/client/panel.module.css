@@ -172,6 +172,13 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr) auto;
 }
 
+/* 操作列：右对齐贴表缘（表头与按钮同侧，UI-UX-SPEC §3.5 列对齐规则）。 */
+.cellActions {
+  display: flex;
+  justify-content: flex-end;
+  text-align: right;
+}
+
 /* 供应商总表：供应商 | 付费类型 | 余额/月费 | 按量等价 | 操作。
    表头与数据行是两个独立 grid，max-content 在两边算宽会不同
    （「付费类型」四字 vs 行内 Tag），后面列随之错位 —— 该列必须用固定宽度

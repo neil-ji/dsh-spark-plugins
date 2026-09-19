@@ -242,7 +242,7 @@ export function ThisMonthView({
                   <span className={css.cell}>{t('colBillingType')}</span>
                   <span className={cx(css.cell, css.cellNum)}>{t('colBalanceFee')}</span>
                   <span className={cx(css.cell, css.cellNum)} title={t('colEquivHint')}>{t('planEquivalent')}</span>
-                  <span className={css.cell}>{t('colActions')}</span>
+                  <span className={cx(css.cell, css.cellActions)}>{t('colActions')}</span>
                 </div>
                 {knownProviders.length === 0
                   ? <p className={css.hint}>{t('planEmpty')}</p>
@@ -281,7 +281,7 @@ export function ThisMonthView({
                           </span>
                           <span className={cx(css.cell, css.cellNum)}>{feeOrBalance}</span>
                           <span className={cx(css.cell, css.cellNum, css.balanceValue)}>{equiv}</span>
-                          <span className={css.planActions}>
+                          <span className={cx(css.planActions, css.cellActions)}>
                             {/* 操作列始终有下拉；锁定（如 deepseek-official）或设置只读时
                                 收窄为「详情」一项 —— 修改入口不给，详情永远在。 */}
                             {!plansWritable || billingLocked.has(providerKey(provider))
