@@ -2,6 +2,9 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
   OPENAI_LONG_CONTEXT_THRESHOLD,
+  ceilingOf,
+  parseGlmTierPage,
+  parseQwenTierPage,
   parseMoneyCell,
   parseOpenAiTierPage,
   parseXaiTierPage,
@@ -127,5 +130,117 @@ describe('snapshotToTierSpecs', () => {
   it('输出按 key 稳定：同一输入两次解析结果逐值相同（生成物幂等 INV-8 的前提）', () => {
     const again = snapshotToTierSpecs(parseOpenAiTierPage(openaiMd, FX), 'CNY')
     expect(JSON.stringify(again)).toBe(JSON.stringify(specs))
+  })
+})
+/* ─────────────── 智谱 GLM（S4/P1，zai）与阿里百炼 Qwen（dashscope） ─────────────── */
+
+const glmHtml = readFileSync(new URL('./fixtures/glm-pricing.2026-09-19.html', import.meta.url), 'utf8')
+const qwenHtml = readFileSync(new URL('./fixtures/qwen-pricing.2026-09-19.html', import.meta.url), 'utf8')
+
+describe('ceilingOf（三家档位写法）', () => {
+  it('认三种官方写法：无上界 / 半开区间 / 不等号区间', () => {
+    // 无上界 → 兜底档 0
+    expect(ceilingOf('≥32K')).toBe(0)
+    expect(ceilingOf('输入长度 ≥32K')).toBe(0)
+    // GLM 半开区间：取右端
+    expect(ceilingOf('输入长度 [0, 32K)')).toBe(32_000)
+    expect(ceilingOf('输入长度 [32K, 128K)')).toBe(128_000)
+    expect(ceilingOf('输入 [32K, 200K)')).toBe(200_000)
+    // Qwen 不等号：取**最后**一个界（32K<Token≤256K 的上界是 256K，不是 32K）
+    expect(ceilingOf('0<Token≤32K')).toBe(32_000)
+    expect(ceilingOf('32K<Token≤256K')).toBe(256_000)
+    expect(ceilingOf('256K<Token≤1M')).toBe(1_000_000)
+    // 认不出 → undefined（调用方丢弃该行，不猜）
+    expect(ceilingOf('无阶梯计价')).toBeUndefined()
+  })
+})
+
+describe('parseGlmTierPage', () => {
+  const specs = parseGlmTierPage(glmHtml)
+
+  it('解析出「输入长度」一维阶梯的模型，单位是元（不乘 fx）', () => {
+    // GLM-5.1 官方：输入长度 [0,32K) = ¥6/¥24，≥32K = ¥8/¥28
+    expect(specs['zai/glm-5.1'].tiers.map(t => t.maxPromptTokens)).toEqual([32_000, 0])
+    expect(specs['zai/glm-5.1'].tiers[0].inputMicrosPerMtok).toBe(6_000_000)
+    expect(specs['zai/glm-5.1'].tiers[0].outputMicrosPerMtok).toBe(24_000_000)
+    expect(specs['zai/glm-5.1'].tiers[1].inputMicrosPerMtok).toBe(8_000_000)
+  })
+
+  it('缓存命中落绝对价（页面给的就是绝对价，不是倍率）', () => {
+    expect(specs['zai/glm-5.1'].tiers[0].cacheReadMicrosPerMtok).toBe(1_300_000)
+    expect(specs['zai/glm-5.1'].tiers[1].cacheReadMicrosPerMtok).toBe(2_000_000)
+  })
+
+  it('二维档（输入 × 输出）的模型**整模型跳过**，避免留下半张表', () => {
+    // GLM-4.7 / GLM-4.5-Air 的档位形如「输入 [0,32K)，输出 [0,0.2K)」，
+    // tiers 是一维，无法忠实表达 —— 必须整模型不进产物。
+    expect(specs['zai/glm-4.7']).toBeUndefined()
+    expect(specs['zai/glm-4.5-air']).toBeUndefined()
+  })
+
+  it('无长度阶梯的模型（上下文列写 1M/200K）不进产物', () => {
+    expect(specs['zai/glm-5.3']).toBeUndefined()
+    expect(specs['zai/glm-5.2']).toBeUndefined()
+  })
+
+  it('币种一律 CNY', () => {
+    for (const spec of Object.values(specs)) expect(spec.currency).toBe('CNY')
+  })
+
+  it('输出稳定（同一输入两次结果逐值相同，幂等前提）', () => {
+    expect(JSON.stringify(parseGlmTierPage(glmHtml))).toBe(JSON.stringify(specs))
+  })
+})
+
+describe('parseQwenTierPage', () => {
+  const specs = parseQwenTierPage(qwenHtml)
+
+  it('三档模型：档位上界与官方一致，最高档转成兜底档', () => {
+    // qwen3-max 官方：0<Token≤32K ¥2.5/¥10；32K<Token≤128K ¥4/¥16；128K<Token≤256K ¥7/¥28
+    const tiers = specs['dashscope/qwen3-max'].tiers
+    expect(tiers.map(t => t.maxPromptTokens)).toEqual([32_000, 128_000, 0])
+    expect(tiers.map(t => t.inputMicrosPerMtok)).toEqual([2_500_000, 4_000_000, 7_000_000])
+    expect(tiers.map(t => t.outputMicrosPerMtok)).toEqual([10_000_000, 16_000_000, 28_000_000])
+  })
+
+  it('四档模型也解析完整（qwen3-coder-plus 有 4 档）', () => {
+    const tiers = specs['dashscope/qwen3-coder-plus-2025-09-23']?.tiers
+    expect(tiers).toBeDefined()
+    expect(tiers!.length).toBeGreaterThanOrEqual(4)
+    // 兜底档必须是最后一条（生成段按升序渲染）
+    expect(tiers![tiers!.length - 1].maxPromptTokens).toBe(0)
+  })
+
+  it('输出价随「思考模式」分叉的模型整模型跳过', () => {
+    // qwen-plus 系列：非思考 / 思考两套输出价，1D schema 无法忠实表达。
+    expect(specs['dashscope/qwen-plus']).toBeUndefined()
+    expect(specs['dashscope/qwen-plus-2025-12-01']).toBeUndefined()
+  })
+
+  it('只取中国内地价目，不混入海外站（禁止跨站点合并）', () => {
+    // 同一模型若混入国际/美国价，输入价会被抬高到 2.9 元级别。
+    const tiers = specs['dashscope/qwen3-max'].tiers
+    expect(tiers[0].inputMicrosPerMtok).toBe(2_500_000)
+    expect(tiers.some(t => t.inputMicrosPerMtok === 2_936_000)).toBe(false)
+  })
+
+  it('无长度阶梯（只有单档）的模型不进产物', () => {
+    // qwen3.7-max / qwen3.8-max 是 0<Token≤1M 单档 → 没有阶梯
+    expect(specs['dashscope/qwen3.7-max']).toBeUndefined()
+    expect(specs['dashscope/qwen3.8-max']).toBeUndefined()
+  })
+
+  it('缓存读走倍率 0.2（官方给 10%/20% 区间，取更贵的那个）', () => {
+    for (const spec of Object.values(specs)) {
+      for (const tier of spec.tiers) expect(tier.cacheReadMultiplier).toBe(0.2)
+    }
+  })
+
+  it('价格逐档严格递增（越长越贵，列错位会立刻暴露）', () => {
+    for (const [key, spec] of Object.entries(specs)) {
+      for (let i = 1; i < spec.tiers.length; i += 1) {
+        expect(spec.tiers[i].inputMicrosPerMtok, key).toBeGreaterThan(spec.tiers[i - 1].inputMicrosPerMtok)
+      }
+    }
   })
 })

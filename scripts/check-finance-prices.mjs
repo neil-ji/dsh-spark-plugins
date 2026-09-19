@@ -178,10 +178,28 @@ for (const [key, spec] of Object.entries(seriesTiers)) {
   const bounded = tiers.filter(t => t.maxPromptTokens > 0)
   const catchAll = tiers.filter(t => t.maxPromptTokens === 0)
   if (catchAll.length > 1) tierProblems.push(key + ' 有多个兜底档')
-  // 档位必须严格升序，且**全量按所在档**要求兜底档是最后一道（否则长请求无价可落）。
+  // 兜底档必须在**最后**（生成段按升序渲染；插在中间会让长请求落错档）。
+  if (catchAll.length === 1 && tiers[tiers.length - 1].maxPromptTokens !== 0) {
+    tierProblems.push(key + ' 兜底档不在最后')
+  }
+  // 档位必须严格升序。多档厂商（Qwen 最多 4 档）很容易解析出重复上界 ——
+  // 重复上界会让 tierForBucket 的 `find(>=)` 命中错档，故逐对检查而非只看长度。
   const ceilings = bounded.map(t => t.maxPromptTokens)
   for (let i = 1; i < ceilings.length; i += 1) {
     if (ceilings[i] <= ceilings[i - 1]) { tierProblems.push(key + ' 档位未严格升序'); break }
+  }
+  // 档位价格必须逐档**严格递增**：官方阶梯都是"越长越贵"。若解析把列读错位
+  // （例如把免费额度列当成单价），这里立刻能看出价格不再单调。
+  const ordered = [...bounded, ...catchAll]
+  for (let i = 1; i < ordered.length; i += 1) {
+    if (ordered[i].inputMicrosPerMtok <= ordered[i - 1].inputMicrosPerMtok) {
+      tierProblems.push(key + ' 输入价未随档位递增（疑似列错位）')
+      break
+    }
+  }
+  // 缓存读要么给绝对价、要么给倍率、要么缺省继承；倍率必须是正数。
+  if (tiers.some(t => t.cacheReadMultiplier !== undefined && !(t.cacheReadMultiplier > 0))) {
+    tierProblems.push(key + ' cacheReadMultiplier 非正数')
   }
   // 长档必须真的更贵：同价的"两档"是噪声，说明解析把无阶梯模型也写进来了。
   if (bounded.length === 1 && catchAll.length === 1) {
@@ -193,8 +211,30 @@ for (const [key, spec] of Object.entries(seriesTiers)) {
   }
   if (typeof spec?.currency !== 'string' || spec.currency === '') tierProblems.push(key + ' 缺少币种')
 }
-if (tierProblems.length === 0) ok('A6 每个阶梯价条目：档位升序、单一兜底档、长档严格更贵、带币种')
+if (tierProblems.length === 0) ok('A6 每个阶梯价条目：档位严格升序、兜底档最后、价格逐档递增、带币种')
 else bad('A6 阶梯价条目结构不成立', JSON.stringify(tierProblems))
+
+// A6b：**生成物必须覆盖所有已接源的 provider**。防"某家源解析退化成 0 个模型"
+// 而被静默接受（生成器只会打印一行 `x: 0 个模型`，产物里少一整家也没人察觉）。
+const TIER_PROVIDERS = ['openai', 'xai', 'zai', 'dashscope']
+const presentProviders = new Set(Object.keys(seriesTiers).map(key => key.split('/')[0]))
+const missingProviders = TIER_PROVIDERS.filter(provider => !presentProviders.has(provider))
+if (missingProviders.length === 0) {
+  ok('A6b 已接源的 provider 都有阶梯价条目', TIER_PROVIDERS.join(' / '))
+} else {
+  bad('A6b 阶梯价生成物缺 provider（该家源解析退化了？）', JSON.stringify(missingProviders))
+}
+
+// A6c：倍率写法必须活着走到序列里。Qwen 只给倍率（命中 10%/20%），漏渲染会让缓存读
+// 静默退化成"按输入价算"——真实缓存读只有输入价的 20%，即虚高 5 倍。
+if (presentProviders.has('dashscope')) {
+  const missingMultiplier = Object.entries(seriesTiers)
+    .filter(([key]) => key.startsWith('dashscope/'))
+    .filter(([, spec]) => !(spec?.tiers ?? []).every(t => typeof t.cacheReadMultiplier === 'number' && t.cacheReadMultiplier > 0))
+    .map(([key]) => key)
+  if (missingMultiplier.length === 0) ok('A6c Qwen 档位都带 cacheReadMultiplier（缓存读不会退化成输入价）')
+  else bad('A6c Qwen 档位缺 cacheReadMultiplier', JSON.stringify(missingMultiplier.slice(0, 5)))
+}
 
 // 生成段 ↔ 序列逐值一致（与 A4 同精神：文本对不上就是产物漂移）。
 if (tiersBegin !== -1 && tiersEnd > tiersBegin) {

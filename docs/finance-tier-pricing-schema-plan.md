@@ -3,7 +3,8 @@
 - 状态：**S1–S4 全部落地（2026-09-19）**；INV-1 偏离已闭合
 - 日期：2026-09-19
 - 依据：`docs/pricing-research-llm-tiered-pricing.md`（11 家官方定价调研 + 阿里百炼官方页复核）
-- 范围：P0（OpenAI 272K / xAI 200K / Gemini 200K）+ P1（Qwen plus 线、qwen3.7-flash）
+- 范围：P0（OpenAI 272K / xAI 200K）+ P1（Qwen 多档 / GLM 32K）—— 均已落地；
+  Gemini 200K 因页面不可机器解析未产出，豆包按用户指示不接
 
 > 本方案**只做 schema 与语义**，不含阶梯价编辑 UI（见 §7 决策点 4）。
 > **解析规则已沉淀进规范源**：`docs/FINANCE-PRICING-SPEC.md` §2.3（七条规则 + 形状 + 边界），
@@ -194,10 +195,34 @@ export interface FinanceTierEntryInput {
 
 ### 生成器覆盖范围（诚实记录）
 
-`scripts/gen-finance-tiers.mjs` 目前只覆盖**页面可机器解析**的两家：
-**OpenAI**（272K，Standard 段 `Short/Long context` 列）与 **xAI**（200K，转置表）。
-Gemini 的 `.md` 实际返回 404 SPA 壳（实测），**按 SPEC §3.4「不猜、不补」不予产出**；
-Qwen / GLM / 豆包 / MiniMax（P1）同理待各自源可解析后再扩。
+`scripts/gen-finance-tiers.mjs` 覆盖 4 家、共 **40 个模型**（2026-09-19）：
+
+| provider | 源 | 阈值/档位 | 产出 | 备注 |
+|---|---|---|---|---|
+| `openai` | `developers.openai.com/api/docs/pricing.md` | 272K 两档 | 8 | 只读 **Standard** 段（Batch/Flex/Fast 是 serviceTier 维度） |
+| `xai` | `docs.x.ai/developers/models/grok-4.6.md` | 200K 两档 | 1 | 转置表（行=Type / 列=档位） |
+| `zai` | `docs.bigmodel.cn/cn/guide/start/pricing` | 32K 两档 | 4 | 单位本就是元 → **fx = 1** |
+| `dashscope` | `help.aliyun.com/zh/model-studio/model-pricing` | 32K/128K/256K 最多 4 档 | 27 | 只取中国内地价目；单位元 → **fx = 1** |
+
+**明确不产出的（不猜、不补）**：
+
+- **Gemini**：`.md` 实测返回 404 SPA 壳，页面不可机器解析。
+- **豆包（volcengine）**：按用户指示不接。
+- **Qwen 输出价随思考模式分叉的模型**（`qwen-plus` 系列等）：`tiers` 的输出价只有一个
+  字段，非思考/思考两套价无法忠实表达 → **整模型跳过**（只跳带分叉的行会留下半张表，更糟）。
+  这些模型仍由 community 层的 flat 价覆盖，成本口径不受影响。
+- **GLM 的二维档模型**（`GLM-4.7` / `GLM-4.5-Air`，档位是"输入 × 输出"）：同理整模型跳过。
+- **无长度阶梯的模型**（单档、或上下文列直接写 `1M`）：不进产物，以便与"尚未录入"区分。
+- **缺兜底档的厂商**：Qwen 最高档是有界的（`128K<Token≤256K`），生成器把**最高档改写为
+  兜底档**（`maxPromptTokens = 0`）—— 语义等价：官方声明落档即全量按该档结算。
+
+**取数网络**：OpenAI / xAI 文档在部分网络下需代理（直连 403 / 超时）。生成器**不依赖**
+代理也能跑：不可达的源其既有 key 会**原样保留**（INV-7），不会把该 provider 从产物里抹掉。
+需要全量刷新时：
+
+```bash
+NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://127.0.0.1:7897 node scripts/gen-finance-tiers.mjs
+```
 
 ### 踩到的生成物陷阱（已进闸门）
 

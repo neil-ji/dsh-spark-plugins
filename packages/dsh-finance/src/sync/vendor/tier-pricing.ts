@@ -22,6 +22,11 @@ export interface VendorTierRates {
   outputMicrosPerMtok: number
   cacheReadMicrosPerMtok?: number
   cacheWriteMicrosPerMtok?: number
+  /**
+   * 缓存读倍率（相对该档 input）。页面上只给倍率、不给绝对价的厂商用它
+   * （Qwen 官方："命中 10%（显式）/ 20%（隐式）"）。与绝对价二选一，绝对价优先。
+   */
+  cacheReadMultiplier?: number
 }
 
 /** 一个模型的短/长两档。长档缺省 = 该模型没有长度阶梯。 */
@@ -126,6 +131,303 @@ export function modelToTierSpec(model: VendorTierModel, threshold: number, curre
     ? [toEntry(model.short, 0)]
     : [toEntry(model.short, threshold), toEntry(model.long, 0)]
   return { currency, tiers }
+}
+
+/* ─────────────────── 通用 N 档形状（GLM / Qwen 用） ─────────────────── */
+
+/**
+ * 一档（通用）：`maxPromptTokens` 是**上界**，0 = 兜底档（恒排最后）。
+ * OpenAI / xAI 是"短/长两档"特例；GLM 最多 2 档、Qwen 最多 4 档，故这里用通用形状。
+ */
+export interface VendorTierRow {
+  maxPromptTokens: number
+  rates: VendorTierRates
+}
+
+/** N 档 → `FinanceTierSpec`（升序 + 兜底档最后；落档语义见 SPEC §2.3 规则 7）。 */
+export function rowsToTierSpec(rows: readonly VendorTierRow[], currency: string): FinanceTierSpec {
+  if (rows.length === 0) throw new Error('tier-pricing: 空档位表')
+  const toEntry = (row: VendorTierRow): FinanceTierEntryInput => ({
+    maxPromptTokens: row.maxPromptTokens,
+    inputMicrosPerMtok: row.rates.inputMicrosPerMtok,
+    outputMicrosPerMtok: row.rates.outputMicrosPerMtok,
+    ...row.rates.cacheReadMicrosPerMtok !== undefined ? { cacheReadMicrosPerMtok: row.rates.cacheReadMicrosPerMtok } : {},
+    ...row.rates.cacheWriteMicrosPerMtok !== undefined ? { cacheWriteMicrosPerMtok: row.rates.cacheWriteMicrosPerMtok } : {},
+    ...row.rates.cacheReadMultiplier !== undefined ? { cacheReadMultiplier: row.rates.cacheReadMultiplier } : {},
+  })
+  const bounded = rows.filter(row => row.maxPromptTokens > 0).slice().sort((a, b) => a.maxPromptTokens - b.maxPromptTokens)
+  const catchAll = rows.filter(row => row.maxPromptTokens === 0)
+  return { currency, tiers: [...bounded, ...catchAll].map(toEntry) }
+}
+
+/**
+ * 档位文本 → 上界 token（0 = 无上界/兜底档）。三种官方写法都要认：
+ *
+ * - `≥32K` / `>1M` —— 无上界 → 0（兜底档）
+ * - `[0, 32K)` / `[32K, 128K)`（GLM）—— 取**右端**（半开区间上界）
+ * - `0<Token≤32K` / `32K<Token≤256K`（Qwen）—— 取 `≤` 右侧
+ */
+export function ceilingOf(label: string): number | undefined {
+  const scale = (value: string, unit: string | undefined): number => {
+    const number = Number(value)
+    if (!Number.isFinite(number)) return Number.NaN
+    const suffix = (unit ?? '').toLowerCase()
+    if (suffix === 'k') return Math.round(number * 1_000)
+    if (suffix === 'm') return Math.round(number * 1_000_000)
+    return Math.round(number)
+  }
+  // 半开区间 `[a, b)`：取右端 b。
+  const range = /[\[(]\s*[0-9.]+\s*[kKmM]?\s*,\s*([0-9.]+)\s*([kKmM])?\s*[)\]]/.exec(label)
+  if (range !== null) return scale(range[1]!, range[2])
+  // 无上界：`≥` / `>`（但不含 `≤`/`<`，否则是 Qwen 的 `32K<Token≤256K` 这种区间写法）。
+  if (/[≥>]/.test(label) && !/[≤<]/.test(label)) return 0
+  // `≤` / `<` 右侧取**最后一个**（Qwen 的 `32K<Token≤256K` 上界是 256K，不是 32K）。
+  const bounds = [...label.matchAll(/[≤<]\s*([0-9.]+)\s*([kKmM])?/g)]
+  const last = bounds[bounds.length - 1]
+  if (last === undefined) return undefined
+  const value = scale(last[1]!, last[2])
+  return Number.isFinite(value) ? value : undefined
+}
+
+/** 价格单元格 → 数值；`限时免费` / `免费` = 0，`-` / 非数字 = undefined（该行丢弃）。 */
+export function parseCnyPriceCell(text: string): number | undefined {
+  const trimmed = text.replace(/[\s\u00a0]+/g, '').trim()
+  if (trimmed === '') return undefined
+  if (trimmed === '免费' || trimmed === '限时免费') return 0
+  const match = /^([0-9]+(?:\.[0-9]+)?)/.exec(trimmed)
+  if (match === null) return undefined
+  const value = Number(match[1])
+  return Number.isFinite(value) ? value : undefined
+}
+
+/* ─────────────────────────── 智谱 GLM（zai） ─────────────────────────── */
+
+/**
+ * GLM 定价页（`docs.bigmodel.cn/cn/guide/start/pricing`，服务端渲染）→ 阶梯表。
+ *
+ * 列：模型名称 | 上下文/档位 | 输入单价 | 输出单价 | 缓存存储 | 缓存命中。
+ * 单位一律 **元/百万 Tokens**（页面原文），故 `fx = 1`。
+ *
+ * **两条跳过规则**（不猜、不补）：
+ * 1. **二维档（输入 × 输出）整模型跳过**：GLM-4.7 / GLM-4.5-Air 的档位形如
+ *    `输入 [0, 32K)，输出 [0, 0.2K)`，`tiers` 是一维（只有 prompt 上界），
+ *    无法忠实表达。若只跳带"输出"的行，会留下半张表（更糟）—— 所以按**整模型**跳。
+ *    这些模型仍由 community 层的 flat 价覆盖，成本口径不受影响。
+ * 2. **缓存存储**（元/百万 Tokens/小时）当前"限时免费"，且 `tiers` 无该维度 → 不产出。
+ *
+ * 缓存命中是**绝对价**（页面原文），直接落 `cacheReadMicrosPerMtok`，不走倍率。
+ */
+export function parseGlmTierPage(html: string, provider = 'zai'): Record<string, FinanceTierSpec> {
+  const rowsByModel = new Map<string, { label: string; cells: string[] }[]>()
+  for (const table of tablesOf(html)) {
+    if (!table.includes('输入长度') && !table.includes('输入 [')) continue
+    for (const raw of expandRows(table)) {
+      const cells = raw.map(cleanText)
+      const model = cells[0] ?? ''
+      const label = cells[1] ?? ''
+      if (!/^[A-Za-z0-9][A-Za-z0-9.\-]*$/.test(model)) continue
+      if (!label.includes('输入长度') && !label.includes('输入 [')) continue
+      const list = rowsByModel.get(model) ?? []
+      list.push({ label, cells })
+      rowsByModel.set(model, list)
+    }
+  }
+
+  const out: Record<string, FinanceTierSpec> = {}
+  for (const [model, rows] of rowsByModel) {
+    // 跳过规则 1：任一档带"输出"维度 → 整个模型不进产物。
+    if (rows.some(row => row.label.includes('输出'))) continue
+    const tiers: VendorTierRow[] = []
+    let bad = false
+    for (const { label, cells } of rows) {
+      const ceiling = ceilingOf(label)
+      const input = parseCnyPriceCell(cells[2] ?? '')
+      const output = parseCnyPriceCell(cells[3] ?? '')
+      if (ceiling === undefined || input === undefined || output === undefined) { bad = true; break }
+      const cacheRead = parseCnyPriceCell(cells[5] ?? '')
+      tiers.push({
+        maxPromptTokens: ceiling,
+        rates: {
+          inputMicrosPerMtok: Math.round(input * 1_000_000),
+          outputMicrosPerMtok: Math.round(output * 1_000_000),
+          ...cacheRead !== undefined ? { cacheReadMicrosPerMtok: Math.round(cacheRead * 1_000_000) } : {},
+        },
+      })
+    }
+    if (bad || tiers.length === 0) continue
+    // 只有兜底档 = 事实上没有长度阶梯 → 不进产物（与"没录入"区分开）。
+    if (tiers.every(row => row.maxPromptTokens === 0)) continue
+    // 必须存在兜底档，否则长请求无价可落。
+    if (!tiers.some(row => row.maxPromptTokens === 0)) continue
+    out[`${provider}/${model.toLowerCase()}`] = rowsToTierSpec(tiers, 'CNY')
+  }
+  return out
+}
+
+/* ─────────────────────────── 阿里云百炼 Qwen ─────────────────────────── */
+
+/**
+ * Qwen 定价页（`help.aliyun.com/zh/model-studio/model-pricing`）→ 阶梯表。
+ *
+ * 只取**中国内地**价目（CNY，页面原文 → `fx = 1`）；海外站（全球/国际/美国/欧盟/日本…）
+ * 是独立价目，混进来会把账算错（SPEC §2.3 规则 5 的"禁止跨币种/站点合并"）。
+ *
+ * **列位由表头解析，绝不写死偏移**：实测该页有 12 种表头形态（有无"服务部署范围"、
+ * 有无"模式"、档位列叫"输入Token数"还是"输入Token范围"、输出价是一列还是按模式拆两列）。
+ * 写死偏移会静默错列 —— 那正是"宁可不算，不可算错"要防的。
+ *
+ * **跳过规则**：
+ * 1. **输出价按"非思考模式 / 思考模式"拆成两列 → 整模型跳过**：`tiers` 的输出价只有一个
+ *    字段，无法忠实表达（qwen-plus 系列等）。
+ * 2. 档位写 `无阶梯计价`、或只有单一档（无长度阶梯）的模型不产出。
+ *
+ * 缓存：页面只给"命中 10%（显式）/ 20%（隐式）"的**倍率区间**，取更贵的 0.2（保守侧）。
+ */
+export function parseQwenTierPage(html: string, provider = 'dashscope'): Record<string, FinanceTierSpec> {
+  const REGIONS = new Set(['中国内地', '全球', '国际', '美国', '欧盟', '日本', '新加坡', '澳大利亚'])
+  const rowsByModel = new Map<string, { ceiling: number; input: number; output: number }[]>()
+  const divergent = new Set<string>()
+
+  for (const table of tablesOf(html)) {
+    if (!table.includes('Token≤') && !table.includes('无阶梯计价')) continue
+    const header = headerOf(table)
+    if (header === undefined) continue
+    const tierCol = header.findIndex(cell => cell.includes('输入Token'))
+    if (tierCol < 0) continue
+    const regionCol = header.findIndex(cell => cell.includes('服务部署范围'))
+    // 价格列：档位列之后、表头含"单价"的列。输出价按模式拆列时会有 ≥2 个"输出单价"。
+    const priceCols = header.map((cell, index) => ({ cell, index })).filter(entry => entry.index > tierCol && entry.cell.includes('单价'))
+    const inputCol = priceCols.find(entry => entry.cell.includes('输入'))
+    if (inputCol === undefined) continue
+
+    for (const raw of expandRows(table)) {
+      const cells = raw.map(cleanText)
+      const model = (cells[0] ?? '').split('\n')[0].trim().toLowerCase()
+      if (!/^qwen[a-z0-9.\-]*$/.test(model)) continue
+      if (regionCol >= 0) {
+        const region = cells[regionCol] ?? ''
+        // 非"中国内地"（含空 = 继承上一行的中国内地）一律不取。
+        if (region !== '' && region !== '中国内地') continue
+      }
+      const ceiling = ceilingOf(cells[tierCol] ?? '')
+      if (ceiling === undefined) continue
+      const input = parseCnyPriceCell(cells[inputCol.index] ?? '')
+      // 价格列：档位列之后的全部含"元"单元格。
+      // **按单元格数而不是按表头数判分叉**：拆模式的表把"非思考模式 / 思考模式"放在
+      // 子表头里，`<th>` 只有一个"输出单价"，但数据行有 3 个价格格。按表头数判会漏。
+      const priceCells = cells.slice(tierCol + 1).filter(cell => cell.includes('元'))
+      if (priceCells.length >= 3) { divergent.add(model); continue }
+      const output = parseCnyPriceCell(priceCells[1] ?? priceCells[priceCells.length - 1] ?? '')
+      if (input === undefined || output === undefined) continue
+      const list = rowsByModel.get(model) ?? []
+      list.push({ ceiling, input, output })
+      rowsByModel.set(model, list)
+    }
+  }
+
+  const out: Record<string, FinanceTierSpec> = {}
+  for (const [model, rows] of rowsByModel) {
+    if (divergent.has(model)) continue
+    // 去重（同一模型可能在多张表里重复出现，例如"旗舰模型"段与"文本模型"段）。
+    const byCeiling = new Map<number, { ceiling: number; input: number; output: number }>()
+    for (const row of rows) if (!byCeiling.has(row.ceiling)) byCeiling.set(row.ceiling, row)
+    const tiers = [...byCeiling.values()]
+    // 无长度阶梯（只有一档）→ 不进产物，与"没录入"区分开。
+    if (tiers.length < 2) continue
+    /*
+     * Qwen 的最高档是**有界**的（`128K<Token≤256K`），不像 OpenAI/xAI 那样给一个开口档。
+     * 而落档语义要求存在无上界档，否则超出最高档的请求没有明确的价可落。故把**最高档**
+     * 改写成兜底档（`maxPromptTokens = 0`）——语义等价：官方声明"输入总量落在该档即全量
+     * 按该档单价结算"，而最高档本就吃掉超过它的一切（其上下文窗口即该上界）。
+     * 已带显式兜底档时原样保留。
+     */
+    const sorted = tiers.slice().sort((a, b) => a.ceiling - b.ceiling)
+    const normalized = sorted.some(row => row.ceiling === 0)
+      ? sorted
+      : sorted.map((row, index) => (index === sorted.length - 1 ? { ...row, ceiling: 0 } : row))
+    out[`${provider}/${model}`] = rowsToTierSpec(normalized.map(row => ({
+      maxPromptTokens: row.ceiling,
+      rates: {
+        inputMicrosPerMtok: Math.round(row.input * 1_000_000),
+        outputMicrosPerMtok: Math.round(row.output * 1_000_000),
+        cacheReadMultiplier: QWEN_CACHE_READ_MULTIPLIER,
+      },
+    })), 'CNY')
+  }
+  return out
+}
+
+/** 一张表的表头单元格（`<th>`；无 `<thead>` 时退回第一行的 `<td>`）。 */
+function headerOf(table: string): string[] | undefined {
+  const inHead = [...table.matchAll(/<th[^>]*>([\s\S]*?)<\/th>/g)].map(match => cleanText(match[1] ?? ''))
+  if (inHead.length > 0) return inHead
+  const firstRow = /<tr[^>]*>([\s\S]*?)<\/tr>/.exec(table)
+  if (firstRow === null) return undefined
+  return [...(firstRow[1] ?? '').matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/g)].map(match => cleanText(match[1] ?? ''))
+}
+
+/** Qwen 缓存命中倍率：官方给"显式 10% / 隐式 20%"区间，取更贵的 0.2（保守）。 */
+export const QWEN_CACHE_READ_MULTIPLIER = 0.2
+
+/* ─────────────────────────── 共用工具 ─────────────────────────── */
+
+/** 页面里的全部 `<table>`。 */
+function tablesOf(html: string): string[] {
+  return [...html.matchAll(/<table[^>]*>[\s\S]*?<\/table>/g)].map(match => match[0])
+}
+
+/** 单元格文本：去标签、去零宽、压空白（**保留**换行，调用方按需切首行）。 */
+function cleanText(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|blockquote)>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/[\u200b\u200c\u200d\ufeff]/g, '')
+    .replace(/[ \t\u00a0]+/g, ' ')
+    .trim()
+}
+
+/**
+ * 展开一张表的行（处理 rowspan）——与 `deepseek-pricing.expandTable` 同一算法。
+ * 这里自带一份是为了不跨文件耦合（deepseek 那份绑定其自身单元格解析）。
+ */
+function expandRows(tableHtml: string): string[][] {
+  const rawRows = [...tableHtml.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)].map(m => m[1] ?? '')
+  const out: string[][] = []
+  let pending = new Map<number, { text: string; rowsLeft: number }>()
+  for (const raw of rawRows) {
+    const queue = [...raw.matchAll(/<(t[dh])([^>]*)>([\s\S]*?)<\/\1>/g)].map(m => ({
+      text: m[3] ?? '',
+      colspan: Number((/colspan="(\d+)"/.exec(m[2] ?? '') ?? [])[1] ?? 1) || 1,
+      rowspan: Number((/rowspan="(\d+)"/.exec(m[2] ?? '') ?? [])[1] ?? 1) || 1,
+    }))
+    const row: string[] = []
+    const next = new Map<number, { text: string; rowsLeft: number }>()
+    let col = 0
+    while (queue.length > 0 || pending.has(col)) {
+      const carried = pending.get(col)
+      if (carried !== undefined) {
+        row[col] = carried.text
+        if (carried.rowsLeft - 1 > 0) next.set(col, { text: carried.text, rowsLeft: carried.rowsLeft - 1 })
+        col += 1
+        continue
+      }
+      const cell = queue.shift()
+      if (cell === undefined) break
+      for (let i = 0; i < cell.colspan; i++) {
+        row[col + i] = cell.text
+        if (cell.rowspan > 1) next.set(col + i, { text: cell.text, rowsLeft: cell.rowspan - 1 })
+      }
+      col += cell.colspan
+    }
+    pending = next
+    out.push(row)
+  }
+  return out
 }
 
 /* ─────────────────────────── OpenAI ─────────────────────────── */

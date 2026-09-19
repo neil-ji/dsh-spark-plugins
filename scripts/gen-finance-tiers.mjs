@@ -23,7 +23,13 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { parseOpenAiTierPage, parseXaiTierPage, snapshotToTierSpecs } from '../packages/dsh-finance/src/sync/vendor/tier-pricing.ts'
+import {
+  parseGlmTierPage,
+  parseOpenAiTierPage,
+  parseQwenTierPage,
+  parseXaiTierPage,
+  snapshotToTierSpecs,
+} from '../packages/dsh-finance/src/sync/vendor/tier-pricing.ts'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const BUNDLE_YAML = path.join(ROOT, 'packages/dsh-finance-bundle/cordis.patch.yml')
@@ -42,18 +48,35 @@ const YAML_INDENT = '        '
 /** CNY micros per USD — 与 sync-finance-prices.mjs 的 DEFAULT_FX 同口径。 */
 export const DEFAULT_FX = 7.2
 
-/** 各 provider 的取数方式（URL 必须是可解析的 markdown；SPA 页面一律不猜）。 */
+/** 各 provider 的取数方式（URL 必须是可解析的页面；SPA 页面一律不猜）。 */
 export const TIER_SOURCES = {
   openai: {
     kind: 'openai',
     url: 'https://developers.openai.com/api/docs/pricing.md',
     provider: 'openai',
+    /** 源页面币种（USD）→ 需按 fx 折算成记账币种。 */
+    sourceCurrency: 'USD',
   },
   xai: {
     kind: 'xai',
     url: 'https://docs.x.ai/developers/models/grok-4.6.md',
     modelId: 'grok-4.6',
     provider: 'xai',
+    sourceCurrency: 'USD',
+  },
+  zai: {
+    kind: 'zai',
+    url: 'https://docs.bigmodel.cn/cn/guide/start/pricing',
+    provider: 'zai',
+    /** GLM 页面单位就是「元/百万 Tokens」→ **不许再乘 fx**（乘了会虚高 7.2 倍）。 */
+    sourceCurrency: 'CNY',
+  },
+  dashscope: {
+    kind: 'dashscope',
+    url: 'https://help.aliyun.com/zh/model-studio/model-pricing',
+    provider: 'dashscope',
+    /** 中国内地价目单位就是元 → 同上，fx = 1。 */
+    sourceCurrency: 'CNY',
   },
 }
 
@@ -63,6 +86,10 @@ function renderTierEntryYaml(entry, indent) {
   lines.push(`${indent}  inputMicrosPerMtok: ${entry.inputMicrosPerMtok}`)
   if (entry.cacheReadMicrosPerMtok !== undefined) lines.push(`${indent}  cacheReadMicrosPerMtok: ${entry.cacheReadMicrosPerMtok}`)
   if (entry.cacheWriteMicrosPerMtok !== undefined) lines.push(`${indent}  cacheWriteMicrosPerMtok: ${entry.cacheWriteMicrosPerMtok}`)
+  // 倍率写法（Qwen 只给倍率）必须渲染 —— 漏了会让缓存读静默退化成"按输入价算"，
+  // 而 Qwen 的真实缓存读只有输入价的 20%（虚高 5 倍）。单测/闸门都盯这一条。
+  if (entry.cacheReadMultiplier !== undefined) lines.push(`${indent}  cacheReadMultiplier: ${entry.cacheReadMultiplier}`)
+  if (entry.cacheWriteMultiplier !== undefined) lines.push(`${indent}  cacheWriteMultiplier: ${entry.cacheWriteMultiplier}`)
   lines.push(`${indent}  outputMicrosPerMtok: ${entry.outputMicrosPerMtok}`)
   return lines
 }
@@ -115,11 +142,29 @@ export function spliceTierBlock(yaml, block) {
   return `${yaml.slice(0, anchorLineEnd + 1)}${block}\n${yaml.slice(anchorLineEnd + 1)}`
 }
 
-/** 解析一个 provider 的源文本 → specs。 */
+/**
+ * 解析一个 provider 的源文本 → specs。
+ *
+ * `fx` 只作用于**源币种为 USD** 的源（OpenAI / xAI）；GLM / Qwen 的源页面本身就是
+ * 元/百万 Tokens，再乘一次 fx 会把价格虚高 7.2 倍 —— 这是本条腿最容易犯的错。
+ */
 export function parseTierSource(text, source, fx) {
-  if (source.kind === 'openai') return snapshotToTierSpecs(parseOpenAiTierPage(text, fx, source.provider), 'CNY')
-  if (source.kind === 'xai') return snapshotToTierSpecs(parseXaiTierPage(text, source.modelId, fx, source.provider), 'CNY')
+  const rate = source.sourceCurrency === 'USD' ? fx : 1
+  if (source.kind === 'openai') return snapshotToTierSpecs(parseOpenAiTierPage(text, rate, source.provider), 'CNY')
+  if (source.kind === 'xai') return snapshotToTierSpecs(parseXaiTierPage(text, source.modelId, rate, source.provider), 'CNY')
+  if (source.kind === 'zai') return parseGlmTierPage(text, source.provider)
+  if (source.kind === 'dashscope') return parseQwenTierPage(text, source.provider)
   throw new Error('gen-finance-tiers: 未知的源类型 ' + source.kind)
+}
+
+/** 读取已提交的阶梯价段（供不可达源保留旧 key，INV-7）。 */
+async function readPreviousTiers() {
+  try {
+    const series = JSON.parse(await readFile(SERIES_JSON, 'utf8'))
+    return series.tiers ?? {}
+  } catch {
+    return {}
+  }
 }
 
 async function main(argv) {
@@ -139,6 +184,7 @@ async function main(argv) {
 
   const specs = {}
   const sources = []
+  const skipped = []
   for (const [name, source] of Object.entries(TIER_SOURCES)) {
     let text
     let usedUrl = source.url
@@ -151,12 +197,15 @@ async function main(argv) {
       try {
         response = await fetch(source.url, { signal: AbortSignal.timeout(30_000), headers: { 'user-agent': 'Mozilla/5.0' } })
       } catch (error) {
-        // SPEC §3.4：来源不可达 → 不产出该部分，**绝不**回落上一次的值假装成功（INV-7）。
+        // SPEC §3.4：来源不可达 → 不产出该部分。**但既有 key 必须原样保留**
+        // （见下面的 merge），否则一次网络抖动就会把该 provider 的阶梯价从产物里抹掉。
         console.error(`  skip ${name}: ${error instanceof Error ? error.message : String(error)}`)
+        skipped.push(name)
         continue
       }
       if (!response.ok) {
         console.error(`  skip ${name}: HTTP ${response.status} from ${source.url}`)
+        skipped.push(name)
         continue
       }
       text = await response.text()
@@ -172,6 +221,33 @@ async function main(argv) {
     process.exitCode = 1
     return
   }
+  if (skipped.length > 0) {
+    console.error('  提示：OpenAI / xAI 文档在部分网络下需要代理 ——')
+    console.error('        NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://127.0.0.1:7897 node scripts/gen-finance-tiers.mjs')
+    console.error('        （跳过源的既有 key 会原样保留，不会被抹掉）')
+  }
+
+  /*
+   * INV-7 失败原子性：**不可达的源其既有 key 原样保留**。
+   *
+   * 为什么必须有这一步：OpenAI / xAI 的页面在本机需要代理（直连 403/超时），若按"本次
+   * 解析出什么就写什么"落盘，一次忘记挂代理的运行就会把它们几十个 key 从产物里**静默
+   * 抹掉** —— 面板上"官方表"凭空少一大块，而生成器还打印"wrote N models"。
+   * 覆盖优先级：本次解析的 key 胜出；不可达源的旧 key 补齐。
+   */
+  const previous = await readPreviousTiers()
+  const previousProviders = new Set(Object.keys(previous).map(key => key.split('/')[0]))
+  const activeProviders = new Set(sources.map(entry => TIER_SOURCES[entry.id].provider))
+  let preserved = 0
+  for (const [key, spec] of Object.entries(previous)) {
+    if (specs[key] !== undefined) continue
+    // 只保留"本次确实跳过了其源"的 provider；源可达却不再产出该 key = 上游删了它，应当移除。
+    if (!previousProviders.has(key.split('/')[0])) continue
+    if (activeProviders.has(key.split('/')[0])) continue
+    specs[key] = spec
+    preserved += 1
+  }
+  if (preserved > 0) console.error(`  preserved ${preserved} 个 key（源不可达：${skipped.join(', ')}）`)
 
   const updated = new Date().toISOString()
   const block = renderTierBlock(specs, { source: sources.map(s => s.id).join('+'), updated, fx, currency })
