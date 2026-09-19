@@ -1,21 +1,23 @@
 /**
  * 视图①：本月值不值（子导航的第一个 tab）。
  *
- * 这个 tab 拥有整页的钱：更新时间与刷新、五个总量数字、订阅 vs 按量、余额、
- * 成本趋势、单位成本榜与两条脚注（价格来源 / 估算口径）。没有会话时只留
- * 「数字 + 为什么是 0」的引导，不摆一堆空卡。
+ * 这个 tab 拥有整页的钱：更新时间与刷新、五个总量数字、供应商总表（订阅 vs 按量
+ * 合并为一张表）、成本趋势、单位成本榜与两条脚注（价格来源 / 估算口径）。
+ * 没有会话时只留「数字 + 为什么是 0」的引导，不摆一堆空卡。
  */
 
 import { useState, type ReactNode } from 'react'
 import { Button, Card, CellText, Checkbox, EmptyState, Input, Modal, Money, Pill, RowActions, SegmentedControl, Stat, StatGrid, TrendChart, formatMicros } from 'dsh-ui-kit'
 import type {
   FinanceLedger,
+  FinanceListProvidersEntry,
   FinanceListProvidersResult,
   FinancePlanEntry,
   FinancePlanPeriod,
   FinancePriceTableStatus,
   FinanceProviderBalance,
   FinanceProviderBillingMode,
+  FinanceProviderEntry,
 } from 'dsh-spark-finance/types'
 import {
   balanceDaysLeft,
@@ -40,10 +42,7 @@ export interface ThisMonthViewProps {
   removePlan: (provider: string) => Promise<void>
   /** 打 provider 级计费方式标记（订阅 / 按量 / 免费）。 */
   onSetBillingMode: (provider: string, mode: FinanceProviderBillingMode) => Promise<void>
-  /**
-   * 打标（SPEC §5.4 两池）：计费方式 + 可选手动余额 / autoFetch，订阅可附带月费
-   * 条目；按量池行的「手动余额」编辑走这条（订阅池月费走 savePlan）。
-   */
+  /** 打标（SPEC §5.4 两池）：计费方式 + 手动余额 / autoFetch + 可选月费条目。 */
   onTagProvider: (
     provider: string,
     patch: { mode: FinanceProviderBillingMode; manualBalanceMicros?: number; autoFetchBalance?: boolean },
@@ -75,7 +74,6 @@ export function ThisMonthView({
   plansWritable,
   savePlan,
   removePlan,
-  onSetBillingMode,
   onTagProvider,
   refreshing,
   onRefresh,
@@ -87,9 +85,10 @@ export function ThisMonthView({
   onRestorePrices,
 }: ThisMonthViewProps): ReactNode {
   const currency = ledger.currency === '' ? 'CNY' : ledger.currency
+  /** 「修改」表单 modal：正在编辑的 provider（null = 收起）。 */
   const [editing, setEditing] = useState<string | null>(null)
-  /** 按量池行内余额表单：正在编辑的 provider（null = 收起）。 */
-  const [balanceEditing, setBalanceEditing] = useState<string | null>(null)
+  /** 「详情」modal：正在查看的 provider（null = 收起）。 */
+  const [detail, setDetail] = useState<string | null>(null)
   /** 还原价格表（回退/破坏性）的二次确认；确认后才真调 onRestorePrices。 */
   const [confirmRestore, setConfirmRestore] = useState(false)
   /** 没有覆盖层时「还原」没有可回退的东西 —— 禁用必须给原因（UI-UX-SPEC §3.1 Don't）。 */
@@ -118,6 +117,7 @@ export function ThisMonthView({
    * 中间那条是为了兼容「早就填过月费、还没打标记」的老数据 —— 否则它们的订阅卡会
    * 突然变成按量、连编辑入口都消失。
    */
+  const planEntries = [...plans]
   const billingFor = (provider: string): FinanceProviderBillingMode => {
     const key = providerKey(provider)
     const explicit = billingExplicit.get(key)
@@ -126,52 +126,37 @@ export function ThisMonthView({
     return billingDefault.get(key) ?? 'metered'
   }
   const { withPlan } = planRows(ledger, plans)
-  const planByProvider = new Map(withPlan.map((insight) => [insight.provider, insight]))
-  const planEntries = [...plans]
-  // 两池分类（SPEC §5.4，2026-09-19 修订）：订阅 / 按量。生效计费方式 = 显式标记 > 已有月费条目 > 宿主默认。
-  // 待选池已退役：未打标且无宿主元数据的厂商按宿主默认（无则 metered）直接落入按量池；
-  // free 收归订阅计划卡呈现（强制月费 0，SPEC §5.4），可随时经「…」菜单改标。
+  const insightByProvider = new Map(withPlan.map((insight) => [insight.provider, insight]))
+  // 供应商总表（2026-09 订阅/按量合并）：订阅 + 按量一张表，付费类型用 Tag 区分。
   const knownProviders = [...new Set([
     ...ledger.byProvider.map((row) => row.provider),
     ...planEntries.map((plan) => plan.provider),
     ...allProviders.map((row) => row.provider),
-  ])]
+  ])].sort((a, b) => a.localeCompare(b))
   const spendByProvider = new Map(ledger.byProvider.map((row) => [providerKey(row.provider), row.costMicros]))
   const providerRowOf = new Map(allProviders.map((row) => [providerKey(row.provider), row]))
-  const supportsFetch = (provider: string): boolean =>
-    providerRowOf.get(providerKey(provider))?.hostMeta?.supportsBalanceFetch === true
-  // 订阅池 = plan + free（free 是「月费为 0 的订阅」）；按量池 = metered。
-  const isPlanSide = (provider: string): boolean => {
-    const mode = billingFor(provider)
-    return mode === 'plan' || mode === 'free'
+  const planEntryOf = (provider: string): FinancePlanEntry | undefined =>
+    planEntries.find((plan) => plan.provider === provider)
+  /** Action 列「…」菜单（UI-UX-SPEC §3.5）：修改 / 详情收敛进下拉。 */
+  const onMenuSelect = (provider: string, id: string): void => {
+    if (id === 'edit') setEditing(provider)
+    if (id === 'detail') setDetail(provider)
   }
-  const planPool = knownProviders.filter(isPlanSide)
-  const meteredPool = knownProviders.filter((provider) => billingFor(provider) === 'metered')
-  /** Action 列「…」菜单（UI-UX-SPEC §3.5）：操作 >1 项必须收敛进下拉。 */
-  const modeMenuId = (mode: FinanceProviderBillingMode): string => `mode:${mode}`
-  const menuItems = (provider: string, kind: 'plan' | 'metered') => {
-    const mode = billingFor(provider)
-    const existing = planEntries.find((plan) => plan.provider === provider)
-    const items = BILLING_MODES.map((m) => ({ id: modeMenuId(m), label: billingLabel(m, t) }))
-    if (kind === 'plan' && mode === 'plan') {
-      // free 行月费强制 0：不提供月费编辑 / 移除（改标即可离开）。
-      items.push(
-        { id: 'edit-plan', label: existing === undefined ? t('planFill') : t('planEdit') },
-        ...(existing !== undefined ? [{ id: 'remove-plan', label: t('planRemove') }] : []),
-      )
-    } else if (kind === 'metered') {
-      items.push({ id: 'edit-balance', label: t('manualBalanceLabel') })
+  /** 修改表单保存：按目标付费类型分派到对应的写回 seam（表单内联动已完成校验）。 */
+  const onSaveProvider = async (
+    provider: string,
+    mode: FinanceProviderBillingMode,
+    plan: FinancePlanEntry | undefined,
+    balance: { manualBalanceMicros?: number; autoFetchBalance?: boolean } | undefined,
+  ): Promise<void> => {
+    if (mode === 'plan' && plan !== undefined) await onTagProvider(provider, { mode: 'plan' }, plan)
+    else if (mode === 'metered') await onTagProvider(provider, { mode: 'metered', ...balance })
+    else if (mode === 'free') {
+      await onTagProvider(provider, { mode: 'free' })
+      // free 强制月费 0：清掉遗留套餐条目，避免「已有月费条目视为订阅」的兼容口径把行拉回订阅。
+      if (planEntryOf(provider) !== undefined) await removePlan(provider)
     }
-    return items
-  }
-  const onMenuSelect = (provider: string, kind: 'plan' | 'metered', id: string): void => {
-    if (id.startsWith('mode:')) {
-      void onSetBillingMode(provider, id.slice(5) as FinanceProviderBillingMode)
-      return
-    }
-    if (id === 'edit-plan') setEditing(editing === provider ? null : provider)
-    if (id === 'remove-plan') void removePlan(provider)
-    if (id === 'edit-balance') setBalanceEditing(balanceEditing === provider ? null : provider)
+    setEditing(null)
   }
   const empty = ledger.sessionCount === 0
 
@@ -220,130 +205,70 @@ export function ThisMonthView({
         )
         : (
           <>
-            <Card title={t('planCardTitle')} className={css.section}>
-              <div className={css.table} data-testid="finance-plan-card">
-                <div className={cx(css.tableHead, css.colsPlan)}>
+            {/* 订阅计划 + 按量付费合并为一张供应商总表：付费类型用 Tag 区分，
+                「余额 / 月费」按付费类型取值，「按量等价」列给跨类型比较基准。 */}
+            <Card title={t('providerCardTitle')} className={css.section}>
+              <div className={css.table} data-testid="finance-provider-table">
+                <div className={cx(css.tableHead, css.colsProviders)}>
                   <span className={css.cell}>{t('colProvider')}</span>
-                  <span className={cx(css.cell, css.cellNum)}>{t('planMonthly')}</span>
-                  <span className={cx(css.cell, css.cellNum)}>{t('planSavingsCol')}</span>
-                  <span className={css.cell} />
+                  <span className={css.cell}>{t('colBillingType')}</span>
+                  <span className={cx(css.cell, css.cellNum)}>{t('colBalanceFee')}</span>
+                  <span className={cx(css.cell, css.cellNum)} title={t('colEquivHint')}>{t('planEquivalent')}</span>
+                  <span className={css.cell}>{t('colActions')}</span>
                 </div>
-                {planPool.length === 0
+                {knownProviders.length === 0
                   ? <p className={css.hint}>{t('planEmpty')}</p>
-                  : planPool.map((provider) => {
+                  : knownProviders.map((provider) => {
                     const mode = billingFor(provider)
                     const isFree = mode === 'free'
-                    const insight = planByProvider.get(provider)
-                    const existing = planEntries.find((plan) => plan.provider === provider)
-                    const open = editing === provider
-                    const savings = isFree ? undefined : insight?.savingsMicros
+                    const isPlan = mode === 'plan'
+                    const insight = insightByProvider.get(provider)
+                    const row = providerRowOf.get(providerKey(provider))
+                    const spend = spendByProvider.get(providerKey(provider)) ?? 0
+                    // 「余额 / 月费」列：订阅行取月费（free 强制 0，SPEC §5.4），按量行取余额。
+                    const feeOrBalance = isPlan || isFree
+                      ? (isFree
+                        ? <Money micros={0} currency={currency} exact />
+                        : insight === undefined ? '—' : <Money micros={insight.monthlyMicros} currency={insight.currency} exact />)
+                      : (row !== undefined ? balanceValue(ledger, row.balance, t) : '')
+                    // 「按量等价」列：订阅行给目录价等价（省了才亮「超值」），按量行即本月支出。
+                    const equiv = isPlan && insight !== undefined
+                      ? (
+                        <span title={insight.savingsMicros > 0 ? t('planSaved', { amount: formatMicros(insight.savingsMicros) }) : undefined}>
+                          <Money micros={insight.equivalentMicros} currency={currency} exact />
+                          {insight.savingsMicros > 0 ? <Pill tone="success" className={css.cellNum}>{t('superValue')}</Pill> : null}
+                        </span>
+                      )
+                      : <Money micros={spend} currency={currency} exact />
                     return (
-                      <div key={provider} className={css.group}>
-                        <div className={cx(css.tableRow, css.colsPlan)} data-testid={`finance-plan-${provider}`}>
+                      <div key={provider}>
+                        <div className={cx(css.tableRow, css.colsProviders)} data-testid={`finance-provider-${provider}`}>
                           <span className={cx(css.cell, css.balanceName)}>
                             <CellText text={provider} />
                           </span>
-                          <span className={cx(css.cell, css.cellNum)}>
-                            {/* free 强制月费 0（SPEC §5.4）；其余显示已填套餐或「—」。 */}
-                            {isFree
-                              ? <Money micros={0} currency={currency} exact />
-                              : insight === undefined ? '—' : <Money micros={insight.monthlyMicros} currency={insight.currency} exact />}
+                          <span className={css.cell}>
+                            <Pill tone={mode === 'plan' ? 'brand' : mode === 'free' ? 'success' : 'neutral'} title={billingLabel(mode, t)}>
+                              {billingLabel(mode, t)}
+                            </Pill>
                           </span>
-                          <span className={cx(css.cell, css.cellNum)}>
-                            {savings === undefined
-                              ? '—'
-                              : (
-                                <>
-                                  <Money micros={savings} currency={currency} exact />
-                                  {/* 按量等价 > 月费 = 订阅真省了（SPEC §5.4 两池列）。 */}
-                                  {savings > 0 ? <Pill tone="success" className={css.cellNum}>{t('superValue')}</Pill> : null}
-                                </>
-                              )}
-                          </span>
+                          <span className={cx(css.cell, css.cellNum)}>{feeOrBalance}</span>
+                          <span className={cx(css.cell, css.cellNum, css.balanceValue)}>{equiv}</span>
                           <span className={css.planActions}>
-                            {/* Action 列「…」菜单（UI-UX-SPEC §3.5）：打标/编辑/移除收敛进下拉。 */}
+                            {/* 只读（设置不可写 / 宿主锁定）：计费方式以静音标签呈现，不给菜单。 */}
                             {!plansWritable || billingLocked.has(providerKey(provider))
                               ? <span className={css.tagMuted}>{billingLabel(mode, t)}</span>
                               : (
                                 <RowActions
                                   label={`${t('actionsMenu')}: ${provider}`}
-                                  items={menuItems(provider, 'plan')}
-                                  selectedId={modeMenuId(mode)}
-                                  onSelect={(id) => onMenuSelect(provider, 'plan', id)}
+                                  items={[
+                                    { id: 'edit', label: t('providerEdit') },
+                                    { id: 'detail', label: t('providerDetail') },
+                                  ]}
+                                  onSelect={(id) => onMenuSelect(provider, id)}
                                 />
                               )}
                           </span>
                         </div>
-                        {open
-                          ? (
-                            <PlanEditor
-                              provider={provider}
-                              initial={existing}
-                              t={t}
-                              onCancel={() => setEditing(null)}
-                              onSave={async (plan) => { await savePlan(plan); setEditing(null) }}
-                            />
-                          )
-                          : null}
-                      </div>
-                    )
-                  })}
-              </div>
-            </Card>
-
-            <Card title={t('meteredCardTitle')} className={css.section}>
-              <div className={css.table}>
-                <div className={cx(css.tableHead, css.colsBalance)}>
-                  <span className={css.cell}>{t('colProvider')}</span>
-                  <span className={cx(css.cell, css.cellNum)}>{t('balanceLabel')}</span>
-                  <span className={cx(css.cell, css.cellNum)}>{t('meteredSpend')}</span>
-                  <span className={css.cell} />
-                </div>
-                {meteredPool.length === 0
-                  ? <p className={css.hint}>{t('meteredEmpty')}</p>
-                  : meteredPool.map((provider) => {
-                    const row = providerRowOf.get(providerKey(provider))
-                    const spend = spendByProvider.get(providerKey(provider)) ?? 0
-                    return (
-                      <div key={provider}>
-                        <div className={cx(css.tableRow, css.colsBalance)} data-testid={`finance-metered-${provider}`}>
-                          <span className={cx(css.cell, css.balanceName)}>
-                            <CellText text={provider} />
-                          </span>
-                          <span className={cx(css.cell, css.cellNum)}>
-                            {row !== undefined ? balanceValue(ledger, row.balance, t) : ''}
-                          </span>
-                          <span className={cx(css.cell, css.cellNum, css.balanceValue)}>
-                            <Money micros={spend} currency={currency} exact />
-                          </span>
-                          <span className={css.planActions}>
-                            {/* Action 列「…」菜单（UI-UX-SPEC §3.5）：打标 + 手动余额收敛进下拉。 */}
-                            {!plansWritable || billingLocked.has(providerKey(provider))
-                              ? <span className={css.tagMuted}>{billingLabel('metered', t)}</span>
-                              : (
-                                <RowActions
-                                  label={`${t('actionsMenu')}: ${provider}`}
-                                  items={menuItems(provider, 'metered')}
-                                  selectedId={modeMenuId('metered')}
-                                  onSelect={(id) => onMenuSelect(provider, 'metered', id)}
-                                />
-                              )}
-                          </span>
-                        </div>
-                        {balanceEditing === provider
-                          ? (
-                            <MeteredBalanceEditor
-                              provider={provider}
-                              canAutoFetch={supportsFetch(provider)}
-                              t={t}
-                              onCancel={() => setBalanceEditing(null)}
-                              onSave={async (patch) => {
-                                await onTagProvider(provider, { mode: 'metered', ...patch })
-                                setBalanceEditing(null)
-                              }}
-                            />
-                          )
-                          : null}
                       </div>
                     )
                   })}
@@ -440,6 +365,37 @@ export function ThisMonthView({
         >
           <p>{t('restoreConfirmBody')}</p>
         </Modal>
+        {/* 修改表单 modal：一张表单涵盖全部付费类型的字段，按类型联动显隐。 */}
+        {editing !== null
+          ? (
+            <ProviderEditModal
+              provider={editing}
+              initialMode={billingFor(editing)}
+              plan={planEntryOf(editing)}
+              userEntry={providerRowOf.get(providerKey(editing))?.userEntry}
+              canAutoFetch={supportsFetch(providerRowOf.get(providerKey(editing)))}
+              t={t}
+              onClose={() => { setEditing(null) }}
+              onSave={(mode, plan, balance) => onSaveProvider(editing, mode, plan, balance)}
+            />
+          )
+          : null}
+        {/* 详情 modal：厂商全部已知属性（来源 / 宿主元数据 / 用户配置 / 余额 / 对比结论）。 */}
+        {detail !== null
+          ? (
+            <ProviderDetailModal
+              provider={detail}
+              mode={billingFor(detail)}
+              row={providerRowOf.get(providerKey(detail))}
+              plan={planEntryOf(detail)}
+              insight={insightByProvider.get(detail)}
+              spend={spendByProvider.get(providerKey(detail)) ?? 0}
+              currency={currency}
+              t={t}
+              onClose={() => { setDetail(null) }}
+            />
+          )
+          : null}
         {priceTable?.base.ok === false
           ? <p className={css.footerNote} role="status">{t('priceTampered')}</p>
           : null}
@@ -469,6 +425,10 @@ export function billingLabel(mode: FinanceProviderBillingMode, t: FinanceTransla
   return t('billing_metered')
 }
 
+function supportsFetch(row: FinanceListProvidersEntry | undefined): boolean {
+  return row?.hostMeta?.supportsBalanceFetch === true
+}
+
 function minutesSince(epochMs: number): number {
   return Math.max(0, Math.round((Date.now() - epochMs) / 60_000))
 }
@@ -486,131 +446,239 @@ export function priceNote(lastSyncAppliedAt: number | undefined, t: FinanceTrans
 }
 
 /**
- * 行内套餐编辑器：月费 + 币种 + 计费形态，保存写回 settings 的 `plans`。
+ * 修改供应商 modal：**一张表单涵盖全部付费类型的字段**，付费类型切换即字段联动 ——
+ * 订阅亮月费/币种/计费形态，按量亮手动余额/自动获取，免费只留说明。
  *
- * 按钮形制：这是**卡片内的行内表单**，与页脚的价格表主操作同处一个图层 ——
- * 按 UI-UX-SPEC §3.1「一屏一个 primary」，它的「保存」是次形制（secondary），
- * 「取消」更是无底（ghost，hippomemo 编辑弹窗同规）；两枚同尺寸（md），行内不混高。
+ * 按钮形制：表单写操作是次形制（secondary，与页脚 primary 错层），取消无底（ghost）。
  */
-function PlanEditor({ provider, initial, t, onSave, onCancel }: {
+function ProviderEditModal({ provider, initialMode, plan, userEntry, canAutoFetch, t, onClose, onSave }: {
   provider: string
-  initial: FinancePlanEntry | undefined
+  initialMode: FinanceProviderBillingMode
+  plan: FinancePlanEntry | undefined
+  userEntry: FinanceProviderEntry | undefined
+  canAutoFetch: boolean
   t: FinanceTranslate
-  onSave: (plan: FinancePlanEntry) => Promise<void>
-  onCancel: () => void
+  onClose: () => void
+  onSave: (
+    mode: FinanceProviderBillingMode,
+    plan: FinancePlanEntry | undefined,
+    balance: { manualBalanceMicros?: number; autoFetchBalance?: boolean } | undefined,
+  ) => Promise<void>
 }): ReactNode {
-  const [fee, setFee] = useState(initial === undefined ? '' : microsToMajor(initial.monthlyMicros))
-  const [currency, setCurrency] = useState(initial?.currency ?? 'CNY')
-  const [period, setPeriod] = useState<FinancePlanPeriod>(initial?.periodLabel ?? 'month')
-  const micros = majorToMicros(fee)
-  const invalid = fee.trim() !== '' && micros === null
+  const [mode, setMode] = useState<FinanceProviderBillingMode>(initialMode)
+  // 订阅字段（保留既有填写值，切走再切回不丢）
+  const [fee, setFee] = useState(plan === undefined ? '' : microsToMajor(plan.monthlyMicros))
+  const [planCurrency, setPlanCurrency] = useState(plan?.currency ?? 'CNY')
+  const [period, setPeriod] = useState<FinancePlanPeriod>(plan?.periodLabel ?? 'month')
+  // 按量字段
+  const [balance, setBalance] = useState(
+    userEntry?.manualBalanceMicros !== undefined ? microsToMajor(userEntry.manualBalanceMicros) : '',
+  )
+  const [autoFetch, setAutoFetch] = useState(userEntry?.autoFetchBalance === true && canAutoFetch)
+  const feeMicros = majorToMicros(fee)
+  const feeInvalid = mode === 'plan' && (fee.trim() === '' || feeMicros === null)
+  const balanceMicros = balance.trim() === '' ? 0 : majorToMicros(balance)
+  const balanceInvalid = mode === 'metered' && balanceMicros === null
+  const invalid = feeInvalid || balanceInvalid
   return (
-    <div className={css.planForm} data-testid={`finance-plan-form-${provider}`}>
-      <label className={css.section}>
-        <span className={css.balanceNote}>{t('planMonthly')}</span>
-        <Input
-          className={css.planInput}
-          type="text"
-          inputMode="decimal"
-          aria-label={`${t('planMonthly')}: ${provider}`}
-          value={fee}
-          aria-invalid={invalid}
-          onChange={(event) => setFee(event.currentTarget.value)}
-        />
-      </label>
-      <label className={css.section}>
-        <span className={css.balanceNote}>{t('planCurrency')}</span>
-        <Input
-          className={css.planInput}
-          type="text"
-          aria-label={`${t('planCurrency')}: ${provider}`}
-          value={currency}
-          onChange={(event) => setCurrency(event.currentTarget.value)}
-        />
-      </label>
-      <SegmentedControl<FinancePlanPeriod>
-        options={FINANCE_PLAN_PERIODS.map((value) => ({ value, label: periodLabel(value, t) }))}
-        value={period}
-        onChange={setPeriod}
-        ariaLabel={`${t('planPeriod')}: ${provider}`}
-      />
-      <span className={css.planActions}>
-        <Button
-          variant="secondary"
-          disabled={micros === null}
-          onClick={() => {
-            void onSave({
-              provider,
-              monthlyMicros: micros ?? 0,
-              currency: currency.trim() === '' ? 'CNY' : currency.trim(),
-              periodLabel: period,
-              effectiveFrom: 0,
-            })
-          }}
-        >
-          {t('planSave')}
-        </Button>
-        <Button variant="ghost" onClick={onCancel}>{t('planCancel')}</Button>
-      </span>
-      {invalid ? <span className={css.tag}>{t('planInvalidFee')}</span> : null}
-    </div>
+    <Modal
+      open
+      onClose={onClose}
+      title={`${t('providerEditTitle')} · ${provider}`}
+      footer={(
+        <>
+          <Button variant="ghost" onClick={onClose}>{t('planCancel')}</Button>
+          <Button
+            variant="secondary"
+            disabled={invalid}
+            onClick={() => {
+              void onSave(
+                mode,
+                mode === 'plan' && feeMicros !== null
+                  ? {
+                    provider,
+                    monthlyMicros: feeMicros,
+                    currency: planCurrency.trim() === '' ? 'CNY' : planCurrency.trim(),
+                    periodLabel: period,
+                    effectiveFrom: 0,
+                  }
+                  : undefined,
+                mode === 'metered'
+                  ? { manualBalanceMicros: balanceMicros ?? 0, autoFetchBalance: canAutoFetch && autoFetch }
+                  : undefined,
+              )
+            }}
+          >
+            {t('planSave')}
+          </Button>
+        </>
+      )}
+    >
+      <div className={css.planFormVertical} data-testid={`finance-provider-form-${provider}`}>
+        {/* 联动总开关：付费类型决定下面哪些字段组出现。 */}
+        <div className={css.fieldGroup}>
+          <span className={css.balanceNote}>{t('colBillingType')}</span>
+          <SegmentedControl<FinanceProviderBillingMode>
+            options={BILLING_MODES.map((value) => ({ value, label: billingLabel(value, t) }))}
+            value={mode}
+            onChange={setMode}
+            ariaLabel={`${t('colBillingType')}: ${provider}`}
+          />
+        </div>
+        {mode === 'plan'
+          ? (
+            <>
+              <label className={css.fieldGroup}>
+                <span className={css.balanceNote}>{t('planMonthly')}</span>
+                <Input
+                  className={css.planInput}
+                  type="text"
+                  inputMode="decimal"
+                  aria-label={`${t('planMonthly')}: ${provider}`}
+                  value={fee}
+                  aria-invalid={feeInvalid}
+                  onChange={(event) => setFee(event.currentTarget.value)}
+                />
+              </label>
+              <label className={css.fieldGroup}>
+                <span className={css.balanceNote}>{t('planCurrency')}</span>
+                <Input
+                  className={css.planInput}
+                  type="text"
+                  aria-label={`${t('planCurrency')}: ${provider}`}
+                  value={planCurrency}
+                  onChange={(event) => setPlanCurrency(event.currentTarget.value)}
+                />
+              </label>
+              <div className={css.fieldGroup}>
+                <span className={css.balanceNote}>{t('planPeriod')}</span>
+                <SegmentedControl<FinancePlanPeriod>
+                  options={FINANCE_PLAN_PERIODS.map((value) => ({ value, label: periodLabel(value, t) }))}
+                  value={period}
+                  onChange={setPeriod}
+                  ariaLabel={`${t('planPeriod')}: ${provider}`}
+                />
+              </div>
+              {feeInvalid ? <span className={css.tag}>{t('planInvalidFee')}</span> : null}
+            </>
+          )
+          : null}
+        {mode === 'metered'
+          ? (
+            <>
+              <label className={css.fieldGroup}>
+                <span className={css.balanceNote}>{t('manualBalanceLabel')}</span>
+                <Input
+                  className={css.planInput}
+                  type="text"
+                  inputMode="decimal"
+                  aria-label={`${t('manualBalanceLabel')}: ${provider}`}
+                  value={balance}
+                  aria-invalid={balanceInvalid}
+                  onChange={(event) => setBalance(event.currentTarget.value)}
+                />
+              </label>
+              <span className={css.fieldGroup} title={canAutoFetch ? undefined : t('autoFetchUnsupported')}>
+                <Checkbox
+                  label={t('autoFetchLabel')}
+                  checked={canAutoFetch && autoFetch}
+                  disabled={!canAutoFetch}
+                  onChange={setAutoFetch}
+                />
+              </span>
+              {balanceInvalid ? <span className={css.tag}>{t('planInvalidBalance')}</span> : null}
+            </>
+          )
+          : null}
+        {mode === 'free' ? <p className={css.hint}>{t('freeModeHint')}</p> : null}
+      </div>
+    </Modal>
   )
 }
 
-/**
- * 按量池行内「手动余额」表单（SPEC §5.4 / INV-9 用户自报）+ autoFetch 勾选。
- * 厂商不支持自动获取 → 勾选 disable + 悬浮提示（当前仅 deepseek-official 支持）。
- */
-function MeteredBalanceEditor({ provider, canAutoFetch, t, onSave, onCancel }: {
+/** 详情 modal：厂商全部已知属性，只读呈现（来源 / 宿主元数据 / 用户配置 / 余额 / 对比结论）。 */
+function ProviderDetailModal({ provider, mode, row, plan, insight, spend, currency, t, onClose }: {
   provider: string
-  canAutoFetch: boolean
+  mode: FinanceProviderBillingMode
+  row: FinanceListProvidersEntry | undefined
+  plan: FinancePlanEntry | undefined
+  insight: { savingsMicros: number; discountRate: number | null; breakEvenRatio: number | null } | undefined
+  spend: number
+  currency: string
   t: FinanceTranslate
-  onSave: (patch: { manualBalanceMicros?: number; autoFetchBalance?: boolean }) => Promise<void>
-  onCancel: () => void
+  onClose: () => void
 }): ReactNode {
-  const [balance, setBalance] = useState('')
-  const [autoFetch, setAutoFetch] = useState(canAutoFetch)
-  const micros = balance.trim() === '' ? 0 : majorToMicros(balance)
-  const invalid = balance.trim() !== '' && micros === null
+  const balance = row?.balance
+  const details: Array<{ label: string; value: ReactNode }> = [
+    { label: t('colBillingType'), value: billingLabel(mode, t) },
+    { label: t('detailSources'), value: (row?.sources ?? []).length > 0 ? (row?.sources ?? []).join(', ') : t('detailNone') },
+    {
+      label: t('detailDefaultMode'),
+      value: row?.hostMeta === undefined ? t('detailNone') : billingLabel(row.hostMeta.defaultBillingMode, t),
+    },
+    { label: t('detailDefaultCurrency'), value: row?.hostMeta?.defaultCurrency ?? t('detailNone') },
+    {
+      label: t('detailSupportsFetch'),
+      value: row?.hostMeta === undefined ? t('detailNone') : row.hostMeta.supportsBalanceFetch ? t('autoFetchLabel') : t('balanceUnsupported'),
+    },
+    {
+      label: t('detailLock'),
+      value: row?.hostMeta?.lockBillingModeAndCurrency === true ? t('detailYes') : t('detailNo'),
+    },
+    {
+      label: t('balanceLabel'),
+      value: balance === undefined ? t('detailNone') : balanceValue({ currency } as FinanceLedger, balance, t),
+    },
+    { label: t('meteredSpend'), value: <Money micros={spend} currency={currency} exact /> },
+    {
+      label: t('planMonthly'),
+      value: plan === undefined ? t('detailNone') : <Money micros={plan.monthlyMicros} currency={plan.currency} exact />,
+    },
+    { label: t('planPeriod'), value: plan?.periodLabel === undefined ? t('detailNone') : periodLabel(plan.periodLabel, t) },
+    {
+      label: t('detailQuota'),
+      value: plan?.quotaTokens === undefined ? t('detailNone') : String(plan.quotaTokens),
+    },
+    {
+      label: t('manualBalanceLabel'),
+      value: row?.userEntry?.manualBalanceMicros === undefined
+        ? t('detailNone')
+        : <Money micros={row.userEntry.manualBalanceMicros} currency={row.userEntry.currency} exact />,
+    },
+    {
+      label: t('autoFetchLabel'),
+      value: row?.userEntry === undefined ? t('detailNone') : row.userEntry.autoFetchBalance ? t('detailYes') : t('detailNo'),
+    },
+    { label: t('planCurrency'), value: row?.userEntry?.currency ?? t('detailNone') },
+    {
+      label: t('planSavingsCol'),
+      value: insight === undefined ? t('planNoUsage') : <Money micros={insight.savingsMicros} currency={currency} exact />,
+    },
+    {
+      label: t('planDiscount'),
+      value: insight?.discountRate == null ? t('planNoUsage') : `${Math.round(insight.discountRate * 100)}%`,
+    },
+    {
+      label: t('planBreakEven'),
+      value: insight?.breakEvenRatio == null ? t('planNoUsage') : `${Math.round(insight.breakEvenRatio * 100)}%`,
+    },
+  ]
   return (
-    <div className={css.planForm} data-testid={`finance-metered-form-${provider}`}>
-      <label className={css.section}>
-        <span className={css.balanceNote}>{t('manualBalanceLabel')}</span>
-        <Input
-          className={css.planInput}
-          type="text"
-          inputMode="decimal"
-          aria-label={`${t('manualBalanceLabel')}: ${provider}`}
-          value={balance}
-          aria-invalid={invalid}
-          onChange={(event) => setBalance(event.currentTarget.value)}
-        />
-      </label>
-      <span title={canAutoFetch ? undefined : t('autoFetchUnsupported')}>
-        <Checkbox
-          label={t('autoFetchLabel')}
-          checked={canAutoFetch && autoFetch}
-          disabled={!canAutoFetch}
-          onChange={setAutoFetch}
-        />
-      </span>
-      <span className={css.planActions}>
-        <Button
-          variant="secondary"
-          disabled={invalid}
-          onClick={() => {
-            void onSave({
-              manualBalanceMicros: micros ?? 0,
-              autoFetchBalance: canAutoFetch && autoFetch,
-            })
-          }}
-        >
-          {t('planSave')}
-        </Button>
-        <Button variant="ghost" onClick={onCancel}>{t('planCancel')}</Button>
-      </span>
-      {invalid ? <span className={css.tag}>{t('planInvalidBalance')}</span> : null}
-    </div>
+    <Modal
+      open
+      onClose={onClose}
+      title={`${t('providerDetailTitle')} · ${provider}`}
+      footer={<Button variant="ghost" onClick={onClose}>{t('cancel')}</Button>}
+    >
+      <div className={css.detailList} data-testid={`finance-provider-detail-${provider}`}>
+        {details.map((item) => (
+          <div key={item.label} className={css.detailRow}>
+            <span className={css.detailLabel}>{item.label}</span>
+            <span className={css.detailValue}>{item.value}</span>
+          </div>
+        ))}
+      </div>
+    </Modal>
   )
 }
 

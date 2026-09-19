@@ -119,6 +119,55 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr) auto;
 }
 
+/* 供应商总表：供应商 | 付费类型 | 余额/月费 | 按量等价 | 操作 */
+.colsProviders {
+  grid-template-columns: minmax(120px, 1.4fr) minmax(72px, 0.8fr) minmax(96px, 1fr) minmax(96px, 1fr) auto;
+}
+
+/* modal 里的纵向表单（修改供应商）：字段组纵排，联动显隐。 */
+.planFormVertical {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spk-space-3);
+}
+
+.fieldGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spk-space-1);
+}
+
+/* 详情 modal 的键值列表。 */
+.detailList {
+  display: flex;
+  flex-direction: column;
+}
+
+.detailRow {
+  display: grid;
+  grid-template-columns: minmax(96px, 0.9fr) minmax(0, 1.4fr);
+  gap: var(--spk-space-2);
+  align-items: baseline;
+  padding: var(--spk-space-2) 0;
+  border-bottom: 1px solid var(--spk-border-2);
+  font-size: var(--spk-text-sm);
+}
+
+.detailRow:last-child {
+  border-bottom: none;
+}
+
+.detailLabel {
+  color: var(--spk-label-3);
+  font-size: var(--spk-text-xs);
+}
+
+.detailValue {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
 .planForm {
   display: flex;
   align-items: flex-end;

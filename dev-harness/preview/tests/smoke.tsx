@@ -288,15 +288,15 @@ export async function run(): Promise<{ checks: Check[] }> {
       html.indexOf('finance-tabs') > -1 && html.indexOf('finance-tabs') < html.indexOf('finance-stat-cost'),
       'tabs@' + html.indexOf('finance-tabs') + ' stats@' + html.indexOf('finance-stat-cost'),
     )
-    // 按量付费卡只列有余额接口的厂商；openai 宿主建议值是订阅 → 落订阅卡。
-    expectContains('finance: 余额行按已接入 provider 渲染', html, 'finance-metered-deepseek')
+    // 供应商总表（订阅/按量合并为一张表，付费类型用 Tag 区分）；deepseek 走按量。
+    expectContains('finance: 余额行按已接入 provider 渲染', html, 'finance-provider-deepseek')
     expectContains('finance: 四个决策视图页签（zh 字典）', html, '怎么调度更省')
-    expectContains('finance: 订阅 vs 按量卡存在', html, 'finance-plan-card')
+    expectContains('finance: 供应商总表存在', html, 'finance-provider-table')
     // 写回路径真的通：给有用量、无显式标记的 openai 填一次月费 → 落到 settings 的
     // plans，并推出「省了多少」结论（deepseek/tencent 已显式标记为按量，不进订阅卡）。
     await injected.controller.savePlan({ provider: 'openai', monthlyMicros: 1, currency: 'CNY', periodLabel: 'month', effectiveFrom: 0 })
     const afterPlan = renderToString(<FinancePanel {...injected.panel} /> as ReactElement)
-    expectContains('finance: 填过月费的厂商进入订阅卡', afterPlan, 'finance-plan-openai')
+    expectContains('finance: 填过月费的厂商进总表并标订阅', afterPlan, 'finance-provider-openai')
     // SPEC §5.4：结论列改为「按量等价节省 + 超值 tag」。
     expectContains('finance: 填月费后给出按量等价节省与超值 tag', afterPlan, '超值')
     // P1-B：该用谁 —— 输出速率列 + 同一模型跨供应商的时间成本比较。

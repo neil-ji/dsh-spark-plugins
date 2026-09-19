@@ -155,7 +155,7 @@ describe('FinancePanel shell', () => {
     expect(html).toContain('finance-stat-metered')
     expect(html).toContain('finance-stat-plan')
     expect(html).toContain('finance-view-thisMonth')
-    expect(html).toContain('finance-metered-deepseek-official')
+    expect(html).toContain('finance-provider-deepseek-official')
     // 形制（与 hippomemo MemorySection 一致）：子页签栏是面板内容的第一件东西，
     // 指标/操作/脚注都在 tab 里，不允许置顶。
     expect(html.indexOf('finance-tabs')).toBeGreaterThan(-1)
@@ -203,7 +203,7 @@ describe('finance views', () => {
       onRefresh: () => {},
       lastSyncAppliedAt: undefined,
     }))
-    expect(html).toContain('finance-metered-deepseek-official')
+    expect(html).toContain('finance-provider-deepseek-official')
     expect(html).toContain('topModelsHint')
     expect(html).toContain('trendTitle')
   })
@@ -223,13 +223,13 @@ describe('finance views', () => {
       lastSyncAppliedAt: undefined,
       onSetBillingMode: async () => {},
     }))
-    // 按量付费卡：a、b 都进本卡（待选池已退役，未打标默认按量）；操作收敛为「…」菜单
-    expect(noPlan).toContain('finance-metered-a')
-    expect(noPlan).toContain('finance-metered-b')
+    // 供应商总表（订阅/按量合并）：a、b 都进同一张表；操作收敛为「…」菜单
+    expect(noPlan).toContain('finance-provider-a')
+    expect(noPlan).toContain('finance-provider-b')
     expect(noPlan).toContain('actionsMenu: a')
-    // 订阅计划卡此时为空态，且不再默认摆出「填月费」
-    expect(noPlan).toContain('planEmpty')
-    expect(noPlan).not.toContain('planFill')
+    // 表内不再有独立的订阅空态卡；付费类型列 + Tag 归位
+    expect(noPlan).toContain('colBillingType')
+    expect(noPlan).toContain('billing_metered')
 
     const withPlan = renderToStaticMarkup(createElement(ThisMonthView, {
       ledger: LEDGER,
@@ -244,8 +244,8 @@ describe('finance views', () => {
       onRefresh: () => {},
       lastSyncAppliedAt: undefined,
     }))
-    // 等价按量价 10_000_000 > 月费 1_000_000 → 节省列 + 超值 tag（SPEC §5.4 三池列）
-    expect(withPlan).toContain('planSavingsCol')
+    // 等价按量价 10_000_000 > 月费 1_000_000 → 按量等价列 + 超值 tag（SPEC §5.4）
+    expect(withPlan).toContain('planEquivalent')
     expect(withPlan).toContain('superValue')
   })
 
@@ -276,13 +276,11 @@ describe('finance views', () => {
       onSetBillingMode: async () => {},
       onTagProvider: async () => {},
     }))
-    // free 进订阅计划卡（不是按量卡），月费强制 0
-    expect(html).toContain('finance-plan-free-guy')
-    expect(html).not.toContain('finance-metered-free-guy')
-    // 月费列强制 0（¥0.00），节省列无比较意义
+    // 订阅行月费列强制 0（¥0.00），节省列无比较意义
+    expect(html).toContain('finance-provider-free-guy')
     expect(html).toContain('¥0.00')
-    // 不提供月费编辑/移除入口（改标即可离开）
-    expect(html).not.toContain('finance-plan-form-free-guy')
+    // 行内不再展开编辑表单（编辑入口收敛为 modal，未点开时不渲染）
+    expect(html).not.toContain('finance-provider-form-free-guy')
   })
 
   it('设置只读时套餐卡明确说明不能改，且不给编辑入口', () => {
@@ -299,10 +297,10 @@ describe('finance views', () => {
       onRefresh: () => {},
       lastSyncAppliedAt: undefined,
     }))
-    // 有月费条目的厂商按「订阅」归类 → 落在订阅计划卡；只读时计费方式以标签呈现
-    expect(html).toContain('finance-plan-a')
+    // 有月费条目的厂商按「订阅」归类 → 付费类型 Tag 呈订阅；只读时不给操作菜单
+    expect(html).toContain('finance-provider-a')
     expect(html).toContain('billing_plan')
-    expect(html).not.toContain('planEdit')
+    expect(html).not.toContain('providerEditTitle')
   })
 
   it('WhoToUse groups the same model across vendors and marks the cheaper one', () => {
