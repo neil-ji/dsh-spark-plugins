@@ -109,7 +109,7 @@
 
 /* 项目账表格：项目(名+会话数) | 消耗(按量+订阅估价) | 总 token | 总耗时 */
 .colsProjectCost {
-  grid-template-columns: minmax(140px, 1.6fr) minmax(140px, 1.4fr) minmax(80px, 0.8fr) minmax(80px, 0.8fr);
+  grid-template-columns: minmax(120px, 1.2fr) minmax(170px, 1.6fr) minmax(80px, 0.8fr) minmax(80px, 0.8fr);
 }
 
 /* 项目行可点进入明细：悬停反馈与手型（与 ui-kit ListRow 的 hover 同 token）。 */
@@ -121,8 +121,18 @@
   background: var(--spk-hover);
 }
 
-.projectRow .detailText {
+/* 副行（会话数 / 按量·订阅估价）在列内折行显示 —— 单元格默认 nowrap+ellipsis
+   会把「订阅估价 ¥0.00」从中间裁掉（真宿主 3999 截图实测），副行必须可换行。 */
+.projectRow .detailText,
+.projectRow .balanceName {
   display: block;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.projectRow .detailText {
+  line-height: 1.4;
 }
 
 .colsSessions {
