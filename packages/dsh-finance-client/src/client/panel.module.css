@@ -107,6 +107,24 @@
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
 }
 
+/* 项目账表格：项目(名+会话数) | 消耗(按量+订阅估价) | 总 token | 总耗时 */
+.colsProjectCost {
+  grid-template-columns: minmax(140px, 1.6fr) minmax(140px, 1.4fr) minmax(80px, 0.8fr) minmax(80px, 0.8fr);
+}
+
+/* 项目行可点进入明细：悬停反馈与手型（与 ui-kit ListRow 的 hover 同 token）。 */
+.projectRow {
+  cursor: pointer;
+}
+
+.projectRow:hover {
+  background: var(--spk-hover);
+}
+
+.projectRow .detailText {
+  display: block;
+}
+
 .colsSessions {
   grid-template-columns: minmax(120px, 2fr) minmax(80px, 1fr) minmax(96px, 1fr) minmax(80px, 1fr);
 }

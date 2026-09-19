@@ -379,13 +379,16 @@ describe('finance views', () => {
   })
 
   it('Projects lists workspaces with their cost', () => {
-    const html = renderToStaticMarkup(createElement(ProjectsView, { ledger: LEDGER, t }))
+    const html = renderToStaticMarkup(createElement(ProjectsView, { ledger: LEDGER, plans: [], t }))
     expect(html).toContain('finance-projects')
     expect(html).toContain('AgentStudio')
+    // 表格形制：项目 / 消耗 / 总 token / 总耗时 四列都在
+    expect(html).toContain('colTokensTotal')
+    expect(html).toContain('colDuration')
   })
 
   it('Projects shows the guidance empty state without workspaces', () => {
-    const html = renderToStaticMarkup(createElement(ProjectsView, { ledger: { ...LEDGER, byWorkspace: [] }, t }))
+    const html = renderToStaticMarkup(createElement(ProjectsView, { ledger: { ...LEDGER, byWorkspace: [] }, plans: [], t }))
     expect(html).toContain('finance-projects-empty')
   })
 })

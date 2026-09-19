@@ -2,31 +2,33 @@
  * 视图④：项目账。
  *
  * 项目 = 工作区（ledger.byWorkspace）；点进去看该项目的时间趋势与会话明细。
- * 趋势点由会话时间戳聚合而来——账本没有按工作区的日粒度，所以这里用的是
- * 「你自己的会话」这一手数据，不做任何补造。
+ * 列表是表格形制：项目（名称+会话数合并渲染）、消耗（按量现金 + 订阅估价合并渲染）、
+ * 总 token、总耗时（速率推算，标注估算）。
  */
 
 import { useState, type ReactNode } from 'react'
-import { Button, Card, EmptyState, ListRow, Money, TrendChart, formatMicros } from 'dsh-ui-kit'
-import type { FinanceLedger, FinanceSessionRow, FinanceWorkspaceRow } from 'dsh-spark-finance/types'
-import { projectRows, sessionsOfWorkspace, sessionsTrend } from '../derive.ts'
+import { Button, Card, CellText, EmptyState, Money, TrendChart, formatMicros } from 'dsh-ui-kit'
+import type { FinanceLedger, FinancePlanEntry, FinanceSessionRow } from 'dsh-spark-finance/types'
+import { projectCostRows, sessionsOfWorkspace, sessionsTrend } from '../derive.ts'
 import type { FinanceTranslate } from '../locales.ts'
 import css from '../panel.module.css'
 
 export interface ProjectsViewProps {
   ledger: FinanceLedger
+  /** 已填套餐（订阅估价需要月费与计费形态）。 */
+  plans: readonly FinancePlanEntry[]
   t: FinanceTranslate
 }
 
 /** 账本里 workspaceId 可能是 null（未归属工作区的会话），用哨兵字符串做选择键。 */
 const NO_WORKSPACE = 'none'
 
-export function ProjectsView({ ledger, t }: ProjectsViewProps): ReactNode {
+export function ProjectsView({ ledger, plans, t }: ProjectsViewProps): ReactNode {
   const [selected, setSelected] = useState<string | null>(null)
   const currency = ledger.currency === '' ? 'CNY' : ledger.currency
-  const projects = projectRows(ledger)
+  const rows = projectCostRows(ledger, plans)
 
-  if (projects.length === 0) {
+  if (rows.length === 0) {
     return (
       <div data-testid="finance-projects-empty">
         <EmptyState message={t('projectsEmptyTitle')} hint={t('projectsEmptyHint')} />
@@ -34,7 +36,7 @@ export function ProjectsView({ ledger, t }: ProjectsViewProps): ReactNode {
     )
   }
 
-  const current = selected === null ? undefined : projects.find((candidate) => keyOf(candidate) === selected)
+  const current = selected === null ? undefined : rows.find((row) => keyOf(row) === selected)
   if (current !== undefined) {
     return <ProjectDetail row={current} ledger={ledger} currency={currency} t={t} onBack={() => setSelected(null)} />
   }
@@ -42,15 +44,40 @@ export function ProjectsView({ ledger, t }: ProjectsViewProps): ReactNode {
   return (
     <Card title={t('projectsTitle')} className={css.section}>
       <div className={css.table} data-testid="finance-projects">
-        {projects.map((row) => (
-          <ListRow
+        <div className={cx(css.tableHead, css.colsProjectCost)}>
+          <span className={css.cell}>{t('colProject')}</span>
+          <span className={cx(css.cell, css.cellNum)} title={t('projectCostHint')}>{t('colCost')}</span>
+          <span className={cx(css.cell, css.cellNum)}>{t('colTokensTotal')}</span>
+          <span className={cx(css.cell, css.cellNum)} title={t('durationHint')}>{t('colDuration')}</span>
+        </div>
+        {rows.map((row) => (
+          <div
             key={keyOf(row)}
-            title={displayTitle(row, t)}
-            meta={`${t('colSessions')} ${row.sessionCount}`}
-            trailing={<Money micros={row.costMicros} currency={currency} />}
-            accentColor="var(--spk-acc-finance)"
+            className={cx(css.tableRow, css.colsProjectCost, css.projectRow)}
+            data-testid={`finance-project-${keyOf(row)}`}
             onClick={() => setSelected(keyOf(row))}
-          />
+            onKeyDown={(event) => { if (event.key === 'Enter') setSelected(keyOf(row)) }}
+            role="button"
+            tabIndex={0}
+            aria-label={`${displayTitle(row, t)} · ${t('colCost')} ${formatMicros(row.totalMicros)}`}
+          >
+            <span className={css.cell}>
+              {/* 合并渲染：项目名 + 会话数副行。 */}
+              <span className={css.balanceName}><CellText text={displayTitle(row, t)} /></span>
+              <span className={css.detailText}>{t('projectSessions', { count: row.sessionCount })}</span>
+            </span>
+            <span className={cx(css.cell, css.cellNum)}>
+              {/* 合并渲染：合计主行 + 按量/订阅估价拆分副行。 */}
+              <span><Money micros={row.totalMicros} currency={currency} exact /></span>
+              <span className={css.detailText}>
+                {t('consumeMetered')} <Money micros={row.meteredMicros} currency={currency} exact />
+                {' · '}
+                {t('planEstimateShort')} <Money micros={row.planEstimateMicros} currency={currency} exact />
+              </span>
+            </span>
+            <span className={cx(css.cell, css.cellNum)}>{row.totalTokens.toLocaleString()}</span>
+            <span className={cx(css.cell, css.cellNum)}>{formatDuration(row.durationSeconds, t)}</span>
+          </div>
         ))}
       </div>
     </Card>
@@ -58,7 +85,7 @@ export function ProjectsView({ ledger, t }: ProjectsViewProps): ReactNode {
 }
 
 function ProjectDetail({ row, ledger, currency, t, onBack }: {
-  row: FinanceWorkspaceRow
+  row: { workspaceId: string | null; title: string }
   ledger: FinanceLedger
   currency: string
   t: FinanceTranslate
@@ -66,7 +93,7 @@ function ProjectDetail({ row, ledger, currency, t, onBack }: {
 }): ReactNode {
   const sessions = sessionsOfWorkspace(ledger, row.workspaceId)
   const points = sessionsTrend(sessions)
-  const title = displayTitle(row, t)
+  const title = row.title === '' ? t('otherProjects') : row.title
   return (
     <Card
       title={
@@ -113,10 +140,19 @@ function SessionRow({ session, currency, t }: { session: FinanceSessionRow; curr
   )
 }
 
-function displayTitle(row: FinanceWorkspaceRow, t: FinanceTranslate): string {
+function displayTitle(row: { title: string }, t: FinanceTranslate): string {
   return row.title === '' ? t('otherProjects') : row.title
 }
 
-function keyOf(row: FinanceWorkspaceRow): string {
+function keyOf(row: { workspaceId: string | null }): string {
   return row.workspaceId ?? NO_WORKSPACE
 }
+
+/** 秒 → 人读时长（<1h 给分钟，其余给一位小数的小时）；无样本给「暂无数据」。 */
+function formatDuration(seconds: number | null, t: FinanceTranslate): string {
+  if (seconds === null || seconds <= 0) return t('noData')
+  if (seconds < 3600) return t('durationMinutes', { m: Math.max(1, Math.round(seconds / 60)) })
+  return t('durationHours', { h: (seconds / 3600).toFixed(1) })
+}
+
+const cx = (...names: string[]): string => names.join(' ')

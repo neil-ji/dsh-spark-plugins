@@ -13,6 +13,7 @@ import type {
   FinanceDayRow,
   FinanceLedger,
   FinanceModelRow,
+  FinancePlanEntry,
   FinanceProviderRow,
   FinanceRateStats,
   FinanceSessionRow,
@@ -522,4 +523,131 @@ export function planRows(
     .filter((provider) => !planned.has(providerKey(provider)))
     .sort((a, b) => a.localeCompare(b))
   return { withPlan, withoutPlan }
+}
+
+/* ───────────── 项目账：按量现金 + 订阅估价（周期内用量占比分摊） ───────────── */
+
+/** 项目账表格行：按量现金 + 订阅估价 + token / 耗时。 */
+export interface ProjectCostRow {
+  workspaceId: string | null
+  title: string
+  sessionCount: number
+  /** 按量现金消耗：无套餐厂商的目录价成本（= 真金白银）。 */
+  meteredMicros: number
+  /**
+   * 订阅估价：套餐费是沉没成本（用不到上限也不退），所以按「当周项目占全部项目
+   * 按量等价的比例」分摊周费，跨周累加。见 `planEstimateHint` 文案。
+   */
+  planEstimateMicros: number
+  /** 消耗合计 = 按量 + 订阅估价。 */
+  totalMicros: number
+  /** 该项目全部 token（四桶合计）。 */
+  totalTokens: number
+  /** 由 byModel 实测速率 × 项目输出 token 推算的输出耗时（秒）；无速率样本时 null。 */
+  durationSeconds: number | null
+}
+
+/** modelKey → provider 段（`provider/model` 前缀；无 `/` 时整个键当 provider）。 */
+function providerOfModelKey(modelKey: string): string {
+  const slash = modelKey.indexOf('/')
+  return slash === -1 ? modelKey : modelKey.slice(0, slash)
+}
+
+/** 某月的天数与「7 天一周」的周数（ceil；31 天月 = 5 周）。 */
+function monthWeeks(epochMs: number): { monthKey: string; weeks: number; dayOfMonth: number } {
+  const date = new Date(epochMs)
+  const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
+  return {
+    monthKey: `${date.getFullYear()}-${date.getMonth()}`,
+    weeks: Math.ceil(daysInMonth / 7),
+    dayOfMonth: date.getDate(),
+  }
+}
+
+/**
+ * 项目成本行（含订阅估价）。算法（SPEC §5.4 推广）：
+ *
+ * 1. 套餐月费固定：`周费 = 月费 ÷ 当月周数`（31 天月 = ceil(31/7) = 5 周 → 100 元月费
+ *    = 每周 20 元）。周上限 / 5 小时上限触发与否不影响这笔钱 —— 沉没成本。
+ * 2. 每个周内：分母 = 全部项目在该厂商模型上的按量等价金额之和；分子 = 单个项目在该
+ *    厂商模型上的按量等价金额。`分子 ÷ 分母 × 周费` = 该周该项目的订阅估价。
+ * 3. 跨周累加得到项目订阅估价；加上按量厂商的现金消耗即为项目总消耗。
+ *
+ * 会话成本按 modelKeys 均摊到模型（账本只有会话级成本，模型级拆分是估算）。
+ * 订阅路线的会话成本本身就是目录价等价（SPEC INV-1），可直接当「按量等价」用。
+ */
+export function projectCostRows(ledger: FinanceLedger, plans: readonly FinancePlanEntry[]): ProjectCostRow[] {
+  /** 套餐月费：providerKey（大小写 / `-official` 归一）→ monthlyMicros。 */
+  const planFee = new Map<string, number>()
+  for (const plan of plans) planFee.set(providerKey(plan.provider), plan.monthlyMicros)
+
+  // 分摊桶：`provider|month|weekIdx` → { weeks, denom, perWorkspace }
+  interface Bucket { weeks: number; denom: number; ws: Map<string, number> }
+  const bucketsByWeek = new Map<string, Bucket>()
+  const metered = new Map<string, number>()
+
+  for (const session of ledger.sessions) {
+    const wsKey = session.workspaceId ?? 'none'
+    if (session.modelKeys.length === 0) {
+      metered.set(wsKey, (metered.get(wsKey) ?? 0) + session.costMicros)
+      continue
+    }
+    const share = session.costMicros / session.modelKeys.length
+    for (const modelKey of session.modelKeys) {
+      const provider = providerKey(providerOfModelKey(modelKey))
+      const fee = planFee.get(provider)
+      if (fee === undefined) {
+        metered.set(wsKey, (metered.get(wsKey) ?? 0) + share)
+        continue
+      }
+      const { monthKey, weeks, dayOfMonth } = monthWeeks(session.createdAt)
+      const weekIdx = Math.min(Math.floor((dayOfMonth - 1) / 7), weeks - 1)
+      const bucketKey = `${provider}|${monthKey}|${weekIdx}`
+      const bucket = bucketsByWeek.get(bucketKey) ?? { weeks, denom: 0, ws: new Map() }
+      bucket.denom += share
+      bucket.ws.set(wsKey, (bucket.ws.get(wsKey) ?? 0) + share)
+      bucketsByWeek.set(bucketKey, bucket)
+    }
+  }
+
+  // 周费分摊：分子 / 分母 × 周费，跨周累加到项目。周费 = 月费 ÷ 当月周数（沉没成本均摊）。
+  const planEstimate = new Map<string, number>()
+  for (const [key, bucket] of bucketsByWeek) {
+    const provider = key.split('|')[0] ?? ''
+    const weeklyFee = (planFee.get(provider) ?? 0) / bucket.weeks
+    if (weeklyFee <= 0 || bucket.denom <= 0) continue
+    for (const [wsKey, numerator] of bucket.ws) {
+      planEstimate.set(wsKey, (planEstimate.get(wsKey) ?? 0) + (numerator / bucket.denom) * weeklyFee)
+    }
+  }
+
+  // 输出耗时估算：全局实测速率（decodeTokens/decodeMs）× 项目输出 token。
+  let decodeMs = 0
+  let decodeTokens = 0
+  for (const model of ledger.byModel) {
+    if (model.rate === undefined) continue
+    decodeMs += model.rate.decodeMs
+    decodeTokens += model.rate.decodeTokens
+  }
+  const msPerOutputToken = decodeTokens > 0 ? decodeMs / decodeTokens : null
+
+  return ledger.byWorkspace
+    .map((row): ProjectCostRow => {
+      const wsKey = row.workspaceId ?? 'none'
+      const plan = planEstimate.get(wsKey) ?? 0
+      const meter = metered.get(wsKey) ?? 0
+      return {
+        workspaceId: row.workspaceId,
+        title: row.title,
+        sessionCount: row.sessionCount,
+        meteredMicros: Math.round(meter),
+        planEstimateMicros: Math.round(plan),
+        totalMicros: Math.round(meter + plan),
+        totalTokens: totalTokens(row.usage),
+        durationSeconds: msPerOutputToken === null
+          ? null
+          : Math.round((totalTokens(row.usage) - effectiveInputTokens(row.usage)) * msPerOutputToken / 1000),
+      }
+    })
+    .sort((a, b) => b.totalMicros - a.totalMicros)
 }

@@ -23,6 +23,7 @@ import {
   peakShare,
   planInsight,
   planRows,
+  projectCostRows,
   projectRows,
   providerCostMicros,
   providerDailyMicros,
@@ -367,5 +368,77 @@ describe('derive: peak share and projects', () => {
     const trend = sessionsTrend(w1)
     expect(trend).toHaveLength(1)
     expect(trend[0].value).toBe(9)
+  })
+})
+
+describe('derive: 项目账订阅估价（周费按用量占比分摊）', () => {
+  // 2026-03-15（3 月 31 天 → ceil(31/7)=5 周；15 号 → weekIdx = floor(14/7) = 2）
+  const T = new Date(2026, 2, 15, 12).getTime()
+  const session = (sessionId: string, workspaceId: string, modelKeys: string[], costMicros: number, output = 400): FinanceSessionRow => ({
+    sessionId,
+    title: sessionId,
+    createdAt: T,
+    workspaceId,
+    workspaceTitle: workspaceId,
+    taskId: 't',
+    modelKeys,
+    usage: buckets(1_000, 0, 0, output),
+    costMicros,
+  })
+  const ledger = {
+    currency: 'CNY',
+    byWorkspace: [
+      { workspaceId: 'w1', title: 'Alpha', sessionCount: 1, usage: buckets(1_000, 0, 0, 400), costMicros: 3_000_000 },
+      { workspaceId: 'w2', title: 'Beta', sessionCount: 2, usage: buckets(6_000, 0, 0, 800), costMicros: 6_000_000 },
+    ],
+    sessions: [
+      session('s1', 'w1', ['deepseek/m1'], 3_000_000),
+      session('s2', 'w2', ['deepseek-official/m2'], 1_000_000),
+      session('s3', 'w2', ['acme/m3'], 5_000_000),
+    ],
+    byModel: [
+      { modelKey: 'deepseek/m1', provider: 'deepseek', model: 'm1', usage: buckets(1_000, 0, 0, 400), costMicros: 3_000_000, rate: { decodeMs: 60_000, decodeTokens: 1_200, ttftMs: 0, ttftSteps: 0 } },
+    ],
+  } as unknown as FinanceLedger
+  const plans = [{ provider: 'deepseek-official', monthlyMicros: 10_000_000, currency: 'CNY', effectiveFrom: 0 }]
+
+  it('订阅估价 = 周费 × 项目当周按量等价占比；按量厂商走现金口径', () => {
+    const rows = projectCostRows(ledger, plans)
+    const alpha = rows.find((row) => row.workspaceId === 'w1')!
+    const beta = rows.find((row) => row.workspaceId === 'w2')!
+    // 周费 = 10_000_000 ÷ 5 = 2_000_000；当周分母 = 3_000_000 + 1_000_000 = 4_000_000
+    // Alpha 订阅估价 = 3/4 × 2_000_000 = 1_500_000，按量 0
+    expect(alpha.planEstimateMicros).toBe(1_500_000)
+    expect(alpha.meteredMicros).toBe(0)
+    expect(alpha.totalMicros).toBe(1_500_000)
+    // Beta 订阅估价 = 1/4 × 2_000_000 = 500_000；acme 是按量现金 5_000_000
+    expect(beta.planEstimateMicros).toBe(500_000)
+    expect(beta.meteredMicros).toBe(5_000_000)
+    expect(beta.totalMicros).toBe(5_500_000)
+  })
+
+  it('总 token 与总耗时（速率推算）随行给出', () => {
+    const rows = projectCostRows(ledger, plans)
+    const alpha = rows.find((row) => row.workspaceId === 'w1')!
+    expect(alpha.totalTokens).toBe(1_400)
+    // 400 output × (60_000ms / 1_200tok) = 20_000ms = 20s
+    expect(alpha.durationSeconds).toBe(20)
+  })
+
+  it('没有套餐时不产生订阅估价，全部走按量；没有速率样本时耗时为 null', () => {
+    const rows = projectCostRows(ledger, [])
+    for (const row of rows) {
+      expect(row.planEstimateMicros).toBe(0)
+    }
+    const beta = rows.find((row) => row.workspaceId === 'w2')!
+    expect(beta.totalMicros).toBe(6_000_000)
+
+    const withoutRate = {
+      ...ledger,
+      byModel: (ledger.byModel as FinanceLedger['byModel']).map(({ rate: _rate, ...row }) => row),
+    } as FinanceLedger
+    for (const row of projectCostRows(withoutRate, plans)) {
+      expect(row.durationSeconds).toBeNull()
+    }
   })
 })
