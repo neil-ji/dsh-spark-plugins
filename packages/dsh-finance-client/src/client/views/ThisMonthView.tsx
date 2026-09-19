@@ -215,6 +215,24 @@ export function ThisMonthView({
         )
         : (
           <>
+            <Card
+              title={t('trendTitle')}
+              actions={<span className={css.tagMuted} title={t('trendHint')}>{t('trendRange', { days: ledger.byDay.length })}</span>}
+              className={css.section}
+            >
+              {/* 数据不足（<2 天）画不出趋势：给空占位而不是一块空白画布。 */}
+              {trendPoints.length < 2
+                ? <EmptyState message={t('trendEmpty')} />
+                : (
+                  <TrendChart
+                    points={trendPoints}
+                    ariaLabel={t('trendTitle')}
+                    formatValue={formatMicros}
+                    gradientId="finance-trend"
+                  />
+                )}
+            </Card>
+
             {/* 订阅计划 + 按量付费合并为一张供应商总表：付费类型用 Tag 区分，
                 「余额 / 月费」按付费类型取值，「按量等价」列给跨类型比较基准。 */}
             <Card title={t('providerCardTitle')} className={css.section}>
@@ -290,24 +308,6 @@ export function ThisMonthView({
                     )
                   })}
               </div>
-            </Card>
-
-            <Card
-              title={t('trendTitle')}
-              actions={<span className={css.tagMuted} title={t('trendHint')}>{t('trendRange', { days: ledger.byDay.length })}</span>}
-              className={css.section}
-            >
-              {/* 数据不足（<2 天）画不出趋势：给空占位而不是一块空白画布。 */}
-              {trendPoints.length < 2
-                ? <EmptyState message={t('trendEmpty')} />
-                : (
-                  <TrendChart
-                    points={trendPoints}
-                    ariaLabel={t('trendTitle')}
-                    formatValue={formatMicros}
-                    gradientId="finance-trend"
-                  />
-                )}
             </Card>
 
             <Card title={t('topModelsTitle')} className={css.section}>
