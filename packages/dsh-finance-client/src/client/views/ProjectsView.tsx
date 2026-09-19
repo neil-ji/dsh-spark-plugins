@@ -133,13 +133,19 @@ function ProjectDetail({ row, ledger, currency, t, onBack }: {
 }
 
 function SessionRow({ session, currency, t }: { session: FinanceSessionRow; currency: string; t: FinanceTranslate }): ReactNode {
+  const model = session.modelKeys.length === 0 ? null : session.modelKeys[0]
   return (
     <div className={`${css.tableRow} ${css.colsSessions}`}>
-      <span className={`${css.cell} ${css.cellWrap}`} title={session.sessionId}>
+      {/* 文本列统一最多两行截断 + 悬浮全文（会话名悬浮换 sessionId）。 */}
+      <span className={`${css.cell} ${css.clamp2}`} title={session.sessionId}>
         {session.title === null || session.title === '' ? t('untitledSession') : session.title}
       </span>
-      <span className={css.cell}>{new Date(session.createdAt).toLocaleDateString()}</span>
-      <span className={`${css.cell} ${css.modelKey}`} title={session.modelKeys[0]}>{session.modelKeys.length === 0 ? t('noData') : session.modelKeys[0]}</span>
+      <span className={`${css.cell} ${css.clamp2}`} title={new Date(session.createdAt).toLocaleString()}>
+        {new Date(session.createdAt).toLocaleDateString()}
+      </span>
+      <span className={`${css.cell} ${css.modelKey} ${css.clamp2}`} title={model ?? undefined}>
+        {model ?? t('noData')}
+      </span>
       <span className={`${css.cell} ${css.cellNum}`}><Money micros={session.costMicros} currency={currency} exact /></span>
     </div>
   )
