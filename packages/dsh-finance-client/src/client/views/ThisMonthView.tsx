@@ -204,12 +204,6 @@ export function ThisMonthView({
             value={ledger.planEquivalentCostMicros === undefined ? t('noData') : <Money micros={ledger.planEquivalentCostMicros} currency={currency} />}
           />
         </div>
-        <div data-testid="finance-stat-sessions">
-          <Stat label={t('metricSessions')} value={ledger.sessionCount} />
-        </div>
-        <div data-testid="finance-stat-workspaces">
-          <Stat label={t('metricWorkspaces')} value={ledger.workspaceCount} />
-        </div>
       </StatGrid>
 
       {empty
