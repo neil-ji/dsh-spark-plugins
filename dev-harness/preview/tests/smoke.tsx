@@ -290,7 +290,7 @@ export async function run(): Promise<{ checks: Check[] }> {
     )
     // 供应商总表（订阅/按量合并为一张表，付费类型用 Tag 区分）；deepseek 走按量。
     expectContains('finance: 余额行按已接入 provider 渲染', html, 'finance-provider-deepseek')
-    expectContains('finance: 四个决策视图页签（zh 字典）', html, '怎么调度更省')
+    expectContains('finance: 四个决策视图页签（zh 字典）', html, '节省分析')
     expectContains('finance: 供应商总表存在', html, 'finance-provider-table')
     // 写回路径真的通：给有用量、无显式标记的 openai 填一次月费 → 落到 settings 的
     // plans，并推出「省了多少」结论（deepseek/tencent 已显式标记为按量，不进订阅卡）。
