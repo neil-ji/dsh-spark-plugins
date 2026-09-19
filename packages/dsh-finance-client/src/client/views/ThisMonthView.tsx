@@ -269,9 +269,16 @@ export function ThisMonthView({
                           <span className={cx(css.cell, css.cellNum)}>{feeOrBalance}</span>
                           <span className={cx(css.cell, css.cellNum, css.balanceValue)}>{equiv}</span>
                           <span className={css.planActions}>
-                            {/* 只读（设置不可写 / 宿主锁定）：计费方式以静音标签呈现，不给菜单。 */}
+                            {/* 操作列始终有下拉；锁定（如 deepseek-official）或设置只读时
+                                收窄为「详情」一项 —— 修改入口不给，详情永远在。 */}
                             {!plansWritable || billingLocked.has(providerKey(provider))
-                              ? <span className={css.tagMuted}>{billingLabel(mode, t)}</span>
+                              ? (
+                                <RowActions
+                                  label={`${t('actionsMenu')}: ${provider}`}
+                                  items={[{ id: 'detail', label: t('providerDetail') }]}
+                                  onSelect={(id) => onMenuSelect(provider, id)}
+                                />
+                              )
                               : (
                                 <RowActions
                                   label={`${t('actionsMenu')}: ${provider}`}
