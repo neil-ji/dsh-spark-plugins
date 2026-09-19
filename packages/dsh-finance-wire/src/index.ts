@@ -241,10 +241,14 @@ export const financeOverviewSchema = z.object({
 })
 
 export const financeBackfillProgressSchema = z.object({
-  phase: z.enum(['idle', 'backfill', 'done']),
+  phase: z.enum(['idle', 'backfill', 'aggregate', 'done']),
+  /** 全流程 0–100 整数百分比（回填 0–70 + 聚合 70–100 加权）。 */
+  percent: z.number(),
   scanned: z.number(),
   total: z.number(),
   rescanned: z.number(),
+  /** 最新一行后台动作日志（客户端逐行累积展示；host 结构化数据，不进 locale）。 */
+  line: z.string().optional(),
   startedAt: z.number(),
 })
 
@@ -668,7 +672,7 @@ export const FINANCE_REFLECTION: TypertPackageModel = {
         { name: 'FinanceLedger', declaration: 'export interface FinanceLedger { generatedAt: number; currency: string; totals: FinanceTokenBuckets; totalCostMicros: number; meteredCostMicros?: number; planEquivalentCostMicros?: number; freeCostMicros?: number; sessionCount: number; workspaceCount: number; taskCount: number; windowedSinceMs: number | null; hourOfDayWindowStartMs: number; byDay: readonly FinanceDayRow[]; byModel: readonly FinanceModelRow[]; byProvider: readonly FinanceProviderRow[]; byWorkspace: readonly FinanceWorkspaceRow[]; tasks: readonly FinanceTaskRow[]; sessions: readonly FinanceSessionRow[]; unreadableSessions: readonly FinanceUnreadableSessionRow[]; byHourOfDay: readonly FinanceHourOfDayRow[]; peakValley: FinancePeakValleySplit; }' },
         { name: 'FinanceUnreadableSessionRow', declaration: 'export interface FinanceUnreadableSessionRow { sessionId: string; createdAt: number; reason: string; }' },
         { name: 'FinanceOverview', declaration: 'export interface FinanceOverview { balance: FinanceBalanceView; ledger: FinanceLedger; }' },
-        { name: 'FinanceBackfillProgress', declaration: 'export interface FinanceBackfillProgress { phase: "idle" | "backfill" | "done"; scanned: number; total: number; rescanned: number; startedAt: number; }' },
+        { name: 'FinanceBackfillProgress', declaration: 'export interface FinanceBackfillProgress { phase: "idle" | "backfill" | "aggregate" | "done"; percent: number; scanned: number; total: number; rescanned: number; line?: string; startedAt: number; }' },
         // Per-provider configuration + balance. The host does not yet fill
         // these in `getBalance`, but the types are published now so the client
         // UI / future @Remote can consume them without a manifest bump.

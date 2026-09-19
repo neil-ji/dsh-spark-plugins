@@ -274,6 +274,10 @@ export class FinanceService extends TypertRemoteService {
   private hourlyBackfill: Promise<void> | undefined
   /** Live progress of the running backfill, polled by the loading UI. */
   private backfillProgress: FinanceBackfillProgress | undefined
+  /** 首算的初始化 sink（回填 + 聚合两段共用同一个对象）。 */
+  private initSink: FinanceBackfillSink | undefined
+  /** 是否处于进程内第一次冷聚合（getLedger 用它决定要不要把 sink 递给 build）。 */
+  private firstInitBuild = false
   /** F11 commit: dedicated stream service for `finance.events()`. */
   private readonly eventsService: FinanceEventsService | undefined
   /**
@@ -853,10 +857,14 @@ export class FinanceService extends TypertRemoteService {
     let pending = this.hourlyBackfill
     if (pending === undefined) {
       // F11 commit: type the progress variable as the sink. The host
-      // mutates `phase` and the four counters in place, then `onProgress`
+      // mutates `phase` / `percent` and the counters in place, then `onProgress`
       // projects the sink onto `FinanceBackfillProgress` (no `onProgress`
       // ever crosses the wire) and emits it on the host bus.
-      const progress: FinanceBackfillSink = { phase: 'backfill', scanned: 0, total: 0, rescanned: 0, startedAt: Date.now() }
+      const progress: FinanceBackfillSink = { phase: 'backfill', percent: 0, scanned: 0, total: 0, rescanned: 0, startedAt: Date.now() }
+      // 2026-09 订阅估价修订：首算期间把同一个 sink 递给 buildFinanceLedger，
+      // 让「账本冷聚合」段也上报进度（全流程 0–100 的 70–100 段）。
+      this.initSink = progress
+      this.firstInitBuild = true
       // F11 commit: every mutation of `progress` triggers `onProgress`,
       // which re-emits the latest snapshot on the host bus.
       // `events.ts` / `finance.events()` consumes this bus and bridges
@@ -876,11 +884,13 @@ export class FinanceService extends TypertRemoteService {
         .then(
           () => {
             progress.phase = 'done'
+            progress.percent = 100
             progress.onProgress?.(progress)
           },
           (error: unknown) => {
             this.ctx.logger?.warn?.('finance: hourly backfill failed, sessions stay estimated', error)
             progress.phase = 'done'
+            progress.percent = 100
             progress.onProgress?.(progress)
           },
         )
@@ -917,7 +927,13 @@ export class FinanceService extends TypertRemoteService {
       return this.ledgerCache.ledger
     }
     await this.ensureHourlyBackfilled(signal)
-    const ledger = await buildFinanceLedger(this.ctx, this.currentConfig(), signal)
+    // 首算（本轮进程第一次冷聚合）时把初始化 sink 递给 build，聚合段进度才会上报；
+    // 用完即清 —— 后续常规刷新不产生进度帧。
+    const firstBuild = this.firstInitBuild === true
+    this.firstInitBuild = false
+    const ledger = await buildFinanceLedger(this.ctx, this.currentConfig(), signal, {
+      ...(firstBuild ? { progress: this.initSink } : {}),
+    })
     this.ledgerCache = { at: now, ledger }
     return ledger
   }

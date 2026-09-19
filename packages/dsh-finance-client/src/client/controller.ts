@@ -32,6 +32,11 @@ export interface FinancePanelState {
   error: string | null
   /** 首次回填进度（宿主推流；只有 loading 期间会用到）。 */
   progress?: FinanceBackfillProgress
+  /**
+   * 初始化小字日志（宿主逐行推送的后台动作行，客户端只累积呈现）。
+   * 上限 50 行，渲染层自行取尾部；loading 结束随快照一起清空。
+   */
+  progressLines: readonly string[]
   /** 最近一次成功的社区价格同步（epoch ms）；undefined = 从未同步。 */
   lastSyncAppliedAt?: number
   /** 价格表状态（基础快照完整性 + 覆盖层 + 被形状守卫拒绝的键）。 */
@@ -82,6 +87,7 @@ export class FinancePanelController {
     plansWritable: false,
     priceBusy: false,
     priceError: null,
+    progressLines: [],
   })
   private generation = 0
   private readonly seam: FinancePlanSeam | undefined
@@ -110,7 +116,14 @@ export class FinancePanelController {
 
   /** 宿主推来的回填进度帧（dock 模块订阅 finance/events 后调用）。 */
   setProgress(progress: FinanceBackfillProgress): void {
-    this.store.update((state) => { state.progress = progress })
+    this.store.update((state) => {
+      state.progress = progress
+      // 动作日志逐行累积（同一行去重：宿主会为同一进度快照重复推帧）。
+      if (progress.line !== undefined && state.progressLines[state.progressLines.length - 1] !== progress.line) {
+        const next = [...state.progressLines, progress.line]
+        state.progressLines = next.length > 50 ? next.slice(next.length - 50) : next
+      }
+    })
   }
 
   /** 拉 ledger + provider 列表；失败保留上次快照，只切状态与错误文案。 */
@@ -120,7 +133,10 @@ export class FinancePanelController {
     this.store.update((state) => {
       state.status = firstLoad ? 'loading' : 'ready'
       state.error = null
-      if (firstLoad) state.progress = undefined
+      if (firstLoad) {
+        state.progress = undefined
+        state.progressLines = []
+      }
     })
     try {
       const [listResult, ledgerResult] = await Promise.all([
@@ -144,6 +160,7 @@ export class FinancePanelController {
         state.ledger = ledgerResult.value
         state.error = null
         state.progress = undefined
+        state.progressLines = []
       })
       void this.refreshPriceTable(generation)
     } catch (error) {

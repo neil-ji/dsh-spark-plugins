@@ -149,10 +149,17 @@ describe('FinancePanelController', () => {
     expect(state.ledger).toBeDefined()
   })
 
-  it('lands backfill progress frames from the host stream', () => {
+  it('lands backfill progress frames and accumulates the action log', () => {
     const controller = new FinancePanelController(fakeRemote() as never)
-    controller.setProgress({ phase: 'backfill', scanned: 3, total: 9, rescanned: 1, startedAt: 0 })
-    expect(controller.store.getSnapshot().progress?.scanned).toBe(3)
+    controller.setProgress({ phase: 'backfill', percent: 20, scanned: 1, total: 9, rescanned: 0, startedAt: 0, line: 'backfill 1/9 replay s1' })
+    controller.setProgress({ phase: 'backfill', percent: 40, scanned: 2, total: 9, rescanned: 1, startedAt: 0, line: 'backfill 2/9 cached s2' })
+    const state = controller.store.getSnapshot()
+    expect(state.progress?.scanned).toBe(2)
+    expect(state.progress?.percent).toBe(40)
+    expect(state.progressLines).toEqual(['backfill 1/9 replay s1', 'backfill 2/9 cached s2'])
+    // 同一行重复推帧不重复累积
+    controller.setProgress({ phase: 'backfill', percent: 40, scanned: 2, total: 9, rescanned: 1, startedAt: 0, line: 'backfill 2/9 cached s2' })
+    expect(controller.store.getSnapshot().progressLines).toHaveLength(2)
   })
 
   it('patches a single provider balance without touching the others', async () => {

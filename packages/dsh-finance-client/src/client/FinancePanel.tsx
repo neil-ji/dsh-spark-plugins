@@ -44,26 +44,37 @@ export interface FinancePanelInjected {
 
 const VIEWS: readonly FinanceView[] = ['thisMonth', 'whoToUse', 'saveMore', 'projects']
 
-/** 首开加载态：回填进度来自宿主推的 finance/events 帧，不轮询。 */
-function LoadingState({ progress, t }: { progress: FinancePanelState['progress']; t: FinanceTranslate }): ReactNode {
-  const total = progress?.total ?? 0
-  const scanned = progress?.scanned ?? 0
-  const pct = total > 0 ? Math.min(100, Math.round((scanned / total) * 100)) : 0
+/**
+ * 首开初始化态：全流程 0–100% 进度条（回填重放 + 账本聚合两段加权）+
+ * 宿主推送的后台动作小字日志。不放帮助/提示文案 —— 日志本身就是表意。
+ */
+function LoadingState({ progress, lines, t }: {
+  progress: FinancePanelState['progress']
+  lines: readonly string[]
+  t: FinanceTranslate
+}): ReactNode {
+  const pct = Math.max(0, Math.min(100, Math.round(progress?.percent ?? 0)))
+  const tail = lines.slice(-6)
   return (
     <div className={css.state} role="status" aria-live="polite" data-testid="finance-loading">
       <p className={css.stateTitle}>{t('loadingTitle')}</p>
-      <p className={css.stateBody}>{t('loadingDetail')}</p>
       <div
         className={css.progressTrack}
         role="progressbar"
-        aria-label={t('loadingProgress', { scanned, total })}
+        aria-label={t('loadingTitle')}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={pct}
       >
         <div className={css.progressFill} style={{ width: `${pct}%` }} />
       </div>
-      <p className={css.stateNote}>{t('loadingProgress', { scanned, total })} · {t('loadingReassure')}</p>
+      <p className={css.stateNote}>{pct}%</p>
+      {/* 后台动作日志：等宽小字逐行打印（宿主结构化数据，不进 locale）。 */}
+      <div className={css.initLog} data-testid="finance-init-log">
+        {tail.map((line, index) => (
+          <p key={`${index}-${line}`} className={css.initLogLine}>{line}</p>
+        ))}
+      </div>
     </div>
   )
 }
@@ -93,7 +104,7 @@ export function FinancePanel(props: FinancePanelInjected): ReactNode {
       <div className={css.panel} data-testid="finance-panel">
         {state.status === 'error'
           ? <ErrorState message={state.error} t={t} onRetry={props.refresh} />
-          : <LoadingState progress={state.progress} t={t} />}
+          : <LoadingState progress={state.progress} lines={state.progressLines} t={t} />}
       </div>
     )
   }

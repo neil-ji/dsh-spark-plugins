@@ -32,6 +32,14 @@ import type {} from '@deepseek-ai/dsh-session-projection-cache'
 import type {} from '@deepseek-ai/dsh-session-title/types'
 import type {} from '@deepseek-ai/dsh-workspace'
 import { inspectPersistenceSession, listPersistenceSnapshots } from './session-source.ts'
+
+/**
+ * 全流程进度加权（0–100）：回填重放段占 0–70，账本冷聚合段占 70–100。
+ * 权重按实测耗时比例估的常数——回填（逐会话重放+写盘）通常比聚合读略贵。
+ */
+const BACKFILL_WEIGHT = 70
+const AGGREGATE_WEIGHT = 30
+
 import {
   addFinanceBuckets,
   emptyFinanceBuckets,
@@ -252,11 +260,26 @@ export async function buildFinanceLedger(
   ctx: Context,
   config: FinanceConfig,
   signal?: AbortSignal,
-  opts?: { nowMs?: number },
+  opts?: { nowMs?: number; progress?: FinanceBackfillSink },
 ): Promise<FinanceLedger> {
   const nowMs = opts?.nowMs ?? Date.now()
+  // 全流程进度（0–100）：回填段占 0–70，聚合段占 70–100。仅首算（宿主把
+  // 初始化 sink 传进来时）上报；后续 5s TTL 内的常规刷新不再发进度帧。
+  const progress = opts?.progress
+  if (progress !== undefined) {
+    progress.phase = 'aggregate'
+    progress.scanned = 0
+    progress.line = 'ledger aggregate start'
+    progress.percent = BACKFILL_WEIGHT
+    progress.onProgress?.(progress)
+  }
   const hourWindowStartMs = nowMs - 24 * 3_600_000
   const snapshots = await listPersistenceSnapshots(ctx, signal)
+  if (progress !== undefined) {
+    progress.total = snapshots.length
+    progress.line = `ledger read ${snapshots.length} sessions`
+    progress.onProgress?.(progress)
+  }
   const workspaces = ctx.workspaceRegistry.list()
   const workspaceBySession = new Map<string, { id: string; title: string }>()
   for (const workspace of workspaces) {
@@ -272,6 +295,7 @@ export async function buildFinanceLedger(
 
   const records: SessionRecord[] = []
   const unreadableSessions: FinanceUnreadableSessionRow[] = []
+  let aggregated = 0
   for (const snapshot of snapshots) {
     const header = snapshot.header
     let read: SessionProjectionRead
@@ -290,6 +314,13 @@ export async function buildFinanceLedger(
       })
       ctx.logger?.warn?.(`finance: session ${String(header.id)} is unreadable, skipped`, error)
       continue
+    }
+    aggregated += 1
+    if (progress !== undefined) {
+      progress.scanned = aggregated
+      progress.percent = BACKFILL_WEIGHT + Math.round((AGGREGATE_WEIGHT * aggregated) / Math.max(1, snapshots.length))
+      progress.line = `aggregate ${aggregated}/${snapshots.length} ${String(header.id)}`
+      progress.onProgress?.(progress)
     }
     const workspace = workspaceBySession.get(String(header.id)) ?? null
     const legacy = windowedSinceMs !== null && header.createdAt < windowedSinceMs
@@ -570,6 +601,12 @@ export async function buildFinanceLedger(
     shiftSavingsMicros: byHourOfDayShiftSavings[localHour],
   }))
 
+  if (progress !== undefined) {
+    progress.phase = 'done'
+    progress.percent = 100
+    progress.line = `ledger done · ${records.length} sessions`
+    progress.onProgress?.(progress)
+  }
   return {
     generatedAt: nowMs,
     currency: config.currency,
@@ -589,8 +626,7 @@ export async function buildFinanceLedger(
     byWorkspace: workspaceRows,
     tasks: taskRows,
     sessions: records.map(record => record.row).sort((a, b) => b.createdAt - a.createdAt),
-    unreadableSessions,
-    byHourOfDay,
+    unreadableSessions,    byHourOfDay,
     peakValley: split,
   }
 }
@@ -618,31 +654,36 @@ export async function backfillFinanceHourly(
   const snapshots = await listPersistenceSnapshots(ctx, signal)
   if (progress !== undefined) {
     progress.total = snapshots.length
+    progress.phase = 'backfill'
+    progress.line = `backfill scan ${snapshots.length} sessions`
     progress.onProgress?.(progress)
   }
   let scanned = 0
   let rescanned = 0
   for (const snapshot of snapshots) {
     if (signal?.aborted) break
-    scanned += 1
-    if (progress !== undefined) {
-      progress.scanned = scanned
-      progress.onProgress?.(progress)
-    }
     const header = snapshot.header
+    let replayed = false
     try {
       const inspection = await inspectPersistenceSession(ctx, String(header.id), signal)
       const cached = ctx.sessionProjectionCache.cachedSnapshot(inspection.meta, inspection.inheritedEventCount)
       if (cached === undefined || cached.values.financeUsageHourly === undefined) {
         ctx.sessionProjectionCache.coldSnapshot(inspection.meta, inspection.inheritedEventCount, inspection.events)
         rescanned += 1
-        if (progress !== undefined) {
-          progress.rescanned = rescanned
-          progress.onProgress?.(progress)
-        }
+        replayed = true
       }
     } catch (error) {
       ctx.logger?.warn?.(`finance rescan: session ${String(header.id)} replay failed`, error)
+    }
+    // 2026-09 订阅估价修订：scanned 在会话**处理完成后**才 +1 —— 进度条反映真实
+    // 完成量，不再「先满后等」（最后一个会话的重放最慢，旧实现让条提前走满）。
+    scanned += 1
+    if (progress !== undefined) {
+      progress.scanned = scanned
+      progress.rescanned = rescanned
+      progress.percent = Math.round((BACKFILL_WEIGHT * scanned) / Math.max(1, snapshots.length))
+      progress.line = `backfill ${scanned}/${snapshots.length}${replayed ? ' replay' : ' cached'} ${String(header.id)}`
+      progress.onProgress?.(progress)
     }
   }
   return { sessionCount: snapshots.length, rescanned }

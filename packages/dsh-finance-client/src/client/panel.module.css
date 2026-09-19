@@ -369,6 +369,30 @@
   transition: width var(--spk-dur-med) var(--spk-ease-out);
 }
 
+/* 初始化动作日志：等宽小字逐行，替代帮助/提示文案。 */
+.initLog {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--spk-space-2);
+  border: 1px solid var(--spk-border-2);
+  border-radius: var(--spk-radius-sm);
+  background: var(--spk-layer-1);
+}
+
+.initLogLine {
+  margin: 0;
+  color: var(--spk-label-3);
+  font-family: var(--spk-font-mono);
+  font-size: var(--spk-text-xs);
+  line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .error {
   color: var(--spk-error);
 }

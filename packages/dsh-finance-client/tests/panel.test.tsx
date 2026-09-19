@@ -137,10 +137,19 @@ function render(state: Partial<FinancePanelState>): string {
 
 describe('FinancePanel shell', () => {
   it('renders the first-open loading state with an accessible progress bar', () => {
-    const html = render({ status: 'loading', progress: { phase: 'backfill', scanned: 3, total: 9, rescanned: 0, startedAt: 0 } })
+    const html = render({
+      status: 'loading',
+      progress: { phase: 'backfill', percent: 33, scanned: 3, total: 9, rescanned: 0, startedAt: 0 },
+      progressLines: ['backfill 3/9 replay s3', 'aggregate 1/9 s1'],
+    })
     expect(html).toContain('finance-loading')
     expect(html).toContain('role="progressbar"')
-    expect(html).toContain('aria-valuenow')
+    expect(html).toContain('aria-valuenow="33"')
+    // 全流程百分比 + 动作日志逐行呈现；帮助/提示文案已退役
+    expect(html).toContain('33%')
+    expect(html).toContain('finance-init-log')
+    expect(html).toContain('backfill 3/9 replay s3')
+    for (const key of ['loadingDetail', 'loadingProgress', 'loadingReassure']) expect(html).not.toContain(key)
   })
 
   it('renders the error state with a retry action', () => {

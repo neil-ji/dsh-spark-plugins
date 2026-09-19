@@ -828,14 +828,24 @@ export interface FinanceRescanResult {
  * `Pick<FinanceBackfillSink, ...>` over the published keys.
  */
 export interface FinanceBackfillSink {
-  /** idle: no backfill started; backfill: replaying logs; done: finished. */
-  phase: 'idle' | 'backfill' | 'done'
+  /** idle: not started; backfill: replaying logs; aggregate: ledger cold build; done: finished. */
+  phase: 'idle' | 'backfill' | 'aggregate' | 'done'
+  /**
+   * 全流程 0–100 整数百分比：回填段加权 0–70，账本聚合段加权 70–100。
+   * 客户端只渲染这个数 —— 它代表整个初始化流程，不再用「会话数」呈现。
+   */
+  percent: number
   /** Sessions considered so far. */
   scanned: number
   /** Persisted sessions to consider. */
   total: number
   /** Sessions whose logs were replayed. */
   rescanned: number
+  /**
+   * 最新一行后台动作日志（host 产生的结构化动作行，如 `backfill 3/9 replay <id>`）。
+   * 客户端逐行累积展示为初始化小字日志；它走数据通道，不进 locale 字典。
+   */
+  line?: string
   startedAt: number
   /**
    * Optional push hook fired after every mutation of the counters / phase.
@@ -852,16 +862,16 @@ export interface FinanceBackfillSink {
 }
 
 /**
- * Live progress of the first-open hourly backfill, polled by the dashboard's
- * loading state so the user sees how far the one-time replay has got.
+ * Live progress of the first-open initialization, covering the WHOLE pipeline
+ * (hourly backfill replay + ledger cold aggregation) as one 0–100 percent.
  *
- * Strict wire face: `Pick<FinanceBackfillSink, ...>` over the four
- * counters plus `phase` + `startedAt` (no `onProgress` ever crosses the
- * wire). The host projects the sink onto this shape before emitting.
+ * Strict wire face: `Pick<FinanceBackfillSink, ...>` over the published keys
+ * (no `onProgress` ever crosses the wire). The host projects the sink onto
+ * this shape before emitting.
  */
 export type FinanceBackfillProgress = Pick<
   FinanceBackfillSink,
-  'phase' | 'scanned' | 'total' | 'rescanned' | 'startedAt'
+  'phase' | 'percent' | 'scanned' | 'total' | 'rescanned' | 'line' | 'startedAt'
 >
 
 /**
