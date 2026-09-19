@@ -177,7 +177,9 @@
    （「付费类型」四字 vs 行内 Tag），后面列随之错位 —— 该列必须用固定宽度
    （72px 容纳四字表头，行内 Tag 居中留白即可）。 */
 .colsProviders {
-  grid-template-columns: minmax(120px, 1.4fr) 72px minmax(96px, 1fr) minmax(96px, 1fr) auto;
+  /* 操作列同样必须固定宽：表头「操作」二字 vs 行内「…」按钮宽度不同，
+     auto 会让两个 grid 的 fr 列边界再次错开（第三轮真宿主截图实测）。 */
+  grid-template-columns: minmax(120px, 1.4fr) 72px minmax(96px, 1fr) minmax(96px, 1fr) 56px;
 }
 
 /* modal 里的纵向表单（修改供应商）：字段组纵排，联动显隐。 */
