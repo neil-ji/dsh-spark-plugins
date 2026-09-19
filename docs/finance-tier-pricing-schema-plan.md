@@ -195,7 +195,7 @@ export interface FinanceTierEntryInput {
 
 ### 生成器覆盖范围（诚实记录）
 
-`scripts/gen-finance-tiers.mjs` 覆盖 4 家、共 **40 个模型**（2026-09-19）：
+`scripts/gen-finance-tiers.mjs` 覆盖 5 家、共 **41 个模型**（2026-09-19）：
 
 | provider | 源 | 阈值/档位 | 产出 | 备注 |
 |---|---|---|---|---|
@@ -203,11 +203,14 @@ export interface FinanceTierEntryInput {
 | `xai` | `docs.x.ai/developers/models/grok-4.6.md` | 200K 两档 | 1 | 转置表（行=Type / 列=档位） |
 | `zai` | `docs.bigmodel.cn/cn/guide/start/pricing` | 32K 两档 | 4 | 单位本就是元 → **fx = 1** |
 | `dashscope` | `help.aliyun.com/zh/model-studio/model-pricing` | 32K/128K/256K 最多 4 档 | 27 | 只取中国内地价目；单位元 → **fx = 1** |
+| `minimax-cn` | `platform.minimaxi.com/docs/guides/pricing-paygo.md` | 512K 两档 | 1 | 只取「标准」Tab（**优先档是 1.5× serviceTier**）；删除线取折后价；fx = 1 |
 
 **明确不产出的（不猜、不补）**：
 
 - **Gemini**：`.md` 实测返回 404 SPA 壳，页面不可机器解析。
 - **豆包（volcengine）**：按用户指示不接。
+- **MiniMax 的「优先」档**（`service_tier: priority`，1.5×）与 M2.x（无长度阶梯）：属 serviceTier
+  维度或单档，均不产出。**只取「标准」Tab** —— 混入优先表会让价格整体抬高 50%。
 - **Qwen 输出价随思考模式分叉的模型**（`qwen-plus` 系列等）：`tiers` 的输出价只有一个
   字段，非思考/思考两套价无法忠实表达 → **整模型跳过**（只跳带分叉的行会留下半张表，更糟）。
   这些模型仍由 community 层的 flat 价覆盖，成本口径不受影响。

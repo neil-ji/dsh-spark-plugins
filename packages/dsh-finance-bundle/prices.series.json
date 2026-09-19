@@ -1116,9 +1116,26 @@
           "cacheReadMultiplier": 0.2
         }
       ]
+    },
+    "minimax-cn/minimax-m3": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 512000,
+          "inputMicrosPerMtok": 2100000,
+          "outputMicrosPerMtok": 8400000,
+          "cacheReadMicrosPerMtok": 420000
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 4200000,
+          "outputMicrosPerMtok": 16800000,
+          "cacheReadMicrosPerMtok": 840000
+        }
+      ]
     }
   },
-  "tiersUpdatedAt": "2026-09-19T16:45:51.629Z",
+  "tiersUpdatedAt": "2026-09-19T18:47:32.422Z",
   "tiersSources": [
     {
       "id": "openai",
@@ -1139,6 +1156,11 @@
       "id": "dashscope",
       "url": "https://help.aliyun.com/zh/model-studio/model-pricing",
       "keys": 27
+    },
+    {
+      "id": "minimax-cn",
+      "url": "https://platform.minimaxi.com/docs/guides/pricing-paygo.md",
+      "keys": 1
     }
   ]
 }

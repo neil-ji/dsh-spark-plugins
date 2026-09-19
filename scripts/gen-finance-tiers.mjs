@@ -25,6 +25,7 @@ import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import {
   parseGlmTierPage,
+  parseMinimaxTierPage,
   parseOpenAiTierPage,
   parseQwenTierPage,
   parseXaiTierPage,
@@ -76,6 +77,13 @@ export const TIER_SOURCES = {
     url: 'https://help.aliyun.com/zh/model-studio/model-pricing',
     provider: 'dashscope',
     /** 中国内地价目单位就是元 → 同上，fx = 1。 */
+    sourceCurrency: 'CNY',
+  },
+  'minimax-cn': {
+    kind: 'minimax',
+    url: 'https://platform.minimaxi.com/docs/guides/pricing-paygo.md',
+    provider: 'minimax-cn',
+    /** 中国站价目单位就是元 → fx = 1。只取「标准」Tab（优先档是 1.5× serviceTier）。 */
     sourceCurrency: 'CNY',
   },
 }
@@ -154,6 +162,7 @@ export function parseTierSource(text, source, fx) {
   if (source.kind === 'xai') return snapshotToTierSpecs(parseXaiTierPage(text, source.modelId, rate, source.provider), 'CNY')
   if (source.kind === 'zai') return parseGlmTierPage(text, source.provider)
   if (source.kind === 'dashscope') return parseQwenTierPage(text, source.provider)
+  if (source.kind === 'minimax') return parseMinimaxTierPage(text, source.provider)
   throw new Error('gen-finance-tiers: 未知的源类型 ' + source.kind)
 }
 

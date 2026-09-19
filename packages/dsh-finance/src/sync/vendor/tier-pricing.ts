@@ -430,6 +430,109 @@ function expandRows(tableHtml: string): string[][] {
   return out
 }
 
+/* ─────────────────────── MiniMax（minimax-cn） ─────────────────────── */
+
+/**
+ * MiniMax 按量计费页（`platform.minimaxi.com/docs/guides/pricing-paygo.md`，
+ * 中国站 CNY）→ 阶梯表。**只取「标准」Tab**。
+ *
+ * 页面是 markdown + MDX `<Tabs>`：`标准` 与 `优先*` 两个 Tab 各一张同构表，
+ * 「优先」是 `service_tier: priority` 的 **1.5× 服务档** —— 属 serviceTier 维度，
+ * 本产品不支持（只按 Standard 计价），混进来会把价格抬高 50%。
+ *
+ * **删除线取折后值**：`~~4.20~~ 2.10` 是官方"永久五折"，实际计费按 **2.10**。
+ * 取原价会虚高一倍。
+ *
+ * 档位写法：`MiniMax-M3` + `≤ 512k 输入 tokens` / `> 512k 输入 tokens`。
+ * 只有 M3 系列有长度阶梯；M2.x 是无阶梯单档 → 按"无阶梯"跳过。
+ */
+export function parseMinimaxTierPage(markdown: string, provider = 'minimax-cn'): Record<string, FinanceTierSpec> {
+  const standard = standardTabOf(markdown)
+  if (standard === '') return {}
+  const rows = markdownRows(standard)
+  if (rows.length === 0) return {}
+
+  /** 逐行：模型名（含档位说明） + 输入/输出/缓存读（元/百万 tokens）。 */
+  const tiers: VendorTierRow[] = []
+  for (const cells of rows) {
+    const label = cells[0] ?? ''
+    // 行首单元格形如 `**MiniMax-M3**<br />≤ 512k 输入 tokens <span …>永久五折</span>`。
+    // **必须先剥掉 HTML 标签再判档位**：`<span class="…">` 里的 `<` 会被 `ceilingOf`
+    // 误当成"上界符号"，于是 `> 512k`（无上界档）被读不出来 —— 实测踩过。
+    const plainLabel = label
+      .replace(/<br\s*\/?>/gi, ' ')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/\\\*/g, ' ')
+      .replace(/\s+/g, ' ')
+    // 只认 M3 系列；M2.x 无长度阶梯（档位判不出来，自然被丢）。
+    if (!/\*\*MiniMax-M3\*\*/.test(plainLabel)) continue
+    if (!plainLabel.includes('512k')) continue
+    const ceiling = ceilingOf(plainLabel)
+    if (ceiling === undefined) continue
+    const input = parseDiscountedPrice(cells[1] ?? '')
+    const output = parseDiscountedPrice(cells[2] ?? '')
+    if (input === undefined || output === undefined) continue
+    const cacheRead = parseDiscountedPrice(cells[3] ?? '')
+    tiers.push({
+      maxPromptTokens: ceiling,
+      rates: {
+        inputMicrosPerMtok: Math.round(input * 1_000_000),
+        outputMicrosPerMtok: Math.round(output * 1_000_000),
+        ...cacheRead !== undefined ? { cacheReadMicrosPerMtok: Math.round(cacheRead * 1_000_000) } : {},
+      },
+    })
+  }
+  if (tiers.length < 2) return {}
+  // 与 Qwen 同理：最高档可能是有界的（这里 `> 512k` 已是无上界，ceilingOf 返回 0）。
+  if (!tiers.some(row => row.maxPromptTokens === 0)) return {}
+  return { [`${provider}/minimax-m3`]: rowsToTierSpec(tiers, 'CNY') }
+}
+
+/** 取「标准」Tab 的正文（`<Tab title="标准">` 到下一个 `</Tab>`）。 */
+function standardTabOf(markdown: string): string {
+  const start = /<Tab\s+title="标准"\s*>/.exec(markdown)
+  if (start === null) return ''
+  const rest = markdown.slice(start.index + start[0].length)
+  const end = rest.indexOf('</Tab>')
+  return end < 0 ? rest : rest.slice(0, end)
+}
+
+/**
+ * 价格单元格 → 数值（元），**取删除线后的折后价**。
+ *
+ * `~~4.20~~ 2.10` → 2.10（官方永久五折后的实际计费价）；
+ * `2.10` → 2.10（无删除线）；`-` / 空 → undefined。
+ */
+export function parseDiscountedPrice(cell: string): number | undefined {
+  const text = cell.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+  if (text === '' || text === '-') return undefined
+  // 删除线优先取后一个数（折后价）；没有删除线就取第一个数。
+  const struck = /~~\s*([0-9.]+)\s*~~\s*([0-9.]+)/.exec(text)
+  if (struck !== null) {
+    const value = Number(struck[2])
+    return Number.isFinite(value) ? value : undefined
+  }
+  const plain = /([0-9]+(?:\.[0-9]+)?)/.exec(text)
+  if (plain === null) return undefined
+  const value = Number(plain[1])
+  return Number.isFinite(value) ? value : undefined
+}
+
+/** markdown 表格 → 单元格二维数组（只取 `|` 行，剥掉分隔行）。 */
+function markdownRows(text: string): string[][] {
+  const rows: string[][] = []
+  for (const line of text.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed.startsWith('|')) continue
+    const cells = trimmed.replace(/^\|/, '').replace(/\|$/, '').split('|').map(cell => cell.trim())
+    if (cells.every(cell => /^:?-{2,}:?$/.test(cell))) continue
+    rows.push(cells)
+  }
+  // 首行是表头（含"模型"），去掉。
+  if ((rows[0]?.[0] ?? '').includes('模型')) rows.shift()
+  return rows
+}
+
 /* ─────────────────────────── OpenAI ─────────────────────────── */
 
 /** OpenAI 官方定价页的 markdown 表格行（`| model | short… | long… |`）。 */

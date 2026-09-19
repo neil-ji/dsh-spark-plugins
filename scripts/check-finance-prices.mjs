@@ -216,7 +216,7 @@ else bad('A6 阶梯价条目结构不成立', JSON.stringify(tierProblems))
 
 // A6b：**生成物必须覆盖所有已接源的 provider**。防"某家源解析退化成 0 个模型"
 // 而被静默接受（生成器只会打印一行 `x: 0 个模型`，产物里少一整家也没人察觉）。
-const TIER_PROVIDERS = ['openai', 'xai', 'zai', 'dashscope']
+const TIER_PROVIDERS = ['openai', 'xai', 'zai', 'dashscope', 'minimax-cn']
 const presentProviders = new Set(Object.keys(seriesTiers).map(key => key.split('/')[0]))
 const missingProviders = TIER_PROVIDERS.filter(provider => !presentProviders.has(provider))
 if (missingProviders.length === 0) {

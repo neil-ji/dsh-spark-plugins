@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest'
 import {
   OPENAI_LONG_CONTEXT_THRESHOLD,
   ceilingOf,
+  parseDiscountedPrice,
   parseGlmTierPage,
+  parseMinimaxTierPage,
   parseQwenTierPage,
   parseMoneyCell,
   parseOpenAiTierPage,
@@ -242,5 +244,60 @@ describe('parseQwenTierPage', () => {
         expect(spec.tiers[i].inputMicrosPerMtok, key).toBeGreaterThan(spec.tiers[i - 1].inputMicrosPerMtok)
       }
     }
+  })
+})
+
+/* ─────────────────────── MiniMax（minimax-cn，512K 两档） ─────────────────────── */
+
+const minimaxMd = readFileSync(new URL('./fixtures/minimax-pricing.2026-09-19.md', import.meta.url), 'utf8')
+
+describe('parseDiscountedPrice（删除线 = 永久五折）', () => {
+  it('有删除线时取**折后价**，没有则取原值', () => {
+    // 官方「永久五折」：~~4.20~~ 2.10 表示实际按 2.10 计费。取原价会虚高一倍。
+    expect(parseDiscountedPrice('~~4.20~~ 2.10')).toBe(2.1)
+    expect(parseDiscountedPrice('~~16.80~~ 8.40')).toBe(8.4)
+    expect(parseDiscountedPrice('~~0.84~~ 0.42')).toBe(0.42)
+    // 无删除线
+    expect(parseDiscountedPrice('2.10')).toBe(2.1)
+    // 非数字
+    expect(parseDiscountedPrice('-')).toBeUndefined()
+    expect(parseDiscountedPrice('')).toBeUndefined()
+  })
+})
+
+describe('parseMinimaxTierPage', () => {
+  const specs = parseMinimaxTierPage(minimaxMd)
+
+  it('M3 两档，价格取折后值（元/百万 tokens）', () => {
+    const tiers = specs['minimax-cn/minimax-m3'].tiers
+    expect(tiers.map(t => t.maxPromptTokens)).toEqual([512_000, 0])
+    expect(tiers[0].inputMicrosPerMtok).toBe(2_100_000)
+    expect(tiers[0].outputMicrosPerMtok).toBe(8_400_000)
+    expect(tiers[1].inputMicrosPerMtok).toBe(4_200_000)
+    expect(tiers[1].outputMicrosPerMtok).toBe(16_800_000)
+  })
+
+  it('缓存读落绝对价（页面给的就是绝对价）', () => {
+    expect(specs['minimax-cn/minimax-m3'].tiers[0].cacheReadMicrosPerMtok).toBe(420_000)
+    expect(specs['minimax-cn/minimax-m3'].tiers[1].cacheReadMicrosPerMtok).toBe(840_000)
+  })
+
+  it('**只取「标准」Tab**：优先档是 1.5× serviceTier，混进来会把价格抬高 50%', () => {
+    // 优先 Tab 的 ≤512k 输入价是 3.15（= 2.10 × 1.5）。若误取优先表，这里会看到 3_150_000。
+    const tiers = specs['minimax-cn/minimax-m3'].tiers
+    expect(tiers[0].inputMicrosPerMtok).toBe(2_100_000)
+    expect(tiers.some(t => t.inputMicrosPerMtok === 3_150_000)).toBe(false)
+    expect(tiers.some(t => t.inputMicrosPerMtok === 6_300_000)).toBe(false)
+  })
+
+  it('无长度阶梯的模型（M2.x 单档）不进产物', () => {
+    expect(specs['minimax-cn/minimax-m2.7']).toBeUndefined()
+    expect(specs['minimax-cn/minimax-m2.5']).toBeUndefined()
+    expect(Object.keys(specs)).toEqual(['minimax-cn/minimax-m3'])
+  })
+
+  it('币种 CNY，且输出稳定（幂等前提）', () => {
+    expect(specs['minimax-cn/minimax-m3'].currency).toBe('CNY')
+    expect(JSON.stringify(parseMinimaxTierPage(minimaxMd))).toBe(JSON.stringify(specs))
   })
 })
