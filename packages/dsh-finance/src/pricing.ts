@@ -768,6 +768,26 @@ export function normalizeFinanceTiers(
   return out
 }
 
+/**
+ * 阶梯价分层（SPEC INV-1）：releaseBase 是唯一结构源，`user`（legacy 手填）
+ * **只在 releaseBase 没有该 key 时**生效。
+ *
+ * 返回被取代的手填键 —— 调用方必须能把它报给用户（"我填的价没生效"不许静默）。
+ * 与客户端 `layerTierMaps` 同一口径；两侧都有单测锁住同一条语义。
+ */
+export function layerFinanceTiers(
+  base: Record<string, unknown> | undefined,
+  user: Record<string, unknown> | undefined,
+): { tiers: Record<string, unknown>; shadowedKeys: readonly string[] } {
+  const merged: Record<string, unknown> = { ...(base ?? {}) }
+  const shadowedKeys: string[] = []
+  for (const [key, value] of Object.entries(user ?? {})) {
+    if (merged[key] !== undefined) { shadowedKeys.push(key); continue }
+    merged[key] = value
+  }
+  return { tiers: merged, shadowedKeys: shadowedKeys.sort() }
+}
+
 /** 一个 key 的原始值 → 归一化分组；不可信时 undefined（整组丢弃）。 */
 function normalizeTierGroup(key: string, value: unknown): FinanceTierGroup | undefined {
   // 旧形状：裸档位数组。

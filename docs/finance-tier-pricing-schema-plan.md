@@ -1,6 +1,6 @@
 # 阶梯计价 Schema 变更方案
 
-- 状态：**S1–S3 已落地（2026-09-19）**；§7 四条决策已裁决，S4（走 B）待做
+- 状态：**S1–S4 全部落地（2026-09-19）**；INV-1 偏离已闭合
 - 日期：2026-09-19
 - 依据：`docs/pricing-research-llm-tiered-pricing.md`（11 家官方定价调研 + 阿里百炼官方页复核）
 - 范围：P0（OpenAI 272K / xAI 200K / Gemini 200K）+ P1（Qwen plus 线、qwen3.7-flash）
@@ -29,11 +29,12 @@
 
 两种走法（**决策点 1**，见 §7）：
 
-- **A. 维持 settings**（现状）：改动最小，但与 INV-1 冲突；「用户填的阶梯价」永远只是估算、无法随发版更新
-- **B. 迁入 releaseBase**（生成物 `prices.series.json` → `cordis.patch.yml` → host 配置）：合规、可随发版更新官方阶梯价，但需新增一条 host→client 的只读通路（**动 wire**）
+- **A. 维持 settings**（原状）：改动最小，但与 INV-1 冲突；「用户填的阶梯价」永远只是估算、无法随发版更新
+- **B. 迁入 releaseBase**（生成物 `prices.series.json` → `cordis.patch.yml` → host 配置）：合规、可随发版更新官方阶梯价（草案当时以为必须新增一条 host→client 只读通路；**实测不需要**，见 §6「关键设计判断」）
 
-**裁决（2026-09-19）：先 A 后 B。** S1–S3 已按 A 落地；Spec §2.3 已把该偏离写成
-「已知的、被显式接受的临时偏离」，迁移完成后即闭合。
+**裁决（2026-09-19）：先 A 后 B，两步都已完成。** S1–S3 先按 A 落地（settings 形态，
+Spec §2.3 记为「已知的、被显式接受的临时偏离」），S4 迁入 releaseBase 后**该偏离已闭合** ——
+Spec §2.3 与 INV-1 现在一致。
 
 ---
 
@@ -139,7 +140,7 @@ export interface FinanceTierEntryInput {
 | **S1** | schema 扩展（G1–G5）+ `normalizeTierMap` 双形状兼容 + 三条解析规则 | 单测：倍率解析优先级、TTL 选取、币种不匹配跳过、落档语义锁死 | ✅ 已落地 |
 | **S2** | `splitEstimate` / UI 接入新 spec（币种守卫、`offPeakDiscount` 参与） | 单测 + `preview:verify` | ✅ 已落地 |
 | **S3** | 「拆分会话」卡的**币种不匹配**提示文案 | 真宿主截图 | ✅ 文案已落地（真宿主截图待补） |
-| **S4**（走 B 才做） | 生成器产出官方阶梯价 + host 端点 + 面板读取 | `check:all` + `real-host-check` 注册面断言 | ⬜ 待做 |
+| **S4**（走 B） | 生成器产出官方阶梯价 + host 端点 + 面板读取 | `check:all` + `real-host-check` 注册面断言 | ✅ 已落地（**wire 未动**，见下） |
 
 ### 落地摘要（2026-09-19）
 
@@ -158,15 +159,52 @@ export interface FinanceTierEntryInput {
   `contextOffPeakApplied`（zh + en 同步）。
 - **wire 未动**（决策点 1 = A）。
 
-### 验收记录（2026-09-19）
+### 验收记录
+
+**S1–S3（2026-09-19）**
 
 | 项 | 结果 |
 |---|---|
 | `pnpm -r build` → `typecheck` → `test`（顺序执行） | 全绿（finance 238、finance-client 75） |
 | `pnpm check:all`（架构 / 价格 / 对比度 / token / 版本） | 全 PASS，硬失败 0 |
 | `pnpm preview:verify` | **119/119 项通过**（新增：币种不匹配不参与估算、错峰折扣标注） |
-| `real-host-check` | 未跑（本次未动 host 注册面 / wire；S4 时必跑） |
 | 版本 bump | `dsh-finance` 0.4.13 → 0.4.14、`dsh-finance-client` 0.5.43 → 0.5.44 |
+
+**S4（2026-09-19，迁 releaseBase）**
+
+| 项 | 结果 |
+|---|---|
+| `pnpm -r build` → `typecheck` → `test`（顺序执行） | 全绿（finance **258**、finance-client **84**） |
+| `pnpm check:all` | 全 PASS；价格闸门新增 **A6**（阶梯价结构 + 生成段覆盖 + `config.tiers` 解析断言） |
+| `pnpm preview:verify` | **120/120**（新增：releaseBase 的阶梯价不被误报为被用户覆盖） |
+| `node dev-harness/real-host-check.mjs` | **61/62**，typert 注册面 11 条 finance 端点全 strict（退出码 0） |
+| 版本 bump | `dsh-finance` 0.4.15、`dsh-finance-client` 0.5.45、`dsh-finance-bundle` 0.2.2 |
+
+### S4 的两处关键设计判断（与方案草案不同）
+
+1. **wire 未动 —— 原方案 §5.3 预估的「host 只读端点」不需要了。**
+   实测确认：宿主 `settings.installSection(ctx, ns, Config, config)` 把 `cordis.patch.yml`
+   的 config 注册为 settings 的 **composition `base` 层**，而客户端 `settingsScope` 快照本就
+   同时暴露 `base` / `user` / `value` 三层。`tiers` 又从不进账本（只被面板消费），
+   于是 releaseBase 的阶梯价**经既有 settings 通路直达面板**，新增 Remote 端点纯属多余。
+   省掉一条 wire 契约、一个 endpoint 与一份 zod schema。
+2. **客户端必须读原始的 `user` 层，不能读 `value`。** `value` 已经折了 base，
+   拿它当"用户层"会把 releaseBase 的每个 key 都误判成"被用户覆盖"，
+   面板于是对每个模型都报「已被发行版官方表取代」。已单测锁死这一条。
+
+### 生成器覆盖范围（诚实记录）
+
+`scripts/gen-finance-tiers.mjs` 目前只覆盖**页面可机器解析**的两家：
+**OpenAI**（272K，Standard 段 `Short/Long context` 列）与 **xAI**（200K，转置表）。
+Gemini 的 `.md` 实际返回 404 SPA 壳（实测），**按 SPEC §3.4「不猜、不补」不予产出**；
+Qwen / GLM / 豆包 / MiniMax（P1）同理待各自源可解析后再扩。
+
+### 踩到的生成物陷阱（已进闸门）
+
+生成段的缩进必须与 `prices:` **同级（8 空格）**。首版写成 10 空格时，`tiers:` 缩进成
+`prices` 的子键并被 YAML **静默吞掉** —— 文本里 marker 齐全、生成器报"写好了"，
+而 `config` 里根本没有 `tiers`。价格闸门 A6 因此改为**解析后断言 `config.tiers` 非空**，
+不再只看文本 marker（另修：YAML 解析失败要记成失败项，而不是抛异常崩掉整个闸门）。
 
 ### 与 §3.1 草案的差异（实现时按 Spec 收敛）
 
@@ -176,6 +214,8 @@ export interface FinanceTierEntryInput {
    剥后缀回退（Spec 规则 3），而不是把整串当一个 key。
 3. **`offPeakDiscount` 的作用位置**：草案未定义，实现定为"观测值与压缩值两侧同乘"
    （Spec 规则 6）——桶数据无小时维度，只能整体缩放，比例不变。这是保守选择，需评审确认。
+4. **生成物币种**：源页面多为 USD，产物折成记账币种（CNY）并在生成段头标注 `fx=` / `currency=`。
+   照抄 USD 会让整张官方表被币种守卫静默排除（Spec 规则 8）。
 
 ---
 
@@ -183,7 +223,7 @@ export interface FinanceTierEntryInput {
 
 | # | 决策 | 裁决 | 落地情况 |
 |---|---|---|---|
-| **1** | `tiers` 落点 | **A 维持 settings**，B 迁 releaseBase 作为独立后续任务（S4） | A 已落地；wire 未动；Spec §2.3 已写明这是**被显式接受的临时偏离** |
+| **1** | `tiers` 落点 | **B 迁 releaseBase**（S4 已完成） | ✅ 已闭合：生成器写 `cordis.patch.yml` 的 `config.tiers`；settings 降级为 legacy overlay；wire 未动（见上「关键设计判断」） |
 | **2** | 币种策略 | **`currency` 字段 + 后缀 key 双管**（字段表达币种，后缀表达地域/站点变体） | ✅ 已落地（规则 3 + 规则 5） |
 | **3** | cacheRead 表达 | **绝对价优先 + 倍率兜底**（Anthropic/Qwen 官方给倍率） | ✅ 已落地（规则 1，另加 cacheWrite 倍率与 TTL，规则 2） |
 | **4** | 本次是否做阶梯价编辑 UI | **否** —— 先做对 schema 与语义；编辑 UI 等 B 之后（那时数据来自生成物，用户只需选「用哪套」） | ✅ 未做（仍手填 YAML/settings） |

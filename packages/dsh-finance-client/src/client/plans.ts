@@ -88,6 +88,52 @@ function splitTierKey(key: string): { modelKey: string; suffix?: string } {
   return { modelKey: key.slice(0, index), suffix }
 }
 
+/**
+ * 分层后的生效阶梯价（INV-1 单一结构源）。
+ *
+ * `tiers` 现在是 releaseBase 的**结构维度**（生成物写进 `cordis.patch.yml` 的
+ * `config.tiers`，由 settings 的 composition `base` 层下发）。settings 里的 `tiers`
+ * 降级为 **legacy overlay**：只有在 releaseBase **没有**该 key 时才生效。
+ */
+export interface FinanceTierLayers {
+  /** 生效的阶梯价（releaseBase 优先，legacy 只补空缺键）。 */
+  tiers: Record<string, readonly FinanceTierGroup[]>
+  /**
+   * 被 releaseBase 取代的手填键（用户仍填着、但官方表已有该 key）。
+   * 不是错误，但必须能说清 —— 否则"我填的价没生效"会变成静默失败（INV-3 的精神）。
+   */
+  shadowedKeys: readonly string[]
+}
+
+/**
+ * 按 INV-1 分层：`base`（releaseBase，唯一结构源）优先；`user`（legacy 手填）
+ * 只补 `base` 没有的 modelKey。
+ *
+ * 依据：宿主 `installSection(ctx, ns, Config, config)` 把 `cordis.patch.yml` 的
+ * composition entry 注册成 settings 的 `base` 层，客户端 scope 快照因此同时给出
+ * `base` / `user` / `value` 三层 —— releaseBase 的阶梯价无需新增 Remote 端点即可到达面板。
+ */
+export function layerTierMaps(base: unknown, user: unknown): FinanceTierLayers {
+  const baseMap = normalizeTierMap(base)
+  const userMap = normalizeTierMap(user)
+  const tiers: Record<string, readonly FinanceTierGroup[]> = { ...baseMap }
+  const shadowedKeys: string[] = []
+  for (const [modelKey, groups] of Object.entries(userMap)) {
+    if (baseMap[modelKey] !== undefined) {
+      shadowedKeys.push(modelKey)
+      continue
+    }
+    tiers[modelKey] = groups
+  }
+  return { tiers, shadowedKeys: shadowedKeys.sort() }
+}
+
+/** settings 里 `tiers` 的原始层（形状不可信，一律当对象过滤）。 */
+function tierLayerOf(layer: unknown): unknown {
+  if (layer === null || typeof layer !== 'object') return undefined
+  return (layer as { tiers?: unknown }).tiers
+}
+
 /** 一组档位：坏档跳过、升序、兜底档 0 恒排最后；无可信档位时 undefined。 */
 function normalizeTierEntries(list: unknown): readonly FinanceTierEntry[] | undefined {
   if (!Array.isArray(list)) return undefined
@@ -221,9 +267,15 @@ export function createPlanSeam(scope: SettingsScope<FinanceSettingsSection>): Fi
   return {
     getSnapshot: () => {
       const snapshot = scope.getSnapshot()
+      // INV-1：releaseBase（composition `base` 层）是唯一结构源，settings 的 `tiers`
+      // 只作为 legacy overlay 补空缺键。**必须读原始的 `user` 层**（而不是已解析的
+      // `value`）—— `value` 已经把 base 折进去了，拿它当用户层会把 releaseBase 的每个
+      // key 都误判成"被用户覆盖"。两层都由 scope 快照直接给出，无需额外端点。
+      const layered = layerTierMaps(tierLayerOf(snapshot.base), tierLayerOf(snapshot.user))
       return {
         plans: normalizePlanList(snapshot.value?.plans),
-        tiers: normalizeTierMap(snapshot.value?.tiers),
+        tiers: layered.tiers,
+        shadowedTierKeys: layered.shadowedKeys,
         writable: snapshot.writable,
       }
     },

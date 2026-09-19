@@ -150,7 +150,9 @@ export function FinancePanel(props: FinancePanelInjected): ReactNode {
           )
           : null}
         {view === 'whoToUse' ? <WhoToUseView ledger={ledger} t={t} /> : null}
-        {view === 'saveMore' ? <SaveMoreView ledger={ledger} tiers={state.tiers} t={t} /> : null}
+        {view === 'saveMore'
+          ? <SaveMoreView ledger={ledger} tiers={state.tiers} shadowedTierKeys={state.shadowedTierKeys} t={t} />
+          : null}
         {view === 'projects' ? <ProjectsView ledger={ledger} plans={state.plans} t={t} /> : null}
       </div>
     </div>

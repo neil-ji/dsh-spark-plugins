@@ -73,12 +73,19 @@ type PriceEra = {
 }
 ```
 
-### 2.3 阶梯价解析规则（2026-09-19 增补，S1–S3 落地依据）
+### 2.3 阶梯价解析规则（2026-09-19 增补；S4 已把 `tiers` 迁入 releaseBase）
 
-阶梯价当前落在 settings（`finance.tiers`），而 INV-1 把 `tiers` 列为 releaseBase 的**结构维度**——
-这是**已知的、被显式接受的临时偏离**：S1–S3 先用 settings 形态落地，`tiers` 迁入生成物
-（`prices.series.json`）作为独立的后续任务 B。迁移完成前，settings 里的 `tiers` 就是
-该结构维度的唯一来源，不视为 INV-1 违规。
+**落点（INV-1 已闭合）**：`tiers` 与 `prices` 同属**结构维度**，主源是 **releaseBase** ——
+生成器 `scripts/gen-finance-tiers.mjs` 把厂商阶梯价写进 `packages/dsh-finance-bundle/`
+的 `cordis.patch.yml`（`config.tiers`，随发版冻结）。
+
+settings 里的 `tiers` 降级为 **legacy overlay**：**只在 releaseBase 没有该 modelKey 时生效**。
+被 releaseBase 取代的手填键必须能报出来（面板「已被发行版官方表取代」文案），
+不允许静默忽略用户输入。宿主侧分层在 `FinanceService.getTierLayers()`；
+客户端侧在 `createPlanSeam` 读 settings scope 的 **`base` / `user` 两层**（不是已解析的
+`value` —— 后者折了 base，会把官方表的每个 key 误判成"被用户覆盖"）。
+
+> 历史：S1–S3 期间 `tiers` 曾临时落在 settings，作为对 INV-1 的显式接受偏离；S4 落地后偏离闭合。
 
 **形状（两种并存，向后兼容）**：值可以是旧的裸数组（隐式 `CNY`、无折扣、无生效窗口），
 也可以是新对象：
@@ -111,6 +118,9 @@ type FinanceTierSpec = {
    绝对省额随之缩放（5 折线路省一半），**比例不变**。这是刻意的保守选择
 7. **落档语义**：**全量按所在档**（不是分段累计）——7 家官方原文一致（OpenAI / xAI / Gemini / Qwen / GLM / MiniMax / 豆包）。
    `tierForBucket` 是这条语义的唯一实现，**已有单测锁死**；改成「分段累计」前先改本 Spec
+8. **生成物币种**：生成器把厂商报价**折算成记账币种**再写进产物（沿用 prices 管道的 `--fx` 口径），
+   而非照抄源页面币种 —— 否则整张表会被规则 5 静默排除，表现为"官方表生成了但面板一个数都不给"。
+   折算是**显式标注**的（生成段头 `fx=` / `currency=`），与"静默硬换汇"不同：后者禁止，前者是产物契约
 
 **边界**：阶梯价只服务面板的「拆分会话能省多少」估算，**不进入账本成本口径**
 （账本仍走 `prices` / `providerDefaults` / `defaultPrice`）。

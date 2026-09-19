@@ -257,5 +257,177 @@
         }
       }
     ]
-  }
+  },
+  "tiers": {
+    "openai/gpt-6-astra": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 272000,
+          "inputMicrosPerMtok": 72000000,
+          "outputMicrosPerMtok": 360000000,
+          "cacheReadMicrosPerMtok": 7200000,
+          "cacheWriteMicrosPerMtok": 90000000
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 144000000,
+          "outputMicrosPerMtok": 540000000,
+          "cacheReadMicrosPerMtok": 14400000,
+          "cacheWriteMicrosPerMtok": 180000000
+        }
+      ]
+    },
+    "openai/gpt-5.6-sol": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 272000,
+          "inputMicrosPerMtok": 28800000,
+          "outputMicrosPerMtok": 144000000,
+          "cacheReadMicrosPerMtok": 2880000,
+          "cacheWriteMicrosPerMtok": 36000000
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 57600000,
+          "outputMicrosPerMtok": 216000000,
+          "cacheReadMicrosPerMtok": 5760000,
+          "cacheWriteMicrosPerMtok": 72000000
+        }
+      ]
+    },
+    "openai/gpt-5.6-terra": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 272000,
+          "inputMicrosPerMtok": 14400000,
+          "outputMicrosPerMtok": 86400000,
+          "cacheReadMicrosPerMtok": 1440000,
+          "cacheWriteMicrosPerMtok": 18000000
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 28800000,
+          "outputMicrosPerMtok": 129600000,
+          "cacheReadMicrosPerMtok": 2880000,
+          "cacheWriteMicrosPerMtok": 36000000
+        }
+      ]
+    },
+    "openai/gpt-5.6-luna": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 272000,
+          "inputMicrosPerMtok": 1440000,
+          "outputMicrosPerMtok": 8640000,
+          "cacheReadMicrosPerMtok": 144000,
+          "cacheWriteMicrosPerMtok": 1800000
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 2880000,
+          "outputMicrosPerMtok": 12960000,
+          "cacheReadMicrosPerMtok": 288000,
+          "cacheWriteMicrosPerMtok": 3600000
+        }
+      ]
+    },
+    "openai/gpt-5.5": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 272000,
+          "inputMicrosPerMtok": 36000000,
+          "outputMicrosPerMtok": 216000000,
+          "cacheReadMicrosPerMtok": 3600000
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 72000000,
+          "outputMicrosPerMtok": 324000000,
+          "cacheReadMicrosPerMtok": 7200000
+        }
+      ]
+    },
+    "openai/gpt-5.5-pro": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 272000,
+          "inputMicrosPerMtok": 216000000,
+          "outputMicrosPerMtok": 1296000000
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 432000000,
+          "outputMicrosPerMtok": 1944000000
+        }
+      ]
+    },
+    "openai/gpt-5.4": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 272000,
+          "inputMicrosPerMtok": 18000000,
+          "outputMicrosPerMtok": 108000000,
+          "cacheReadMicrosPerMtok": 1800000
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 36000000,
+          "outputMicrosPerMtok": 162000000,
+          "cacheReadMicrosPerMtok": 3600000
+        }
+      ]
+    },
+    "openai/gpt-5.4-pro": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 272000,
+          "inputMicrosPerMtok": 216000000,
+          "outputMicrosPerMtok": 1296000000
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 432000000,
+          "outputMicrosPerMtok": 1944000000
+        }
+      ]
+    },
+    "xai/grok-4.6": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 200000,
+          "inputMicrosPerMtok": 14400000,
+          "outputMicrosPerMtok": 43200000,
+          "cacheReadMicrosPerMtok": 3600000
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 28800000,
+          "outputMicrosPerMtok": 86400000,
+          "cacheReadMicrosPerMtok": 7200000
+        }
+      ]
+    }
+  },
+  "tiersUpdatedAt": "2026-09-19T15:12:03.113Z",
+  "tiersSources": [
+    {
+      "id": "openai",
+      "url": "packages/dsh-finance/tests/fixtures/openai-pricing.2026-09-19.md",
+      "keys": 8
+    },
+    {
+      "id": "xai",
+      "url": "packages/dsh-finance/tests/fixtures/xai-grok-4.6.2026-09-19.md",
+      "keys": 1
+    }
+  ]
 }

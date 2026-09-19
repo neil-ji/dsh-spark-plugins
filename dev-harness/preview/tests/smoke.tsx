@@ -321,6 +321,9 @@ export async function run(): Promise<{ checks: Check[] }> {
     expectContains('finance: 币种不匹配的阶梯价不参与估算', saveHtml, '币种不匹配')
     // 新形状的错峰折扣在金额旁标注，且确实把金额缩了。
     expectContains('finance: 错峰折扣在金额旁标注', saveHtml, '错峰')
+    // S4 / INV-1：releaseBase 是唯一结构源。预览夹具把 tiers 放在 scope 的 `base` 层
+    // （= 真宿主里 cordis.patch.yml 的位置），用户层为空 → 不该报"被取代"。
+    check('finance: releaseBase 的阶梯价不被误报为被用户覆盖', !saveHtml.includes('已被发行版官方表取代'), '')
     check(
       'finance: 套餐写回 settings 的 plans 字段',
       JSON.stringify((injected.scope as unknown as { getSnapshot(): { user: unknown } }).getSnapshot().user).includes('monthlyMicros'),

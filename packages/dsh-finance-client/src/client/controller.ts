@@ -49,6 +49,11 @@ export interface FinancePanelState {
   plans: readonly FinancePlanEntry[]
   /** context 阶梯价分组（`finance.tiers`，按剥净后缀的 modelKey）；空 = 没有阶梯价可算。 */
   tiers: Record<string, readonly FinanceTierGroup[]>
+  /**
+   * 被 releaseBase 取代的手填 tiers 键（INV-1：官方表是唯一结构源）。
+   * 面板据此把"你填的价没生效"说出来，而不是静默忽略。
+   */
+  shadowedTierKeys: readonly string[]
   /** 设置文档是否接受写入；memory 模式下为 false（面板显示只读提示）。 */
   plansWritable: boolean
 }
@@ -61,7 +66,13 @@ type FinanceRemote = ClientRemote['finance']
  * 阶梯价是只读的（它属于价格事实，不是面板该编辑的东西）。
  */
 export interface FinancePlanSeam {
-  getSnapshot(): { plans: readonly FinancePlanEntry[]; tiers: Record<string, readonly FinanceTierGroup[]>; writable: boolean }
+  getSnapshot(): {
+    plans: readonly FinancePlanEntry[]
+    tiers: Record<string, readonly FinanceTierGroup[]>
+    /** 被 releaseBase 取代的手填键（INV-1）。 */
+    shadowedTierKeys: readonly string[]
+    writable: boolean
+  }
   subscribe(listener: () => void): () => void
   /** 整体写回 `plans` 字段（settings 的一次原子写）。 */
   write(plans: readonly FinancePlanEntry[]): Promise<void>
@@ -84,6 +95,7 @@ export class FinancePanelController {
     error: null,
     plans: [],
     tiers: {},
+    shadowedTierKeys: [],
     plansWritable: false,
     priceBusy: false,
     priceError: null,
@@ -101,6 +113,7 @@ export class FinancePanelController {
         this.store.update((state) => {
           state.plans = snapshot.plans
           state.tiers = snapshot.tiers
+          state.shadowedTierKeys = snapshot.shadowedTierKeys
           state.plansWritable = snapshot.writable
         })
       }

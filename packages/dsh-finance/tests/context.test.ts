@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { financeContextProjectionDefinition as context } from '../src/projection.ts'
-import { normalizeFinanceConfig, normalizeFinanceTiers } from '../src/pricing.ts'
+import { layerFinanceTiers, normalizeFinanceConfig, normalizeFinanceTiers } from '../src/pricing.ts'
 import { FINANCE_CONTEXT_BOUNDARIES } from '../src/types.ts'
 
 /**
@@ -169,5 +169,35 @@ describe('normalizeFinanceTiers', () => {
     })
     expect(config.tiers['a/llm'][0].tiers).toHaveLength(1)
     expect(normalizeFinanceConfig({}).tiers).toEqual({})
+  })
+})
+
+describe('layerFinanceTiers（INV-1 单一结构源）', () => {
+  const spec = (input: number) => ({
+    currency: 'CNY',
+    tiers: [{ maxPromptTokens: 128_000, inputMicrosPerMtok: input, outputMicrosPerMtok: input * 4 }],
+  })
+
+  it('releaseBase 优先；被取代的手填键必须报出来（不许静默忽略用户输入）', () => {
+    const layered = layerFinanceTiers({ 'a/llm': spec(1_000_000) }, { 'a/llm': spec(9_999_999) })
+    expect(layered.tiers['a/llm']).toEqual(spec(1_000_000))
+    expect(layered.shadowedKeys).toEqual(['a/llm'])
+  })
+
+  it('手填只补官方表没有的 key（legacy 兼容）', () => {
+    const layered = layerFinanceTiers({ 'a/llm': spec(1) }, { 'b/llm': spec(2) })
+    expect(Object.keys(layered.tiers).sort()).toEqual(['a/llm', 'b/llm'])
+    expect(layered.shadowedKeys).toEqual([])
+  })
+
+  it('releaseBase 缺失时手填全部生效（未迁版宿主仍可用）', () => {
+    expect(layerFinanceTiers(undefined, { 'a/llm': spec(5) }).tiers['a/llm']).toEqual(spec(5))
+    expect(layerFinanceTiers({}, undefined).tiers).toEqual({})
+  })
+
+  it('分层只做"谁覆盖谁"：形状校验仍归 normalizeFinanceTiers（不越权）', () => {
+    const layered = layerFinanceTiers({ 'a/llm': spec(1) }, {})
+    const normalized = normalizeFinanceTiers(layered.tiers)
+    expect(normalized['a/llm'][0].tiers[0].inputMicrosPerMtok).toBe(1)
   })
 })

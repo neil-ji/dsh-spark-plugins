@@ -25,6 +25,11 @@ export interface SaveMoreViewProps {
   ledger: FinanceLedger
   /** context 阶梯价分组（按剥净后缀的 modelKey）；空 = 该模型没有阶梯价，拆分不改变单价。 */
   tiers: Record<string, readonly FinanceTierGroup[]>
+  /**
+   * 被 releaseBase 取代的手填 tiers 键（INV-1）。可选：旧夹具不必补该字段。
+   * 有值时必须说出来 —— 用户填的价没生效属于"必须可解释"，不能静默。
+   */
+  shadowedTierKeys?: readonly string[]
   t: FinanceTranslate
 }
 
@@ -48,7 +53,7 @@ function contextOutcomeText(outcome: SplitEstimateOutcome, t: FinanceTranslate):
   }
 }
 
-export function SaveMoreView({ ledger, tiers, t }: SaveMoreViewProps): ReactNode {
+export function SaveMoreView({ ledger, tiers, shadowedTierKeys = [], t }: SaveMoreViewProps): ReactNode {
   const currency = ledger.currency === '' ? 'CNY' : ledger.currency
   const peak = ledger.peakValley
   const share = peakShare(ledger)
@@ -110,6 +115,15 @@ export function SaveMoreView({ ledger, tiers, t }: SaveMoreViewProps): ReactNode
       </Card>
 
       <Card title={t('contextCardTitle')} className={css.section}>
+        {/* INV-1：官方表（releaseBase）是唯一结构源。用户手填的同名键会被它取代 —— 
+            这种事必须说出来，否则"我填的价没生效"就是静默失败。 */}
+        {shadowedTierKeys.length === 0
+          ? null
+          : (
+            <p className={css.hint} data-testid="finance-context-shadowed">
+              {t('contextShadowedTiers', { keys: shadowedTierKeys.join('、') })}
+            </p>
+          )}
         {contextRows.length === 0
           ? <p className={css.hint} data-testid="finance-context-empty">{t('contextNoData')}</p>
           : (

@@ -28,7 +28,7 @@ import {
   financeUsageProjectionDefinition,
 } from './projection.ts'
 import { createHash } from 'node:crypto'
-import { DEFAULT_PRICE, basePriceFingerprint, foldProviderBillingModes, mergePriceLayersDetailed, normalizeFinanceConfig } from './pricing.ts'
+import { DEFAULT_PRICE, basePriceFingerprint, foldProviderBillingModes, layerFinanceTiers, mergePriceLayersDetailed, normalizeFinanceConfig } from './pricing.ts'
 import { FINANCE_PRICES_HASH, FINANCE_PRICES_SOURCE, FINANCE_PRICES_UPDATED } from './pricing-hash.generated.ts'
 import type { FinancePriceMergeDiagnostic } from './pricing.ts'
 import {
@@ -123,18 +123,44 @@ const NS = 'finance' as SettingsNamespace
 
 /**
  * Pull `prices` out of one side (base / user) of the active settings
- * descriptor for our namespace. Returns `{}` when the settings service has
- * not yet been installed, when the descriptor has no entry for `ns`, or when
- * the side carries no `prices` field.
- *
- * Detached — never returns the live object the descriptor holds, so a caller
- * can mutate the result without aliasing the settings store.
+ * descriptor for our namespace. Shorthand over `readDescriptorField`.
  */
 function readDescriptorPrices(
   ctx: Context,
   ns: SettingsNamespace,
   side: 'base' | 'user',
 ): FinanceConfigInput['prices'] {
+  return readDescriptorField(ctx, ns, side, 'prices') as FinanceConfigInput['prices']
+}
+
+/**
+ * Pull the `tiers` map out of one side (base / user) of the settings descriptor.
+ * Same guards as `readDescriptorPrices`; `tiers` is the second structural
+ * dimension that has to be layered per INV-1.
+ */
+function readDescriptorTiers(
+  ctx: Context,
+  ns: SettingsNamespace,
+  side: 'base' | 'user',
+): Record<string, unknown> {
+  return readDescriptorField(ctx, ns, side, 'tiers') as Record<string, unknown>
+}
+
+/**
+ * Read one field out of one side (base / user) of the active settings
+ * descriptor for our namespace. Returns `{}` when the settings service has not
+ * yet been installed, when the descriptor has no entry for `ns`, or when the
+ * side carries no such field.
+ *
+ * Detached — never returns the live object the descriptor holds, so a caller
+ * can mutate the result without aliasing the settings store.
+ */
+function readDescriptorField(
+  ctx: Context,
+  ns: SettingsNamespace,
+  side: 'base' | 'user',
+  field: string,
+): Record<string, unknown> {
   // A cordis context throws (instead of returning undefined) when a service
   // property is read without the service being injectable in that context.
   // FinanceService's own ctx never injects 'settings', so a bare read here
@@ -153,10 +179,10 @@ function readDescriptorPrices(
   const descriptor = settings.describe().find(d => d.ns === ns)
   if (descriptor === undefined) return {}
   const sideValue = descriptor[side]
-  if (sideValue === undefined || sideValue === null || typeof sideValue !== 'object' || !('prices' in sideValue)) return {}
-  const prices = (sideValue as { prices?: unknown }).prices
-  if (prices === undefined || prices === null || typeof prices !== 'object') return {}
-  return prices as FinanceConfigInput['prices']
+  if (sideValue === undefined || sideValue === null || typeof sideValue !== 'object' || !(field in sideValue)) return {}
+  const value = (sideValue as Record<string, unknown>)[field]
+  if (value === undefined || value === null || typeof value !== 'object') return {}
+  return value as Record<string, unknown>
 }
 
 /** One rate line in integer micros per million tokens. Cache fields optional. */
@@ -331,6 +357,16 @@ export class FinanceService extends TypertRemoteService {
    */
   private userPrices: FinanceConfigInput['prices'] = {}
   /**
+   * releaseBase 阶梯价（composition `base` 层的 `tiers`）：INV-1 下**唯一的结构源**，
+   * 由生成器写进 `cordis.patch.yml`。
+   */
+  private releaseBaseTiers: Record<string, unknown> = {}
+  /**
+   * Legacy 手填阶梯价（`descriptor.user` 的 `tiers`）：releaseBase 有同名键时被取代。
+   * 保留它只为兼容老 settings，且必须能报出"哪些键没生效"。
+   */
+  private userTiers: Record<string, unknown> = {}
+  /**
    * In-memory community-prices layer populated by `@Remote syncCommunityPrices`.
    * Empty by default (no override). Cleared by setting to `{}`; absent on the
    * settings document so a restart means bundle defaults take over until the
@@ -458,6 +494,22 @@ export class FinanceService extends TypertRemoteService {
     // settings section was re-registered with a different entry. 只在读到非空时替换。
     const base = readDescriptorPrices(ctx, NS, 'base') ?? {}
     if (Object.keys(base).length > 0) this.compositionPrices = base
+    // INV-1：`tiers` 与 prices 同属**结构维度**，主源是 releaseBase（composition
+    // `base` 层，由生成物写进 cordis.patch.yml）。settings 里的 tiers 降级为 legacy
+    // overlay：只在 releaseBase 没有该 key 时生效。这里同样只在读到非空时替换，
+    // 理由与 prices 一致 —— 不能被一次空读抹掉。
+    const baseTiers = readDescriptorTiers(ctx, NS, 'base')
+    if (Object.keys(baseTiers).length > 0) this.releaseBaseTiers = baseTiers
+    this.userTiers = readDescriptorTiers(ctx, NS, 'user')
+  }
+
+  /**
+   * 生效的阶梯价分层（INV-1）：releaseBase 优先，legacy settings 只补空缺键。
+   * 返回被 releaseBase 取代的手填键，供 UI 明示（"你填的价没生效"不能静默）。
+   * 分层逻辑抽在 pricing.ts 的纯函数 `layerFinanceTiers` 里（可单测，且与客户端同口径）。
+   */
+  getTierLayers(): { tiers: Record<string, unknown>; shadowedKeys: readonly string[] } {
+    return layerFinanceTiers(this.releaseBaseTiers, this.userTiers)
   }
 
   /**
@@ -486,7 +538,10 @@ export class FinanceService extends TypertRemoteService {
       (raw.plans ?? []).map(plan => (typeof plan?.provider === 'string' ? plan.provider : '')),
     )
     for (const [id, mode] of Object.entries(billingByProvider)) hostMetaByProvider[id] = mode
-    return normalizeFinanceConfig({ ...raw, prices: layers.prices }, hostMetaByProvider)
+    // INV-1：`tiers` 必须用**分层后**的表，不能用 settings 的 resolved 值 —— 后者让
+    // 用户的手填覆盖官方表，正是"一次覆盖即抹掉结构"的那条反模式。releaseBase 优先。
+    const tiers = this.getTierLayers().tiers as FinanceConfigInput['tiers']
+    return normalizeFinanceConfig({ ...raw, prices: layers.prices, tiers }, hostMetaByProvider)
   }
 
   /**

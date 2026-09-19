@@ -72,6 +72,10 @@ else bad('A3 峰谷倍率或窗口结构不成立', JSON.stringify(rateMismatche
 
 // ── A4 生成物与序列一致（优先真解析 YAML）──────────────────────────────────
 const yamlText = readFileSync(YAML_PATH, 'utf8')
+/* A6 的常量与数据先于此处的 A4 块声明（A4 的 YAML 分支要复用它做 config.tiers 断言）。 */
+const TIERS_MARKER_BEGIN = '# >>> FINANCE-VENDOR-TIERS-BEGIN'
+const TIERS_MARKER_END = '# <<< FINANCE-VENDOR-TIERS-END'
+const seriesTiers = series.tiers ?? {}
 const begin = yamlText.indexOf(MARKER_BEGIN)
 const end = yamlText.indexOf(MARKER_END)
 if (begin === -1 || end === -1 || end < begin) {
@@ -89,9 +93,33 @@ if (begin === -1 || end === -1 || end < begin) {
     if (missingKeys.length === 0) ok('A4（文本级）生成段覆盖全部必需 key')
     else bad('A4（文本级）生成段缺 key', JSON.stringify(missingKeys))
   } else {
-    const document = yamlModule.parse(yamlText)
+    // 解析失败必须**记成失败项**，不能把异常抛出去：抛异常会让闸门以一个栈回溯退出，
+    // 既看不到其它检查项的结果，也让 CI 报错信息变成"脚本崩了"而不是"YAML 坏了"。
+    let document
+    try {
+      document = yamlModule.parse(yamlText)
+    } catch (error) {
+      bad('A4 cordis.patch.yml 无法解析（生成段缩进/键冲突）', error instanceof Error ? error.message.split('\n')[0] : String(error))
+      document = undefined
+    }
     const row = (document?.[0]?.insert ?? []).find(entry => entry.id === 'finance')
     const yamlPrices = row?.config?.prices ?? {}
+
+    // A6 核心断言：`config.tiers` 必须真的解析出来。生成段缩进错了（例如与 `prices:`
+    // 的子键同级）会被 YAML **静默吞掉** —— 文本里 marker 齐全、config 里却没有 tiers。
+    // 只看文本永远发现不了，所以这里必须解析后断言。
+    const parsedTiers = row?.config?.tiers
+    if (document === undefined) {
+      bad('A6 无法断言 config.tiers（YAML 解析失败，见上一条）')
+    } else if (parsedTiers === undefined || Object.keys(parsedTiers).length === 0) {
+      bad('A6 解析后的 config.tiers 为空（生成段缩进错误 → 被 YAML 吞掉）', 'tiers=' + JSON.stringify(parsedTiers))
+    } else {
+      ok('A6 解析出的 config.tiers 非空', Object.keys(parsedTiers).length + ' 个模型')
+      const tierDiffs = Object.keys(seriesTiers).filter(key => parsedTiers[key] === undefined)
+      if (tierDiffs.length === 0) ok('A6 解析出的 tiers 覆盖序列全部 key')
+      else bad('A6 解析出的 tiers 缺 key', JSON.stringify(tierDiffs))
+    }
+
     const diffs = []
     for (const key of Object.keys(prices)) {
       const fromYaml = yamlPrices[key]
@@ -115,6 +143,70 @@ if (begin === -1 || end === -1 || end < begin) {
     if (actualHash === FINANCE_PRICES_HASH) ok('A4b 配置侧指纹 = lib 内哈希常量（完整性检测不会误报）')
     else bad('A4b 配置侧指纹 ≠ lib 内哈希常量（面板会误报基础表被改）', actualHash.slice(0, 16) + ' vs ' + FINANCE_PRICES_HASH.slice(0, 16))
   }
+}
+
+/* ── A6 阶梯价结构（INV-1 单一结构源 / SPEC §2.3）────────────────────────────
+ * 防线动机：`tiers` 在 S4 之前是 settings 里的手填项；迁进 releaseBase 后，
+ * 最危险的失效模式是**生成段缩进错了、YAML 静默吞掉整个 tiers 键** ——
+ * 生成器说"写好了"、面板却读不到，日志里一个字都没有。所以这里直接解析 YAML
+ * 断言 `config.tiers` 真的存在，而不是只看文本里有没有 marker。
+ */
+console.log('')
+console.log('══ A6 阶梯价结构（releaseBase 唯一结构源）══')
+
+const tiersBegin = yamlText.indexOf(TIERS_MARKER_BEGIN)
+const tiersEnd = yamlText.indexOf(TIERS_MARKER_END)
+if (tiersBegin === -1 || tiersEnd === -1 || tiersEnd < tiersBegin) {
+  bad('A6 找不到阶梯价生成段 marker（S4 后 tiers 必须由 releaseBase 产出）')
+} else {
+  const tiersHeader = yamlText.slice(tiersBegin, yamlText.indexOf('\n', tiersBegin))
+  if (/source=.+/.test(tiersHeader) && /currency=/.test(tiersHeader)) ok('A6 阶梯价生成段带来源与币种标注')
+  else bad('A6 阶梯价生成段缺少 source/currency 标注', tiersHeader)
+}
+
+if (Object.keys(seriesTiers).length === 0) {
+  bad('A6 prices.series.json 没有 tiers 段（生成器没跑？）')
+} else {
+  ok('A6 序列带有阶梯价段', Object.keys(seriesTiers).length + ' 个模型')
+}
+
+// 逐项结构断言：不管 YAML 能否解析，先校验序列自身的语义（SPEC §2.3 规则 7）。
+const tierProblems = []
+for (const [key, spec] of Object.entries(seriesTiers)) {
+  const tiers = spec?.tiers
+  if (!Array.isArray(tiers) || tiers.length === 0) { tierProblems.push(key + ' 没有档位'); continue }
+  const bounded = tiers.filter(t => t.maxPromptTokens > 0)
+  const catchAll = tiers.filter(t => t.maxPromptTokens === 0)
+  if (catchAll.length > 1) tierProblems.push(key + ' 有多个兜底档')
+  // 档位必须严格升序，且**全量按所在档**要求兜底档是最后一道（否则长请求无价可落）。
+  const ceilings = bounded.map(t => t.maxPromptTokens)
+  for (let i = 1; i < ceilings.length; i += 1) {
+    if (ceilings[i] <= ceilings[i - 1]) { tierProblems.push(key + ' 档位未严格升序'); break }
+  }
+  // 长档必须真的更贵：同价的"两档"是噪声，说明解析把无阶梯模型也写进来了。
+  if (bounded.length === 1 && catchAll.length === 1) {
+    const short = bounded[0]
+    const long = catchAll[0]
+    if (short.inputMicrosPerMtok === long.inputMicrosPerMtok && short.outputMicrosPerMtok === long.outputMicrosPerMtok) {
+      tierProblems.push(key + ' 短/长档同价（无阶梯的模型不该进产物）')
+    }
+  }
+  if (typeof spec?.currency !== 'string' || spec.currency === '') tierProblems.push(key + ' 缺少币种')
+}
+if (tierProblems.length === 0) ok('A6 每个阶梯价条目：档位升序、单一兜底档、长档严格更贵、带币种')
+else bad('A6 阶梯价条目结构不成立', JSON.stringify(tierProblems))
+
+// 生成段 ↔ 序列逐值一致（与 A4 同精神：文本对不上就是产物漂移）。
+if (tiersBegin !== -1 && tiersEnd > tiersBegin) {
+  const block = yamlText.slice(tiersBegin, tiersEnd)
+  // 用正则而非写死缩进：生成段的缩进是"tiers: 父键 + 2"，写死空格数一旦对不上
+  // 就会误报（本次 S4 就踩了：块从 10 空格改到 8 空格，断言跟着错）。
+  const missing = Object.keys(seriesTiers).filter(key => {
+    const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    return !new RegExp('^\\s+' + escaped + ':\\s*$', 'm').test(block)
+  })
+  if (missing.length === 0) ok('A6 生成段覆盖全部阶梯价 key', Object.keys(seriesTiers).length + ' 个')
+  else bad('A6 生成段缺 key（生成器没跑或缩进错了）', JSON.stringify(missing))
 }
 
 /**
