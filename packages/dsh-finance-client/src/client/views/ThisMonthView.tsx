@@ -312,21 +312,19 @@ export function ThisMonthView({
 
             <Card title={t('topModelsTitle')} className={css.section}>
               <div className={css.table}>
-                <div className={cx(css.tableHead, css.colsModels)}>
+                <div className={cx(css.tableHead, css.colsContext)}>
                   <span className={css.cell}>{t('colModel')}</span>
-                  <span className={css.cell}>{t('colProvider')}</span>
                   <span className={cx(css.cell, css.cellNum)}>{t('colCost')}</span>
                   <span className={cx(css.cell, css.cellNum)} title={t('topModelsHint')}>{t('colUnitCost')}</span>
                 </div>
                 {topModels.length === 0
                   ? <p className={css.hint}>{t('noData')}</p>
                   : topModels.map((row) => (
-                    <div className={cx(css.tableRow, css.colsModels)} key={row.modelKey}>
-                      {/* 文本列两行截断 + 悬浮全文（UI-UX-SPEC §3.5）。 */}
-                      <span className={cx(css.cell, css.modelKey)}>
-                        <CellText text={row.model} />
+                    <div className={cx(css.tableRow, css.colsContext)} key={row.modelKey}>
+                      {/* 模型 + 厂商合并 provider/model：两行截断 + 悬浮全文。 */}
+                      <span className={cx(css.cell, css.modelKey, css.clamp2)} title={`${row.provider}/${row.model}`}>
+                        {row.provider}/{row.model}
                       </span>
-                      <span className={css.cell}><CellText text={row.provider} /></span>
                       <span className={cx(css.cell, css.cellNum)}><Money micros={row.costMicros} currency={currency} exact /></span>
                       <span className={cx(css.cell, css.cellNum)}>
                         {row.unitCostMicros === null ? t('noData') : `${formatMicros(Math.round(row.unitCostMicros))}${t('perMtok')}`}

@@ -109,6 +109,8 @@
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+  /* line-clamp 生效的前提是允许换行：必须压过 .cell 的 nowrap（真宿主实测单行省略）。 */
+  white-space: normal;
   overflow: hidden;
   overflow-wrap: anywhere;
 }
