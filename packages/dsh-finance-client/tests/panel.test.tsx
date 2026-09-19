@@ -422,8 +422,9 @@ describe('finance views', () => {
       onBack: () => {},
     }))
     expect(html).toContain('finance-project-detail')
-    // 嵌套子卡走 ui-kit Card variant=inset（不覆写组件 CSS）
+    // 三个分块（消耗构成 / 成本趋势 / 会话明细）全部走 ui-kit Card variant=inset
     expect(html).toContain('inset')
+    expect(html).toContain('projectCostSplitTitle')
     expect(html).toContain('projectSessionsTitle')
     expect(html).toContain('trendTitle')
   })

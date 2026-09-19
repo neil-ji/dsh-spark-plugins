@@ -100,16 +100,18 @@ export function ProjectDetail({ row, ledger, currency, t, onBack }: {
       }
       className={css.section}
     >
-      {/* 消耗拆分（列表只显示总额；按量/订阅估价在这里看）。 */}
-      <div className={css.projectCostSplit} data-testid="finance-project-cost-split" title={t('projectCostHint')}>
-        <span className={css.detailText}>
-          {t('consumeMetered')} <Money micros={row.meteredMicros} currency={currency} exact />
-          {' · '}
-          {t('planEstimateShort')} <Money micros={row.planEstimateMicros} currency={currency} exact />
-          {' · '}
-          {t('colCost')} <Money micros={row.totalMicros} currency={currency} exact />
-        </span>
-      </div>
+      {/* 消耗构成也是分块内容 → 同样用嵌套 Card（列表只显示总额，拆分在这里看）。 */}
+      <Card variant="inset" title={t('projectCostSplitTitle')} actions={<span className={css.tagMuted} title={t('projectCostHint')}>{t('planEstimateShort')}</span>}>
+        <div className={css.projectCostSplit} data-testid="finance-project-cost-split">
+          <span className={css.detailText}>
+            {t('consumeMetered')} <Money micros={row.meteredMicros} currency={currency} exact />
+            {' · '}
+            {t('planEstimateShort')} <Money micros={row.planEstimateMicros} currency={currency} exact />
+            {' · '}
+            {t('colCost')} <Money micros={row.totalMicros} currency={currency} exact />
+          </span>
+        </div>
+      </Card>
       {/* 明细分块改为嵌套 Card（与「成本总览」同形制，只是嵌在项目卡内）。 */}
       <div className={css.section} data-testid="finance-project-detail">
         <Card variant="inset" title={t('trendTitle')} actions={<span className={css.tagMuted}>{t('trendRange', { days: points.length })}</span>}>
