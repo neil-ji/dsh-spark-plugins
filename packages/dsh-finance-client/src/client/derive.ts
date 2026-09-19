@@ -651,3 +651,15 @@ export function projectCostRows(ledger: FinanceLedger, plans: readonly FinancePl
     })
     .sort((a, b) => b.totalMicros - a.totalMicros)
 }
+
+/** token 计数格式化：<1K 原样，1K–1M 用 K（1000），≥1M 用 M（1,000,000），最多 1 位小数并去尾零。 */
+export function formatTokens(count: number): string {
+  if (!Number.isFinite(count) || count < 0) return '0'
+  if (count < 1_000) return String(Math.round(count))
+  const trim = (value: number): string => {
+    const fixed = value.toFixed(1)
+    return fixed.endsWith('.0') ? fixed.slice(0, -2) : fixed
+  }
+  if (count < 1_000_000) return `${trim(count / 1_000)}K`
+  return `${trim(count / 1_000_000)}M`
+}

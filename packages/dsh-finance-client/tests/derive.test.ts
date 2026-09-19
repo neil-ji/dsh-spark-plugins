@@ -14,6 +14,7 @@ import {
   firstTokenMs,
   formatPercent,
   formatSpeed,
+  formatTokens,
   groupByModel,
   hitRate,
   outputTokensPerSecond,
@@ -440,5 +441,16 @@ describe('derive: 项目账订阅估价（周费按用量占比分摊）', () =>
     for (const row of projectCostRows(withoutRate, plans)) {
       expect(row.durationSeconds).toBeNull()
     }
+  })
+})
+
+describe('derive: token 计数格式化', () => {
+  it('K=1000 / M=1e6，最多 1 位小数并去尾零', () => {
+    expect(formatTokens(0)).toBe('0')
+    expect(formatTokens(999)).toBe('999')
+    expect(formatTokens(1_000)).toBe('1K')
+    expect(formatTokens(101_746)).toBe('101.7K')
+    expect(formatTokens(1_024_000)).toBe('1M')
+    expect(formatTokens(1_500_000)).toBe('1.5M')
   })
 })

@@ -9,7 +9,7 @@
 import { useState, type ReactNode } from 'react'
 import { Button, Card, CellText, EmptyState, Money, TrendChart, formatMicros } from 'dsh-ui-kit'
 import type { FinanceLedger, FinancePlanEntry, FinanceSessionRow } from 'dsh-spark-finance/types'
-import { projectCostRows, sessionsOfWorkspace, sessionsTrend } from '../derive.ts'
+import { formatTokens, projectCostRows, sessionsOfWorkspace, sessionsTrend } from '../derive.ts'
 import type { FinanceTranslate } from '../locales.ts'
 import css from '../panel.module.css'
 
@@ -69,7 +69,7 @@ export function ProjectsView({ ledger, plans, t }: ProjectsViewProps): ReactNode
               {/* 列表只给总成本；按量/订阅估价拆分进详情看。 */}
               <Money micros={row.totalMicros} currency={currency} exact />
             </span>
-            <span className={cx(css.cell, css.cellNum)}>{row.totalTokens.toLocaleString()}</span>
+            <span className={cx(css.cell, css.cellNum)}>{formatTokens(row.totalTokens)}</span>
             <span className={cx(css.cell, css.cellNum)}>{formatDuration(row.durationSeconds, t)}</span>
           </div>
         ))}
