@@ -23,6 +23,8 @@ import { fetchFinanceBalance, FinanceBalanceError } from './balance.ts'
 import { backfillFinanceHourly, buildFinanceLedger } from './ledger.ts'
 import {
   financeContextProjectionDefinition,
+  financeQuotaProjectionDefinition,
+  financeRateHourlyProjectionDefinition,
   financeRateProjectionDefinition,
   financeUsageHourlyProjectionDefinition,
   financeUsageProjectionDefinition,
@@ -67,14 +69,19 @@ import type {
 } from './types.ts'
 
 export type * from './types.ts'
+// SPEC §10：额度触达判定（纯函数，供测试与 embedder 复用）。
+export { classifyQuotaFailure, parseQuotaReset, quotaEpisodeKey, quotaMessageSignature } from './quota.ts'
+export type { FinanceQuotaClass, FinanceQuotaWindow, QuotaFailureLike } from './quota.ts'
 export {
   financeContextProjectionDefinition,
+  financeQuotaProjectionDefinition,
+  financeRateHourlyProjectionDefinition,
   financeRateProjectionDefinition,
   financeUsageHourlyProjectionDefinition,
   financeUsageProjectionDefinition,
 } from './projection.ts'
 export { fetchFinanceBalance, FinanceBalanceError, microsFromDecimal } from './balance.ts'
-export { backfillFinanceHourly } from './ledger.ts'
+export { aggregateQuota, aggregateQuotaWindows, backfillFinanceHourly, quotaMonthStart } from './ledger.ts'
 // Cross-generation `ctx.sessionPersistence` access (DSH 0.1.2 flat surface /
 // 0.1.5 handle surface) — shared with embedders that fold session logs.
 export {
@@ -432,6 +439,11 @@ export class FinanceService extends TypertRemoteService {
       projectionCtx.sessionProjections.register(financeRateProjectionDefinition)
       // P2：每模型上下文长度分布（阶梯价与"拆分会话"的分析输入）。
       projectionCtx.sessionProjections.register(financeContextProjectionDefinition)
+      // SPEC §10：额度触达 episode。**新 key、新 unit** —— 既不 bump 任何既有
+      // stateVersion（那会让每个会话全量重放），也天然 forward-only。
+      projectionCtx.sessionProjections.register(financeQuotaProjectionDefinition)
+      // 窗口归因：每模型 × UTC 小时的速率样本（时长口径）。
+      projectionCtx.sessionProjections.register(financeRateHourlyProjectionDefinition)
     })
 
     // F11 commit: dedicated stream service for `finance.events()`. Cordis
@@ -444,9 +456,13 @@ export class FinanceService extends TypertRemoteService {
     // 2026-09 增量刷新：一轮对话走完（assistant/message 落入会话日志）→ 防抖后
     // 作废账本缓存并广播 `finance/ledgerUpdated`，客户端收到帧后增量重拉。
     // 防抖 2s：一轮里 assistant/message 可能连发多条，只刷一次。
+    //
+    // SPEC §10：额度触达由 `turn/end`（终态失败）触发，**不是** `assistant/message`
+    // （那是用量事件）—— 被额度挡下的那一轮根本没有 assistant/message。两者共用
+    // 同一个防抖计时器：同一轮里用量与触达只会刷一次。
     let ledgerDirtyTimer: ReturnType<typeof setTimeout> | undefined
     ctx.on('session/event', (_session, event) => {
-      if (event.type !== 'assistant/message') return
+      if (event.type !== 'assistant/message' && event.type !== 'turn/end') return
       if (ledgerDirtyTimer !== undefined) clearTimeout(ledgerDirtyTimer)
       ledgerDirtyTimer = setTimeout(() => {
         ledgerDirtyTimer = undefined

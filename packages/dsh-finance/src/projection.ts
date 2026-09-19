@@ -18,12 +18,18 @@
 import { z } from 'zod'
 import type { StreamChunk, TokenUsage } from '@deepseek-ai/dsh-llm'
 import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
-import { addFinanceBuckets, emptyFinanceBuckets, financeModelKey } from './pricing.ts'
+import { addFinanceBuckets, emptyFinanceBuckets, financeModelKey, financeProviderOf } from './pricing.ts'
+import { classifyQuotaFailure, quotaEpisodeKey } from './quota.ts'
+import type { QuotaFailureLike } from './quota.ts'
 import { FINANCE_CONTEXT_BOUNDARIES } from './types.ts'
 import type {
   FinanceContextBucket,
   FinanceContextProjection,
   FinanceHourlyProjection,
+  FinanceQuotaEpisodeRow,
+  FinanceQuotaProjection,
+  FinanceQuotaWindow,
+  FinanceRateHourlyProjection,
   FinanceRateProjection,
   FinanceRateStats,
   FinanceTokenBuckets,
@@ -64,12 +70,39 @@ interface FinanceHourlyState {
  * rc.2+（dsh-session-projection）把投影 key 拆成两张表：`SessionProjectionStateMap`（host 折叠状态）与
  * `SessionProjectionMap`（客户端可见值）。finance 的两个单位都是 client-visible，两个表都要声明合并。
  */
+/**
+ * 窗口归因 Card 的时长口径：每模型 × UTC 小时的速率样本。
+ * 归属小时以 `step/start` 时刻为准（decode 跨小时时整步归到开始那一小时）。
+ */
+interface FinanceRateHourlyState {
+  currentModel: string | null
+  byModelHour: Record<string, Record<string, FinanceRateStats>>
+  open: {
+    turn: number
+    step: number
+    startTime: number
+    firstTokenTime: number | null
+    modelKey: string
+    hour: string
+  } | null
+}
+
+interface FinanceQuotaState {
+  /** 归属用：`turn/end` 不带 provider，只能靠最近的 `request/header`。 */
+  currentModel: string | null
+  episodes: FinanceQuotaEpisodeRow[]
+}
+
 declare module '@deepseek-ai/dsh-session-projection/types' {
   interface SessionProjectionStateMap {
     financeUsage: FinanceUsageState
     financeUsageHourly: FinanceHourlyState
     financeRate: FinanceRateState
     financeContext: FinanceContextState
+    /** SPEC §10：额度触达 episode 的 host 折叠状态。 */
+    financeQuota: FinanceQuotaState
+    /** 窗口归因：每模型 × UTC 小时的速率样本。 */
+    financeRateHourly: FinanceRateHourlyState
   }
 }
 
@@ -311,6 +344,8 @@ function isVisibleDelta(chunk: StreamChunk): boolean {
 /** 投影 `apply` 收到的事件的最小面（只做字符串判别，形状按平台代次宽松处理）。 */
 interface CommittedEvent {
   type: string
+  /** 事件时刻（epoch ms）—— `financeQuota` 用它做 episode 的第一/最后时刻。 */
+  time: number
   data?: unknown
 }
 
@@ -636,3 +671,271 @@ export const financeContextProjectionDefinition = {
   },
   stateVersion: 1,
 } satisfies ProjectionDefinition<'financeContext', FinanceContextState>
+/* ───────────────── 额度触达（SPEC §10，INV-10） ───────────────── */
+
+/**
+ * 每个会话最多保留的 episode 数。
+ *
+ * 有界是必须的：投影值会随会话日志 checkpoint 落盘，一个长期会话若被反复触达
+ * 会无限增长。50 条足以覆盖"这个会话里被挡过哪些次"，且落盘体积可控。
+ * 超出后**保留最新的**（诊断价值在近期，不在陈年旧账）。
+ */
+const MAX_QUOTA_EPISODES = 50
+
+const FINANCE_QUOTA_WINDOWS = ['5h', 'week', 'month', 'balance', 'trial', 'unknown'] as const
+
+const quotaSchema = z.object({
+  episodes: z.array(z.object({
+    provider: z.string(),
+    modelKey: z.string(),
+    window: z.enum(FINANCE_QUOTA_WINDOWS),
+    firstAtMs: z.number().nonnegative(),
+    lastAtMs: z.number().nonnegative(),
+    attempts: z.number().int().nonnegative(),
+    final: z.boolean(),
+    resetAtMs: z.number().nonnegative().nullable(),
+    resetRaw: z.string().nullable(),
+    vendorCode: z.string().nullable(),
+  }).strict()),
+}).strict()
+
+/** 从失败事件里取出 `{ failure, provider }`；非失败事件返回 null。 */
+function quotaFailureOf(event: CommittedEvent): { failure: QuotaFailureLike; provider: string | null } | null {
+  const data = event.data as Record<string, unknown> | undefined
+  if (data === null || typeof data !== 'object') return null
+  // 终态：整轮失败。
+  if (event.type === 'turn/end') {
+    const reason = data.reason as { kind?: unknown; error?: unknown } | undefined
+    if (reason?.kind !== 'error' || reason.error === null || typeof reason.error !== 'object') return null
+    return { failure: reason.error as QuotaFailureLike, provider: null }
+  }
+  // 过程：一次尝试失败、即将重试。自带 provider，比 turn/end 更可靠。
+  if (event.type === 'llm/retry') {
+    const failure = data.failure
+    if (failure === null || typeof failure !== 'object') return null
+    const provider = typeof data.provider === 'string' ? data.provider : null
+    return { failure: failure as QuotaFailureLike, provider }
+  }
+  return null
+}
+
+/**
+ * 把一次判定结果并进 episode 列表（**去重**）。
+ *
+ * 实测同一次断供 = `n× llm/retry + 1× turn/end`（典型 5+1），事件数比真实断供
+ * 多约 6 倍。合并键见 `quotaEpisodeKey`；命中已有条目则累加 `attempts`、
+ * 推进 `lastAtMs`、并合并 `final` / reset 信息（后到的补全先到的）。
+ *
+ * 导出仅供测试直接调用（纯函数，不改原数组）。
+ */
+export function mergeQuotaEpisode(
+  episodes: readonly FinanceQuotaEpisodeRow[],
+  modelKey: string,
+  entry: { window: FinanceQuotaWindow; final: boolean; resetAtMs: number | null; resetRaw: string | null; vendorCode: string | null },
+  atMs: number,
+  message: string,
+): FinanceQuotaEpisodeRow[] {
+  const key = quotaEpisodeKey(modelKey, {
+    kind: 'quota',
+    window: entry.window,
+    vendorCode: entry.vendorCode,
+    resetAtMs: entry.resetAtMs,
+    resetRaw: entry.resetRaw,
+  }, message)
+  const index = episodes.findIndex(existing => quotaEpisodeKey(existing.modelKey, {
+    kind: 'quota',
+    window: existing.window,
+    vendorCode: existing.vendorCode,
+    resetAtMs: existing.resetAtMs,
+    resetRaw: existing.resetRaw,
+  }, '') === key)
+
+  if (index >= 0) {
+    const previous = episodes[index]
+    const merged: FinanceQuotaEpisodeRow = {
+      ...previous,
+      lastAtMs: Math.max(previous.lastAtMs, atMs),
+      attempts: previous.attempts + 1,
+      final: previous.final || entry.final,
+      // 后到的 reset 信息补全先到的缺失（终态那条通常信息最全）。
+      resetAtMs: previous.resetAtMs ?? entry.resetAtMs,
+      resetRaw: previous.resetRaw ?? entry.resetRaw,
+      vendorCode: previous.vendorCode ?? entry.vendorCode,
+    }
+    const next = [...episodes]
+    next[index] = merged
+    return next
+  }
+
+  const provider = financeProviderOf(modelKey)
+  const created: FinanceQuotaEpisodeRow = {
+    provider,
+    modelKey,
+    window: entry.window,
+    firstAtMs: atMs,
+    lastAtMs: atMs,
+    attempts: 1,
+    final: entry.final,
+    resetAtMs: entry.resetAtMs,
+    resetRaw: entry.resetRaw,
+    vendorCode: entry.vendorCode,
+  }
+  const next = [...episodes, created]
+  // 有界：超出时丢最旧的（诊断价值在近期）。
+  return next.length > MAX_QUOTA_EPISODES
+    ? next.slice(next.length - MAX_QUOTA_EPISODES)
+    : next
+}
+
+/**
+ * The `financeQuota` projection unit（SPEC §10.4）。
+ *
+ * **新 key、新 unit**：绝不动既有 `financeUsage` / `financeUsageHourly` /
+ * `financeRate` / `financeContext` 的 `stateVersion` —— 投影缓存对版本不匹配是
+ * **丢弃而非迁移**，一次 bump 会让每个会话全量重放（`projection.ts` 顶部已有该先例）。
+ * 代价是旧会话没有该键 → 优雅退化为"无触达"（与 `financeRate` 同款 forward-only 边界）。
+ *
+ * 只折叠 `kind === 'quota'`：`capacity` / `throttle` / `other` 一律不写状态（INV-10 的
+ * 前置条件——账本里不出现任何非额度噪声）。
+ */
+export const financeQuotaProjectionDefinition = {
+  key: 'financeQuota',
+  stateSchema: z.any(),
+  init: (): FinanceQuotaState => ({ currentModel: null, episodes: [] }),
+  apply: (state, event) => {
+    if (event.type === 'request/header') {
+      const modelKey = financeModelKey(event.data.header.config.provider, event.data.header.config.model)
+      return state.currentModel === modelKey ? state : { ...state, currentModel: modelKey }
+    }
+
+    const hit = quotaFailureOf(event)
+    if (hit === null) return state
+    const result = classifyQuotaFailure(hit.failure, event.time)
+    // 只有真正的额度触达进账本；容量繁忙/限流连状态都不写。
+    if (result.kind !== 'quota') return state
+
+    const message = typeof hit.failure.message === 'string' ? hit.failure.message : ''
+    // 归属走 `request/header` 维护的 currentModel —— 与其余 finance 投影同一口径。
+    // `llm/retry` 自带 provider 但**不带 model**，只有 header 能给完整 `provider/model`；
+    // 两者都缺时放弃记这条（不造一个拼不出模型的假键）。
+    const modelKey = state.currentModel
+    if (modelKey === null || modelKey === '') return state
+
+    return {
+      ...state,
+      episodes: mergeQuotaEpisode(state.episodes, modelKey, {
+        window: result.window,
+        final: event.type === 'turn/end',
+        resetAtMs: result.resetAtMs,
+        resetRaw: result.resetRaw,
+        vendorCode: result.vendorCode,
+      }, event.time, message),
+    }
+  },
+  wire: {
+    viewSchema: quotaSchema,
+    view: (state): FinanceQuotaProjection => ({ episodes: state.episodes }),
+  },
+  stateVersion: 1,
+} satisfies ProjectionDefinition<'financeQuota', FinanceQuotaState>
+
+/* ───────────────── 每模型 × 小时的速率（窗口归因 Card 的时长来源） ───────────────── */
+
+
+const rateHourlySchema = z.object({
+  byModelHour: z.record(z.string(), z.record(z.string(), z.object({
+    decodeMs: z.number().nonnegative(),
+    decodeTokens: z.number().nonnegative(),
+    ttftMs: z.number().nonnegative(),
+    ttftSteps: z.number().nonnegative(),
+  }).strict())),
+}).strict()
+
+/**
+ * The `financeRateHourly` projection unit（窗口归因 Card 的时长口径）。
+ *
+ * 为什么不复用 `financeRate`：那个单元只有 `byModel`（无时间维度），
+ * 于是"这 5 小时里解码了多久"根本算不出来 —— 只能给会话总量。
+ * 这里加**小时维度**，让任意窗口（5h / 周 / 月）都能切出模型级时长。
+ *
+ * 独立 unit 的理由与 `financeUsageHourly` 完全一致：给既有单元加维度就必须 bump
+ * `stateVersion`，而缓存对版本不匹配是丢弃而非迁移 —— 一次 bump = 每个会话全量重放。
+ * 新 key 零代价，旧会话缺键时优雅退化（时长列不显示）。
+ *
+ * 事件语义与 `financeRate` 逐条相同（同一套 step/首个 token/assistant/message 规则），
+ * 唯一差别是落桶多一个 UTC 小时维度。
+ */
+export const financeRateHourlyProjectionDefinition = {
+  key: 'financeRateHourly',
+  stateSchema: z.any(),
+  init: (): FinanceRateHourlyState => ({ currentModel: null, byModelHour: {}, open: null }),
+  apply: (state, event) => {
+    const attempt = assistantAttempt(event)
+    if (attempt !== null) {
+      const open = state.open
+      if (open === null || open.firstTokenTime !== null) return state
+      if (open.turn !== attempt.turn || open.step !== attempt.step) return state
+      const first = firstTokenTimeFromStream(attempt.stream)
+      if (first === null) return state
+      return { ...state, open: { ...open, firstTokenTime: first } }
+    }
+
+    switch (event.type) {
+      case 'request/header': {
+        const modelKey = financeModelKey(event.data.header.config.provider, event.data.header.config.model)
+        return state.currentModel === modelKey ? state : { ...state, currentModel: modelKey }
+      }
+      case 'step/start': {
+        if (state.currentModel === null) return state
+        return {
+          ...state,
+          open: {
+            turn: event.data.turn,
+            step: event.data.step,
+            startTime: event.time,
+            firstTokenTime: null,
+            modelKey: state.currentModel,
+            hour: hourKey(event.time),
+          },
+        }
+      }
+      case 'assistant/chunk': {
+        const open = state.open
+        if (open === null || open.turn !== event.data.turn || open.step !== event.data.step) return state
+        if (open.firstTokenTime !== null) return state
+        if (!isVisibleDelta(event.data.chunk)) return state
+        return { ...state, open: { ...open, firstTokenTime: event.time } }
+      }
+      case 'assistant/message': {
+        const open = state.open
+        if (open === null || open.turn !== event.data.turn || open.step !== event.data.step) return state
+        const firstToken = open.firstTokenTime
+          ?? firstTokenTimeFromStream((event.data as { stream?: unknown }).stream)
+        if (firstToken === null) return { ...state, open: null }
+        const byHour = state.byModelHour[open.modelKey] ?? {}
+        const current = byHour[open.hour] ?? EMPTY_RATE
+        const outputTokens = usageOutputTokens(event.data.usage)
+        const next: FinanceRateStats = {
+          decodeMs: current.decodeMs + (outputTokens === null ? 0 : Math.max(0, event.time - firstToken)),
+          decodeTokens: current.decodeTokens + (outputTokens ?? 0),
+          ttftMs: current.ttftMs + Math.max(0, firstToken - open.startTime),
+          ttftSteps: current.ttftSteps + 1,
+        }
+        return {
+          ...state,
+          byModelHour: { ...state.byModelHour, [open.modelKey]: { ...byHour, [open.hour]: next } },
+          open: null,
+        }
+      }
+      case 'step/end':
+        return state.open === null ? state : { ...state, open: null }
+      default:
+        return state
+    }
+  },
+  wire: {
+    viewSchema: rateHourlySchema,
+    view: (state): FinanceRateHourlyProjection => ({ byModelHour: state.byModelHour }),
+  },
+  stateVersion: 1,
+} satisfies ProjectionDefinition<'financeRateHourly', FinanceRateHourlyState>

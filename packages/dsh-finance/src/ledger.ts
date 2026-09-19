@@ -72,6 +72,15 @@ import type {
   FinanceUnreadableSessionRow,
   FinanceContextBucket,
   FinanceContextProjection,
+  FinanceQuotaEpisodeRow,
+  FinanceQuotaProjection,
+  FinanceQuotaProviderRow,
+  FinanceQuotaSummary,
+  FinanceQuotaWindow,
+  FinanceQuotaWindowModelRow,
+  FinanceQuotaWindowSpan,
+  FinanceQuotaWindowSummary,
+  FinanceRateHourlyProjection,
   FinanceRateProjection,
   FinanceRateStats,
   FinanceUsageProjection,
@@ -97,6 +106,10 @@ interface SessionRecord {
   rate: Record<string, FinanceRateStats>
   /** P2：每模型上下文长度分布（旧会话为空）。 */
   context: Record<string, readonly FinanceContextBucket[]>
+  /** SPEC §10：额度触达 episode（旧会话为空数组）。 */
+  quota: readonly FinanceQuotaEpisodeRow[]
+  /** 窗口归因：每模型 × UTC 小时速率样本（旧会话为空对象）。 */
+  rateHourly: Record<string, Record<string, FinanceRateStats>>
 }
 
 interface SessionProjectionRead {
@@ -108,6 +121,10 @@ interface SessionProjectionRead {
   rate: Record<string, FinanceRateStats>
   /** P2：每模型的上下文长度分布；旧会话为空数组。 */
   context: Record<string, readonly FinanceContextBucket[]>
+  /** SPEC §10：额度触达 episode；旧会话（无该投影键）为空数组。 */
+  quota: readonly FinanceQuotaEpisodeRow[]
+  /** 窗口归因：每模型 × UTC 小时的速率样本；旧会话为空对象。 */
+  rateHourly: Record<string, Record<string, FinanceRateStats>>
   title: string | null
 }
 
@@ -122,6 +139,10 @@ function extractProjection(values: Partial<SessionProjectionMap>, title: string 
   // 速率是独立单元：无论用量走哪条腿，它都单独读（旧会话缺该键 -> 空对象）。
   const rate = (values.financeRate as FinanceRateProjection | undefined)?.byModel ?? {}
   const context = (values.financeContext as FinanceContextProjection | undefined)?.byModel ?? {}
+  // 额度触达是独立单元：与用量走哪条腿无关，永远单独读（旧会话缺该键 -> 空数组）。
+  const quota = (values.financeQuota as FinanceQuotaProjection | undefined)?.episodes ?? []
+  // 窗口归因的时长口径，同样独立读（旧会话缺该键 -> 空对象，Card 不显示时长）。
+  const rateHourly = (values.financeRateHourly as FinanceRateHourlyProjection | undefined)?.byModelHour ?? {}
   const hourly = values.financeUsageHourly as FinanceHourlyProjection | undefined
   if (hourly !== undefined) {
     const byModelHour = hourly.byModelHour
@@ -138,17 +159,17 @@ function extractProjection(values: Partial<SessionProjectionMap>, title: string 
       byModel[modelKey] = modelTotals
       usage = addFinanceBuckets(usage, modelTotals)
     }
-    return { usage, byModel, byDay, byModelHour, rate, context, title }
+    return { usage, byModel, byDay, byModelHour, rate, context, quota, rateHourly, title }
   }
   const finance = values.financeUsage as FinanceUsageProjection | undefined
   if (finance !== undefined) {
-    return { usage: finance.totals, byModel: finance.byModel, byDay: finance.byDay, byModelHour: {}, rate, context, title }
+    return { usage: finance.totals, byModel: finance.byModel, byDay: finance.byDay, byModelHour: {}, rate, context, quota, rateHourly, title }
   }
   const token = values.tokenUsage
   if (token !== undefined) {
-    return { usage: token, byModel: {}, byDay: {}, byModelHour: {}, rate, context, title }
+    return { usage: token, byModel: {}, byDay: {}, byModelHour: {}, rate, context, quota, rateHourly, title }
   }
-  return { usage: emptyFinanceBuckets(), byModel: {}, byDay: {}, byModelHour: {}, rate, context, title }
+  return { usage: emptyFinanceBuckets(), byModel: {}, byDay: {}, byModelHour: {}, rate, context, quota, rateHourly, title }
 }
 
 /**
@@ -242,6 +263,191 @@ function addInto(record: Record<string, FinanceTokenBuckets>, key: string, bucke
 }
 
 /**
+ * 当前自然月起点（epoch ms，**本地时区**）。
+ *
+ * 月度口径与账本其余部分一致：面板说的"这月被挡了几次"就是本地自然月。
+ * @param nowMs - 参考时刻（可注入以便测试）。
+ */
+export function quotaMonthStart(nowMs: number): number {
+  const date = new Date(nowMs)
+  return new Date(date.getFullYear(), date.getMonth(), 1).getTime()
+}
+
+/**
+ * 把各会话的额度触达 episode 聚合成账本口径（SPEC §10.4）。
+ *
+ * **INV-10：本函数只读 episode，不碰任何金额**——它的返回值与 `totalCostMicros`、
+ * `byModel`、`byProvider`、`peakValley` 完全正交，绝不能参与计价。
+ *
+ * 两条过滤：
+ *  1. 只收 `kind === 'quota'` 的 episode（投影已保证，但这里再挡一道——
+ *     `capacity` / `throttle` 永远不该出现在账本里）；
+ *  2. 只收当月（`>= monthStartMs`），让"这月被挡了几次"跨会话累计且与月度口径对齐。
+ *
+ * `attempts` 与 `hits` 分开：`hits` = 去重后的断供次数（用户看到的数），
+ * `attempts` = 原始失败尝试数（解释构成）。实测两者相差 ~6 倍。
+ *
+ * @param records - 已建好的会话记录（含各自读到的 quota episode）。
+ * @param nowMs - 参考时刻，用于确定当月起点。
+ */
+export function aggregateQuota(records: readonly SessionRecord[], nowMs: number): FinanceQuotaSummary {
+  const monthStartMs = quotaMonthStart(nowMs)
+  const episodes: FinanceQuotaEpisodeRow[] = []
+  for (const record of records) {
+    for (const episode of record.quota) {
+      if (episode.lastAtMs < monthStartMs) continue
+      episodes.push({ ...episode, provider: financeProviderOf(episode.modelKey) })
+    }
+  }
+  episodes.sort((a, b) => b.lastAtMs - a.lastAtMs)
+
+  const byProvider = new Map<string, {
+    hits: number
+    attempts: number
+    lastHitAtMs: number
+    windows: Map<FinanceQuotaWindow, { hits: number; resetAtMs: number | null }>
+  }>()
+  for (const episode of episodes) {
+    const agg = byProvider.get(episode.provider) ?? {
+      hits: 0,
+      attempts: 0,
+      lastHitAtMs: 0,
+      windows: new Map(),
+    }
+    agg.hits += 1
+    agg.attempts += episode.attempts
+    agg.lastHitAtMs = Math.max(agg.lastHitAtMs, episode.lastAtMs)
+    const win = agg.windows.get(episode.window) ?? { hits: 0, resetAtMs: null }
+    win.hits += 1
+    if (episode.resetAtMs !== null) {
+      win.resetAtMs = win.resetAtMs === null ? episode.resetAtMs : Math.max(win.resetAtMs, episode.resetAtMs)
+    }
+    agg.windows.set(episode.window, win)
+    byProvider.set(episode.provider, agg)
+  }
+
+  const rows: FinanceQuotaProviderRow[] = [...byProvider.entries()]
+    .map(([provider, agg]) => {
+      const windows = [...agg.windows.entries()]
+        .map(([window, value]) => ({ window, hits: value.hits, resetAtMs: value.resetAtMs }))
+        .sort((a, b) => b.hits - a.hits)
+      // 下一个重置时刻 = 所有窗口里**未来最近**的那个（已经过去了的不算数）。
+      const future = windows
+        .map(value => value.resetAtMs)
+        .filter((value): value is number => value !== null && value > nowMs)
+      return {
+        provider,
+        hits: agg.hits,
+        attempts: agg.attempts,
+        lastHitAtMs: agg.lastHitAtMs,
+        nextResetAtMs: future.length === 0 ? null : Math.min(...future),
+        windows,
+      }
+    })
+    .sort((a, b) => b.lastHitAtMs - a.lastHitAtMs)
+
+  return { rows, totalHits: episodes.length, episodes, monthStartMs }
+}
+
+/**
+ * 窗口长度（毫秒）。**名义长度，不是自然周期**（SPEC §10.8 决策 D1）：
+ * 月 = 固定 30 天。理由是这些值最终会带上「估」角标，而"逐月不同天数"会让同一个
+ * 5 小时窗口在不同月份给出不同数字，用户会以为算错了 —— 可解释性优先于虚假精度。
+ */
+const WINDOW_SPANS: readonly { span: FinanceQuotaWindowSpan; ms: number }[] = [
+  { span: '5h', ms: 5 * 60 * 60 * 1000 },
+  { span: 'week', ms: 7 * 24 * 60 * 60 * 1000 },
+  { span: 'month', ms: 30 * 24 * 60 * 60 * 1000 },
+]
+
+/**
+ * 把会话用量按时间窗切片归因（SPEC §10.8）。
+ *
+ * 机制与既有的滚动 24 小时 hour-of-day 聚合**完全同一套**：遍历每个会话的
+ * `byModelHour`（模型 × UTC 小时桶），按窗口边界过滤，落进该窗口。区别只是
+ * 窗口边界来自调用方（5h / 周 / 月），而不是硬编码的 24 小时。
+ *
+ * 时长来自 `financeRateHourly`（同键同时刻），旧会话缺该键时时长为 0 ——
+ * 这不是错误，是 forward-only 的已知边界（UI 据此不显示时长列）。
+ *
+ * **INV-10：不参与任何金额口径的累加**——返回的是同一批观测的另一种切法。
+ *
+ * @param records - 已建好的会话记录。
+ * @param config - 计价配置（用于把 token 折成目录价等价）。
+ * @param nowMs - 参考时刻；默认作为每个窗口的 `endMs`。
+ * @param anchors - 可选：把某窗口锚定在额度触达时刻上（`span -> 锚点 ms`）。
+ */
+export function aggregateQuotaWindows(
+  records: readonly SessionRecord[],
+  config: FinanceConfig,
+  nowMs: number,
+  anchors: Partial<Record<FinanceQuotaWindowSpan, number>> = {},
+): FinanceQuotaWindowSummary[] {
+  return WINDOW_SPANS.map(({ span, ms }) => {
+    const anchor = anchors[span]
+    const endMs = anchor ?? nowMs
+    const startMs = endMs - ms
+
+    const models = new Map<string, FinanceQuotaWindowModelRow>()
+    let usage = emptyFinanceBuckets()
+    let costMicros = 0
+    let decodeMs = 0
+    let ttftMs = 0
+    let steps = 0
+
+    for (const record of records) {
+      for (const [modelKey, byHour] of Object.entries(record.byModelHour)) {
+        const rateByHour = record.rateHourly[modelKey]
+        for (const [hourKey, buckets] of Object.entries(byHour)) {
+          const timeMs = financeHourTime(hourKey)
+          if (timeMs < startMs || timeMs >= endMs) continue
+          const rate = financeRateAt(config, modelKey, timeMs)
+          const cost = financeBucketCostMicros(buckets, rate)
+          const current = models.get(modelKey) ?? {
+            modelKey,
+            provider: financeProviderOf(modelKey),
+            usage: emptyFinanceBuckets(),
+            costMicros: 0,
+            decodeMs: 0,
+            ttftMs: 0,
+            steps: 0,
+          }
+          const rateStat = rateByHour?.[hourKey]
+          current.usage = addFinanceBuckets(current.usage, buckets)
+          current.costMicros += cost
+          if (rateStat !== undefined) {
+            current.decodeMs += rateStat.decodeMs
+            current.ttftMs += rateStat.ttftMs
+            current.steps += rateStat.ttftSteps
+            decodeMs += rateStat.decodeMs
+            ttftMs += rateStat.ttftMs
+            steps += rateStat.ttftSteps
+          }
+          models.set(modelKey, current)
+          usage = addFinanceBuckets(usage, buckets)
+          costMicros += cost
+        }
+      }
+    }
+
+    const rows = [...models.values()].sort((a, b) => b.costMicros - a.costMicros)
+    return {
+      span,
+      startMs,
+      endMs,
+      anchoredAtHit: anchor !== undefined,
+      usage,
+      costMicros,
+      decodeMs,
+      ttftMs,
+      steps,
+      models: rows,
+      providerCount: new Set(rows.map(row => row.provider)).size,
+    }
+  })
+}
+
+/**
  * Build the whole-ledger projection for the browser finance dashboard.
  *
  * The hour-of-day chart and the peak/off-peak split are aggregated over a
@@ -260,7 +466,12 @@ export async function buildFinanceLedger(
   ctx: Context,
   config: FinanceConfig,
   signal?: AbortSignal,
-  opts?: { nowMs?: number; progress?: FinanceBackfillSink },
+  opts?: {
+    nowMs?: number
+    progress?: FinanceBackfillSink
+    /** 把某个窗口锚定在额度触达时刻上（SPEC §10.8）。 */
+    windowAnchors?: Partial<Record<FinanceQuotaWindowSpan, number>>
+  },
 ): Promise<FinanceLedger> {
   const nowMs = opts?.nowMs ?? Date.now()
   // 全流程进度（0–100）：回填段占 0–70，聚合段占 70–100。仅首算（宿主把
@@ -351,6 +562,8 @@ export async function buildFinanceLedger(
       byModelHour: read.byModelHour,
       rate: read.rate,
       context: read.context,
+      quota: read.quota,
+      rateHourly: read.rateHourly,
     })
   }
 
@@ -626,8 +839,13 @@ export async function buildFinanceLedger(
     byWorkspace: workspaceRows,
     tasks: taskRows,
     sessions: records.map(record => record.row).sort((a, b) => b.createdAt - a.createdAt),
-    unreadableSessions,    byHourOfDay,
+    unreadableSessions,
+    byHourOfDay,
     peakValley: split,
+    // SPEC §10 / INV-10：额度触达与上面每个金额口径正交，只读不参与计价。
+    quota: aggregateQuota(records, nowMs),
+    // 窗口归因：同一批观测按 5h / 周 / 月切片的另一种切法（同样不参与金额累加）。
+    windows: aggregateQuotaWindows(records, config, nowMs, opts?.windowAnchors),
   }
 }
 

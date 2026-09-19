@@ -476,3 +476,43 @@
   color: var(--spk-label-3);
   font-size: var(--spk-text-xs);
 }
+/* ── 额度触达与窗口归因（SPEC §10） ─────────────────────────── */
+
+/* 供应商名旁的触达角标：跟在名字后面，不占独立列（列宽是稀缺资源，
+   加第 6 列会压扁本已紧张的表格，见 UI-UX-SPEC §3.5）。 */
+.quotaPill {
+  margin-left: var(--spk-space-2);
+  vertical-align: middle;
+}
+
+/* 窗口归因表：模型 | 用量 | 解码时长 | 金额。
+   时长列在旧会话（无 financeRateHourly）时不渲染，所以用两套列宽。 */
+.colsQuotaWindow {
+  grid-template-columns: minmax(140px, 1.6fr) minmax(80px, 1fr) minmax(80px, 1fr) minmax(88px, 1fr);
+}
+
+/* 无时长列时的三列布局：表头与行必须用同一套（否则两个 grid 列宽不一致会整行错位，
+   UI-UX-SPEC §3.5 第 5 条 —— finance 供应商表三轮真宿主截图实测沉淀）。 */
+.colsQuotaWindowNoDuration {
+  grid-template-columns: minmax(140px, 1.6fr) minmax(80px, 1fr) minmax(88px, 1fr);
+}
+
+/* 额度触达明细（供应商详情弹窗内）：标题行 + 只读表。 */
+.quotaHits {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spk-space-2);
+  margin-top: var(--spk-space-4);
+}
+
+.quotaHitsHead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spk-space-1);
+}
+
+/* 时间 | 窗口 | 厂商码 | 尝试 | 重置 —— 五列全固定宽（表格规则第 5 条：
+   表头与数据行是两个独立 grid，非 fr 列宽必须固定值）。 */
+.colsQuotaHits {
+  grid-template-columns: minmax(120px, 1.4fr) 76px 64px 48px minmax(84px, 1fr);
+}

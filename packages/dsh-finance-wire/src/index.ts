@@ -116,6 +116,67 @@ export const financeProviderEntrySchema = z.object({
   }).optional(),
 })
 
+/**
+ * SPEC §10.4：额度触达的 wire 契约。
+ *
+ * 必须要在这里声明 —— `financeLedgerSchema` 是普通 `z.object`（Zod 默认丢弃未声明键），
+ * 未声明的字段会被**静默剥离**：宿主算得对、单测也过，而真宿主 UI 永远空白
+ * （P1-B 的 `rate` 就这么漏过一次，见 `financeModelRowSchema` 的注释）。
+ */
+export const financeQuotaEpisodeSchema = z.object({
+  provider: z.string(),
+  modelKey: z.string(),
+  window: z.enum(['5h', 'week', 'month', 'balance', 'trial', 'unknown']),
+  firstAtMs: z.number(),
+  lastAtMs: z.number(),
+  attempts: z.number(),
+  final: z.boolean(),
+  resetAtMs: z.number().nullable(),
+  resetRaw: z.string().nullable(),
+  vendorCode: z.string().nullable(),
+})
+
+export const financeQuotaSummarySchema = z.object({
+  rows: z.array(z.object({
+    provider: z.string(),
+    hits: z.number(),
+    attempts: z.number(),
+    lastHitAtMs: z.number(),
+    nextResetAtMs: z.number().nullable(),
+    windows: z.array(z.object({
+      window: z.enum(['5h', 'week', 'month', 'balance', 'trial', 'unknown']),
+      hits: z.number(),
+      resetAtMs: z.number().nullable(),
+    })),
+  })),
+  totalHits: z.number(),
+  episodes: z.array(financeQuotaEpisodeSchema),
+  monthStartMs: z.number(),
+})
+
+/** SPEC §10.8：窗口归因的 wire 契约（同样必须声明，否则被静默剥离）。 */
+export const financeQuotaWindowSchema = z.object({
+  span: z.enum(['5h', 'week', 'month']),
+  startMs: z.number(),
+  endMs: z.number(),
+  anchoredAtHit: z.boolean(),
+  usage: financeTokenBucketsSchema,
+  costMicros: z.number(),
+  decodeMs: z.number(),
+  ttftMs: z.number(),
+  steps: z.number(),
+  models: z.array(z.object({
+    modelKey: z.string(),
+    provider: z.string(),
+    usage: financeTokenBucketsSchema,
+    costMicros: z.number(),
+    decodeMs: z.number(),
+    ttftMs: z.number(),
+    steps: z.number(),
+  })),
+  providerCount: z.number(),
+})
+
 export const financeHourOfDayRowSchema = z.object({
   localHour: z.number(),
   usage: financeTokenBucketsSchema,
@@ -233,6 +294,10 @@ export const financeLedgerSchema = z.object({
   // Same rolling-upgrade allowance: old hosts send no cut-off date.
   windowedSinceMs: z.number().nullable().optional().default(null),
   hourOfDayWindowStartMs: z.number(),
+  // SPEC §10.4：额度触达（INV-10 与成本口径正交）。旧宿主不带 -> undefined（UI 不显示）。
+  quota: financeQuotaSummarySchema.optional(),
+  // SPEC §10.8：窗口归因（5h / 周 / 月）。旧宿主不带 -> 不出卡。
+  windows: z.array(financeQuotaWindowSchema).optional(),
 })
 
 export const financeOverviewSchema = z.object({
@@ -671,7 +736,7 @@ export const FINANCE_REFLECTION: TypertPackageModel = {
         { name: 'FinanceBillingMode', declaration: "export type FinanceBillingMode = 'metered' | 'plan' | 'free';" },
         { name: 'FinanceProviderRow', declaration: 'export interface FinanceProviderRow { provider: string; usage: FinanceTokenBuckets; costMicros: number; modelCount: number; billingMode?: FinanceBillingMode | "mixed"; }' },
         { name: 'FinanceModelRow', declaration: 'export interface FinanceModelRow { modelKey: string; provider: string; model: string; billingMode?: FinanceBillingMode; usage: FinanceTokenBuckets; costMicros: number; shiftSavingsMicros?: number; rate?: FinanceRateStats; context?: readonly FinanceContextBucket[]; }' },
-        { name: 'FinanceLedger', declaration: 'export interface FinanceLedger { generatedAt: number; currency: string; totals: FinanceTokenBuckets; totalCostMicros: number; meteredCostMicros?: number; planEquivalentCostMicros?: number; freeCostMicros?: number; sessionCount: number; workspaceCount: number; taskCount: number; windowedSinceMs: number | null; hourOfDayWindowStartMs: number; byDay: readonly FinanceDayRow[]; byModel: readonly FinanceModelRow[]; byProvider: readonly FinanceProviderRow[]; byWorkspace: readonly FinanceWorkspaceRow[]; tasks: readonly FinanceTaskRow[]; sessions: readonly FinanceSessionRow[]; unreadableSessions: readonly FinanceUnreadableSessionRow[]; byHourOfDay: readonly FinanceHourOfDayRow[]; peakValley: FinancePeakValleySplit; }' },
+        { name: 'FinanceLedger', declaration: 'export interface FinanceLedger { generatedAt: number; currency: string; totals: FinanceTokenBuckets; totalCostMicros: number; meteredCostMicros?: number; planEquivalentCostMicros?: number; freeCostMicros?: number; sessionCount: number; workspaceCount: number; taskCount: number; windowedSinceMs: number | null; hourOfDayWindowStartMs: number; byDay: readonly FinanceDayRow[]; byModel: readonly FinanceModelRow[]; byProvider: readonly FinanceProviderRow[]; byWorkspace: readonly FinanceWorkspaceRow[]; tasks: readonly FinanceTaskRow[]; sessions: readonly FinanceSessionRow[]; unreadableSessions: readonly FinanceUnreadableSessionRow[]; byHourOfDay: readonly FinanceHourOfDayRow[]; peakValley: FinancePeakValleySplit; quota?: FinanceQuotaSummary; windows?: readonly FinanceQuotaWindowSummary[]; }' },
         { name: 'FinanceUnreadableSessionRow', declaration: 'export interface FinanceUnreadableSessionRow { sessionId: string; createdAt: number; reason: string; }' },
         { name: 'FinanceOverview', declaration: 'export interface FinanceOverview { balance: FinanceBalanceView; ledger: FinanceLedger; }' },
         { name: 'FinanceBackfillProgress', declaration: 'export interface FinanceBackfillProgress { phase: "idle" | "backfill" | "aggregate" | "done"; percent: number; scanned: number; total: number; rescanned: number; line?: string; startedAt: number; }' },

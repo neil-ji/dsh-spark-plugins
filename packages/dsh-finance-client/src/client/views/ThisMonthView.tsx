@@ -18,6 +18,10 @@ import type {
   FinanceProviderBalance,
   FinanceProviderBillingMode,
   FinanceProviderEntry,
+  FinanceQuotaEpisodeRow,
+  FinanceQuotaProviderRow,
+  FinanceQuotaWindow,
+  FinanceQuotaWindowSpan,
 } from 'dsh-spark-finance/types'
 import {
   balanceDaysLeft,
@@ -27,8 +31,10 @@ import {
   planRows,
   providerDailyMicros,
   providerKey,
+  resetCountdown,
 } from '../derive.ts'
 import { FINANCE_PLAN_PERIODS, majorToMicros, microsToMajor } from '../plans.ts'
+import { QuotaWindowCard } from './QuotaWindowCard.tsx'
 import type { FinanceTranslate } from '../locales.ts'
 import css from '../panel.module.css'
 
@@ -136,6 +142,8 @@ export function ThisMonthView({
   ])].sort((a, b) => a.localeCompare(b))
   const spendByProvider = new Map(ledger.byProvider.map((row) => [providerKey(row.provider), row.costMicros]))
   const providerRowOf = new Map(allProviders.map((row) => [providerKey(row.provider), row]))
+  /** SPEC §10：本月的额度触达（按 provider 归一键）。空账本 / 旧宿主 -> 空表。 */
+  const quotaByProvider = new Map((ledger.quota?.rows ?? []).map((row) => [providerKey(row.provider), row]))
   const planEntryOf = (provider: string): FinancePlanEntry | undefined =>
     planEntries.find((plan) => plan.provider === provider)
   /** Action 列「…」菜单（UI-UX-SPEC §3.5）：修改 / 详情收敛进下拉。 */
@@ -252,6 +260,9 @@ export function ThisMonthView({
                     const isPlan = mode === 'plan'
                     const insight = insightByProvider.get(provider)
                     const row = providerRowOf.get(providerKey(provider))
+                    /** SPEC §10：该 provider 本月的额度触达（无则 undefined，不渲染角标）。 */
+                    const quotaRow = quotaByProvider.get(providerKey(provider))
+                    const quotaEpisodes = quotaRow === undefined ? [] : quotaEpisodesOf(ledger, provider)
                     const spend = spendByProvider.get(providerKey(provider)) ?? 0
                     // 「余额 / 月费」列：订阅行取月费（free 强制 0，SPEC §5.4），按量行取余额。
                     const feeOrBalance = isPlan || isFree
@@ -273,6 +284,22 @@ export function ThisMonthView({
                         <div className={cx(css.tableRow, css.colsProviders)} data-testid={`finance-provider-${provider}`}>
                           <span className={cx(css.cell, css.balanceName, css.clamp2)} title={provider}>
                             {provider}
+                            {/* SPEC §10：额度触达角标 —— **仅命中时出现**。
+                                无命中什么都不显示（不显示"正常"、不摆绿点）：这是
+                                克制的口径，避免把"本月没被挡"变成一条需要阅读的信息。 */}
+                            {quotaRow !== undefined
+                              ? (
+                                <Pill
+                                  tone="warn"
+                                  className={css.quotaPill}
+                                  title={t('quotaDetailHint')}
+                                  aria-label={quotaPillLabel(quotaRow, quotaEpisodes, t)}
+                                  data-testid={`finance-quota-${provider}`}
+                                >
+                                  {quotaPillLabel(quotaRow, quotaEpisodes, t)}
+                                </Pill>
+                              )
+                              : null}
                           </span>
                           <span className={css.cell}>
                             <Pill tone={mode === 'plan' ? 'brand' : mode === 'free' ? 'success' : 'neutral'} title={billingLabel(mode, t)}>
@@ -309,6 +336,10 @@ export function ThisMonthView({
                   })}
               </div>
             </Card>
+
+            {/* SPEC §10.8：窗口归因 —— 把"这段时间用在哪、用了多少、用了多久"拆开。
+                放在供应商表与模型榜之间：它是供应商触达角标的下一步追问。 */}
+            <QuotaWindowCard ledger={ledger} plans={plans} t={t} />
 
             <Card title={t('topModelsTitle')} className={css.section}>
               <div className={css.table}>
@@ -383,6 +414,7 @@ export function ThisMonthView({
               insight={insightByProvider.get(detail)}
               spend={spendByProvider.get(providerKey(detail)) ?? 0}
               currency={currency}
+              ledger={ledger}
               t={t}
               onClose={() => { setDetail(null) }}
             />
@@ -575,7 +607,7 @@ function ProviderEditModal({ provider, initialMode, plan, userEntry, canAutoFetc
 }
 
 /** 详情 modal：厂商全部已知属性，只读呈现（来源 / 宿主元数据 / 用户配置 / 余额 / 对比结论）。 */
-function ProviderDetailModal({ provider, mode, row, plan, insight, spend, currency, t, onClose }: {
+function ProviderDetailModal({ provider, mode, row, plan, insight, spend, currency, ledger, t, onClose }: {
   provider: string
   mode: FinanceProviderBillingMode
   row: FinanceListProvidersEntry | undefined
@@ -583,6 +615,7 @@ function ProviderDetailModal({ provider, mode, row, plan, insight, spend, curren
   insight: { savingsMicros: number; discountRate: number | null; breakEvenRatio: number | null } | undefined
   spend: number
   currency: string
+  ledger: FinanceLedger
   t: FinanceTranslate
   onClose: () => void
 }): ReactNode {
@@ -656,6 +689,10 @@ function ProviderDetailModal({ provider, mode, row, plan, insight, spend, curren
           </div>
         ))}
       </div>
+
+      {/* SPEC §10.5：额度触达逐条明细 —— 只读，不可编辑。
+          这是"被挡在门外"的原始证据：时间 / 窗口 / 厂商码 / 尝试次数 / 是否终态 / 重置。 */}
+      <QuotaHitList ledger={ledger} provider={provider} t={t} />
     </Modal>
   )
 }
@@ -664,6 +701,38 @@ function periodLabel(period: FinancePlanPeriod, t: FinanceTranslate): string {
   if (period === 'month-week') return t('periodMonthWeek')
   if (period === 'month-week-5h') return t('periodMonthWeek5h')
   return t('periodMonth')
+}
+
+/** 额度窗口标签（SPEC §10.3 的六种窗口）。 */
+function quotaWindowLabel(window: FinanceQuotaWindow, t: FinanceTranslate): string {
+  if (window === '5h') return t('quotaWindow5h')
+  if (window === 'week') return t('quotaWindowWeek')
+  if (window === 'month') return t('quotaWindowMonth')
+  if (window === 'balance') return t('quotaWindowBalance')
+  if (window === 'trial') return t('quotaWindowTrial')
+  return t('quotaWindowUnknown')
+}
+
+/**
+ * 额度触达角标的文案。
+ *
+ * 三种形态对应三种已知程度（与 SPEC §10 的"不确定不猜"一致）：
+ *  - 能算出倒计时 → 给出"还有多久能再用"；
+ *  - 有原文但没时区 → 显示原文（不硬补时区）；
+ *  - 都没有 → 只报次数，不假装知道重置时间。
+ */
+function quotaPillLabel(row: FinanceQuotaProviderRow, episodes: readonly FinanceQuotaEpisodeRow[], t: FinanceTranslate): string {
+  const countdown = resetCountdown(row.nextResetAtMs, Date.now())
+  if (countdown !== null) return t('quotaPillReset', { hits: row.hits, countdown })
+  const raw = episodes.find((episode) => episode.resetRaw !== null)?.resetRaw
+  if (raw !== undefined && raw !== null) return t('quotaPillResetRaw', { hits: row.hits, raw })
+  return t('quotaPill', { hits: row.hits })
+}
+
+/** 每 provider 的触达明细（详情弹窗用），按时间倒序。 */
+function quotaEpisodesOf(ledger: FinanceLedger, provider: string): readonly FinanceQuotaEpisodeRow[] {
+  const key = providerKey(provider)
+  return (ledger.quota?.episodes ?? []).filter((episode) => providerKey(episode.provider) === key)
 }
 
 function balanceValue(ledger: FinanceLedger, balance: FinanceProviderBalance, t: FinanceTranslate): ReactNode {
@@ -680,4 +749,65 @@ function balanceValue(ledger: FinanceLedger, balance: FinanceProviderBalance, t:
   if (balance.status === 'missing-credential') return t('balanceMissingKey')
   if (balance.status === 'unsupported') return t('balanceUnsupported')
   return t('balanceError')
+}
+
+/**
+ * 额度触达逐条明细（SPEC §10.5）—— 只读列表，挂在供应商详情弹窗里。
+ *
+ * 为什么放在详情而不是主表：主表列宽是稀缺资源（UI-UX-SPEC §3.5），
+ * 而这里是"偶尔要查证"的信息（哪次、哪个窗口、厂商码、重试了几次）。
+ *
+ * 三种"已知程度"如实呈现，不猜：能算出倒计时就给倒计时，只有原文就给原文，
+ * 都没有就只显示次数（`resetAtMs` 缺失不是错误，是厂商没给时区）。
+ */
+function QuotaHitList({ ledger, provider, t }: {
+  ledger: FinanceLedger
+  provider: string
+  t: FinanceTranslate
+}): ReactNode {
+  const episodes = quotaEpisodesOf(ledger, provider)
+  const row = (ledger.quota?.rows ?? []).find((entry) => providerKey(entry.provider) === providerKey(provider))
+  if (row === undefined) return null
+
+  return (
+    <div className={css.quotaHits} data-testid={`finance-quota-hits-${provider}`}>
+      <div className={css.quotaHitsHead}>
+        <span className={css.detailLabel}>{t('quotaDetailTitle')}</span>
+        <span className={css.hint}>{t('quotaAttemptsNote', { hits: row.hits, attempts: row.attempts })}</span>
+      </div>
+      {episodes.length === 0
+        ? <p className={css.hint}>{t('quotaDetailEmpty')}</p>
+        : (
+          <div className={css.table}>
+            <div className={`${css.tableHead} ${css.colsQuotaHits}`}>
+              <span className={css.cell}>{t('quotaColTime')}</span>
+              <span className={css.cell}>{t('quotaColWindow')}</span>
+              <span className={css.cell}>{t('quotaColVendor')}</span>
+              <span className={`${css.cell} ${css.cellNum}`}>{t('quotaColAttempts')}</span>
+              <span className={css.cell}>{t('quotaColReset')}</span>
+            </div>
+            {episodes.map((episode) => {
+              const countdown = resetCountdown(episode.resetAtMs, Date.now())
+              const resetText = countdown !== null
+                ? countdown
+                : episode.resetRaw ?? '—'
+              return (
+                <div key={`${episode.modelKey}-${String(episode.firstAtMs)}`} className={`${css.tableRow} ${css.colsQuotaHits}`}>
+                  <span className={css.cell}>{new Date(episode.lastAtMs).toLocaleString()}</span>
+                  <span className={css.cell}>
+                    {quotaWindowLabel(episode.window, t)}
+                    {/* 终态 vs 重试中：只有见过 turn/end 才是确认终止。 */}
+                    {!episode.final ? <Pill className={css.quotaPill}>{t('quotaRetrying')}</Pill> : null}
+                  </span>
+                  <span className={css.cell}>{episode.vendorCode ?? '—'}</span>
+                  <span className={`${css.cell} ${css.cellNum}`}>{episode.attempts}</span>
+                  <span className={css.cell} title={episode.resetRaw ?? undefined}>{resetText}</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      <p className={css.hint}>{t('quotaDetailHint')}</p>
+    </div>
+  )
 }

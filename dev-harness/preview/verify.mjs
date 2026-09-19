@@ -183,6 +183,11 @@ async function runServerChecks() {
     check('server: 产物含插件 CSS（CSS Modules 已内联）', hasGithubCss, hasGithubCss ? '' : '未找到 github CSS tag')
     const hasFinance = code.includes('FinancePanel') || code.includes('FinancePanelController')
     check('server: 产物含 finance 面板', hasFinance, hasFinance ? '' : '未找到 FinancePanel 标识')
+    // SPEC §10 回归线：额度触达与窗口归因必须真进产物（不是只存在于源码）。
+    const hasQuotaWindow = code.includes('finance-quota-window') && code.includes('QuotaWindowCard')
+    check('server: 产物含额度窗口归因卡（SPEC §10）', hasQuotaWindow, hasQuotaWindow ? '' : '未找到 finance-quota-window / QuotaWindowCard')
+    const hasQuotaPill = code.includes('finance-quota-hits-') && code.includes('quotaAttemptsNote')
+    check('server: 产物含额度触达明细（SPEC §10）', hasQuotaPill, hasQuotaPill ? '' : '未找到 finance-quota-hits- / quotaAttemptsNote')
     const bareRequire = code.match(/require\("(?!react)/)
     check('server: 产物不含裸 require 外链', bareRequire === null, bareRequire === null ? '' : '未内联：' + bareRequire[0])
     const hasShell = code.includes('pv-shell') && code.includes('零 dsh')

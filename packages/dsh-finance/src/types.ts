@@ -8,6 +8,9 @@
 
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type { FinanceBackfillStreamFrame } from 'dsh-spark-finance-wire'
+import type { FinanceQuotaWindow } from './quota.ts'
+export type { FinanceQuotaWindow }
+export type { FinanceQuotaClass } from './quota.ts'
 // Re-export so the public `dsh-spark-finance/types` surface still carries
 // the wire-published frame type (downstream embedders don't have to know
 // about the wire package).
@@ -99,6 +102,16 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
      */
     financeContext: FinanceContextProjection
     /**
+     * 额度触达 episode（SPEC §10）：厂商明确回报"额度到顶"的观测记录。
+     * **forward-only**：旧会话没有该键，不回溯补造（同 `financeRate`）。
+     */
+    financeQuota: FinanceQuotaProjection
+    /**
+     * 每模型 × UTC 小时的速率样本（窗口归因的时长口径）。
+     * **forward-only**：旧会话没有该键，Card 的时长列不显示。
+     */
+    financeRateHourly: FinanceRateHourlyProjection
+    /**
      * Provider-reported token totals from the harness core token-meter.
      * Checkpointed for every session (including ones persisted before this
      * plugin existed), so the ledger can read historical totals with zero log
@@ -176,6 +189,26 @@ export interface FinanceContextBucket {
 export interface FinanceContextProjection {
   /** Keyed by modelKey; every entry carries exactly `FINANCE_CONTEXT_BOUNDARIES.length + 1` buckets. */
   byModel: Record<string, FinanceContextBucket[]>
+}
+
+/**
+ * `financeQuota` 投影的 client-visible 值：该会话观察到的额度触达 episode。
+ *
+ * 只装 `kind === 'quota'` 的判定结果——`capacity`（服务容量繁忙）与
+ * `throttle`（请求限流）**永不入账本**，它们只是分类器用来"不被误记成额度"的旁证
+ * （SPEC §10.3）。
+ */
+export interface FinanceQuotaProjection {
+  episodes: readonly FinanceQuotaEpisodeRow[]
+}
+
+/**
+ * `financeRateHourly` 投影值：每模型 × UTC 小时的速率样本。
+ * 窗口归因 Card 用它回答"这段时间里某模型解码了多久"——`financeRate`（无时间维度）
+ * 只能给会话总量，切不出任意窗口。
+ */
+export interface FinanceRateHourlyProjection {
+  byModelHour: Record<string, Record<string, FinanceRateStats>>
 }
 
 /**
@@ -872,6 +905,126 @@ export interface FinanceLedger {
   byHourOfDay: readonly FinanceHourOfDayRow[]
   /** Peak/off-peak cost split (24h window) and potential off-peak-shift savings. */
   peakValley: FinancePeakValleySplit
+  /**
+   * 额度触达记录（SPEC §10，INV-10）。**与上面每一个金额口径严格正交**：
+   * 这里是"容量事实"（被厂商挡在门外几次），不是"金额事实"。
+   *
+   * 缺失（`undefined`）= 本版本之前的宿主产物，或该账本范围内没有任何触达 ——
+   * 两者 UI 都按"无触达"呈现（不显示 Pill，不摆空卡）。
+   */
+  quota?: FinanceQuotaSummary
+  /**
+   * 窗口归因：按 5h / 周 / 月三个窗口切出的用量、时长与金额
+   * （SPEC §10.8）。与 `quota` 一样**不参与**任何金额口径的累加——
+   * 它是同一批观测数据的另一种切法，不是新的一笔账。
+   */
+  windows?: readonly FinanceQuotaWindowSummary[]
+}
+
+/* ───────────────────── 窗口归因（SPEC §10.8） ───────────────────── */
+
+/** 窗口长度：名义长度，不是自然周期（SPEC §10.8 决策 D1）。 */
+export type FinanceQuotaWindowSpan = '5h' | 'week' | 'month'
+
+/**
+ * 一个窗口内按模型切出的用量与时长。
+ *
+ * `decodeMs` / `ttftMs` 来自 `financeRateHourly`（每模型 × UTC 小时）；
+ * 旧会话没有该投影键时两者为 0，UI 不显示时长列。
+ */
+export interface FinanceQuotaWindowModelRow {
+  modelKey: string
+  provider: string
+  usage: FinanceTokenBuckets
+  /** 目录价折算金额（订阅路线即"按量等价"）。 */
+  costMicros: number
+  /** 解码墙钟总时长；无 `financeRateHourly` 键时为 0。 */
+  decodeMs: number
+  /** 首 token 延迟合计；无该键时为 0。 */
+  ttftMs: number
+  steps: number
+}
+
+/**
+ * 一个时间窗口的归因结果。
+ *
+ * `startMs` / `endMs` 是闭开区间；`endMs` 缺省为账本生成时刻（"现在回溯"），
+ * 也可以锚在某次额度触达上（"那次撞墙前的 5 小时"）。
+ */
+export interface FinanceQuotaWindowSummary {
+  span: FinanceQuotaWindowSpan
+  startMs: number
+  endMs: number
+  /** 该窗口是否被锚定在额度触达事件上（true 时 UI 显示锚点说明）。 */
+  anchoredAtHit: boolean
+  usage: FinanceTokenBuckets
+  costMicros: number
+  decodeMs: number
+  ttftMs: number
+  steps: number
+  models: readonly FinanceQuotaWindowModelRow[]
+  /** 该窗口内使用的 provider 数（用于说明"额度被谁吃掉了"）。 */
+  providerCount: number
+}
+
+/* ───────────────────────── 额度触达（SPEC §10） ───────────────────────── */
+
+/**
+ * 一次"断供事件"（episode）——同一次触达里多次失败尝试合并成一条。
+ *
+ * 为什么必须合并：实测同一次断供会留下 `5× llm/retry + 1× turn/end`，
+ * 原始事件与真实断供相差 **~6 倍**（123 → 21）。展示原始次数会给出错误数字。
+ */
+export interface FinanceQuotaEpisodeRow {
+  provider: string
+  modelKey: string
+  window: FinanceQuotaWindow
+  /** 该 episode 里第一次失败的时刻。 */
+  firstAtMs: number
+  /** 最后一次失败（通常是 `turn/end` 终态）的时刻。 */
+  lastAtMs: number
+  /** 失败尝试次数（原始事件数，用于解释 hits 的构成）。 */
+  attempts: number
+  /** 是否见过终态 `turn/end`（false = 重试中途，可能仍在恢复）。 */
+  final: boolean
+  /** 可解析的重置时刻；null = 厂商没给或没带时区。 */
+  resetAtMs: number | null
+  /** 重置描述的原文（UI 在 resetAtMs 缺失时直接显示）。 */
+  resetRaw: string | null
+  /** 厂商自报码：1308 / 1310 / 2067 / 1113 / 401008 ... */
+  vendorCode: string | null
+}
+
+/** 按 provider 聚合的触达统计。 */
+export interface FinanceQuotaProviderRow {
+  provider: string
+  /** episode 数（**已去重**）—— 这是"被挡了几次"的正确口径。 */
+  hits: number
+  /** 原始失败尝试数，`hits` 的构成解释。 */
+  attempts: number
+  lastHitAtMs: number
+  /** 最近一个可解析的重置时刻（该 provider 所有 episode 里最大的未来时刻）。 */
+  nextResetAtMs: number | null
+  windows: readonly {
+    window: FinanceQuotaWindow
+    hits: number
+    resetAtMs: number | null
+  }[]
+}
+
+/** 账本里的额度触达汇总。 */
+export interface FinanceQuotaSummary {
+  /** 只收 `kind === 'quota'`；`capacity` / `throttle` 永不入账本（SPEC §10.3）。 */
+  rows: readonly FinanceQuotaProviderRow[]
+  /** 全部 provider 的 episode 总数。 */
+  totalHits: number
+  /** 逐条 episode（按时间倒序），供供应商详情展开。 */
+  episodes: readonly FinanceQuotaEpisodeRow[]
+  /**
+   * 当月起点（epoch ms，本地时区自然月）。触达统计只覆盖当月 ——
+   * 与账本的月度口径一致，且让"这月被挡了几次"可跨会话累计。
+   */
+  monthStartMs: number
 }
 
 export interface FinanceOverview {

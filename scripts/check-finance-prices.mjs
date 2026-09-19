@@ -312,6 +312,57 @@ function globalYamlPath() {
   return path.join(nodeDir, 'node_modules', '@deepseek-ai', 'dsh', 'node_modules', 'yaml', 'dist', 'index.js')
 }
 
+// ── A9b 额度判定反模式（SPEC §10.3，静态检查）────────────────────────────
+/* 三种被判据必须禁止的写法，每一种都有真实漏判/误判证据（2026-09-19 实测 498 条载荷）：
+ *   ① 只看 status：504 条里只有 1 条带 status —— status-only 会漏 99.8%；
+ *   ② 只看 429：漏掉 402/401008（额度但非 429）；
+ *   ③ 只看 code === 'QUOTA'：漏掉 2067 与两条声明式窗口（它们落在 RATE_LIMIT）。
+ * 这条防线的意义是：判定口径必须留在**有序组合**里，不能被后人"简化"成单一判据。 */
+console.log('')
+console.log('══ A9b 额度判定反模式（SPEC §10.3）══')
+{
+  const quotaSrc = readFileSync(path.join(ROOT, 'packages/dsh-finance/src/quota.ts'), 'utf8')
+  // 剥注释后再扫，避免文档里的反例说明被当成违规。
+  const codeOnly = quotaSrc
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '')
+
+  // ① 禁止把 status 当作判据（允许出现在类型声明里，不允许出现在比较里）。
+  const statusCompare = /status\s*(===|!==|==|!=)\s*\d/.exec(codeOnly)
+  if (statusCompare === null) ok('A9b 不按 HTTP status 判定')
+  else bad('A9b 出现 status 单一判据（实测 99.8% 载荷无 status）', statusCompare[0])
+
+  // ② 顺序不可调换：容量词表必须排在额度词表之前。
+  const capacityAt = codeOnly.indexOf('CAPACITY_PATTERNS, message')
+  const balanceAt = codeOnly.indexOf('BALANCE_PATTERNS, message')
+  if (capacityAt !== -1 && balanceAt !== -1 && capacityAt < balanceAt) {
+    ok('A9b 容量判定先于额度判定（429006 不被误记成额度）')
+  } else {
+    bad('A9b 容量词表未排在额度词表之前', `capacity@${String(capacityAt)} balance@${String(balanceAt)}`)
+  }
+
+  // ③ 额度措辞词表不得包含裸 limit（"Rate limit reached" 是请求限流，不是额度）。
+  const wordingDecl = /const QUOTA_WORDING\s*=\s*(.+)$/m.exec(codeOnly)
+  if (wordingDecl === null) {
+    bad('A9b 找不到 QUOTA_WORDING 词表')
+  } else {
+    const bare = /\|\s*limit\s*\|/.test(wordingDecl[1]) || /\blimit\b(?!\s*\]|s)/.test(wordingDecl[1].replace(/usage\[\\s_-\]\*limit/gi, ''))
+    if (bare) bad('A9b QUOTA_WORDING 含裸 limit（会把 1302 请求限流吞成额度）', wordingDecl[1])
+    else ok('A9b 额度措辞不含裸 limit（1302 保持 throttle）')
+  }
+
+  // ④ 账本侧正交：quota 聚合不得出现在计价调用链上。
+  const ledgerSrc = readFileSync(path.join(ROOT, 'packages/dsh-finance/src/ledger.ts'), 'utf8')
+  const costFn = /function costOf\([\s\S]*?\n}/.exec(ledgerSrc)
+  if (costFn === null) {
+    bad('A9b 找不到 costOf（INV-10 正交性无法断言）')
+  } else if (/quota/i.test(costFn[0])) {
+    bad('A9b costOf 里出现 quota（INV-10：额度不得进入成本口径）')
+  } else {
+    ok('A9b INV-10 正交：costOf 不含任何 quota 引用')
+  }
+}
+
 console.log('')
 for (const note of notes) console.log('  note ' + note)
 if (failures.length === 0) {

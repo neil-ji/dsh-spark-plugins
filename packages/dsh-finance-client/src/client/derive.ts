@@ -829,3 +829,81 @@ export function relativeTime(epochMs: number, t: FinanceTranslate): string {
   if (days < 30) return t('timeDays', { n: days })
   return t('timeMonths', { n: Math.floor(days / 30) })
 }
+
+/* ───────────────── 窗口归因与双值性价比（SPEC §10.8） ───────────────── */
+
+/**
+ * 一个窗口的「性价比」双值。
+ *
+ * 用户定义的两个值（2026-09-19 裁决）：
+ *  - **窗口估价**：订阅月费按窗口长度折算的周期均值 —— "这个窗口我付了多少订阅费"；
+ *  - **按量等价**：该窗口实际用量按目录价折算 —— "同样用量走按量要花多少"。
+ *
+ * 二者之差就是**性价比的明确相对标准**：等价 > 估价 = 这个窗口用订阅赚了。
+ *
+ * 口径与既有 `planInsight`（月度）**同一个公式、不同分母**，所以月度卡与窗口卡的数字
+ * 天然自洽，不会互相打架。
+ */
+export interface WindowPlanVerdict {
+  /** 该窗口的按量等价（目录价折算；订阅路线不是现金流）。 */
+  equivalentMicros: number
+  /** 该窗口的订阅估价（月费 × 窗口长度 ÷ 30 天）；未填月费时 null。 */
+  plannedMicros: number | null
+  /** 等价 − 估价；正 = 赚了。未填月费时 null。 */
+  savingsMicros: number | null
+  /** 等价 ÷ 估价；>1 = 赚了。未填月费或估价为 0 时 null。 */
+  valueRatio: number | null
+}
+
+/** 名义月长（30 天）：与宿主 `WINDOW_SPANS` 的 month 保持一致（SPEC §10.8 决策 D1）。 */
+const NOMINAL_MONTH_MS = 30 * 24 * 60 * 60 * 1000
+
+/**
+ * 算一个窗口的性价比双值。
+ *
+ * @param costMicros - 该窗口的目录价等价（来自账本窗口切片）。
+ * @param windowMs - 窗口长度。
+ * @param monthlyMicros - 订阅月费；undefined = 未填（按量厂商或还没填月费）。
+ */
+export function windowPlanVerdict(
+  costMicros: number,
+  windowMs: number,
+  monthlyMicros: number | undefined,
+): WindowPlanVerdict {
+  if (monthlyMicros === undefined || monthlyMicros <= 0 || windowMs <= 0) {
+    return { equivalentMicros: costMicros, plannedMicros: null, savingsMicros: null, valueRatio: null }
+  }
+  const plannedMicros = (monthlyMicros * windowMs) / NOMINAL_MONTH_MS
+  return {
+    equivalentMicros: costMicros,
+    plannedMicros,
+    savingsMicros: costMicros - plannedMicros,
+    valueRatio: plannedMicros > 0 ? costMicros / plannedMicros : null,
+  }
+}
+
+/**
+ * 解码时长的可读呈现：秒 → 分秒 → 时分。
+ * 窗口归因里"用了多久"是核心问题之一，必须能一眼读出量级。
+ */
+export function formatDuration(ms: number): string {
+  const totalSeconds = Math.max(0, Math.round(ms / 1000))
+  if (totalSeconds < 60) return `${totalSeconds}s`
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  if (minutes < 60) return seconds === 0 ? `${minutes}m` : `${minutes}m${seconds}s`
+  const hours = Math.floor(minutes / 60)
+  const restMinutes = minutes % 60
+  return restMinutes === 0 ? `${hours}h` : `${hours}h${restMinutes}m`
+}
+
+/**
+ * 重置倒计时（"还有多久能再用"）。
+ * 已过期返回 null —— 调用方据此不显示倒计时（不显示"已重置"，那是无信息表述）。
+ */
+export function resetCountdown(resetAtMs: number | null, nowMs: number): string | null {
+  if (resetAtMs === null) return null
+  const remaining = resetAtMs - nowMs
+  if (remaining <= 0) return null
+  return formatDuration(remaining)
+}
