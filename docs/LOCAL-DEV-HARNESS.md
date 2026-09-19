@@ -118,7 +118,37 @@ curl.exe -s http://127.0.0.1:3997/__dev/probe   # 看 services.hmr / entries[].f
 的唯一可观测口径**。为什么需要它：插件可以用 `ctx.typert.register(CONTRIBUTION)` 显式注册，
 也可以只导出 `./typert` 让平台 loader 代注册，而网关在两者都缺席时还有 SRC 标记兜底 ——
 三条路都让面板**正常渲染**，所以「功能没坏」证明不了注册真的发生。`real-host-check.mjs`
-因此断言 `finance/*` 的 8 条端点出现在 `typert.endpoints` 里（P5 之后 finance 走显式注册）。
+因此断言 `finance/*` 的 11 条端点出现在 `typert.endpoints` 里（P5 之后 finance 走显式注册）。
+
+### 1.4.1 跨平台运行 real-host-check（macOS / Linux，2026-09-19 补齐）
+
+两条前置曾让它只能在 Windows 上跑，都已修：
+
+| 坑 | 症状 | 处置 |
+|---|---|---|
+| 浏览器路径写死 Windows Edge | 非 Windows 上直接以「找不到浏览器」退出，**注册面断言整段跑不了** | `real-host-check.mjs` 的 `resolveBrowser()`：`EDGE_PATH` → 各平台常见安装位置（macOS Chrome/Edge/Chromium/Brave、Linux 常见路径）→ `PATH` 命令名。只认 Chromium 系（CDP 是 Chromium 协议） |
+| sandbox 缺 home 补丁层 | 老沙箱（只有 `PROFILE_MANIFEST`）缺 `$DSH_HOME/cordis.patch.yml`，dev-control 插件没挂 → `/__dev/probe` **404**，注册面断言静默失效 | `scripts/dev-up.mjs` 的 `ensureHome()` 现在**同时**检查 `PROFILE_MANIFEST` 与 `HOME_PATCH`，缺任一个就自动 `dev-home init`（旧沙箱自愈） |
+
+### 1.4.2 无头页面必须开 focus emulation（PCQA-002 的隐形杀手）
+
+**这是本仓库最容易被误判成「产品 bug」的 harness 坑**（2026-09-19 定位）：
+
+- **症状**：`PCQA-002 视口缩小后悬浮球重吸附` 稳定失败，球停在旧坐标；`innerWidth` 却已正常更新。
+  看起来像 dock 没监听 resize。
+- **实测根因（不是 dock）**：只要用真 CDP 输入发过**一个键**（脚本里的键盘断言必需），
+  无头页面就翻成 `visibilityState: hidden`，而 **Chromium 不向 hidden 页面派发 `resize`** ——
+  重吸附逻辑根本没被调用。极具迷惑性：不注入键盘的独立复现一切正常。
+- **处置**：CDP 连接就绪后立即 `Emulation.setFocusEmulationEnabled {enabled:true}`，再设 viewport。
+  三个脚本已加：`real-host-check.mjs`、`panel-sweep.mjs`、`preview/ball-shots.mjs`。
+- **判据**：修复前 `61/62`（PCQA-002 FAIL），修复后 `62/62` 且球坐标恰为 `1036/636`。
+  若某天又见 PCQA-002 失败，**先查这行有没有被删**，不要先怀疑 dock。
+
+```bash
+# macOS 上的标准跑法（无需任何环境变量）
+pnpm sandbox:install && pnpm sandbox:up &     # 默认 127.0.0.1:3997
+node dev-harness/real-host-check.mjs          # 期望 62/62，退出码 0
+# 需要指定浏览器时：EDGE_PATH="/path/to/chrome" node dev-harness/real-host-check.mjs
+```
 
 ### 1.5 保真安装路径（tarball）在隔离 home 下同样成立（已实测）
 
@@ -633,7 +663,8 @@ profile 的 `node_modules`（Windows 上混用 junction 与拷贝会让 pnpm 在
 ### 9.5 走查工具（视觉证据生成）
 
 `preview:verify` / `real-host-check` 断言「对不对」；走查工具产出「长什么样」的证据集，供 PC-QA
-视觉评审使用。两者都是 CDP 驱动 headless Edge，**本机（Windows）专用，不进 CI**。
+视觉评审使用。两者都是 CDP 驱动 headless Chromium（2026-09-19 起跨平台：浏览器自动发现，
+见 §1.4.1），**不进 CI**。
 
 ```bash
 pnpm sandbox:up                                   # 真宿主（先 pnpm sandbox:install）

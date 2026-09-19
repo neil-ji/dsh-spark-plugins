@@ -160,6 +160,10 @@ try {
 
   await send('Runtime.enable')
   await send('Page.enable')
+  // 保持页面 `visible`：本脚本要用真 CDP 键（Esc 关弹层 / Tab）。一旦发过键，无头页面
+  // 会翻成 hidden，Chromium 就不给 hidden 页面派发 resize/聚焦相关事件，走查会静默失真
+  // （同 real-host-check 的 PCQA-002 坑，2026-09-19 定位）。
+  await send('Emulation.setFocusEmulationEnabled', { enabled: true })
   await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false })
   await send('Page.navigate', { url: URL_TARGET })
 

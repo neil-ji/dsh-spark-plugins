@@ -14,6 +14,7 @@
 import { closeSync, openSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
+  HOME_PATCH,
   LOG_DIR,
   PORT,
   PROFILE,
@@ -45,8 +46,12 @@ const detach = flag('detach')
 const logFile = join(LOG_DIR, `${profile}-${port}.log`)
 
 export function ensureHome() {
-  if (!exists(PROFILE_MANIFEST)) {
-    log.step('沙箱尚未初始化，先执行 dev-home init')
+  // 两个都要查：`PROFILE_MANIFEST` 存在只说明**旧版**沙箱建过；`HOME_PATCH` 是后加的
+  // home 补丁层（承载 dev-control 控制面板与 `/__dev/probe` 探针）。只查前者会让老沙箱
+  // 永远缺这一层 —— 表现为探针 404，于是 real-host-check 的注册面断言整段静默跑不了
+  // （「面板能渲染」照样过，最难发现的那种失效）。
+  if (!exists(PROFILE_MANIFEST) || !exists(HOME_PATCH)) {
+    log.step('沙箱尚未初始化（或缺 home 补丁层），先执行 dev-home init')
     const result = spawnSync(process.execPath, [join(ROOT, 'scripts', 'dev-home.mjs'), 'init'], { stdio: 'inherit' })
     if (result.status !== 0) {
       log.fail('沙箱初始化失败')

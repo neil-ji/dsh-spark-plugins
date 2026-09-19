@@ -16,7 +16,61 @@ import { spawn } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
-const EDGE = process.env.EDGE_PATH ?? 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'
+/**
+ * 浏览器发现（跨平台）。
+ *
+ * 为什么不能写死：原先只认 Windows Edge 的绝对路径，任何非 Windows 机器上脚本
+ * 直接以「找不到浏览器」退出 —— 注册面断言（本脚本存在的理由）整段跑不起来。
+ * 优先级：`EDGE_PATH` 环境变量 → 各平台常见安装位置 → `PATH` 里的命令名。
+ * 只找 Chromium 系（CDP 是 Chromium 协议，Firefox/Safari 不支持）。
+ */
+const BROWSER_CANDIDATES = process.platform === 'darwin'
+  ? [
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+    '/Applications/Chromium.app/Contents/MacOS/Chromium',
+    '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
+  ]
+  : process.platform === 'win32'
+    ? [
+      'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+      'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    ]
+    : [
+      '/usr/bin/google-chrome',
+      '/usr/bin/chromium',
+      '/usr/bin/chromium-browser',
+      '/usr/bin/microsoft-edge',
+      '/snap/bin/chromium',
+    ]
+
+/** PATH 里可以直接 spawn 的命令名（最后兜底）。 */
+const BROWSER_COMMANDS = ['google-chrome', 'chromium', 'chromium-browser', 'microsoft-edge', 'chrome', 'msedge']
+
+/** 是否位于 PATH（避免为了探测装 which 依赖：逐段查文件即可）。 */
+function onPath(command) {
+  const dirs = (process.env.PATH ?? '').split(process.platform === 'win32' ? ';' : ':')
+  const exts = process.platform === 'win32' ? ['.exe', '.cmd', ''] : ['']
+  for (const dir of dirs) {
+    if (dir === '') continue
+    for (const ext of exts) {
+      if (existsSync(dir + (process.platform === 'win32' ? '\\' : '/') + command + ext)) return true
+    }
+  }
+  return false
+}
+
+/** 解析出可用的浏览器路径/命令；找不到返回 undefined。 */
+export function resolveBrowser(env = process.env) {
+  if (env.EDGE_PATH !== undefined && env.EDGE_PATH !== '') return env.EDGE_PATH
+  for (const candidate of BROWSER_CANDIDATES) if (existsSync(candidate)) return candidate
+  for (const command of BROWSER_COMMANDS) if (onPath(command)) return command
+  return undefined
+}
+
+const EDGE = resolveBrowser()
 const PORT = Number(process.env.CDP_PORT ?? 9225)
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
 const argv = process.argv.slice(2)
@@ -27,8 +81,10 @@ const URL_TARGET = urlArgIndex >= 0
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
-if (!existsSync(EDGE)) {
-  console.error('找不到浏览器：' + EDGE)
+if (EDGE === undefined) {
+  console.error('找不到 Chromium 系浏览器（CDP 需要它）。已尝试：')
+  for (const candidate of BROWSER_CANDIDATES) console.error('  ' + candidate)
+  console.error('指定路径：EDGE_PATH=/path/to/chrome node dev-harness/real-host-check.mjs')
   process.exit(1)
 }
 
@@ -101,6 +157,14 @@ try {
 
   await send('Page.enable')
   await send('Runtime.enable')
+  // 让无头页面保持 `visibilityState: visible`（**必须有**，2026-09-19 定位）。
+  //
+  // 症状：PCQA-002「视口缩小后球重吸附」稳定失败，且页面的 resize 监听器一次都不触发
+  // （innerWidth 已变成 1100，球却停在旧坐标）。实测根因**不是 dock**：
+  // 只要用真 CDP 输入发过一个键（本脚本的键盘断言必需），无头页面就翻成 hidden，
+  // 而 Chromium **不向 hidden 页面派发 resize** —— 重吸附逻辑于是根本没被调用。
+  // 这个坑极具迷惑性：dock 实现是对的，不注入键盘的独立复现一切正常。
+  await send('Emulation.setFocusEmulationEnabled', { enabled: true })
   await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false })
   await send('Page.navigate', { url: URL_TARGET })
   await sleep(6000)
