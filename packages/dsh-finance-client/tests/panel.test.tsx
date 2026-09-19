@@ -170,21 +170,20 @@ describe('FinancePanel shell', () => {
     expect(html).toContain('finance-stat-cost')
   })
 
-  it('footnotes the price source, the estimate rule and unreadable sessions', () => {
+  it('价格表操作与刷新同排（sm），脚注不再承载操作按钮与口径段落', () => {
     const html = render({
       status: 'ready',
       ledger: { ...LEDGER, unreadableSessions: [{ sessionId: 'bad', createdAt: 1, reason: 'v0' }] },
       providerList: PROVIDERS,
       lastSyncAppliedAt: Date.now() - 60_000,
     })
-    expect(html).toContain('priceNote')
-    expect(html).toContain('estimateNote')
-    expect(html).toContain('unreadableNote')
-  })
-
-  it('says it never synced community prices instead of inventing a source', () => {
-    const html = render({ status: 'ready', ledger: LEDGER, providerList: PROVIDERS })
-    expect(html).toContain('priceNoteNever')
+    expect(html).toContain('updatePrices')
+    expect(html).toContain('restorePrices')
+    expect(html).toContain('refresh')
+    // 已移除的脚注文案不得回潮
+    for (const key of ['priceNoteNever', 'restoreDisabledHint', 'estimateNote', 'unreadableNote']) {
+      expect(html).not.toContain(key)
+    }
   })
 })
 

@@ -166,11 +166,26 @@ export function ThisMonthView({
         <span className={css.toolbarMeta} data-testid="finance-updated">
           {ledger.generatedAt > 0 ? t('lastUpdated', { minutes: minutesSince(ledger.generatedAt) }) : t('lastUpdatedNever')}
         </span>
-        {/* 刷新是**次操作**（UI-UX-SPEC §4.2 仪表盘模板：刷新类动作归次形制），
-            本 tab 唯一 primary 是页脚的价格表主操作。 */}
-        <Button variant="secondary" size="sm" onClick={onRefresh} disabled={refreshing} aria-label={t('refresh')}>
-          {refreshing ? t('refreshing') : t('refresh')}
-        </Button>
+        {/* 刷新是**次操作**（UI-UX-SPEC §4.2 仪表盘模板）；价格表两枚操作与之同排同尺寸
+            （sm，同属一个 group ⇒ 不混高）。「更新价格表」是真写操作保留 primary，
+            「还原到发版快照」按 §4.2 危险操作取 danger。 */}
+        <span className={css.planActions} role="group" aria-label={t('priceActionsLabel')}>
+          <Button variant="primary" size="sm" disabled={priceBusy} onClick={() => { void onUpdatePrices() }} aria-label={t('updatePrices')}>
+            {t('updatePrices')}
+          </Button>
+          <Button
+            variant="danger"
+            size="sm"
+            disabled={restoreDisabled}
+            onClick={() => { setConfirmRestore(true) }}
+            aria-label={t('restorePrices')}
+          >
+            {t('restorePrices')}
+          </Button>
+          <Button variant="secondary" size="sm" onClick={onRefresh} disabled={refreshing} aria-label={t('refresh')}>
+            {refreshing ? t('refreshing') : t('refresh')}
+          </Button>
+        </span>
       </div>
 
       <StatGrid className={css.stats}>
@@ -321,29 +336,6 @@ export function ThisMonthView({
         )}
 
       <div className={css.footer}>
-        <p className={css.footerNote}>{priceNote(lastSyncAppliedAt, t)}</p>
-        {/* 价格表操作（SPEC §5.1 / UI-UX-SPEC §3.1「一屏一个 primary」）：
-            · 「更新价格表」= 本视图唯一 primary（拉最新目录价 → 原子替换覆盖层，真写操作）；
-            · 「还原到发版快照」= 回退/破坏性操作，实心 primary 会让两个写操作抢同一视觉层级，
-              故按 §4.2 危险操作取 danger；disabled 语义原样保留（没有覆盖层时不给点）。
-              两枚按钮同属一个 group ⇒ 同尺寸（md），组内不混高。 */}
-        <div className={css.planActions} role="group" aria-label={t('priceActionsLabel')}>
-          <Button variant="primary" disabled={priceBusy} onClick={() => { void onUpdatePrices() }} aria-label={t('updatePrices')}>
-            {t('updatePrices')}
-          </Button>
-          <Button
-            variant="danger"
-            disabled={restoreDisabled}
-            aria-describedby={restoreBlocked ? 'finance-restore-hint' : undefined}
-            onClick={() => { setConfirmRestore(true) }}
-            aria-label={t('restorePrices')}
-          >
-            {t('restorePrices')}
-          </Button>
-        </div>
-        {restoreBlocked
-          ? <p id='finance-restore-hint' className={css.hint} role='status'>{t('restoreDisabledHint')}</p>
-          : null}
         {/* 破坏性操作二次确认（UI-UX-SPEC §4.2 模板 4「危险区 … danger Button + 二次确认（Modal）」）。
             文案走 locale；Modal 自己负责焦点圈闭，Esc 由它这层接管（不会连带收掉指挥舱）。 */}
         <Modal
@@ -409,10 +401,6 @@ export function ThisMonthView({
         {priceError != null
           ? <p className={css.footerNote} role="status">{t('priceActionFailed', { message: priceError })}</p>
           : null}
-        <p className={css.footerNote}>{t('estimateNote')}</p>
-        {ledger.unreadableSessions.length > 0
-          ? <p className={css.footerNote}>{t('unreadableNote', { count: ledger.unreadableSessions.length })}</p>
-          : null}
       </div>
     </>
   )
@@ -431,18 +419,6 @@ function supportsFetch(row: FinanceListProvidersEntry | undefined): boolean {
 
 function minutesSince(epochMs: number): number {
   return Math.max(0, Math.round((Date.now() - epochMs) / 60_000))
-}
-
-const STALE_MS = 24 * 60 * 60 * 1000
-
-/** 价格来源脚注：说清账本用的是哪一层价格，以及新鲜度。 */
-export function priceNote(lastSyncAppliedAt: number | undefined, t: FinanceTranslate): string {
-  if (lastSyncAppliedAt === undefined) {
-    return `${t('priceNoteNever')} · ${t('priceStale')}`
-  }
-  const when = t('lastUpdated', { minutes: minutesSince(lastSyncAppliedAt) })
-  if (Date.now() - lastSyncAppliedAt > STALE_MS) return `${t('priceNote', { when })} · ${t('priceStale')}`
-  return t('priceNote', { when })
 }
 
 /**
