@@ -8,6 +8,7 @@
  *  - 可用天数 = 余额 ÷ 近 7 日该厂商日均成本（估算，标注为推算）
  */
 
+import type { FinanceTranslate } from './locales.ts'
 import type {
   FinanceContextBucket,
   FinanceDayRow,
@@ -662,4 +663,20 @@ export function formatTokens(count: number): string {
   }
   if (count < 1_000_000) return `${trim(count / 1_000)}K`
   return `${trim(count / 1_000_000)}M`
+}
+
+/**
+ * 人类易读的相对时间：秒 → 分钟 → 小时 → 天 → 月（30 天近似，超过按月计）。
+ * 「0 分钟前」这类无信息表述不允许出现，最低粒度是秒。
+ */
+export function relativeTime(epochMs: number, t: FinanceTranslate): string {
+  const seconds = Math.max(0, Math.round((Date.now() - epochMs) / 1000))
+  if (seconds < 60) return t('timeSeconds', { n: seconds })
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return t('timeMinutes', { n: minutes })
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return t('timeHours', { n: hours })
+  const days = Math.floor(hours / 24)
+  if (days < 30) return t('timeDays', { n: days })
+  return t('timeMonths', { n: Math.floor(days / 30) })
 }

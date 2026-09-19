@@ -29,6 +29,7 @@ import {
   providerCostMicros,
   providerDailyMicros,
   sessionsOfWorkspace,
+  relativeTime,
   sessionsTrend,
   totalTokens,
 } from '../src/client/derive.ts'
@@ -452,5 +453,16 @@ describe('derive: token 计数格式化', () => {
     expect(formatTokens(101_746)).toBe('101.7K')
     expect(formatTokens(1_024_000)).toBe('1M')
     expect(formatTokens(1_500_000)).toBe('1.5M')
+  })
+})
+
+describe('derive: relativeTime（人类易读相对时间）', () => {
+  const t = ((key: string, params?: Record<string, number>) => `${key}:${params?.n}`) as never
+  it('秒→分→时→天→月逐级换算，不再出现「0 分钟前」', () => {
+    expect(relativeTime(Date.now() - 5_000, t)).toBe('timeSeconds:5')
+    expect(relativeTime(Date.now() - 120_000, t)).toBe('timeMinutes:2')
+    expect(relativeTime(Date.now() - 7 * 3_600_000, t)).toBe('timeHours:7')
+    expect(relativeTime(Date.now() - 2 * 86_400_000, t)).toBe('timeDays:2')
+    expect(relativeTime(Date.now() - 45 * 86_400_000, t)).toBe('timeMonths:1')
   })
 })

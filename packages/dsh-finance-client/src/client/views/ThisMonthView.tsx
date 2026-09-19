@@ -21,6 +21,7 @@ import type {
 } from 'dsh-spark-finance/types'
 import {
   balanceDaysLeft,
+  relativeTime,
   mixedUnitCostMicros,
   modelComparisonRows,
   planRows,
@@ -164,7 +165,7 @@ export function ThisMonthView({
     <>
       <div className={css.toolbar}>
         <span className={css.toolbarMeta} data-testid="finance-updated">
-          {ledger.generatedAt > 0 ? t('lastUpdated', { minutes: minutesSince(ledger.generatedAt) }) : t('lastUpdatedNever')}
+          {ledger.generatedAt > 0 ? t('lastUpdated', { time: relativeTime(ledger.generatedAt, t) }) : t('lastUpdatedNever')}
         </span>
         {/* 刷新是**次操作**（UI-UX-SPEC §4.2 仪表盘模板）；价格表两枚操作与之同排同尺寸
             （sm，同属一个 group ⇒ 不混高）。「更新价格表」是真写操作保留 primary，
@@ -422,10 +423,6 @@ export function billingLabel(mode: FinanceProviderBillingMode, t: FinanceTransla
 
 function supportsFetch(row: FinanceListProvidersEntry | undefined): boolean {
   return row?.hostMeta?.supportsBalanceFetch === true
-}
-
-function minutesSince(epochMs: number): number {
-  return Math.max(0, Math.round((Date.now() - epochMs) / 60_000))
 }
 
 /**
