@@ -253,8 +253,8 @@ export function ThisMonthView({
                     return (
                       <div key={provider}>
                         <div className={cx(css.tableRow, css.colsProviders)} data-testid={`finance-provider-${provider}`}>
-                          <span className={cx(css.cell, css.balanceName)}>
-                            <CellText text={provider} />
+                          <span className={cx(css.cell, css.balanceName, css.clamp2)} title={provider}>
+                            {provider}
                           </span>
                           <span className={css.cell}>
                             <Pill tone={mode === 'plan' ? 'brand' : mode === 'free' ? 'success' : 'neutral'} title={billingLabel(mode, t)}>

@@ -172,9 +172,10 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr) auto;
 }
 
-/* 供应商总表：供应商 | 付费类型 | 余额/月费 | 按量等价 | 操作 */
+/* 供应商总表：供应商 | 付费类型 | 余额/月费 | 按量等价 | 操作。
+   付费类型取值固定且最长三字（订阅/按量/免费），列宽收到内容宽。 */
 .colsProviders {
-  grid-template-columns: minmax(120px, 1.4fr) minmax(72px, 0.8fr) minmax(96px, 1fr) minmax(96px, 1fr) auto;
+  grid-template-columns: minmax(120px, 1.4fr) max-content minmax(96px, 1fr) minmax(96px, 1fr) auto;
 }
 
 /* modal 里的纵向表单（修改供应商）：字段组纵排，联动显隐。 */
