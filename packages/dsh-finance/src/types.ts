@@ -19,6 +19,8 @@ export type { FinanceBackfillStreamFrame }
 declare module '@deepseek-ai/cordis' {
   interface Events {
     'finance/backfillProgress'(progress: FinanceBackfillProgress): void
+    /** 一轮对话落账后触发（宿主去重）：客户端据此增量刷新账本。 */
+    'finance/ledgerUpdated'(): void
   }
 }
 

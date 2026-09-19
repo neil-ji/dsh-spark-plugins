@@ -29,6 +29,8 @@ export interface FinanceEventSource {
     event: 'finance/backfillProgress',
     listener: (progress: FinanceBackfillProgress) => void,
   ): () => void
+  /** 一轮对话落账后宿主 emit（已在宿主侧去重/防抖）。 */
+  onLedgerUpdated(event: 'finance/ledgerUpdated', listener: () => void): () => void
   /** 一次性快照：返回当前已知最新 progress（若有）。 */
   currentBackfillProgress?(): FinanceBackfillProgress | undefined
 }
@@ -58,6 +60,10 @@ export function financeBackfillStreamFrames(
     return [
       source.on('finance/backfillProgress', (payload) => {
         push({ kind: 'progress', payload, at: Date.now() })
+      }),
+      // 增量刷新信号（宿主已防抖）：客户端收到后重拉账本。
+      source.onLedgerUpdated('finance/ledgerUpdated', () => {
+        push({ kind: 'ledger-updated', at: Date.now() })
       }),
     ]
   }

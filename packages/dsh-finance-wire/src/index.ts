@@ -271,6 +271,8 @@ export const financeBackfillStreamFrameSchema = z.discriminatedUnion('kind', [
     payload: financeBackfillProgressSchema,
     at: z.number(),
   }),
+  // 2026-09 增量刷新：一轮对话落账后宿主去重触发，客户端据此重拉账本。
+  z.object({ kind: z.literal('ledger-updated'), at: z.number() }),
 ])
 
 /**

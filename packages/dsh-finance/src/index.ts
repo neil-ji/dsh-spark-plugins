@@ -368,6 +368,20 @@ export class FinanceService extends TypertRemoteService {
     // the `financeEvents` cordis identity — see dsh-spark / dsh-hippomemo
     // `events-service.ts` for the empirical pattern).
     this.eventsService = new FinanceEventsService(ctx, () => this.backfillProgress)
+
+    // 2026-09 增量刷新：一轮对话走完（assistant/message 落入会话日志）→ 防抖后
+    // 作废账本缓存并广播 `finance/ledgerUpdated`，客户端收到帧后增量重拉。
+    // 防抖 2s：一轮里 assistant/message 可能连发多条，只刷一次。
+    let ledgerDirtyTimer: ReturnType<typeof setTimeout> | undefined
+    ctx.on('session/event', (_session, event) => {
+      if (event.type !== 'assistant/message') return
+      if (ledgerDirtyTimer !== undefined) clearTimeout(ledgerDirtyTimer)
+      ledgerDirtyTimer = setTimeout(() => {
+        ledgerDirtyTimer = undefined
+        this.ledgerCache = undefined
+        ctx.emit('finance/ledgerUpdated')
+      }, 2_000)
+    })
   }
 
   /**

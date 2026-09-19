@@ -88,6 +88,8 @@ export function startFinanceDockModule(ctx: ClientContext): FinanceDockInject {
   let injected: FinanceDockInject
   let disposeStream: (() => void) | undefined
   let disposeController: (() => void) | undefined
+  // 增量刷新防抖计时器（scheduleRefresh 闭包写，effect 清理读）。
+  let refreshTimer: ReturnType<typeof setTimeout> | undefined
   // 模块 chrome 与失败态文案的取词（本包命名空间；与面板共用同一份字典）。
   const tr = ctx.locale.bind('settings.finance') as unknown as FinanceT
   try {
@@ -116,16 +118,25 @@ export function startFinanceDockModule(ctx: ClientContext): FinanceDockInject {
         },
       }
 
-      // 首次回填进度走 finance/events typert stream（不轮询）。引用计数订阅归
-      // UI 挂载层所有，卸载时 dispose。
+      // 首次回填进度 + 账本增量更新都走 finance/events typert stream（不轮询）。
+      // 引用计数订阅归 UI 挂载层所有，卸载时 dispose。
       const channel = financeChannelOf(ctx.remote, ctx.reflect)
+      // 一轮对话落账（宿主已防抖）→ 客户端再小防抖 1s 合并突发，然后增量重拉。
+      const scheduleRefresh = (): void => {
+        if (refreshTimer !== undefined) clearTimeout(refreshTimer)
+        refreshTimer = setTimeout(() => {
+          refreshTimer = undefined
+          void controller.load()
+        }, 1_000)
+      }
       if (channel !== null) {
         disposeStream = subscribeFrames<FinanceBackfillStreamFrame>(channel.remote, {
           name: FINANCE_EVENTS_STREAM,
           open: (signal) => channel.events.events(signal),
-          kinds: ['progress'],
+          kinds: ['progress', 'ledger-updated'],
           onFrame: (frame) => {
             if (frame.kind === 'progress') controller.setProgress(frame.payload)
+            if (frame.kind === 'ledger-updated') scheduleRefresh()
           },
         })
       } else {
@@ -157,6 +168,8 @@ export function startFinanceDockModule(ctx: ClientContext): FinanceDockInject {
   })
   ctx.effect(() => () => {
     disposeStream?.()
+    // 增量刷新的防抖计时器一并释放。
+    if (refreshTimer !== undefined) clearTimeout(refreshTimer)
     // 套餐设置订阅归控制器所有：卸载时一并释放。
     disposeController?.()
     dispose()

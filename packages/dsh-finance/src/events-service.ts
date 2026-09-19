@@ -38,6 +38,7 @@ export class FinanceEventsService extends TypertRemoteService {
   events(signal?: AbortSignal): AsyncIterable<FinanceBackfillStreamFrame> {
     const source: FinanceEventSource = {
       on: (event, listener) => this.ctx.on(event, listener),
+      onLedgerUpdated: (event, listener) => this.ctx.on(event, listener),
       currentBackfillProgress: () => this.getSnapshot(),
     }
     return financeBackfillStreamFrames(source, signal)
