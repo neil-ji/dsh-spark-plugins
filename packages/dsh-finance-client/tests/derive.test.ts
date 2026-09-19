@@ -78,10 +78,11 @@ describe('derive: token buckets', () => {
     expect(hitRate(buckets(100, 100, 0, 10))).toBeCloseTo(0.5)
   })
 
-  it('mixed unit cost is micros per million tokens', () => {
-    // 2_000_000 micros over 2_000_000 tokens = 1 micros/token = 1e6 micros/Mtok
-    expect(mixedUnitCostMicros(2_000_000, buckets(1_000_000, 900_000, 0, 100_000))).toBeCloseTo(1_000_000)
-    expect(mixedUnitCostMicros(10, buckets(0, 0, 0, 0))).toBeNull()
+  it('mixed unit cost is micros per million BILLABLE tokens (cache-read excluded)', () => {
+    // 分母 = 未命中输入 + 缓存写 + 输出 = 1.1M tok；缓存读 900K 不摊入
+    expect(mixedUnitCostMicros(2_000_000, buckets(1_000_000, 900_000, 0, 100_000))).toBeCloseTo(1_818_181.8, 0)
+    expect(mixedUnitCostMicros(2_000_000, buckets(1_000_000, 0, 0, 1_000_000))).toBeCloseTo(1_000_000)
+    expect(mixedUnitCostMicros(10, buckets(0, 900_000, 0, 0))).toBeNull()
   })
 
   it('formats percentages with a dash for unknown values', () => {
@@ -129,7 +130,9 @@ describe('derive: model comparison', () => {
     if (savings !== null) {
       expect(savings.from.provider).toBe('b')
       expect(savings.to.provider).toBe('a')
-      const unitGap = (pricey.costMicros / (2_300_000 / 1_000_000)) - (cheap.costMicros / (2_100_000 / 1_000_000))
+      // 单位成本分母已改为计费 token（未命中输入+缓存写+输出）：pricey 2.1M、cheap 1.1M
+      const unitGap = (pricey.costMicros / (2_100_000 / 1_000_000)) - (cheap.costMicros / (1_100_000 / 1_000_000))
+      // 省额 = 单位成本差 × 高成本侧输入侧 token（2M 未命中 + 200K 缓存读 = 2.2M）
       expect(savings.amountMicros).toBeCloseTo((2_200_000 / 1_000_000) * unitGap)
     }
   })
@@ -147,7 +150,7 @@ describe('derive: model comparison', () => {
     }))
     expect(mapped).toHaveLength(1)
     expect(mapped[0].hitRate).toBeCloseTo(0.5)
-    expect(mapped[0].unitCostMicros).toBeCloseTo(cheap.costMicros / 2.1)
+    expect(mapped[0].unitCostMicros).toBeCloseTo(cheap.costMicros / 1.1)
   })
 })
 

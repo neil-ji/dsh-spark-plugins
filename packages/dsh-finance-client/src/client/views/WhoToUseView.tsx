@@ -95,7 +95,7 @@ export function WhoToUseView({ ledger, t }: WhoToUseViewProps): ReactNode {
                     <span className={css.cell}>{row.provider}</span>
                     <span className={`${css.cell} ${css.cellNum}`}><Money micros={row.costMicros} currency={currency} exact /></span>
                     <span className={`${css.cell} ${css.cellNum}`}>
-                      {row.unitCostMicros === null ? t('noData') : `${formatMicros(Math.round(row.unitCostMicros))}${t('perMtok')}`}
+                      {row.unitCostMicros === null ? t('noData') : (<><Money micros={Math.round(row.unitCostMicros)} currency={currency} />{t('perMtok')}</>)}
                     </span>
                     <span className={`${css.cell} ${css.cellNum}`}>{formatPercent(row.hitRate)}</span>
                     <span className={`${css.cell} ${css.cellNum}`} data-testid={`finance-speed-${row.provider}`}>

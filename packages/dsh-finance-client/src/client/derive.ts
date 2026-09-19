@@ -40,11 +40,15 @@ export function hitRate(buckets: FinanceTokenBuckets): number | null {
   return buckets.cacheReadTokens / denominator
 }
 
-/** 混合单位成本（micros per million tokens）；没有 token 时 null。 */
+/**
+ * 混合单位成本（micros per million tokens）；没有计费 token 时 null。
+ * 分母 = 未命中输入 + 缓存写 + 输出 —— 缓存读按折扣价计费、成本里已体现，
+ * 再摊回分母会把单价稀释到失真（真宿主实测 0.34 vs 应为 0.88 CNY/Mtok）。
+ */
 export function mixedUnitCostMicros(costMicros: number, buckets: FinanceTokenBuckets): number | null {
-  const total = totalTokens(buckets)
-  if (total <= 0) return null
-  return costMicros / (total / 1_000_000)
+  const billable = buckets.uncachedInputTokens + buckets.cacheWriteTokens + buckets.outputTokens
+  if (billable <= 0) return null
+  return costMicros / (billable / 1_000_000)
 }
 
 /** 百分比文本；null -> 短横（不冒充 0%）。 */

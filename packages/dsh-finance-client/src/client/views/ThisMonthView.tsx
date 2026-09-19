@@ -327,7 +327,7 @@ export function ThisMonthView({
                       </span>
                       <span className={cx(css.cell, css.cellNum)}><Money micros={row.costMicros} currency={currency} exact /></span>
                       <span className={cx(css.cell, css.cellNum)}>
-                        {row.unitCostMicros === null ? t('noData') : `${formatMicros(Math.round(row.unitCostMicros))}${t('perMtok')}`}
+                        {row.unitCostMicros === null ? t('noData') : (<><Money micros={Math.round(row.unitCostMicros)} currency={currency} />{t('perMtok')}</>)}
                       </span>
                     </div>
                   ))}
