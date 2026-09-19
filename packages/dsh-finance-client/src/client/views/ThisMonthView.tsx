@@ -295,8 +295,9 @@ export function ThisMonthView({
               actions={<span className={css.tagMuted} title={t('trendHint')}>{t('trendRange', { days: ledger.byDay.length })}</span>}
               className={css.section}
             >
-              {trendPoints.length === 0
-                ? <p className={css.hint}>{t('noData')}</p>
+              {/* 数据不足（<2 天）画不出趋势：给空占位而不是一块空白画布。 */}
+              {trendPoints.length < 2
+                ? <EmptyState message={t('trendEmpty')} />
                 : (
                   <TrendChart
                     points={trendPoints}

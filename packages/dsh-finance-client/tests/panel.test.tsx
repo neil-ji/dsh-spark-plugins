@@ -179,6 +179,23 @@ describe('FinancePanel shell', () => {
     expect(html).toContain('finance-stat-cost')
   })
 
+  it('趋势数据不足两天时给空占位而不是空白画布', () => {
+    const html = renderToStaticMarkup(createElement(ThisMonthView, {
+      ledger: { ...LEDGER, byDay: LEDGER.byDay.slice(0, 1) },
+      providerList: PROVIDERS,
+      t,
+      refreshProvider: async () => {},
+      plans: [],
+      plansWritable: true,
+      savePlan: async () => {},
+      removePlan: async () => {},
+      refreshing: false,
+      onRefresh: () => {},
+      lastSyncAppliedAt: undefined,
+    }))
+    expect(html).toContain('trendEmpty')
+  })
+
   it('价格表操作与刷新同排（sm），脚注不再承载操作按钮与口径段落', () => {
     const html = render({
       status: 'ready',

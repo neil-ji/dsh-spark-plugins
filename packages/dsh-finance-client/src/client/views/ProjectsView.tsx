@@ -108,8 +108,9 @@ function ProjectDetail({ row, ledger, currency, t, onBack }: {
     >
       <div className={css.section} data-testid="finance-project-detail">
         <p className={css.hint}>{t('projectTrendTitle', { title })}</p>
-        {points.length === 0
-          ? <p className={css.hint}>{t('projectTrendEmpty')}</p>
+        {/* 数据不足（<2 天）画不出趋势：给空占位而不是一块空白画布。 */}
+        {points.length < 2
+          ? <EmptyState message={t('projectTrendEmpty')} />
           : <TrendChart points={points} ariaLabel={t('projectTrendTitle', { title })} formatValue={formatMicros} gradientId="finance-project-trend" />}
       </div>
       <div className={css.table}>
