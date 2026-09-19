@@ -3,7 +3,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { FinanceLedger, FinanceListProvidersResult, FinanceTokenBuckets } from 'dsh-spark-finance/types'
 import { FinancePanel, type FinancePanelInjected } from '../src/client/FinancePanel.tsx'
-import { ProjectsView } from '../src/client/views/ProjectsView.tsx'
+import { ProjectDetail, ProjectsView } from '../src/client/views/ProjectsView.tsx'
 import { SaveMoreView } from '../src/client/views/SaveMoreView.tsx'
 import { ThisMonthView } from '../src/client/views/ThisMonthView.tsx'
 import { WhoToUseView } from '../src/client/views/WhoToUseView.tsx'
@@ -411,6 +411,21 @@ describe('finance views', () => {
     // 表格形制：项目 / 消耗 / 总 token / 总耗时 四列都在
     expect(html).toContain('colTokensTotal')
     expect(html).toContain('colDuration')
+  })
+
+  it('项目详情把趋势与会话明细渲染为嵌套 Card（inset 变体）', () => {
+    const html = renderToStaticMarkup(createElement(ProjectDetail, {
+      row: { workspaceId: 'w1', title: 'AgentStudio', meteredMicros: 10_000_000, planEstimateMicros: 0, totalMicros: 10_000_000 },
+      ledger: LEDGER,
+      currency: 'CNY',
+      t,
+      onBack: () => {},
+    }))
+    expect(html).toContain('finance-project-detail')
+    // 嵌套子卡走 ui-kit Card variant=inset（不覆写组件 CSS）
+    expect(html).toContain('inset')
+    expect(html).toContain('projectSessionsTitle')
+    expect(html).toContain('trendTitle')
   })
 
   it('Projects shows the guidance empty state without workspaces', () => {

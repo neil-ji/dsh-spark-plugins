@@ -33,3 +33,10 @@
 .brand {
   border-color: color-mix(in srgb, var(--spk-brand) 45%, var(--spk-border));
 }
+
+/* 嵌套子卡：落在外层卡内的层级（背景沉一层 + 边框更弱），
+   与外层 surface 卡形成可辨层级，避免「同色卡套卡」看不出结构。 */
+.inset {
+  background: var(--spk-layer-1);
+  border-color: var(--spk-border-2);
+}

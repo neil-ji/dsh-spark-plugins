@@ -78,7 +78,7 @@ export function ProjectsView({ ledger, plans, t }: ProjectsViewProps): ReactNode
   )
 }
 
-function ProjectDetail({ row, ledger, currency, t, onBack }: {
+export function ProjectDetail({ row, ledger, currency, t, onBack }: {
   row: { workspaceId: string | null; title: string; meteredMicros: number; planEstimateMicros: number; totalMicros: number }
   ledger: FinanceLedger
   currency: string
@@ -110,23 +110,27 @@ function ProjectDetail({ row, ledger, currency, t, onBack }: {
           {t('colCost')} <Money micros={row.totalMicros} currency={currency} exact />
         </span>
       </div>
+      {/* 明细分块改为嵌套 Card（与「成本总览」同形制，只是嵌在项目卡内）。 */}
       <div className={css.section} data-testid="finance-project-detail">
-        <p className={css.hint}>{t('projectTrendTitle', { title })}</p>
-        {/* 数据不足（<2 天）画不出趋势：给空占位而不是一块空白画布。 */}
-        {points.length < 2
-          ? <EmptyState message={t('projectTrendEmpty')} />
-          : <TrendChart points={points} ariaLabel={t('projectTrendTitle', { title })} formatValue={formatMicros} gradientId="finance-project-trend" />}
-      </div>
-      <div className={css.table}>
-        <div className={`${css.tableHead} ${css.colsSessions}`}>
-          <span className={css.cell}>{t('colSession')}</span>
-          <span className={css.cell}>{t('colDate')}</span>
-          <span className={css.cell}>{t('colModel')}</span>
-          <span className={`${css.cell} ${css.cellNum}`}>{t('colCost')}</span>
-        </div>
-        {sessions.map((session) => (
-          <SessionRow key={session.sessionId} session={session} currency={currency} t={t} />
-        ))}
+        <Card variant="inset" title={t('trendTitle')} actions={<span className={css.tagMuted}>{t('trendRange', { days: points.length })}</span>}>
+          {/* 数据不足（<2 天）画不出趋势：给空占位而不是一块空白画布。 */}
+          {points.length < 2
+            ? <EmptyState message={t('projectTrendEmpty')} />
+            : <TrendChart points={points} ariaLabel={t('projectTrendTitle', { title })} formatValue={formatMicros} gradientId="finance-project-trend" />}
+        </Card>
+        <Card variant="inset" title={t('projectSessionsTitle')} actions={<span className={css.tagMuted}>{t('projectSessions', { count: sessions.length })}</span>}>
+          <div className={css.table}>
+            <div className={`${css.tableHead} ${css.colsSessions}`}>
+              <span className={css.cell}>{t('colSession')}</span>
+              <span className={css.cell}>{t('colDate')}</span>
+              <span className={css.cell}>{t('colModel')}</span>
+              <span className={`${css.cell} ${css.cellNum}`}>{t('colCost')}</span>
+            </div>
+            {sessions.map((session) => (
+              <SessionRow key={session.sessionId} session={session} currency={currency} t={t} />
+            ))}
+          </div>
+        </Card>
       </div>
     </Card>
   )
