@@ -415,19 +415,730 @@
           "cacheReadMicrosPerMtok": 7200000
         }
       ]
+    },
+    "zai/glm-5.1": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 32000,
+          "inputMicrosPerMtok": 6000000,
+          "outputMicrosPerMtok": 24000000,
+          "cacheReadMicrosPerMtok": 1300000
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 8000000,
+          "outputMicrosPerMtok": 28000000,
+          "cacheReadMicrosPerMtok": 2000000
+        }
+      ]
+    },
+    "zai/glm-5-turbo": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 32000,
+          "inputMicrosPerMtok": 5000000,
+          "outputMicrosPerMtok": 22000000,
+          "cacheReadMicrosPerMtok": 1200000
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 7000000,
+          "outputMicrosPerMtok": 26000000,
+          "cacheReadMicrosPerMtok": 1800000
+        }
+      ]
+    },
+    "zai/glm-5": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 32000,
+          "inputMicrosPerMtok": 4000000,
+          "outputMicrosPerMtok": 18000000,
+          "cacheReadMicrosPerMtok": 1000000
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 6000000,
+          "outputMicrosPerMtok": 22000000,
+          "cacheReadMicrosPerMtok": 1500000
+        }
+      ]
+    },
+    "zai/glm-5v-turbo": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 32000,
+          "inputMicrosPerMtok": 5000000,
+          "outputMicrosPerMtok": 22000000,
+          "cacheReadMicrosPerMtok": 1200000
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 7000000,
+          "outputMicrosPerMtok": 26000000,
+          "cacheReadMicrosPerMtok": 1800000
+        }
+      ]
+    },
+    "dashscope/qwen3.6-max-preview": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 128000,
+          "inputMicrosPerMtok": 9000000,
+          "outputMicrosPerMtok": 54000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 15000000,
+          "outputMicrosPerMtok": 90000000,
+          "cacheReadMultiplier": 0.2
+        }
+      ]
+    },
+    "dashscope/qwen3-max": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 32000,
+          "inputMicrosPerMtok": 2500000,
+          "outputMicrosPerMtok": 10000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 128000,
+          "inputMicrosPerMtok": 4000000,
+          "outputMicrosPerMtok": 16000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 7000000,
+          "outputMicrosPerMtok": 28000000,
+          "cacheReadMultiplier": 0.2
+        }
+      ]
+    },
+    "dashscope/qwen3-max-2026-01-23": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 32000,
+          "inputMicrosPerMtok": 2500000,
+          "outputMicrosPerMtok": 10000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 128000,
+          "inputMicrosPerMtok": 4000000,
+          "outputMicrosPerMtok": 16000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 7000000,
+          "outputMicrosPerMtok": 28000000,
+          "cacheReadMultiplier": 0.2
+        }
+      ]
+    },
+    "dashscope/qwen3-max-2025-09-23": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 32000,
+          "inputMicrosPerMtok": 6000000,
+          "outputMicrosPerMtok": 24000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 128000,
+          "inputMicrosPerMtok": 10000000,
+          "outputMicrosPerMtok": 40000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 15000000,
+          "outputMicrosPerMtok": 60000000,
+          "cacheReadMultiplier": 0.2
+        }
+      ]
+    },
+    "dashscope/qwen3-max-preview": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 32000,
+          "inputMicrosPerMtok": 6000000,
+          "outputMicrosPerMtok": 24000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 128000,
+          "inputMicrosPerMtok": 10000000,
+          "outputMicrosPerMtok": 40000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 15000000,
+          "outputMicrosPerMtok": 60000000,
+          "cacheReadMultiplier": 0.2
+        }
+      ]
+    },
+    "dashscope/qwen3.7-flash": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 32000,
+          "inputMicrosPerMtok": 200000,
+          "outputMicrosPerMtok": 800000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 256000,
+          "inputMicrosPerMtok": 600000,
+          "outputMicrosPerMtok": 2400000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 1200000,
+          "outputMicrosPerMtok": 4800000,
+          "cacheReadMultiplier": 0.2
+        }
+      ]
+    },
+    "dashscope/qwen3.7-flash-2026-07-15": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 32000,
+          "inputMicrosPerMtok": 200000,
+          "outputMicrosPerMtok": 800000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 256000,
+          "inputMicrosPerMtok": 600000,
+          "outputMicrosPerMtok": 2400000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 1200000,
+          "outputMicrosPerMtok": 4800000,
+          "cacheReadMultiplier": 0.2
+        }
+      ]
+    },
+    "dashscope/qwen3.6-flash": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 256000,
+          "inputMicrosPerMtok": 1200000,
+          "outputMicrosPerMtok": 7200000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 4800000,
+          "outputMicrosPerMtok": 28800000,
+          "cacheReadMultiplier": 0.2
+        }
+      ]
+    },
+    "dashscope/qwen3.6-flash-2026-04-16": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 256000,
+          "inputMicrosPerMtok": 1200000,
+          "outputMicrosPerMtok": 7200000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 4800000,
+          "outputMicrosPerMtok": 28800000,
+          "cacheReadMultiplier": 0.2
+        }
+      ]
+    },
+    "dashscope/qwen3.5-flash": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 128000,
+          "inputMicrosPerMtok": 200000,
+          "outputMicrosPerMtok": 2000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 256000,
+          "inputMicrosPerMtok": 800000,
+          "outputMicrosPerMtok": 8000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 1200000,
+          "outputMicrosPerMtok": 12000000,
+          "cacheReadMultiplier": 0.2
+        }
+      ]
+    },
+    "dashscope/qwen3.5-flash-2026-02-23": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 128000,
+          "inputMicrosPerMtok": 200000,
+          "outputMicrosPerMtok": 2000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 256000,
+          "inputMicrosPerMtok": 800000,
+          "outputMicrosPerMtok": 8000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 1200000,
+          "outputMicrosPerMtok": 12000000,
+          "cacheReadMultiplier": 0.2
+        }
+      ]
+    },
+    "dashscope/qwen-flash": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 128000,
+          "inputMicrosPerMtok": 150000,
+          "outputMicrosPerMtok": 1500000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 256000,
+          "inputMicrosPerMtok": 600000,
+          "outputMicrosPerMtok": 6000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 1200000,
+          "outputMicrosPerMtok": 12000000,
+          "cacheReadMultiplier": 0.2
+        }
+      ]
+    },
+    "dashscope/qwen-flash-2025-07-28": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 128000,
+          "inputMicrosPerMtok": 150000,
+          "outputMicrosPerMtok": 1500000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 256000,
+          "inputMicrosPerMtok": 600000,
+          "outputMicrosPerMtok": 6000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 1200000,
+          "outputMicrosPerMtok": 12000000,
+          "cacheReadMultiplier": 0.2
+        }
+      ]
+    },
+    "dashscope/qwen3-vl-plus": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 32000,
+          "inputMicrosPerMtok": 1000000,
+          "outputMicrosPerMtok": 10000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 128000,
+          "inputMicrosPerMtok": 1500000,
+          "outputMicrosPerMtok": 15000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 3000000,
+          "outputMicrosPerMtok": 30000000,
+          "cacheReadMultiplier": 0.2
+        }
+      ]
+    },
+    "dashscope/qwen3-vl-plus-2025-12-19": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 32000,
+          "inputMicrosPerMtok": 1000000,
+          "outputMicrosPerMtok": 10000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 128000,
+          "inputMicrosPerMtok": 1500000,
+          "outputMicrosPerMtok": 15000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 3000000,
+          "outputMicrosPerMtok": 30000000,
+          "cacheReadMultiplier": 0.2
+        }
+      ]
+    },
+    "dashscope/qwen3-vl-plus-2025-09-23": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 32000,
+          "inputMicrosPerMtok": 1000000,
+          "outputMicrosPerMtok": 10000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 128000,
+          "inputMicrosPerMtok": 1500000,
+          "outputMicrosPerMtok": 15000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 3000000,
+          "outputMicrosPerMtok": 30000000,
+          "cacheReadMultiplier": 0.2
+        }
+      ]
+    },
+    "dashscope/qwen3-vl-flash": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 32000,
+          "inputMicrosPerMtok": 150000,
+          "outputMicrosPerMtok": 1500000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 128000,
+          "inputMicrosPerMtok": 300000,
+          "outputMicrosPerMtok": 3000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 600000,
+          "outputMicrosPerMtok": 6000000,
+          "cacheReadMultiplier": 0.2
+        }
+      ]
+    },
+    "dashscope/qwen3-vl-flash-2026-01-22": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 32000,
+          "inputMicrosPerMtok": 150000,
+          "outputMicrosPerMtok": 1500000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 128000,
+          "inputMicrosPerMtok": 300000,
+          "outputMicrosPerMtok": 3000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 600000,
+          "outputMicrosPerMtok": 6000000,
+          "cacheReadMultiplier": 0.2
+        }
+      ]
+    },
+    "dashscope/qwen3-vl-flash-2025-10-15": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 32000,
+          "inputMicrosPerMtok": 150000,
+          "outputMicrosPerMtok": 1500000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 128000,
+          "inputMicrosPerMtok": 300000,
+          "outputMicrosPerMtok": 3000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 600000,
+          "outputMicrosPerMtok": 6000000,
+          "cacheReadMultiplier": 0.2
+        }
+      ]
+    },
+    "dashscope/qwen3-coder-plus": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 32000,
+          "inputMicrosPerMtok": 4000000,
+          "outputMicrosPerMtok": 16000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 128000,
+          "inputMicrosPerMtok": 6000000,
+          "outputMicrosPerMtok": 24000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 256000,
+          "inputMicrosPerMtok": 10000000,
+          "outputMicrosPerMtok": 40000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 20000000,
+          "outputMicrosPerMtok": 200000000,
+          "cacheReadMultiplier": 0.2
+        }
+      ]
+    },
+    "dashscope/qwen3-coder-plus-2025-09-23": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 32000,
+          "inputMicrosPerMtok": 4000000,
+          "outputMicrosPerMtok": 16000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 128000,
+          "inputMicrosPerMtok": 6000000,
+          "outputMicrosPerMtok": 24000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 256000,
+          "inputMicrosPerMtok": 10000000,
+          "outputMicrosPerMtok": 40000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 20000000,
+          "outputMicrosPerMtok": 200000000,
+          "cacheReadMultiplier": 0.2
+        }
+      ]
+    },
+    "dashscope/qwen3-coder-plus-2025-07-22": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 32000,
+          "inputMicrosPerMtok": 4000000,
+          "outputMicrosPerMtok": 16000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 128000,
+          "inputMicrosPerMtok": 6000000,
+          "outputMicrosPerMtok": 24000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 256000,
+          "inputMicrosPerMtok": 10000000,
+          "outputMicrosPerMtok": 40000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 20000000,
+          "outputMicrosPerMtok": 200000000,
+          "cacheReadMultiplier": 0.2
+        }
+      ]
+    },
+    "dashscope/qwen3-coder-flash": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 32000,
+          "inputMicrosPerMtok": 1000000,
+          "outputMicrosPerMtok": 4000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 128000,
+          "inputMicrosPerMtok": 1500000,
+          "outputMicrosPerMtok": 6000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 256000,
+          "inputMicrosPerMtok": 2500000,
+          "outputMicrosPerMtok": 10000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 5000000,
+          "outputMicrosPerMtok": 25000000,
+          "cacheReadMultiplier": 0.2
+        }
+      ]
+    },
+    "dashscope/qwen3-coder-flash-2025-07-28": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 32000,
+          "inputMicrosPerMtok": 1000000,
+          "outputMicrosPerMtok": 4000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 128000,
+          "inputMicrosPerMtok": 1500000,
+          "outputMicrosPerMtok": 6000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 256000,
+          "inputMicrosPerMtok": 2500000,
+          "outputMicrosPerMtok": 10000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 5000000,
+          "outputMicrosPerMtok": 25000000,
+          "cacheReadMultiplier": 0.2
+        }
+      ]
+    },
+    "dashscope/qwen3-coder-next": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 32000,
+          "inputMicrosPerMtok": 1000000,
+          "outputMicrosPerMtok": 4000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 128000,
+          "inputMicrosPerMtok": 1500000,
+          "outputMicrosPerMtok": 6000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 2500000,
+          "outputMicrosPerMtok": 10000000,
+          "cacheReadMultiplier": 0.2
+        }
+      ]
+    },
+    "dashscope/qwen3-coder-480b-a35b-instruct": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 32000,
+          "inputMicrosPerMtok": 6000000,
+          "outputMicrosPerMtok": 24000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 128000,
+          "inputMicrosPerMtok": 9000000,
+          "outputMicrosPerMtok": 36000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 15000000,
+          "outputMicrosPerMtok": 60000000,
+          "cacheReadMultiplier": 0.2
+        }
+      ]
+    },
+    "dashscope/qwen3-coder-30b-a3b-instruct": {
+      "currency": "CNY",
+      "tiers": [
+        {
+          "maxPromptTokens": 32000,
+          "inputMicrosPerMtok": 1500000,
+          "outputMicrosPerMtok": 6000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 128000,
+          "inputMicrosPerMtok": 2250000,
+          "outputMicrosPerMtok": 9000000,
+          "cacheReadMultiplier": 0.2
+        },
+        {
+          "maxPromptTokens": 0,
+          "inputMicrosPerMtok": 3750000,
+          "outputMicrosPerMtok": 15000000,
+          "cacheReadMultiplier": 0.2
+        }
+      ]
     }
   },
-  "tiersUpdatedAt": "2026-09-19T15:12:03.113Z",
+  "tiersUpdatedAt": "2026-09-19T16:45:51.629Z",
   "tiersSources": [
     {
       "id": "openai",
-      "url": "packages/dsh-finance/tests/fixtures/openai-pricing.2026-09-19.md",
+      "url": "https://developers.openai.com/api/docs/pricing.md",
       "keys": 8
     },
     {
       "id": "xai",
-      "url": "packages/dsh-finance/tests/fixtures/xai-grok-4.6.2026-09-19.md",
+      "url": "https://docs.x.ai/developers/models/grok-4.6.md",
       "keys": 1
+    },
+    {
+      "id": "zai",
+      "url": "https://docs.bigmodel.cn/cn/guide/start/pricing",
+      "keys": 4
+    },
+    {
+      "id": "dashscope",
+      "url": "https://help.aliyun.com/zh/model-studio/model-pricing",
+      "keys": 27
     }
   ]
 }

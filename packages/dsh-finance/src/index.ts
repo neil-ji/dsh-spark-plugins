@@ -249,8 +249,6 @@ const tierSpec: z<FinanceTierSpec> = z.object({
   offPeakDiscount: z.number().min(0).max(1),
   effectiveFrom: z.union([z.string(), z.number()]),
   effectiveTo: z.union([z.string(), z.number()]),
-  region: z.string(),
-  serviceTier: z.string(),
 })
 
 const tierEntryInputs: z<FinanceTierEntryInput[]> = z.array(tierEntryInput)
@@ -311,7 +309,7 @@ export class FinanceService extends TypertRemoteService {
      *
      * 两种形状（SPEC §2.3 规则 4，向后兼容）：
      * - 旧：`{ 'a/llm': [{ maxPromptTokens, inputMicrosPerMtok, ... }] }`（隐式 CNY）
-     * - 新：`{ 'a/llm': { currency?, tiers: [...], offPeakDiscount?, effectiveFrom/To?, region?, serviceTier? } }`
+     * - 新：`{ 'a/llm': { currency?, tiers: [...], offPeakDiscount?, effectiveFrom/To? } }`
      * key 允许带 `#suffix` 限定后缀表达币种/地域变体（如 `openai/gpt-5.6#USD`）。
      */
     tiers: z.dict(z.union([tierEntryInputs, tierSpec])).default({}),

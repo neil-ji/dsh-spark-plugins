@@ -127,11 +127,9 @@ describe('normalizeFinanceTiers', () => {
         offPeakDiscount: 0.5,
         effectiveFrom: '2027-01-01',
         effectiveTo: 1_893_456_000_000,
-        region: 'us',
-        serviceTier: 'batch',
       },
     })
-    // key 带后缀 → 归到剥净后的 modelKey，原始 key 与 suffix 都保留。
+    // key 带后缀 → 归到剥净后的 modelKey，原始 key 与 suffix 都保留（查找用）。
     const group = tiers['openai/gpt-5.6'][0]
     expect(group.key).toBe('openai/gpt-5.6#USD')
     expect(group.suffix).toBe('USD')
@@ -139,8 +137,15 @@ describe('normalizeFinanceTiers', () => {
     expect(group.offPeakDiscount).toBe(0.5)
     expect(group.effectiveFrom).toBe(Date.parse('2027-01-01'))
     expect(group.effectiveTo).toBe(1_893_456_000_000)
-    expect(group.region).toBe('us')
-    expect(group.serviceTier).toBe('batch')
+  })
+
+  it('未知字段（== 旧版的 region / serviceTier）不落进归一化结果', () => {
+    // 这两个字段曾是"看起来能区分区域"的零消费者死字段，已删。归一化不该把它们搬进来。
+    const tiers = normalizeFinanceTiers({
+      'a/llm': { currency: 'CNY', tiers: [{ maxPromptTokens: 0, inputMicrosPerMtok: 1, outputMicrosPerMtok: 1 }], region: 'us', serviceTier: 'batch' },
+    } as never)
+    expect(tiers['a/llm'][0]).not.toHaveProperty('region')
+    expect(tiers['a/llm'][0]).not.toHaveProperty('serviceTier')
   })
 
   it('drops an implausible discount and a spec with no usable tiers', () => {
@@ -154,7 +159,7 @@ describe('normalizeFinanceTiers', () => {
     expect(tiers['b/llm'][0].offPeakDiscount).toBe(1)
   })
 
-  it('keeps several groups under one modelKey (currency / region variants)', () => {
+  it('keeps several groups under one modelKey（暂不支持的配置，交由消费者报 ambiguous）', () => {
     const tiers = normalizeFinanceTiers({
       'qwen/qwen3-max': { currency: 'CNY', tiers: [{ maxPromptTokens: 0, inputMicrosPerMtok: 1, outputMicrosPerMtok: 1 }] },
       'qwen/qwen3-max#intl': { currency: 'USD', tiers: [{ maxPromptTokens: 0, inputMicrosPerMtok: 2, outputMicrosPerMtok: 2 }] },

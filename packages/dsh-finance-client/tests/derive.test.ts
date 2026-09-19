@@ -266,17 +266,30 @@ describe('derive: 上下文分布与阶梯价（P2）', () => {
     expect(resolveCacheWriteMicros({ ...base, cacheWriteTtl: { m5: 20, h1: 40 } })).toBe(20)
   })
 
-  it('picks the exact suffixed group first, then falls back to the bare modelKey (规则 3)', () => {
+  it('resolves the unique group for a modelKey, and falls back across the # suffix (规则 3)', () => {
     const groups: Record<string, readonly FinanceTierGroup[]> = {
       'openai/gpt-5.6': [group('openai/gpt-5.6', 'CNY')],
       'openai/gpt-5.6#USD': [group('openai/gpt-5.6#USD', 'USD', 'USD')],
     }
-    expect(tierGroupFor(groups, 'openai/gpt-5.6#USD')?.currency).toBe('USD')
-    // 没写后缀的模型键回退到通用组。
-    expect(tierGroupFor(groups, 'openai/gpt-5.6')?.currency).toBe('CNY')
-    // 查一个带后缀但没登记的 key → 剥后缀回退。
-    expect(tierGroupFor(groups, 'openai/gpt-5.6#intl')?.currency).toBe('CNY')
-    expect(tierGroupFor(groups, 'nobody/else')).toBeNull()
+    // 精确命中（配置侧可能带后缀）
+    expect(tierGroupFor(groups, 'openai/gpt-5.6#USD')).toEqual({ status: 'found', group: groups['openai/gpt-5.6#USD']![0] })
+    // 运行期真实形态：provider/model 永不带 #，按剥净后的 modelKey 找
+    expect(tierGroupFor(groups, 'openai/gpt-5.6')).toEqual({ status: 'found', group: groups['openai/gpt-5.6']![0] })
+    // 带后缀但该后缀没登记 → 剥后缀回退
+    expect(tierGroupFor(groups, 'openai/gpt-5.6#intl')).toEqual({ status: 'found', group: groups['openai/gpt-5.6']![0] })
+    expect(tierGroupFor(groups, 'nobody/else')).toEqual({ status: 'none' })
+  })
+
+  it('同一 modelKey 下有多个变体组时报 ambiguous，而不是"取第一组"（暂不区分国际/国内）', () => {
+    // 这是关键回归线：旧实现按写入顺序取第一组，等于让 settings 的书写顺序决定用哪套价，
+    // 界面上完全看不出异常。现在必须显式拒绝。
+    const groups: Record<string, readonly FinanceTierGroup[]> = {
+      'qwen/qwen3-max': [group('qwen/qwen3-max#intl', 'CNY', 'intl'), group('qwen/qwen3-max', 'CNY')],
+    }
+    expect(tierGroupFor(groups, 'qwen/qwen3-max')).toEqual({
+      status: 'ambiguous',
+      keys: ['qwen/qwen3-max#intl', 'qwen/qwen3-max'],
+    })
   })
 
   it('refuses to price a group in another currency or outside its era (规则 5)', () => {

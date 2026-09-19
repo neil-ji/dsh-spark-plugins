@@ -242,9 +242,6 @@ export interface FinanceTierSpec {
   /** G4：生效窗口。数字 = epoch ms，字符串 = 可 `Date.parse` 的日期；缺省 = 无界。 */
   effectiveFrom?: string | number
   effectiveTo?: string | number
-  /** G6：区域 / 服务档，仅作标签与去重，不参与计算。 */
-  region?: string
-  serviceTier?: string
 }
 
 /**
@@ -263,8 +260,6 @@ export interface FinanceTierGroup {
   offPeakDiscount: number
   effectiveFrom?: number
   effectiveTo?: number
-  region?: string
-  serviceTier?: string
 }
 
 /**
@@ -518,8 +513,9 @@ export interface FinanceConfig {
   plans: readonly FinancePlanEntry[]
   /**
    * Resolved context tier groups, keyed by the **stripped** modelKey (defaults to {}
-   * when settings omit them). One key may carry several groups (currency / region
-   * variants); consumers pick by currency + era (SPEC §2.3).
+   * when settings omit them). One key normally carries exactly one group; more than
+   * one is an unsupported configuration (we only price China-mainland rates) and is
+   * reported as ambiguous rather than guessed (SPEC §2.3).
    */
   tiers: Record<string, readonly FinanceTierGroup[]>
   /** Resolved per-provider list (defaults to [] when settings omit it). */

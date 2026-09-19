@@ -802,8 +802,6 @@ function normalizeTierGroup(key: string, value: unknown): FinanceTierGroup | und
   if (entries === undefined) return undefined
   const effectiveFrom = normalizeTierBound(record.effectiveFrom)
   const effectiveTo = normalizeTierBound(record.effectiveTo)
-  const region = normalizeTierLabel(record.region)
-  const serviceTier = normalizeTierLabel(record.serviceTier)
   return {
     ...splitTierKey(key),
     key,
@@ -812,8 +810,6 @@ function normalizeTierGroup(key: string, value: unknown): FinanceTierGroup | und
     offPeakDiscount: normalizeOffPeakDiscount(record.offPeakDiscount),
     ...effectiveFrom !== undefined ? { effectiveFrom } : {},
     ...effectiveTo !== undefined ? { effectiveTo } : {},
-    ...region !== undefined ? { region } : {},
-    ...serviceTier !== undefined ? { serviceTier } : {},
   }
 }
 

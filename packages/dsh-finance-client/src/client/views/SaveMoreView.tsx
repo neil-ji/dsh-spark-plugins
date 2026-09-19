@@ -43,6 +43,9 @@ function contextOutcomeText(outcome: SplitEstimateOutcome, t: FinanceTranslate):
       return t('contextCurrencyMismatch', { currency: outcome.tierCurrency })
     case 'era-mismatch':
       return t('contextEraMismatch')
+    case 'ambiguous':
+      // 同一模型有多套区域价目，而运行期拿不到"在用哪条线路"的信号（暂不区分国际/国内）。
+      return t('contextAmbiguousTiers', { keys: outcome.keys.join('、') })
     case 'no-tiers':
       return t('contextNoTiers')
     case 'no-usage':

@@ -102,15 +102,31 @@ type FinanceTierSpec = {
 }
 ```
 
-**key 后缀**：`modelKey#suffix`（如 `openai/gpt-5.6#USD`、`qwen/qwen3-max#cn-beijing`）
-表达币种 / 站点 / 地域变体，按**最后一个** `#` 切分。禁止跨币种合并或硬换汇。
+**key 后缀**：`modelKey#suffix`（如 `openai/gpt-5.6#USD`）按**最后一个** `#` 切分，
+只用于**配置侧**区分币种变体。禁止跨币种合并或硬换汇。
+
+> ⚠️ **区域支持范围（2026-09-19 定案）：只支持中国内地价目，不区分国际/国内。**
+>
+> 原因：运行期只有 `modelKey = provider/model`（取自会话日志 `request/header`），
+> **拿不到"在用哪条线路"的信号** —— 区域体现在 `baseURL` 里，既不进 modelKey，
+> 也没有独立的 provider id（`dashscope` / `zai` 是用户自定义名，`minimax-cn` 的 `-cn`
+> 只是命名习惯）。因此 `#suffix` 的"精确匹配"分支在运行期**永远走不到**。
+>
+> 由此产生的硬约束：**同一 modelKey 下存在多组时一律拒绝估算**（消费者报 `ambiguous`
+> 并提示"暂只支持中国内地价目"），**不得**按写入顺序取第一组 —— 那等于让 settings 的
+> 书写顺序决定用哪套价，界面上看不出任何异常。生成器也只产出中国内地价目。
+>
+> 未来若要支持：需在账本层拿到线路标识（`request/header` 是否暴露 baseURL/endpoint 待查证），
+> 或为不同区域配不同 provider id。**已删除** `region` / `serviceTier` 字段 —— 它们只被搬运、
+> 无任何消费者，留着会让人误以为能区分区域。
 
 **七条解析规则**（实现与评审按此逐条对照）：
 
 1. **缓存读单价**：`cacheReadMicrosPerMtok` > `cacheReadMultiplier × inputMicrosPerMtok` > 继承 `inputMicrosPerMtok`
 2. **缓存写单价**：`cacheWriteMicrosPerMtok` > `cacheWriteMultiplier × inputMicrosPerMtok` > `cacheWriteTtl.m5` > 继承 `inputMicrosPerMtok`。
    只取 `m5`（保守，命中率假设最低）；`h1` 仅在用户显式声明 TTL 档位时才用，当前不参与解析
-3. **选组**：`modelKey#suffix` 精确匹配 → 剥净后缀回退 `modelKey` → 都没有则该模型无阶梯价
+3. **选组**：`modelKey#suffix` 精确匹配 → 剥净后缀回退 `modelKey` → 都没有则该模型无阶梯价。
+   **命中多个变体组时报 `ambiguous` 并拒绝估算**（见上面的区域支持范围）——不许静默取第一组
 4. **形状分流**：值为数组 = 旧形状；值为对象 = 新形状。新形状缺 `tiers` 或档位全不可信 → **整组丢弃**（不猜），旧形状同理
 5. **币种 / 生效窗口守卫**：组 `currency` 与账本 `ledger.currency` 不一致 → **不换算、不参与估算**，UI 标注「币种不匹配，未计入估算」；
    `effectiveFrom/To` 不覆盖当前时刻 → 同样不参与估算并标注。宁可不算，不可算错

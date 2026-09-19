@@ -608,9 +608,423 @@
               peakDays: [1, 2, 3, 4, 5]
               utcOffsetMinutes: 480
           # <<< FINANCE-VENDOR-PRICES-END
-        # >>> FINANCE-VENDOR-TIERS-BEGIN source=openai+xai updated=2026-09-19T15:12:03.113Z fx=7.2 currency=CNY
+        # >>> FINANCE-VENDOR-TIERS-BEGIN source=openai+xai+zai+dashscope updated=2026-09-19T16:45:51.629Z fx=7.2 currency=CNY
         # 生成物：scripts/gen-finance-tiers.mjs，禁止手改（INV-1 结构源）
         tiers:
+          # dashscope
+          dashscope/qwen-flash:
+            currency: CNY
+            tiers:
+              - maxPromptTokens: 128000
+                inputMicrosPerMtok: 150000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 1500000
+              - maxPromptTokens: 256000
+                inputMicrosPerMtok: 600000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 6000000
+              - maxPromptTokens: 0
+                inputMicrosPerMtok: 1200000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 12000000
+          dashscope/qwen-flash-2025-07-28:
+            currency: CNY
+            tiers:
+              - maxPromptTokens: 128000
+                inputMicrosPerMtok: 150000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 1500000
+              - maxPromptTokens: 256000
+                inputMicrosPerMtok: 600000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 6000000
+              - maxPromptTokens: 0
+                inputMicrosPerMtok: 1200000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 12000000
+          dashscope/qwen3-coder-30b-a3b-instruct:
+            currency: CNY
+            tiers:
+              - maxPromptTokens: 32000
+                inputMicrosPerMtok: 1500000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 6000000
+              - maxPromptTokens: 128000
+                inputMicrosPerMtok: 2250000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 9000000
+              - maxPromptTokens: 0
+                inputMicrosPerMtok: 3750000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 15000000
+          dashscope/qwen3-coder-480b-a35b-instruct:
+            currency: CNY
+            tiers:
+              - maxPromptTokens: 32000
+                inputMicrosPerMtok: 6000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 24000000
+              - maxPromptTokens: 128000
+                inputMicrosPerMtok: 9000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 36000000
+              - maxPromptTokens: 0
+                inputMicrosPerMtok: 15000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 60000000
+          dashscope/qwen3-coder-flash:
+            currency: CNY
+            tiers:
+              - maxPromptTokens: 32000
+                inputMicrosPerMtok: 1000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 4000000
+              - maxPromptTokens: 128000
+                inputMicrosPerMtok: 1500000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 6000000
+              - maxPromptTokens: 256000
+                inputMicrosPerMtok: 2500000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 10000000
+              - maxPromptTokens: 0
+                inputMicrosPerMtok: 5000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 25000000
+          dashscope/qwen3-coder-flash-2025-07-28:
+            currency: CNY
+            tiers:
+              - maxPromptTokens: 32000
+                inputMicrosPerMtok: 1000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 4000000
+              - maxPromptTokens: 128000
+                inputMicrosPerMtok: 1500000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 6000000
+              - maxPromptTokens: 256000
+                inputMicrosPerMtok: 2500000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 10000000
+              - maxPromptTokens: 0
+                inputMicrosPerMtok: 5000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 25000000
+          dashscope/qwen3-coder-next:
+            currency: CNY
+            tiers:
+              - maxPromptTokens: 32000
+                inputMicrosPerMtok: 1000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 4000000
+              - maxPromptTokens: 128000
+                inputMicrosPerMtok: 1500000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 6000000
+              - maxPromptTokens: 0
+                inputMicrosPerMtok: 2500000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 10000000
+          dashscope/qwen3-coder-plus:
+            currency: CNY
+            tiers:
+              - maxPromptTokens: 32000
+                inputMicrosPerMtok: 4000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 16000000
+              - maxPromptTokens: 128000
+                inputMicrosPerMtok: 6000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 24000000
+              - maxPromptTokens: 256000
+                inputMicrosPerMtok: 10000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 40000000
+              - maxPromptTokens: 0
+                inputMicrosPerMtok: 20000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 200000000
+          dashscope/qwen3-coder-plus-2025-07-22:
+            currency: CNY
+            tiers:
+              - maxPromptTokens: 32000
+                inputMicrosPerMtok: 4000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 16000000
+              - maxPromptTokens: 128000
+                inputMicrosPerMtok: 6000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 24000000
+              - maxPromptTokens: 256000
+                inputMicrosPerMtok: 10000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 40000000
+              - maxPromptTokens: 0
+                inputMicrosPerMtok: 20000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 200000000
+          dashscope/qwen3-coder-plus-2025-09-23:
+            currency: CNY
+            tiers:
+              - maxPromptTokens: 32000
+                inputMicrosPerMtok: 4000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 16000000
+              - maxPromptTokens: 128000
+                inputMicrosPerMtok: 6000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 24000000
+              - maxPromptTokens: 256000
+                inputMicrosPerMtok: 10000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 40000000
+              - maxPromptTokens: 0
+                inputMicrosPerMtok: 20000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 200000000
+          dashscope/qwen3-max:
+            currency: CNY
+            tiers:
+              - maxPromptTokens: 32000
+                inputMicrosPerMtok: 2500000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 10000000
+              - maxPromptTokens: 128000
+                inputMicrosPerMtok: 4000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 16000000
+              - maxPromptTokens: 0
+                inputMicrosPerMtok: 7000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 28000000
+          dashscope/qwen3-max-2025-09-23:
+            currency: CNY
+            tiers:
+              - maxPromptTokens: 32000
+                inputMicrosPerMtok: 6000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 24000000
+              - maxPromptTokens: 128000
+                inputMicrosPerMtok: 10000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 40000000
+              - maxPromptTokens: 0
+                inputMicrosPerMtok: 15000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 60000000
+          dashscope/qwen3-max-2026-01-23:
+            currency: CNY
+            tiers:
+              - maxPromptTokens: 32000
+                inputMicrosPerMtok: 2500000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 10000000
+              - maxPromptTokens: 128000
+                inputMicrosPerMtok: 4000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 16000000
+              - maxPromptTokens: 0
+                inputMicrosPerMtok: 7000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 28000000
+          dashscope/qwen3-max-preview:
+            currency: CNY
+            tiers:
+              - maxPromptTokens: 32000
+                inputMicrosPerMtok: 6000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 24000000
+              - maxPromptTokens: 128000
+                inputMicrosPerMtok: 10000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 40000000
+              - maxPromptTokens: 0
+                inputMicrosPerMtok: 15000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 60000000
+          dashscope/qwen3-vl-flash:
+            currency: CNY
+            tiers:
+              - maxPromptTokens: 32000
+                inputMicrosPerMtok: 150000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 1500000
+              - maxPromptTokens: 128000
+                inputMicrosPerMtok: 300000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 3000000
+              - maxPromptTokens: 0
+                inputMicrosPerMtok: 600000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 6000000
+          dashscope/qwen3-vl-flash-2025-10-15:
+            currency: CNY
+            tiers:
+              - maxPromptTokens: 32000
+                inputMicrosPerMtok: 150000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 1500000
+              - maxPromptTokens: 128000
+                inputMicrosPerMtok: 300000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 3000000
+              - maxPromptTokens: 0
+                inputMicrosPerMtok: 600000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 6000000
+          dashscope/qwen3-vl-flash-2026-01-22:
+            currency: CNY
+            tiers:
+              - maxPromptTokens: 32000
+                inputMicrosPerMtok: 150000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 1500000
+              - maxPromptTokens: 128000
+                inputMicrosPerMtok: 300000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 3000000
+              - maxPromptTokens: 0
+                inputMicrosPerMtok: 600000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 6000000
+          dashscope/qwen3-vl-plus:
+            currency: CNY
+            tiers:
+              - maxPromptTokens: 32000
+                inputMicrosPerMtok: 1000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 10000000
+              - maxPromptTokens: 128000
+                inputMicrosPerMtok: 1500000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 15000000
+              - maxPromptTokens: 0
+                inputMicrosPerMtok: 3000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 30000000
+          dashscope/qwen3-vl-plus-2025-09-23:
+            currency: CNY
+            tiers:
+              - maxPromptTokens: 32000
+                inputMicrosPerMtok: 1000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 10000000
+              - maxPromptTokens: 128000
+                inputMicrosPerMtok: 1500000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 15000000
+              - maxPromptTokens: 0
+                inputMicrosPerMtok: 3000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 30000000
+          dashscope/qwen3-vl-plus-2025-12-19:
+            currency: CNY
+            tiers:
+              - maxPromptTokens: 32000
+                inputMicrosPerMtok: 1000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 10000000
+              - maxPromptTokens: 128000
+                inputMicrosPerMtok: 1500000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 15000000
+              - maxPromptTokens: 0
+                inputMicrosPerMtok: 3000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 30000000
+          dashscope/qwen3.5-flash:
+            currency: CNY
+            tiers:
+              - maxPromptTokens: 128000
+                inputMicrosPerMtok: 200000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 2000000
+              - maxPromptTokens: 256000
+                inputMicrosPerMtok: 800000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 8000000
+              - maxPromptTokens: 0
+                inputMicrosPerMtok: 1200000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 12000000
+          dashscope/qwen3.5-flash-2026-02-23:
+            currency: CNY
+            tiers:
+              - maxPromptTokens: 128000
+                inputMicrosPerMtok: 200000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 2000000
+              - maxPromptTokens: 256000
+                inputMicrosPerMtok: 800000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 8000000
+              - maxPromptTokens: 0
+                inputMicrosPerMtok: 1200000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 12000000
+          dashscope/qwen3.6-flash:
+            currency: CNY
+            tiers:
+              - maxPromptTokens: 256000
+                inputMicrosPerMtok: 1200000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 7200000
+              - maxPromptTokens: 0
+                inputMicrosPerMtok: 4800000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 28800000
+          dashscope/qwen3.6-flash-2026-04-16:
+            currency: CNY
+            tiers:
+              - maxPromptTokens: 256000
+                inputMicrosPerMtok: 1200000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 7200000
+              - maxPromptTokens: 0
+                inputMicrosPerMtok: 4800000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 28800000
+          dashscope/qwen3.6-max-preview:
+            currency: CNY
+            tiers:
+              - maxPromptTokens: 128000
+                inputMicrosPerMtok: 9000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 54000000
+              - maxPromptTokens: 0
+                inputMicrosPerMtok: 15000000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 90000000
+          dashscope/qwen3.7-flash:
+            currency: CNY
+            tiers:
+              - maxPromptTokens: 32000
+                inputMicrosPerMtok: 200000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 800000
+              - maxPromptTokens: 256000
+                inputMicrosPerMtok: 600000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 2400000
+              - maxPromptTokens: 0
+                inputMicrosPerMtok: 1200000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 4800000
+          dashscope/qwen3.7-flash-2026-07-15:
+            currency: CNY
+            tiers:
+              - maxPromptTokens: 32000
+                inputMicrosPerMtok: 200000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 800000
+              - maxPromptTokens: 256000
+                inputMicrosPerMtok: 600000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 2400000
+              - maxPromptTokens: 0
+                inputMicrosPerMtok: 1200000
+                cacheReadMultiplier: 0.2
+                outputMicrosPerMtok: 4800000
           # openai
           openai/gpt-5.4:
             currency: CNY
@@ -716,6 +1130,51 @@
                 inputMicrosPerMtok: 28800000
                 cacheReadMicrosPerMtok: 7200000
                 outputMicrosPerMtok: 86400000
+          # zai
+          zai/glm-5:
+            currency: CNY
+            tiers:
+              - maxPromptTokens: 32000
+                inputMicrosPerMtok: 4000000
+                cacheReadMicrosPerMtok: 1000000
+                outputMicrosPerMtok: 18000000
+              - maxPromptTokens: 0
+                inputMicrosPerMtok: 6000000
+                cacheReadMicrosPerMtok: 1500000
+                outputMicrosPerMtok: 22000000
+          zai/glm-5-turbo:
+            currency: CNY
+            tiers:
+              - maxPromptTokens: 32000
+                inputMicrosPerMtok: 5000000
+                cacheReadMicrosPerMtok: 1200000
+                outputMicrosPerMtok: 22000000
+              - maxPromptTokens: 0
+                inputMicrosPerMtok: 7000000
+                cacheReadMicrosPerMtok: 1800000
+                outputMicrosPerMtok: 26000000
+          zai/glm-5.1:
+            currency: CNY
+            tiers:
+              - maxPromptTokens: 32000
+                inputMicrosPerMtok: 6000000
+                cacheReadMicrosPerMtok: 1300000
+                outputMicrosPerMtok: 24000000
+              - maxPromptTokens: 0
+                inputMicrosPerMtok: 8000000
+                cacheReadMicrosPerMtok: 2000000
+                outputMicrosPerMtok: 28000000
+          zai/glm-5v-turbo:
+            currency: CNY
+            tiers:
+              - maxPromptTokens: 32000
+                inputMicrosPerMtok: 5000000
+                cacheReadMicrosPerMtok: 1200000
+                outputMicrosPerMtok: 22000000
+              - maxPromptTokens: 0
+                inputMicrosPerMtok: 7000000
+                cacheReadMicrosPerMtok: 1800000
+                outputMicrosPerMtok: 26000000
         # <<< FINANCE-VENDOR-TIERS-END
 
     - id: ui-finance

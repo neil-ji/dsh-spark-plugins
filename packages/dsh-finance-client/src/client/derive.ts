@@ -308,27 +308,42 @@ export function usageCostMicros(usage: FinanceTokenBuckets, rate: FinanceTierEnt
 }
 
 /**
- * 选组（SPEC §2.3 规则 3）：按 `useKey` 精确匹配 → 剥净 `#suffix` 回退 → 都没有则 null。
+ * 选组结果。**本产品暂不区分国际/国内**（只按中国内地价目计价），所以一个 modelKey
+ * 下有多个变体组属于"暂不支持的配置"——必须显式报出，不能猜。
+ */
+export type TierGroupLookup =
+  | { status: 'found'; group: FinanceTierGroup }
+  /** 该 modelKey 没有任何阶梯价组。 */
+  | { status: 'none' }
+  /** 同一 modelKey 下有多个变体组 —— 无从判断哪个对，拒绝估算。 */
+  | { status: 'ambiguous'; keys: readonly string[] }
+
+/**
+ * 选组（SPEC §2.3 规则 3）。
  *
- * 精确匹配优先，因为带后缀的组表达的是**币种 / 站点变体**（`openai/gpt-5.6#USD`），
- * 它比通用组更贴用户实际在用的那条线路。
+ * 运行期 `useKey` 形如 `provider/model`（**永不带 `#` 后缀**，取自会话日志的
+ * request header），带后缀的组只在配置侧存在；故此处先按原始 key 找、再按剥净后缀
+ * 的 modelKey 找，两处都要求**唯一**。
+ *
+ * 为什么不再"取第一组"：那等于让写入顺序决定用哪套价 —— 一旦同一模型既有国际组
+ * 又有国内组，面板会静默按"先写的那组"算账，而界面看不出任何异常。宁可不算。
  */
 export function tierGroupFor(
   groups: Record<string, readonly FinanceTierGroup[]>,
   useKey: string,
-): FinanceTierGroup | null {
-  const exact = groups[useKey]
-  if (exact !== undefined && exact.length > 0) return pickTierGroup(exact)
+): TierGroupLookup {
+  const direct = groups[useKey]
+  if (direct !== undefined && direct.length > 0) return singleOrAmbiguous(direct)
   const hash = useKey.lastIndexOf('#')
   const base = hash > 0 ? useKey.slice(0, hash) : useKey
   const fallback = groups[base]
-  if (fallback !== undefined && fallback.length > 0) return pickTierGroup(fallback)
-  return null
+  if (fallback !== undefined && fallback.length > 0) return singleOrAmbiguous(fallback)
+  return { status: 'none' }
 }
 
-/** 同一 key 上的多组（币种/地域变体）：取第一组，顺序由 settings 决定（先写先赢）。 */
-function pickTierGroup(groups: readonly FinanceTierGroup[]): FinanceTierGroup | null {
-  return groups.length === 0 ? null : groups[0]
+function singleOrAmbiguous(groups: readonly FinanceTierGroup[]): TierGroupLookup {
+  if (groups.length === 1) return { status: 'found', group: groups[0]! }
+  return { status: 'ambiguous', keys: groups.map(entry => entry.key) }
 }
 
 /** 一组阶梯价是否可用于账本币种 / 当前时刻（SPEC §2.3 规则 5）。 */
@@ -501,6 +516,11 @@ export type SplitEstimateOutcome =
   | { status: 'era-mismatch' }
   /** 有价，但没有可用的上下文用量（或没有最小档，如只有兜底档）。 */
   | { status: 'no-usage' }
+  /**
+   * 同一 modelKey 下有多个变体组（例如国内 + 国际价目），而运行期拿不到"在用哪条线路"
+   * 的信号 —— 无从判断用哪套价，拒绝估算（本产品暂不区分国际/国内）。
+   */
+  | { status: 'ambiguous'; keys: readonly string[] }
 
 /**
  * 面向面板的取数：先按 `useKey` 选组（规则 3），再过币种 / 生效窗口守卫（规则 5），
@@ -515,8 +535,10 @@ export function splitEstimateForModel(
   ledgerCurrency: string,
   atMs: number,
 ): SplitEstimateOutcome {
-  const group = tierGroupFor(groups, useKey)
-  if (group === null) return { status: 'no-tiers' }
+  const lookup = tierGroupFor(groups, useKey)
+  if (lookup.status === 'none') return { status: 'no-tiers' }
+  if (lookup.status === 'ambiguous') return { status: 'ambiguous', keys: lookup.keys }
+  const { group } = lookup
   const usability = tierGroupUsability(group, ledgerCurrency, atMs)
   if (usability === 'currency-mismatch') return { status: 'currency-mismatch', tierCurrency: group.currency }
   if (usability === 'era-mismatch') return { status: 'era-mismatch' }
