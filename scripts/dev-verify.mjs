@@ -271,10 +271,30 @@ async function waitForService(base, service, timeoutMs) {  const deadline = Date
   return false
 }
 
+/**
+ * 停掉本次 spawn 的沙箱宿主。
+ *
+ * 历史缺陷（实测 CI 卡死 2 小时）：原先只发 `kill -TERM -<pid>`（**进程组**）。
+ * 但宿主是经 `spawn(cmd, { shell: true })` 起的 —— 它的 PGID 继承自外层 shell，
+ * 并不是自己的进程组 leader（实测 pid=34473 而 PGID=34451）。于是 `kill -<pid>`
+ * 报 "No such process"，**宿主一个都没被杀掉**：
+ *   - `waitForPortFree` 白等 15s 后超时返回；
+ *   - 但没被杀的宿主仍持有那个 log fd，Node 事件循环因此不空，**进程永不退出**，
+ *     CI 的 install-verify 于是永久挂起。
+ *
+ * 现在**两路都发**：先按 pid 直接 TERM（这一路一定命中），再尽力按进程组 TERM
+ * （清掉 shell 与其它子进程）。不改用 SIGKILL：宿主有自己的收尾逻辑，给它 TERM 的机会。
+ */
 export function stopDetached(pid) {
   if (pid === undefined) return
-  if (process.platform === 'win32') spawnSync('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore' })
-  else spawnSync('kill', ['-TERM', '-' + String(pid)], { stdio: 'ignore' })
+  if (process.platform === 'win32') {
+    spawnSync('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore' })
+    return
+  }
+  // 1) 直接按 pid（关键：进程组那一路在 shell 包裹下不成立）
+  spawnSync('kill', ['-TERM', String(pid)], { stdio: 'ignore' })
+  // 2) 尽力按进程组（pid 恰好是 leader 时能连带清掉 shell）
+  spawnSync('kill', ['-TERM', '-' + String(pid)], { stdio: 'ignore' })
 }
 
 /** 等端口真正释放（Windows 上 taskkill 是异步的，立刻重开会撞 EADDRINUSE）。 */
