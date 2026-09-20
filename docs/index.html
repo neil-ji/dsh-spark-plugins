@@ -224,7 +224,7 @@
     </a>
   </div>
   <div class="meta">
-    <span>当前适配 <b class="mono">dsh 0.1.2-rc.1</b>（最新）</span>
+    <span>当前适配 <b class="mono">dsh 0.1.5-rc.2</b>（最新）</span>
     <span><b>12</b> 个包</span>
     <span><b>255+</b> 测试用例</span>
     <span><b>MIT</b> License</span>
@@ -347,14 +347,14 @@
         输入你的 dsh 版本，即时判定
       </h3>
       <div class="row">
-        <input id="ver-in" class="mono" type="text" placeholder="如 0.1.2-rc.1" aria-label="输入你的 dsh 版本号" autocomplete="off" spellcheck="false">
+        <input id="ver-in" class="mono" type="text" placeholder="如 0.1.5-rc.2" aria-label="输入你的 dsh 版本号" autocomplete="off" spellcheck="false">
         <button class="btn primary" id="ver-go" type="button">检查兼容性</button>
       </div>
       <div class="verdict" id="verdict" role="status" aria-live="polite"></div>
       <div class="quick-try">
         <span>试试：</span>
-        <button class="chip" type="button" data-ver="0.1.2-rc.1">0.1.2-rc.1</button>
-        <button class="chip" type="button" data-ver="0.1.1-rc.5">0.1.1-rc.5</button>
+        <button class="chip" type="button" data-ver="0.1.5-rc.2">0.1.5-rc.2</button>
+        <button class="chip" type="button" data-ver="0.1.4-rc.1">0.1.4-rc.1</button>
         <button class="chip" type="button" data-ver="0.2.0">0.2.0</button>
       </div>
     </div>
@@ -365,7 +365,7 @@
       </thead>
       <tbody>
         <tr>
-          <td class="mono">0.1.2-rc.1（最新）</td>
+          <td class="mono">0.1.5-rc.2（最新）</td>
           <td><span class="status ok"><i></i>完全兼容</span></td>
           <td>发布流水线用该版本构建，并用发布出去的资产端到端验收通过</td>
           <td class="mono">直接安装</td>
@@ -404,7 +404,7 @@
       <div class="step">
         <span class="n">1</span>
         <h3>确认 dsh 版本</h3>
-        <p>当前插件线只保证与最新 dsh 兼容（当前 0.1.2-rc.1），其他版本先看上方兼容矩阵。需 Node ≥ 18；不需要 git / pnpm。</p>
+        <p>当前插件线只保证与最新 dsh 兼容（当前 0.1.5-rc.2），其他版本先看上方兼容矩阵。需 Node ≥ 18；不需要 git（需要 pnpm：corepack enable 即可）。</p>
         <code>dsh --version</code>
       </div>
       <div class="step">
@@ -412,14 +412,25 @@
         <h3>一键安装</h3>
         <p>从 GitHub Release 下载预构建产物、校验 sha256 后装进 profile。不 clone、不构建：</p>
         <code>curl -fsSL https://neil-ji.github.io/dsh-spark-plugins/install.sh | sh</code>
-        <p style="margin-top:8px">Windows（PowerShell 5.1+，等价脚本）：</p>
+        <p style="margin-top:8px">Windows（PowerShell 5.1+）：</p>
         <code>irm https://neil-ji.github.io/dsh-spark-plugins/install.ps1 -OutFile install.ps1; .\install.ps1</code>
+        <p style="margin-top:8px">Windows（cmd.exe，薄包装，等价）：</p>
+        <code>curl -fsSL -o install.cmd https://neil-ji.github.io/dsh-spark-plugins/install.cmd &amp;&amp; install.cmd</code>
       </div>
       <div class="step">
         <span class="n">3</span>
         <h3>重启即生效</h3>
-        <p>重启 dsh web，到设置页完成各插件连接配置。变体：</p>
+        <p>重启 dsh web，点右下角悬浮球打开指挥舱，在各模块里完成连接配置。变体：</p>
         <code>install.sh --version v0.2.0 --profile web</code>
+        <p style="margin-top:8px">Windows：<code>.\install.ps1 -Version v0.2.0</code>；只装部分插件 <code>--only dsh-spark</code>；装到沙箱 home（不碰 ~/.dsh）<code>--home .\.dev\home</code>；开发路径 <code>--from-source</code></p>
+      </div>
+      <div class="step">
+        <span class="n">4</span>
+        <h3>卸载（只摘本插件）</h3>
+        <p>profile 里其它插件、它们自己的 override 与补丁一律保留。建议先预演：</p>
+        <code>install.sh --uninstall --dry-run</code>
+        <p style="margin-top:8px">确认后执行 <code>install.sh --uninstall</code>；Windows <code>.\install.ps1 -Uninstall -DryRun</code>；保留缓存加 <code>--keep-cache</code> / <code>-KeepCache</code></p>
+      </div>
         <p style="margin-top:8px">Windows：<code>.\install.ps1 -Version v0.2.0</code>；只装部分插件 <code>--only dsh-spark</code>；装到沙箱 home（不碰 ~/.dsh）<code>--home .\.dev\home</code>；开发路径 <code>--from-source</code></p>
       </div>
     </div>
@@ -446,7 +457,7 @@
     <span>·</span>
     <span>MIT License</span>
     <span>·</span>
-    <span>当前适配 <span class="mono">dsh 0.1.2-rc.1</span>（最新）</span>
+    <span>当前适配 <span class="mono">dsh 0.1.5-rc.2</span>（最新）</span>
     <span class="spacer"></span>
     <a href="https://github.com/neil-ji/dsh-spark-plugins">GitHub</a>
     <a href="demo.html">Demo</a>
@@ -456,7 +467,7 @@
 
 <script>
   // 兼容策略：只保证与最新 dsh 兼容。发版时把 DSH_LATEST 同步成清单里的 dsh.tested。
-  var DSH_LATEST = '0.1.2-rc.1';
+  var DSH_LATEST = '0.1.5-rc.2';
   function parseVer(v) {
     var m = v.match(/^(\d+)\.(\d+)\.(\d+)(?:-rc\.(\d+))?$/);
     return m ? { M: +m[1], mi: +m[2], pa: +m[3], rc: m[4] === undefined ? null : +m[4] } : null;

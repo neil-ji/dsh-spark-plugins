@@ -7,8 +7,22 @@
 > 由打包环境（CI 装 `@latest`）实际版本决定，`compat` 推导为 `^<tested>`；`release.yml` 的 verify
 > job 会装回清单里记录的版本、用发布出去的资产跑验收矩阵。**dsh 一升级就要走完下面两道闸再打新 tag。**
 
-> **当前状态（2026-09-08）**：本仓与全局 dsh 均为 **0.1.2-rc.1**；typecheck / `pnpm test` / `pnpm -r build`
-> 全绿，发布资产端到端验收（`pnpm release:verify`）30/30 通过。
+> **当前状态（2026-09-20）**：dsh 上游 latest 与 npm latest 均为 **0.1.5-rc.2**（本仓 overrides
+> 仍钉 0.1.2-rc.1）。第二道闸 `pnpm dryrun:dsh-upgrade` 对 0.1.5-rc.2 **已跑通**：
+> build + typecheck 全绿。过程中真抓到一处破坏（见下）。正式把 overrides 抬到 0.1.5-rc.2
+> 的迁移是**独立一项**，尚未执行。
+
+> **第二道闸抓到过的真破坏（0.1.5-rc.2）**：`assistant/chunk` 会话事件被**从事件联合里移除**
+> （换成 `assistant/attempt`）。`dsh-spark-finance` 的投影里原先用 `case 'assistant/chunk':`
+> 接这个 0.1.2 遗留事件，升级后 TS 报 `TS2678: not comparable` 并把 event 收窄成 `never`
+> （连带 4 处 `TS2339: Property 'data' does not exist on type 'never'`）。
+>
+> **第一道闸报不出这类问题** —— 它只比对「导出符号存活」，而这是**事件联合成员**的删除。
+> 教训：第一道闸有 🟡/ℹ️ 信号时必须跑第二道闸，别只看快检结论。
+>
+> 修法见 `projection.ts` 的 `legacyChunkFirstTokenTime`：把遗留分支移出 `switch`，
+> 改在 switch 外按字符串判别，从而两代平台共用一份源码、类型安全。
+> 回归锁在 `tests/projection-rate.test.ts` 的 legacy compatibility 组。
 
 ## 一、机制总览（两道闸）
 

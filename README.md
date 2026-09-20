@@ -4,8 +4,9 @@ DSH 第三方插件 monorepo（pnpm workspace）：UI/UX 与 DSH Web 官方设�
 
 ## 安装
 
-前置：dsh **最新版**（当前 `0.1.2-rc.1`）、Node.js ≥ 18。
-**不需要 git、不需要 pnpm、不克隆仓库、不本地构建** —— 脚本从 GitHub Release 下载 CI 预构建的 tarball，
+前置：dsh **最新版**（当前 `0.1.5-rc.2`）、Node.js ≥ 18、**pnpm**（安装器要用它把 tarball
+解析进 profile 的 `node_modules`；没有的话 `corepack enable` 即可，Node 16.9+ 自带）。
+**不需要 git、不克隆仓库、不本地构建** —— 脚本从 GitHub Release 下载 CI 预构建的 tarball，
 逐个校验 sha256 后装进 dsh profile。
 
 > 兼容策略：**只保证与最新 dsh 兼容**。发布清单里记录打包时刻的 `dsh.tested`（CI 装的是 `@latest`），
@@ -24,8 +25,36 @@ curl -fsSL https://neil-ji.github.io/dsh-spark-plugins/install.sh | sh
 irm https://neil-ji.github.io/dsh-spark-plugins/install.ps1 -OutFile install.ps1; .\install.ps1
 ```
 
-两个脚本都幂等：重复执行 = 更新到最新。安装器会核对本机 `dsh --version` 是否落在发布包的兼容区间内
+**Windows（cmd.exe）** —— 与上面等价，只是把 `-` 参数原样转发给 PowerShell：
+
+```bat
+curl -fsSL -o install.cmd https://neil-ji.github.io/dsh-spark-plugins/install.cmd && install.cmd
+```
+
+三个脚本都幂等：重复执行 = 更新到最新。安装器会核对本机 `dsh --version` 是否落在发布包的兼容区间内
 （不满足只告警，`--strict-version` 可改成硬失败）。
+
+## 卸载
+
+只摘本插件，**profile 里其它插件（第三方 bundle、它们自己的 override、profile 补丁）一律保留**。
+之所以强调这点：profile 不是本工具链的地盘，实测真 home 里就并存着 `dsh-plugin-deepeye`。
+
+```bash
+sh install.sh --uninstall                      # 卸载（默认 profile=web）
+sh install.sh --uninstall --dry-run            # 预演：只列出将删什么，不写文件
+sh install.sh --uninstall --keep-cache         # 保留 $DSH_HOME/spark-plugins 缓存
+```
+
+```powershell
+.\install.ps1 -Uninstall
+.\install.ps1 -Uninstall -DryRun
+```
+
+卸载做的事（与安装的 5 处写入逐条对称）：摘掉 profile 依赖行与 bundle 行、删掉我们写进
+`pnpm-workspace.yaml` 的 override、清理 `node_modules`/lockfile 与安装记录、删除
+`$DSH_HOME/spark-plugins` 缓存，最后复核残留 bundle 行是否仍能解析。安装时会把「本次装了哪些包」
+记进 `$DSH_HOME/spark-plugins/install-state.json`，卸载靠它做外科手术式摘除；没有该记录时
+按 tarball 路径特征识别（老版本装的也能摘干净）。
 
 ```bash
 # 常用变体
@@ -48,7 +77,8 @@ sh install.sh --from-source          # 开发路径：clone + pnpm install + bui
 .\install.ps1 -FromSource -LocalDir F:\path\to\checkout
 ```
 
-装完重启 dsh web，到设置页完成各插件的连接配置即可。
+装完重启 dsh web，点右下角悬浮球打开指挥舱，在各模块里完成连接配置即可
+（设置页 slot 形态已随 ADR-003 退役，插件 UI 一律走悬浮球）。
 卸载：`dsh plugin --profile web remove <插件名>`，并删除 `$DSH_HOME/spark-plugins`（安装器缓存）。
 发布流程见 [.github/workflows/release.yml](.github/workflows/release.yml)：打 tag → 构建/测试 → 打包资产 → 发布 → **用刚发布的资产自验**。
 
@@ -58,22 +88,28 @@ sh install.sh --from-source          # 开发路径：clone + pnpm install + bui
 
 <p align="center">GitHub 连接器 · 财务 Finance · npm 发布管线 · 记忆 HippoMemo · 火花 Spark ——按 DSH 设计系统 1:1 复刻的静态预览，演示数据见 <a href="docs/demo.html">docs/demo.html</a></p>
 
-## 包一览（12 个包）
+## 包一览（16 个包）
+
+**安装进 profile 的 11 个插件**（`plugin-registry.json` 登记，含依赖闭包共 16 个包）：
 
 | 包 | 目录 | 说明 |
 | --- | --- | --- |
 | dsh-hippomemo | packages/dsh-hippomemo | 跨会话/跨工作区共享记忆插件 |
+| dsh-spark | packages/dsh-spark | 火花认知层 host：spark 流（情景记忆）+ JSONL 持久化 + 收件箱编排 |
+| dsh-spark-dock | packages/dsh-spark-dock | **app 包**：宿主 web 全局悬浮球 + 指挥舱（`shell.overlay`），插件 UI 的统一入口 |
 | dsh-spark-plugin-kit | packages/dsh-plugin-kit | 公共层：事件订阅运行时（$stream 扇出/引用计数）· 连接器页面公共层（凭据 seam 门面 + 带竞态守卫的加载骨架）· 插件 CSS 注入 · Snapshot 绑定 · dock 模块契约 · 播报总线（文案归模块，壳只呈现） |
 | dsh-ui-kit | packages/dsh-ui-kit | 本地 React 组件库（复刻 DSH 设计系统，零 cordis） |
 | dsh-spark-finance | packages/dsh-finance | 成本统计插件 host（remote/typert + 计算核心） |
 | dsh-spark-finance-wire | packages/dsh-finance-wire | 成本统计插件 wire（remote 描述符 / Zod 边界 schema / 反射模型**单源**：host 注册与 client 挂载吃同一份） |
-| dsh-spark-finance-client | packages/dsh-finance-client | 成本统计插件 client（设置页 UI） |
+| dsh-spark-finance-client | packages/dsh-finance-client | 成本统计插件 client（悬浮球内四个决策视图） |
 | dsh-spark-finance-bundle | packages/dsh-finance-bundle | 成本统计插件安装入口（cordis.patch） |
 | dsh-connector-github | packages/dsh-github | GitHub 连接器 host（40+ 工具） |
-| dsh-connector-github-ui | packages/dsh-github-ui | GitHub 连接器 client（连接配置页） |
+| dsh-connector-github-ui | packages/dsh-github-ui | GitHub 连接器 client（连接配置） |
 | dsh-connector-wire | packages/dsh-github-wire | GitHub 连接器 wire（remote 协议定义） |
 | dsh-connector-npm | packages/dsh-npm | npm 发布管线 host（12 工具，granular token 全权接管 npm 平台侧：publish / dist-tag / deprecate / trust） |
 | dsh-connector-npm-ui | packages/dsh-npm-ui | npm 发布管线 client（token 测试/保存 + 发布状态页） |
+| dsh-connector-npm-wire | packages/dsh-npm-wire | npm 管线 wire（remote 协议定义） |
+| dsh-spark-wire | packages/dsh-spark-wire | 火花认知层 wire（remote 协议定义） |
 | dsh-connector-npm-wire | packages/dsh-npm-wire | npm 管线 wire（remote 协议定义） |
 
 > 目录名沿用各自源码仓库的目录名（dsh-github / dsh-npm / dsh-finance），npm 包名以各包 package.json 为准；`dsh-plugin-kit` / `dsh-finance` 在 npm 被占用，故发布为 `dsh-spark-plugin-kit` / `dsh-spark-finance` / `dsh-spark-finance-wire`。
@@ -86,7 +122,7 @@ npm 连接器 token 优先使用说明（粘贴 token → 测试连接 → 保�
 | --- | --- | --- |
 | 架构 | `pnpm check:architecture` | ① **孤包**：`packages/*` 里出现既非插件、也不在插件依赖闭包内的包（退役世代就是这么漏的）；② **依赖边界**：宿主半边 import react/ui-kit/客户端入口、插件互相 import、`<pkg>/embed` 被非 app 引用、ui-kit 沾平台依赖、wire 沾 cordis；③ **契约漂移**：wire 描述符声明的方法在宿主实现里不存在、同一份 wire 文件内部的反射 `members` 与描述符不一致（P5 之后契约只有一个源文件，没有第二份手抄产物可以漂移；`sourceLocation` 行号校验默认严格）；⑥ **fairy 呈现层**不得 import 领域契约 / 插件 UI（F7：文案归模块）；④ **inject 面覆盖**：client 半边用到 `ctx.slots` / `ctx.remote.credentials` 等服务却没写进该包 `inject` —— 真宿主会因此让整条 loader entry 失败；⑤ **单产物**：任何包再导出 / 构建 `./embed` 第二产物（P4 已删，防回潮）；⑦ **页内总线**：`packages/*/src` 里出现 `new CustomEvent('dsh-*')` / `addEventListener('dsh-*')` —— 拿 `window` 当页内事件总线（F11；原生事件如 `resize`/`keydown` 不在管辖内） |
 | 设计系统 | `pnpm check:contrast` | 亮/暗对比度 AA（154 项配对）+ token 完整性 + 文档/设计稿漂移 |
-| 预览保真 | `pnpm preview:verify` | 真 client 产物 + 假宿主跑通数据流（74 项，harness 不再自带客户端逻辑副本）；假宿主已与真宿主同形：**inject 门**（未声明服务访问抛错、动态命名空间必须走 reflect）、写入路径**按 wire schema 单源校验**（缺必填 → 400 BAD_REQUEST）、以及 teardown 生命周期 —— 五个插件的真 `apply()` 也在冒烟里跑 |
+| 预览保真 | `pnpm preview:verify` | 真 client 产物 + 假宿主跑通数据流（123 项，harness 不再自带客户端逻辑副本）；假宿主已与真宿主同形：**inject 门**（未声明服务访问抛错、动态命名空间必须走 reflect）、写入路径**按 wire schema 单源校验**（缺必填 → 400 BAD_REQUEST）、以及 teardown 生命周期 —— 五个插件的真 `apply()` 也在冒烟里跑 |
 | 版本纪律 | `pnpm check:version-bump` | 改了发布输入（`src/**`、构建配置、清单）却没在同一个 commit 里 bump 该包 `version` —— 版本没变，宿主就继续供旧 client 字节。注释/空白改动会剥离后比较，不算发布改动 |
 | dsh 版本体检 | `pnpm check:dsh-upgrade` | 见下节（上游 API 面 diff + 符号存活） |
 
@@ -111,7 +147,7 @@ pnpm check:version-bump  # 改发布输入必须同 commit bump 版本（--since
 pnpm dev          # 构建全部 + 安装到 web profile
 pnpm dev --run    # 构建 + 安装 + 前台启动 dogfood（dsh --profile web --port 3999）
 pnpm preview      # 零 dsh 组件预览（真 embed 产物 + 假宿主，127.0.0.1:5180）
-pnpm preview:verify  # 预览自检：Node 冒烟 + 服务器/fixture 断言（56 项）
+pnpm preview:verify  # 预览自检：Node 冒烟 + 服务器/fixture 断言（123 项）
 pnpm install:profile  # 仅重新安装到 profile（pack→tarball，与普通用户安装同路径）
 pnpm escape       # 启动「应急逃生」profile（纯官方 web，端口 3998）
 pnpm escape:init  # 仅初始化/刷新逃生 profile（幂等）
@@ -132,7 +168,7 @@ pnpm finance:sync-prices  # 从 models.dev 社区价格表同步非 DeepSeek 计
 ```bash
 pnpm preview         # http://127.0.0.1:5180/  真产物口径，改码自动重建 + 页面自动刷新
 pnpm preview:source  # 源码口径（插件 client 入口 src/client/index.ts），免构建
-pnpm preview:verify  # 自检 52 项（Node 冒烟 + 服务器/fixture 断言）
+pnpm preview:verify  # 自检 123 项（Node 冒烟 + 服务器/fixture 断言）
 ```
 
 左栏其余画布是组件级单渲染（GitHub / npm / 财务 Finance / HippoMemo / UI Kit），便于逐个走查；
