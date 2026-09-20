@@ -40,12 +40,16 @@ jobs:
         run: pnpm -r build
       - name: 类型检查
         run: pnpm -r typecheck
+      - name: 单元测试
+        run: pnpm test
+      - name: 全部门禁（架构 / 价格 / 对比度 / token / 版本）
+        run: pnpm check:all
+      - name: 零 dsh 预览自检
+        run: pnpm preview:verify
       - name: 安装 dsh（最新版）并记录到清单
         run: |
           npm install -g @deepseek-ai/dsh@latest
           dsh --version
-      - name: 单元测试
-        run: pnpm test
       - name: 打包发布资产
         run: node scripts/pack-release.mjs --tag "$VERSION" --out dist-release --dsh "$(dsh --version)"
       - name: 汇总产物

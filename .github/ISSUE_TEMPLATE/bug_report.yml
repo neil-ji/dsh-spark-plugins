@@ -1,0 +1,77 @@
+name: Bug 报告
+description: 插件行为不符合预期 / 报错 / 界面异常
+title: '[bug] '
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。请尽量填全 —— 本仓库只保证与**最新版 dsh** 兼容，
+        版本信息往往是定位问题的最短路径。
+  - type: input
+    id: dsh-version
+    attributes:
+      label: dsh 版本
+      description: 跑 `dsh --version` 的输出
+      placeholder: 0.1.5-rc.2
+    validations:
+      required: true
+  - type: input
+    id: plugin-version
+    attributes:
+      label: 插件版本
+      description: 发布 tag，或 `$DSH_HOME/spark-plugins/install-state.json` 里的 tag
+      placeholder: v0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: 操作系统
+      options:
+        - macOS
+        - Linux
+        - Windows
+        - WSL
+    validations:
+      required: true
+  - type: dropdown
+    id: plugin
+    attributes:
+      label: 涉及哪个插件
+      multiple: true
+      options:
+        - 悬浮球 / 指挥舱（dsh-spark-dock）
+        - 财务 Finance（dsh-spark-finance）
+        - 记忆 HippoMemo（dsh-hippomemo）
+        - 火花 Spark（dsh-spark）
+        - GitHub 连接器
+        - npm 连接器
+        - 安装 / 卸载脚本
+        - 其它 / 不确定
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 发生了什么
+      description: 实际行为 vs 期望行为
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 相关日志 / 报错
+      description: 宿主控制台输出或浏览器 Console。**请先确认里面没有 API key / token。**
+      render: shell
+    validations:
+      required: false

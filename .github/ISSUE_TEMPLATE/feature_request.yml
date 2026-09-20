@@ -1,0 +1,24 @@
+name: 功能建议
+description: 想要一个本仓库还没有的能力
+title: '[feat] '
+labels: ['enhancement']
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 你想解决的问题
+      description: 描述场景，而不只是想要的实现 —— 有助于找到更贴合现有架构的做法。
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 你设想的做法（可选）
+    validations:
+      required: false
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 考虑过的替代方案（可选）
+    validations:
+      required: false

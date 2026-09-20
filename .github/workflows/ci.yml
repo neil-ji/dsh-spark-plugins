@@ -35,8 +35,12 @@ jobs:
         run: pnpm test
       - name: 架构闸门（孤包 / 依赖边界 / 契约漂移，sourceLocation 严格）
         run: pnpm check:architecture
+      - name: 价格闸门（SPEC 不变量 / 生成段结构 / 反模式）
+        run: pnpm check:finance-prices
       - name: 设计系统闸门（对比度 / token 完整性 / 文档漂移）
         run: pnpm check:contrast
+      - name: token 形制闸门（面板层形制全部走 token）
+        run: pnpm audit-tokens
       - name: 零 dsh 预览自检（真 embed 产物 + 假宿主）
         run: pnpm preview:verify
       - name: 版本纪律（改发布输入必须同 commit bump 版本）

@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 安全问题（请勿公开开 issue）
+    url: https://github.com/neil-ji/dsh-spark-plugins/security/advisories/new
+    about: 凭据泄漏、供应链、可被远端触发的漏洞请走私密渠道，见 SECURITY.md
+  - name: 贡献指南
+    url: https://github.com/neil-ji/dsh-spark-plugins/blob/main/CONTRIBUTING.md
+    about: 本地验证工作流、提交规范与收尾 checklist
