@@ -245,6 +245,65 @@ export function ledger(scenario: Scenario): FinanceLedger {
       legacyCostMicros: 0,
       shiftSavingsMicros: Math.round(totalCostMicros * 0.07),
     },
+    // SPEC §10：额度触达与窗口归因的预览样本 —— 让卡片在 mock 通道可走查
+    // （未命中时卡片不出、角标不显示，所以预览必须带命中数据才看得到）。
+    quota: {
+      rows: [{
+        provider: 'zai',
+        hits: 2,
+        attempts: 11,
+        lastHitAtMs: now - 3 * 3600_000,
+        nextResetAtMs: now + 2 * 3600_000 + 12 * 60_000,
+        windows: [
+          { window: '5h', hits: 2, resetAtMs: now + 2 * 3600_000 + 12 * 60_000 },
+        ],
+      }],
+      totalHits: 2,
+      episodes: [
+        {
+          provider: 'zai', modelKey: 'zai/glm-5.3-flash', window: '5h',
+          firstAtMs: now - 3 * 3600_000 - 60_000, lastAtMs: now - 3 * 3600_000,
+          attempts: 6, final: true, resetAtMs: now + 2 * 3600_000 + 12 * 60_000,
+          resetRaw: null, vendorCode: '1308',
+        },
+        {
+          provider: 'zai', modelKey: 'zai/glm-5.3-flash', window: '5h',
+          firstAtMs: now - 9 * 3600_000 - 30_000, lastAtMs: now - 9 * 3600_000,
+          attempts: 5, final: true, resetAtMs: null,
+          resetRaw: '2026-09-19 23:17:45', vendorCode: '1308',
+        },
+      ],
+      monthStartMs: now - days * DAY,
+    },
+    windows: [
+      { span: '5h', ms: 5 * 3600_000 },
+      { span: 'week', ms: 7 * DAY },
+      { span: 'month', ms: 30 * DAY },
+    ].map(({ span, ms }) => {
+      const scaled = span === '5h' ? 0.08 : span === 'week' ? 0.5 : 1
+      const winModels = byModel.slice(0, 3).map((row) => ({
+        modelKey: row.modelKey,
+        provider: row.provider,
+        usage: buckets(scaled * 0.3),
+        costMicros: Math.round(row.costMicros * scaled),
+        decodeMs: Math.round(600_000 * scaled),
+        ttftMs: Math.round(12_000 * scaled),
+        steps: Math.max(1, Math.round(40 * scaled)),
+      }))
+      return {
+        span,
+        startMs: now - ms,
+        endMs: now,
+        anchoredAtHit: false,
+        usage: buckets(scaled * 0.9),
+        costMicros: Math.round(totalCostMicros * scaled),
+        decodeMs: Math.round(1_800_000 * scaled),
+        ttftMs: Math.round(36_000 * scaled),
+        steps: Math.max(1, Math.round(120 * scaled)),
+        models: winModels,
+        providerCount: new Set(winModels.map((row) => row.provider)).size,
+      }
+    }),
   }
 }
 

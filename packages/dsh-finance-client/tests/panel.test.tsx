@@ -511,3 +511,113 @@ describe('locale dictionaries', () => {
     expect(Object.keys(en).sort()).toEqual(Object.keys(zh).sort())
   })
 })
+/**
+ * SPEC §10.8 的克制口径（2026-09-20 用户裁决）：
+ * 窗口归因卡**不承载任何口径解释/提示性文案** —— 月长折算口径、迁移边界
+ * （"旧会话没有时长数据"）、"未填月费"这类说明一律不进 UI。
+ *
+ * 理由与背景：neilji 的一贯口径是「提示文案只在异常且必须给原因时出现」。
+ * 无数据本身已经由「—」表意，再补一段解释就是把认知负担丢给用户。
+ * 卡里只允许出现**数字与列名**。
+ *
+ * 这条测试锁的是"文案不再回来"——口径说明的正确归宿是
+ * `docs/FINANCE-PRICING-SPEC.md` §10.8，不是屏幕。
+ */
+describe('QuotaWindowCard 不含提示性文案（SPEC §10.8）', () => {
+  const windowLedger: FinanceLedger = {
+    ...LEDGER,
+    windows: [{
+      span: '5h',
+      startMs: 0,
+      endMs: 1000,
+      anchoredAtHit: false,
+      usage: buckets(100_000, 1_000, 0, 700),
+      costMicros: 30_000,
+      decodeMs: 60_000,
+      ttftMs: 100,
+      steps: 1,
+      models: [{
+        modelKey: 'acme/llm',
+        provider: 'acme',
+        usage: buckets(100_000, 1_000, 0, 700),
+        costMicros: 30_000,
+        decodeMs: 60_000,
+        ttftMs: 100,
+        steps: 1,
+      }],
+      providerCount: 1,
+    }],
+  }
+
+  const render = (ledger: FinanceLedger) => renderToStaticMarkup(
+    createElement(ThisMonthView, {
+      ledger,
+      providerList: PROVIDERS,
+      t,
+      refreshProvider: async () => {},
+      plans: [],
+      plansWritable: true,
+      savePlan: async () => {},
+      removePlan: async () => {},
+      onSetBillingMode: async () => {},
+      onTagProvider: async () => {},
+      refreshing: false,
+      onRefresh: () => {},
+      lastSyncAppliedAt: undefined,
+      priceTable: undefined,
+      priceBusy: false,
+      priceError: null,
+      onUpdatePrices: async () => {},
+      onRestorePrices: async () => {},
+    } as never),
+  )
+
+  it('renders only numbers and column labels, no explanatory prose', () => {
+    const html = render(windowLedger)
+    const card = /data-testid="finance-quota-window"[\s\S]*?(?=<\/section>|data-testid="finance-quota-window-end")/.exec(html)
+    expect(card).not.toBeNull()
+    const inner = card![0]
+
+    // 口径解释与提示性文案一律不得出现（key 即文案，t() 原样回显 key）。
+    for (const banned of [
+      'windowEstimateNote',
+      'windowDurationNone',
+      'windowNoPlan',
+      'windowProviderCount',
+      'windowCardHint',
+      'windowAnchored',
+    ]) {
+      expect(inner).not.toContain(banned)
+    }
+    // 但数字与列名必须在场（否则就是"删过头"）。
+    expect(inner).toContain('windowColModel')
+    expect(inner).toContain('windowEquivalent')
+  })
+
+  it('shows the value verdict only when the monthly fee allows computing it', () => {
+    const withPlanHtml = renderToStaticMarkup(
+      createElement(ThisMonthView, {
+        ledger: windowLedger,
+        providerList: PROVIDERS,
+        t,
+        refreshProvider: async () => {},
+        plans: [{ provider: 'acme', monthlyMicros: 10_000_000, currency: 'CNY', effectiveFrom: 0 }],
+        plansWritable: true,
+        savePlan: async () => {},
+        removePlan: async () => {},
+        onSetBillingMode: async () => {},
+        onTagProvider: async () => {},
+        refreshing: false,
+        onRefresh: () => {},
+        lastSyncAppliedAt: undefined,
+        priceTable: undefined,
+        priceBusy: false,
+        priceError: null,
+        onUpdatePrices: async () => {},
+        onRestorePrices: async () => {},
+      } as never),
+    )
+    // 有月费 -> 出现结论行；无月费 -> 一个字都不多说（首次 render() 已断言）。
+    expect(withPlanHtml).toMatch(/windowSavings(Up|Down)/)
+  })
+})

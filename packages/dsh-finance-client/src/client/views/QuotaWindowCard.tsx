@@ -109,17 +109,18 @@ export function QuotaWindowCard({ ledger, plans, t }: QuotaWindowCardProps): Rea
           )} />
         </StatGrid>
 
-        {/* 性价比结论：只在能算出来时出现一行，不做趋势/评分。 */}
-        <p className={css.hint}>
-          {verdict.savingsMicros === null
-            ? t('windowNoPlan')
-            : verdict.savingsMicros >= 0
-              ? t('windowSavingsUp', { amount: formatMicros(verdict.savingsMicros) })
-              : t('windowSavingsDown', { amount: formatMicros(-verdict.savingsMicros) })}
-          {' · '}
-          {t('windowProviderCount', { count: current.providerCount })}
-          {current.anchoredAtHit ? ` · ${t('windowAnchored', { time: new Date(current.endMs).toLocaleString() })}` : ''}
-        </p>
+        {/* 性价比结论：**只在真能算出来时**出现，且只给数字。
+            不给"未填月费…"这类解释 —— 窗口估价那格已是「—」，无数据本身就是说明；
+            也不给厂商数、口径脚注（提示性文案只在异常且必须给原因时出现）。 */}
+        {verdict.savingsMicros === null
+          ? null
+          : (
+            <p className={css.windowVerdict}>
+              {verdict.savingsMicros >= 0
+                ? t('windowSavingsUp', { amount: formatMicros(verdict.savingsMicros) })
+                : t('windowSavingsDown', { amount: formatMicros(-verdict.savingsMicros) })}
+            </p>
+          )}
 
         {current.models.length === 0
           ? <p className={css.hint}>{t('windowEmpty')}</p>
@@ -149,12 +150,6 @@ export function QuotaWindowCard({ ledger, plans, t }: QuotaWindowCardProps): Rea
               })}
             </div>
           )}
-
-        {/* 口径脚注：只在必须解释时才出现（月长折算 + 订阅金额非现金流）。 */}
-        <p className={css.hint}>
-          {t('windowEstimateNote')}
-          {hasDuration ? '' : ` · ${t('windowDurationNone')}`}
-        </p>
       </div>
     </Card>
   )

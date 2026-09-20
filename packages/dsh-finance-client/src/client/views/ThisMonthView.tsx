@@ -292,7 +292,6 @@ export function ThisMonthView({
                                 <Pill
                                   tone="warn"
                                   className={css.quotaPill}
-                                  title={t('quotaDetailHint')}
                                   aria-label={quotaPillLabel(quotaRow, quotaEpisodes, t)}
                                   data-testid={`finance-quota-${provider}`}
                                 >
@@ -775,18 +774,15 @@ function QuotaHitList({ ledger, provider, t }: {
         <span className={css.detailLabel}>{t('quotaDetailTitle')}</span>
         <span className={css.hint}>{t('quotaAttemptsNote', { hits: row.hits, attempts: row.attempts })}</span>
       </div>
-      {episodes.length === 0
-        ? <p className={css.hint}>{t('quotaDetailEmpty')}</p>
-        : (
-          <div className={css.table}>
-            <div className={`${css.tableHead} ${css.colsQuotaHits}`}>
-              <span className={css.cell}>{t('quotaColTime')}</span>
-              <span className={css.cell}>{t('quotaColWindow')}</span>
-              <span className={css.cell}>{t('quotaColVendor')}</span>
-              <span className={`${css.cell} ${css.cellNum}`}>{t('quotaColAttempts')}</span>
-              <span className={css.cell}>{t('quotaColReset')}</span>
-            </div>
-            {episodes.map((episode) => {
+      <div className={css.table}>
+        <div className={`${css.tableHead} ${css.colsQuotaHits}`}>
+          <span className={css.cell}>{t('quotaColTime')}</span>
+          <span className={css.cell}>{t('quotaColWindow')}</span>
+          <span className={css.cell}>{t('quotaColVendor')}</span>
+          <span className={`${css.cell} ${css.cellNum}`}>{t('quotaColAttempts')}</span>
+          <span className={css.cell}>{t('quotaColReset')}</span>
+        </div>
+        {episodes.map((episode) => {
               const countdown = resetCountdown(episode.resetAtMs, Date.now())
               const resetText = countdown !== null
                 ? countdown
@@ -804,10 +800,8 @@ function QuotaHitList({ ledger, provider, t }: {
                   <span className={css.cell} title={episode.resetRaw ?? undefined}>{resetText}</span>
                 </div>
               )
-            })}
-          </div>
-        )}
-      <p className={css.hint}>{t('quotaDetailHint')}</p>
+        })}
+      </div>
     </div>
   )
 }

@@ -516,3 +516,10 @@
 .colsQuotaHits {
   grid-template-columns: minmax(120px, 1.4fr) 76px 64px 48px minmax(84px, 1fr);
 }
+
+/* 窗口归因的性价比结论行：只承载数字结论（口径解释不进 UI）。 */
+.windowVerdict {
+  margin: 0;
+  color: var(--spk-label);
+  font-size: var(--spk-text-sm);
+}
