@@ -347,18 +347,25 @@ export async function releaseInstall(argv = process.argv.slice(2)) {
         continue
       }
       let buffer
-      try {
-        buffer = await readAsset(base, entry.file)
-      } catch (primaryError) {
-        // 主通道（github.com）整段不可达时改走 api.github.com。
-        // 不静默降级：明确告诉用户"换了通道"，否则日志会让人误以为一直走的直连。
-        if (fallback === undefined) fallback = await resolveViaApi(base)
-        if (fallback === undefined) throw primaryError
-        if (!fallbackAnnounced) {
-          log(`!  ${base} 不可达，改用备用通道：${fallback.describe}`)
-          fallbackAnnounced = true
-        }
+      if (fallback !== undefined) {
+        // 备用通道已确认可用：后续资产直接走它。
+        // 不这么做的话，每个包都要先在坏掉的主通道上耗完 6 次退避（≈15s），
+        // 16 个包就是 4 分钟白等 —— 实测日志里满屏重试就是这么来的。
         buffer = await readAssetViaApi(fallback, entry.file)
+      } else {
+        try {
+          buffer = await readAsset(base, entry.file)
+        } catch (primaryError) {
+          // 主通道（github.com）整段不可达时改走 api.github.com。
+          // 不静默降级：明确告诉用户"换了通道"，否则日志会让人误以为一直走的直连。
+          fallback = await resolveViaApi(base)
+          if (fallback === undefined) throw primaryError
+          if (!fallbackAnnounced) {
+            log(`!  ${base} 不可达，改用备用通道：${fallback.describe}（后续资产直接走它）`)
+            fallbackAnnounced = true
+          }
+          buffer = await readAssetViaApi(fallback, entry.file)
+        }
       }
       const digest = sha256(buffer)
       if (digest !== entry.sha256) {
