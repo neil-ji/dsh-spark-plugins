@@ -16,17 +16,17 @@
  * 旧会话没有速率投影 —— 那一格显示 `—`，不显示 0。
  */
 
-import { useState, type CSSProperties, type ReactNode } from 'react'
-import { Button, Card, EmptyState, Money, Pill } from 'dsh-ui-kit'
+import type { CSSProperties, ReactNode } from 'react'
+import { Card, EmptyState, Money, Pill } from 'dsh-ui-kit'
 import type { FinanceLedger } from 'dsh-spark-finance/types'
 import {
   cheapestInGroup,
   compareMetricRows,
-  firstTokenMs,
   formatGapRatio,
   formatMs,
   formatPercent,
   formatSpeed,
+  formatTokens,
   groupByModel,
   modelComparisonRows,
   speedComparison,
@@ -46,6 +46,10 @@ function metricLabel(metric: CompareMetricKey, t: FinanceTranslate): string {
   if (metric === 'hitRate') return t('compareMetricHitRate')
   if (metric === 'speed') return t('compareMetricSpeed')
   if (metric === 'ttft') return t('compareMetricTtft')
+  if (metric === 'input') return t('compareMetricInput')
+  if (metric === 'cacheRead') return t('compareMetricCacheRead')
+  if (metric === 'cacheWrite') return t('compareMetricCacheWrite')
+  if (metric === 'output') return t('compareMetricOutput')
   return t('compareMetricCost')
 }
 
@@ -68,11 +72,12 @@ function metricCellValue(
   }
   if (metric === 'hitRate') return formatPercent(cell.value)
   if (metric === 'speed') return `${formatSpeed(cell.value)}${t('perSecond')}`
-  return formatMs(cell.value)
+  if (metric === 'ttft') return formatMs(cell.value)
+  // 四个 token 桶（明细行）：紧凑计数，与别处的 token 展示同口径。
+  return formatTokens(cell.value)
 }
 
 export function WhoToUseView({ ledger, t }: WhoToUseViewProps): ReactNode {
-  const [openModel, setOpenModel] = useState<string | null>(null)
   const groups = groupByModel(modelComparisonRows(ledger))
   const currency = ledger.currency === '' ? 'CNY' : ledger.currency
 
@@ -89,25 +94,18 @@ export function WhoToUseView({ ledger, t }: WhoToUseViewProps): ReactNode {
       <div className={css.table}>
         {groups.map((group) => {
           const best = cheapestInGroup(group.rows)
-          const open = openModel === group.model
           const speed = speedComparison(group.rows)
           const metrics = compareMetricRows(group.rows)
           return (
             <div className={css.group} key={group.model} data-testid={`finance-model-${group.model}`}>
+              {/* 组头只留模型名 + （多供应商时）谁更省的结论。
+                  「仅一家在用 / 样本不足」标签与「明细」展开按钮均已退役（2026-09-20）：
+                  前者在只有一家时是无信息表述，后者藏的 token 分桶已提升为表格的行。 */}
               <div className={css.groupHead}>
                 <span className={`${css.groupTitle} ${css.modelKey}`} title={group.model}>{group.model}</span>
                 {best === null
-                  ? <Pill accentColor="var(--spk-label-3)">{group.rows.length < 2 ? t('whoSingle') : t('whoNoVerdict')}</Pill>
+                  ? null
                   : <Pill accentColor="var(--spk-acc-finance-fg)">{t('whoBest')} · {best.provider}</Pill>}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  aria-expanded={open}
-                  aria-label={`${t('detailToggle')}: ${group.model}`}
-                  onClick={() => setOpenModel(open ? null : group.model)}
-                >
-                  {t('detailToggle')}
-                </Button>
               </div>
               {/* 时间成本放在组头下面常显：慢多少分钟比"谁快"更值得一眼看到。 */}
               {speed === null
@@ -149,22 +147,6 @@ export function WhoToUseView({ ledger, t }: WhoToUseViewProps): ReactNode {
                 ))}
               </div>
               </Card>
-              {open
-                ? (
-                  <div className={css.detail}>
-                    {group.rows.map((row) => (
-                      <p className={css.detailText} key={`detail:${row.provider}`}>
-                        {row.provider} · {t('detailBuckets', {
-                          input: row.usage.uncachedInputTokens,
-                          cacheRead: row.usage.cacheReadTokens,
-                          cacheWrite: row.usage.cacheWriteTokens,
-                          output: row.usage.outputTokens,
-                        })} · {t('ttftLabel', { ms: formatMs(firstTokenMs(row.rate)) })}
-                      </p>
-                    ))}
-                  </div>
-                )
-                : null}
             </div>
           )
         })}

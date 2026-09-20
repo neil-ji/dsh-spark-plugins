@@ -914,7 +914,9 @@ export function resetCountdown(resetAtMs: number | null, nowMs: number): string 
 export type CompareMetricDirection = 'lower-better' | 'higher-better' | 'neutral'
 
 /** 可横向对比的指标键（视图据此取词）。 */
-export type CompareMetricKey = 'cost' | 'unitCost' | 'hitRate' | 'speed' | 'ttft'
+export type CompareMetricKey =
+  | 'cost' | 'unitCost' | 'hitRate' | 'speed' | 'ttft'
+  | 'input' | 'cacheRead' | 'cacheWrite' | 'output'
 
 export interface CompareMetricCell {
   provider: string
@@ -950,16 +952,27 @@ interface CompareMetricSpec {
 /**
  * 指标表（顺序即渲染顺序）。
  *
- * `cost`（总成本）刻意是 **neutral**：它由**用量规模**决定，不是质量指标 ——
- * 同一模型下 A 家花了 ¥10、B 家 ¥1，只说明 A 承载了更多活，不说明 A 更贵。
- * 给它标"最优/最差"是**算错**（违背"宁可不算，不可算错"）。可比的成本口径是
- * 单位成本（`unitCost`），它才是同口径的单价。
+ * 前半是**质量指标**（可判最优）：单位成本、命中率、输出速率、首 token 延迟。
+ * 后半是**用量构成**（全 neutral，不判最优）：四个 token 桶与总成本 ——
+ * 它们由**用量规模**决定，不是质量指标。同一模型下 A 家花了 ¥10、B 家 ¥1，
+ * 只说明 A 承载了更多活，不说明 A 更贵；给它们标"最优/最差"是**算错**
+ * （违背"宁可不算，不可算错"）。可比的成本口径是单位成本，它才是同口径的单价。
+ *
+ * 2026-09-20：四个 token 桶原先藏在「明细」展开区里，现提升为表格的行 ——
+ * 用户原话"你说的明细，其实完全可以加若干行"。于是展开按钮整个退役。
  */
 const COMPARE_METRICS: readonly CompareMetricSpec[] = [
   { metric: 'unitCost', direction: 'lower-better', pick: (row) => row.unitCostMicros },
   { metric: 'hitRate', direction: 'higher-better', pick: (row) => row.hitRate },
   { metric: 'speed', direction: 'higher-better', pick: (row) => outputTokensPerSecond(row.rate) },
   { metric: 'ttft', direction: 'lower-better', pick: (row) => firstTokenMs(row.rate) },
+  // 用量构成（原先藏在「明细」展开区里）：它们同样是可横向对比的指标，
+  // 放进表里就多四行，不必再点开。全为 **neutral** —— 用得多说明活多，
+  // 不代表更好或更差（同总成本的道理）。
+  { metric: 'input', direction: 'neutral', pick: (row) => row.usage.uncachedInputTokens },
+  { metric: 'cacheRead', direction: 'neutral', pick: (row) => row.usage.cacheReadTokens },
+  { metric: 'cacheWrite', direction: 'neutral', pick: (row) => row.usage.cacheWriteTokens },
+  { metric: 'output', direction: 'neutral', pick: (row) => row.usage.outputTokens },
   { metric: 'cost', direction: 'neutral', pick: (row) => row.costMicros },
 ]
 

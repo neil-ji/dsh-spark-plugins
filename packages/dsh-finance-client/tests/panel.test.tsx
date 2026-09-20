@@ -364,6 +364,28 @@ describe('finance views', () => {
     expect(html).toContain('estimateTag')
   })
 
+  it('组头不再有「仅一家在用/样本不足」结论标签与「明细」展开按钮', () => {
+    const html = renderToStaticMarkup(createElement(WhoToUseView, { ledger: LEDGER, t }))
+    // 无信息表述退役：单供应商时说"仅一家在用"、样本不足时说"暂不比较"都是废话
+    expect(html).not.toContain('whoSingle')
+    expect(html).not.toContain('whoNoVerdict')
+    // 「明细」展开整个退役：它藏的 token 分桶已提升为表格的行
+    expect(html).not.toContain('detailToggle')
+    expect(html).not.toContain('detailBuckets')
+    expect(html).not.toContain('aria-expanded')
+  })
+
+  it('明细不再是展开区，而是表格里多出的四行 token 桶', () => {
+    const html = renderToStaticMarkup(createElement(WhoToUseView, { ledger: LEDGER, t }))
+    for (const metric of ['input', 'cacheRead', 'cacheWrite', 'output']) {
+      expect(html).toContain(`finance-compare-row-${metric}`)
+    }
+    expect(html).toContain('compareMetricInput')
+    expect(html).toContain('compareMetricOutput')
+    // token 桶是 neutral：不判最优、不给相对差
+    expect(html).toContain('compareMetricCost')
+  })
+
   it('每行取最优并将其余格百分化（一眼看出相差多少）', () => {
     const html = renderToStaticMarkup(createElement(WhoToUseView, { ledger: LEDGER, t }))
     expect(html).toContain('compareBestTag')
