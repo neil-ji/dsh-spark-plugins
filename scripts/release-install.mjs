@@ -101,16 +101,122 @@ function assetUrl(base, file) {
   return join(resolve(base), file)
 }
 
+/**
+ * 下载一个资产，带重试。
+ *
+ * 为什么必须重试（2026-09-20 用户实测 `curl | sh` 报 `✗ fetch failed`）：
+ * 安装要顺序下 16 个 tarball，而 Node 的 undici 默认**连接超时只有 10s**、
+ * 且对同一 host 的突发连接很敏感 —— 实测在第 11 个包上抛
+ * `UND_ERR_CONNECT_TIMEOUT`（attempted address: github.com:443）与
+ * `UND_ERR_SOCKET`（other side closed）。curl 下同一个 URL 却是 200，
+ * 所以这不是"网络不通"，是**客户端没有韧性**。
+ *
+ * 策略：指数退避重试（默认 6 次尝试），间隔 0.5s→1s→2s→4s→8s（封顶 8s）。
+ * 之所以给到 6 次而不是 3~4 次：实测同一个 URL 单次耗时在 0.5s~7s 间波动，
+ * 而 undici 的连接超时是 10s —— 突发时的失败是**成片**的，重试窗口太短会连
+ * 几轮都落在同一段坏窗口里。6 次退避合计约 15.5s，足以跨过这类抖动。
+ *
+ * 5xx / 连接类错误都重试；4xx（尤其 404）**不重试** —— 那是资产真的不存在，
+ * 重试没意义还会掩盖问题。失败时把底层 cause 一起报出来，不要只留
+ * 一个笼统的 "fetch failed"（这正是本次排查困难的根源）。
+ */
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+export async function fetchWithRetry(target, { attempts = 6, timeoutMs = 30_000, headers } = {}) {
+  let lastError
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const response = await fetch(target, {
+        redirect: 'follow',
+        signal: AbortSignal.timeout(timeoutMs),
+        ...(headers === undefined ? {} : { headers }),
+      })
+      if (response.ok) return response
+      // 4xx 是确定性的（资产不存在 / 权限），重试无意义
+      if (response.status >= 400 && response.status < 500) {
+        throw new Error(`下载失败 ${target} → HTTP ${response.status}`)
+      }
+      lastError = new Error(`下载失败 ${target} → HTTP ${response.status}`)
+    } catch (error) {
+      // 上面主动抛的 4xx 直接向外传，不做重试
+      if (error instanceof Error && /^下载失败 .* HTTP 4\d\d$/.test(error.message)) throw error
+      lastError = error
+    }
+    if (attempt < attempts) {
+      // 指数退避，封顶 8s：500 → 1000 → 2000 → 4000 → 8000
+      const delay = Math.min(8000, 500 * 2 ** (attempt - 1))
+      console.log(`  ! 下载失败（${describeFetchError(lastError)}），${delay}ms 后重试 ${attempt}/${attempts - 1}…`)
+      await sleep(delay)
+    }
+  }
+  throw new Error(`下载失败 ${target}（已重试 ${attempts} 次）：${describeFetchError(lastError)}`)
+}
+
+/** 把 undici 的嵌套 cause 摊平成一句人话（"fetch failed" 单独出现毫无信息量）。 */
+export function describeFetchError(error) {
+  if (!(error instanceof Error)) return String(error)
+  const cause = error.cause
+  const code = cause?.code ?? cause?.errno
+  const message = cause?.message ?? cause?.toString?.() ?? ''
+  if (code !== undefined || message !== '') return `${error.message} ← ${message}${code === undefined ? '' : ` [${code}]`}`
+  return error.message
+}
+
 async function readAsset(base, file) {
   const target = assetUrl(base, file)
   if (/^https?:/.test(target)) {
-    const response = await fetch(target, { redirect: 'follow' })
-    if (!response.ok) throw new Error(`下载失败 ${target} → HTTP ${response.status}`)
+    const response = await fetchWithRetry(target)
     return Buffer.from(await response.arrayBuffer())
   }
   const path = target.startsWith('file://') ? fileURLToPath(target) : target
   if (!existsSync(path)) throw new Error(`资产不存在：${path}`)
   return readFileSync(path)
+}
+
+/**
+ * 备用通道：`github.com` 连不上时，改走 `api.github.com` 拿同一批资产。
+ *
+ * 为什么需要（2026-09-20 实测）：`https://github.com/<owner>/<repo>/releases/download/...`
+ * 的**第一跳就是 github.com**（拿 302 再到 objects.githubusercontent.com）。
+ * 本机网络出现 `github.com` 完全不可达、而 `api.github.com` 与
+ * `objects.githubusercontent.com` 都正常的情况 —— 于是安装必然失败，
+ * 且重试也救不回来（整段窗口都是坏的）。
+ *
+ * GitHub API 提供等价下载：列出 release → 按名字取 asset id →
+ * `GET /repos/{owner}/{repo}/releases/assets/{id}` + `Accept: application/octet-stream`。
+ * 实测同一时刻这条路是通的，能拿到字节完全一致的资产。
+ *
+ * 仅在主通道最终失败且 base 是 GitHub Release URL 时启用，不做静默降级：
+ * 会明确打印用了备用通道，让用户知道发生了什么。
+ */
+async function resolveViaApi(base) {
+  const match = /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/releases\/(?:download\/([^/]+)|latest\/download)\/?$/.exec(
+    base.endsWith('/') ? base.slice(0, -1) : base,
+  )
+  if (match === null) return undefined
+  const [, owner, repo, tag] = match
+  const endpoint = tag === undefined
+    ? `https://api.github.com/repos/${owner}/${repo}/releases/latest`
+    : `https://api.github.com/repos/${owner}/${repo}/releases/tags/${tag}`
+  try {
+    const response = await fetchWithRetry(endpoint, { attempts: 3 })
+    const release = JSON.parse(Buffer.from(await response.arrayBuffer()).toString('utf8'))
+    const byName = new Map((release.assets ?? []).map((asset) => [asset.name, asset]))
+    return { owner, repo, byName, describe: `${owner}/${repo}@${release.tag_name}（经 api.github.com）` }
+  } catch {
+    return undefined
+  }
+}
+
+/** 走 API 通道读一个资产的字节。 */
+async function readAssetViaApi(fallback, file) {
+  const asset = fallback.byName.get(file)
+  if (asset === undefined) throw new Error(`api.github.com 上没有资产 ${file}`)
+  const response = await fetchWithRetry(`https://api.github.com/repos/${fallback.owner}/${fallback.repo}/releases/assets/${asset.id}`, {
+    headers: { accept: 'application/octet-stream' },
+    attempts: 3,
+  })
+  return Buffer.from(await response.arrayBuffer())
 }
 
 const sha256 = (buffer) => createHash('sha256').update(buffer).digest('hex')
@@ -166,7 +272,19 @@ export async function releaseInstall(argv = process.argv.slice(2)) {
     log(`[release-install] pnpm ${pnpm}`)
   }
 
-  const manifestRaw = await readAsset(base, 'manifest.json')
+  // 清单也要能吃备用通道：github.com 不可达时它是**第一个**会失败的请求，
+// 不在这里兜住的话，后面的下载兜底根本轮不到执行。
+  let apiFallback = await (async () => {
+    try {
+      return { raw: await readAsset(base, 'manifest.json') }
+    } catch (primaryError) {
+      const via = await resolveViaApi(base)
+      if (via === undefined) throw primaryError
+      log(`!  ${base} 不可达，改用备用通道：${via.describe}`)
+      return { raw: await readAssetViaApi(via, 'manifest.json'), via }
+    }
+  })()
+  const manifestRaw = apiFallback.raw
   const manifest = JSON.parse(manifestRaw.toString('utf8'))
   if (manifest.schema !== 1) throw new Error(`不支持的清单 schema=${manifest.schema}`)
   log(`[release-install] 版本 ${manifest.tag}（commit ${manifest.commit ?? '?'}，构建于 ${manifest.builtAt}）`)
@@ -213,6 +331,9 @@ export async function releaseInstall(argv = process.argv.slice(2)) {
   const cacheDir = resolve(flags.cache ?? join(home, 'spark-plugins', 'cache', manifest.tag))
   if (!flags.dryRun) mkdirSync(cacheDir, { recursive: true })
   const files = []
+  // 备用通道：清单阶段可能已经解析出来了（github.com 不可达），直接复用，别重复问 API
+  let fallback = apiFallback.via
+  let fallbackAnnounced = fallback !== undefined
   for (const entry of chosen.values()) {
     const target = join(cacheDir, entry.file)
     let reused = false
@@ -225,7 +346,20 @@ export async function releaseInstall(argv = process.argv.slice(2)) {
         log(`  [dry-run] 下载 ${entry.file}（${(entry.size / 1024).toFixed(0)} KB）`)
         continue
       }
-      const buffer = await readAsset(base, entry.file)
+      let buffer
+      try {
+        buffer = await readAsset(base, entry.file)
+      } catch (primaryError) {
+        // 主通道（github.com）整段不可达时改走 api.github.com。
+        // 不静默降级：明确告诉用户"换了通道"，否则日志会让人误以为一直走的直连。
+        if (fallback === undefined) fallback = await resolveViaApi(base)
+        if (fallback === undefined) throw primaryError
+        if (!fallbackAnnounced) {
+          log(`!  ${base} 不可达，改用备用通道：${fallback.describe}`)
+          fallbackAnnounced = true
+        }
+        buffer = await readAssetViaApi(fallback, entry.file)
+      }
       const digest = sha256(buffer)
       if (digest !== entry.sha256) {
         throw new Error(`校验失败 ${entry.file}：期望 ${entry.sha256}，实际 ${digest}`)
