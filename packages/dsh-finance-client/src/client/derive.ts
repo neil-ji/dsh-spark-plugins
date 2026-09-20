@@ -907,3 +907,106 @@ export function resetCountdown(resetAtMs: number | null, nowMs: number): string 
   if (remaining <= 0) return null
   return formatDuration(remaining)
 }
+
+/* ───────────────── 转置对比：每行一个指标、每列一个供应商 ───────────────── */
+
+/** 指标方向：决定"最优"是取最小还是最大。 */
+export type CompareMetricDirection = 'lower-better' | 'higher-better' | 'neutral'
+
+/** 可横向对比的指标键（视图据此取词）。 */
+export type CompareMetricKey = 'cost' | 'unitCost' | 'hitRate' | 'speed' | 'ttft'
+
+export interface CompareMetricCell {
+  provider: string
+  /** 原始数值；null = 该供应商无此指标数据（不参与最优判定）。 */
+  value: number | null
+  /** 是否该行最优（并列时同时为 true）。 */
+  best: boolean
+  /**
+   * 与最优值的**有符号相对差**：`(value − best) / best`。
+   *  - 正 = 比最优大（单位成本/延迟 = 更差；速率/命中率 = 更好）
+   *  - 0 = 就是最优；null = 无数据或该行不可比（neutral / 最优值为 0）
+   *
+   * 刻意**不给方向化的"好/坏"符号**：只报客观差值，好坏的解读交给列头与
+   * 「最优」标记 —— 把 +/− 重新解释成"更好/更差"会在两类指标间翻转语义。
+   */
+  gapRatio: number | null
+}
+
+export interface CompareMetricRow {
+  metric: CompareMetricKey
+  direction: CompareMetricDirection
+  cells: readonly CompareMetricCell[]
+  /** 该行是否判出了最优（≥2 家都有数据，且最优值非 0）。 */
+  hasBest: boolean
+}
+
+interface CompareMetricSpec {
+  metric: CompareMetricKey
+  direction: CompareMetricDirection
+  pick: (row: ModelComparisonRow) => number | null
+}
+
+/**
+ * 指标表（顺序即渲染顺序）。
+ *
+ * `cost`（总成本）刻意是 **neutral**：它由**用量规模**决定，不是质量指标 ——
+ * 同一模型下 A 家花了 ¥10、B 家 ¥1，只说明 A 承载了更多活，不说明 A 更贵。
+ * 给它标"最优/最差"是**算错**（违背"宁可不算，不可算错"）。可比的成本口径是
+ * 单位成本（`unitCost`），它才是同口径的单价。
+ */
+const COMPARE_METRICS: readonly CompareMetricSpec[] = [
+  { metric: 'unitCost', direction: 'lower-better', pick: (row) => row.unitCostMicros },
+  { metric: 'hitRate', direction: 'higher-better', pick: (row) => row.hitRate },
+  { metric: 'speed', direction: 'higher-better', pick: (row) => outputTokensPerSecond(row.rate) },
+  { metric: 'ttft', direction: 'lower-better', pick: (row) => firstTokenMs(row.rate) },
+  { metric: 'cost', direction: 'neutral', pick: (row) => row.costMicros },
+]
+
+/**
+ * 把「同一模型的若干供应商」折成**转置**的指标行：每行一个指标、每列一个供应商。
+ *
+ * 每行取最优（单位成本/延迟取最小，命中率/速率取最大），其余格给出与最优的
+ * 有符号相对差 —— 用户据此一眼看出"相差百分之多少"。
+ *
+ * 最优值退化为 0 时放弃该行的最优判定（相对差会除零/无限放大），`hasBest=false`。
+ * 单个供应商时同样不判最优（没有可比对象）。
+ *
+ * @param rows - 同一模型下的供应商行（顺序决定列顺序，调用方负责排序）。
+ */
+export function compareMetricRows(rows: readonly ModelComparisonRow[]): CompareMetricRow[] {
+  return COMPARE_METRICS.map((spec) => {
+    const values = rows.map((row) => spec.pick(row))
+    const usable = values.filter((value): value is number => value !== null && Number.isFinite(value))
+    let bestValue: number | null = null
+    if (spec.direction !== 'neutral' && usable.length >= 2) {
+      bestValue = spec.direction === 'lower-better' ? Math.min(...usable) : Math.max(...usable)
+      // 0 作分母无意义（延迟/成本理论上不该为 0，真为 0 时放弃判定而不是给 ∞%）。
+      if (bestValue === 0) bestValue = null
+    }
+    const cells: CompareMetricCell[] = rows.map((row, index) => {
+      const value = values[index]
+      if (value === null || !Number.isFinite(value)) {
+        return { provider: row.provider, value: null, best: false, gapRatio: null }
+      }
+      if (bestValue === null) {
+        return { provider: row.provider, value, best: false, gapRatio: null }
+      }
+      const gapRatio = (value - bestValue) / bestValue
+      return { provider: row.provider, value, best: value === bestValue, gapRatio }
+    })
+    return { metric: spec.metric, direction: spec.direction, cells, hasBest: bestValue !== null }
+  })
+}
+
+/**
+ * 相对差文本（带符号，一位小数）：`+12.7%` / `−12.1%` / `0%`。
+ * 用数学减号 U+2212 而非连字符，与其余数字排版一致。
+ */
+export function formatGapRatio(ratio: number | null): string {
+  if (ratio === null || !Number.isFinite(ratio)) return '—'
+  const pct = ratio * 100
+  if (Math.abs(pct) < 0.05) return '0%'
+  const sign = pct > 0 ? '+' : '−'
+  return `${sign}${Math.abs(pct).toFixed(1)}%`
+}

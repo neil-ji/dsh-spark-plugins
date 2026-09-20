@@ -523,3 +523,65 @@
   color: var(--spk-label);
   font-size: var(--spk-text-sm);
 }
+
+/* ── 转置对比表（该用谁，2026-09-20）：行 = 指标，列 = 供应商 ── */
+
+/* 第一列是指标名（固定宽），其余列按供应商数量均分（--compare-cols 由视图给出）。
+   表头行与数据行共用同一套 grid，否则两个 grid 各自算宽会整列错位
+   （UI-UX-SPEC §3.5 第 5 条 —— finance 供应商表三轮真宿主截图实测沉淀）。 */
+.compareGrid {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--spk-border-2);
+}
+
+.compareRow {
+  display: grid;
+  grid-template-columns: minmax(96px, 1.1fr) repeat(var(--compare-cols, 2), minmax(0, 1fr));
+  gap: var(--spk-space-2);
+  align-items: center;
+  padding: var(--spk-space-2) 0;
+  border-bottom: 1px solid var(--spk-border-2);
+}
+
+.compareRow:last-child {
+  border-bottom: none;
+}
+
+/* 表头行（供应商名）：加底边与前一行分隔，名字允许两行并悬浮全文。 */
+.compareProvider {
+  font-size: var(--spk-text-sm);
+  font-weight: 600;
+  color: var(--spk-label);
+  overflow-wrap: anywhere;
+}
+
+.compareMetricLabel {
+  font-size: var(--spk-text-xs);
+  color: var(--spk-label-3);
+}
+
+/* 每格：值在上、最优标记与相对差在下（竖向堆叠，避免横向挤压导致折行）。 */
+.compareCell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.compareValue {
+  font-size: var(--spk-text-sm);
+  color: var(--spk-label);
+}
+
+.compareBest {
+  align-self: flex-start;
+}
+
+/* 相对差：等宽数字，弱化色（它是辅助读数，不该抢过数值本身）。 */
+.compareGap {
+  font-size: var(--spk-text-xs);
+  color: var(--spk-label-3);
+  font-variant-numeric: tabular-nums;
+}

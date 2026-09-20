@@ -341,16 +341,19 @@ describe('finance views', () => {
     const html = renderToStaticMarkup(createElement(WhoToUseView, { ledger: LEDGER, t }))
     // 组名是模型名（不是 provider/model）：两家供应同一个模型才可能同组比较
     expect(html).toContain('finance-model-llm')
-    // 次要口径隐式化：命中率的算式挂在列头 title，不再是展开区里的段落
+    // 次要口径隐式化：命中率的算式挂在指标名 title，不再是展开区里的段落
     expect(html).toContain('title="hitRateHint"')
     expect(html).not.toContain('whoHint')
     expect(html).toContain('whoBest')
-    expect(html).toContain('colHitRate')
+    // 转置（2026-09-20）：行 = 指标，列 = 供应商
+    expect(html).toContain('finance-compare-llm')
+    expect(html).toContain('finance-compare-row-unitCost')
+    expect(html).toContain('finance-compare-row-hitRate')
   })
 
   it('该用谁列出输出速率，并对同一模型给出时间成本比较（标注估算）', () => {
     const html = renderToStaticMarkup(createElement(WhoToUseView, { ledger: LEDGER, t }))
-    expect(html).toContain('colSpeed')
+    expect(html).toContain('compareMetricSpeed')
     expect(html).toContain('perSecond')
     // 92 tok/s 与 22 tok/s 是观测值，直接渲染
     expect(html).toContain('92.0')
@@ -361,13 +364,22 @@ describe('finance views', () => {
     expect(html).toContain('estimateTag')
   })
 
+  it('每行取最优并将其余格百分化（一眼看出相差多少）', () => {
+    const html = renderToStaticMarkup(createElement(WhoToUseView, { ledger: LEDGER, t }))
+    expect(html).toContain('compareBestTag')
+    // a=92 tok/s 最优，b=22 tok/s → 与最优差 (22−92)/92 = −76.1%
+    expect(html).toContain('−76.1%')
+    // 总成本不参与最优判定（由用量规模决定）
+    expect(html).toContain('compareMetricCost')
+  })
+
   it('没有速率样本的会话不显示速率（不是 0）', () => {
     const withoutRate = {
       ...LEDGER,
       byModel: LEDGER.byModel.map(({ rate: _rate, ...row }) => row),
     }
     const html = renderToStaticMarkup(createElement(WhoToUseView, { ledger: withoutRate, t }))
-    expect(html).toContain('colSpeed')
+    expect(html).toContain('compareMetricSpeed')
     expect(html).not.toContain('perSecond')
     expect(html).not.toContain('finance-time-compare')
   })

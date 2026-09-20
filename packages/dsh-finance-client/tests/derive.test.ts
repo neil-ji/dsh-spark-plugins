@@ -8,6 +8,8 @@ import {
   tierForBucket,
   usageCostMicros,
   cheapestInGroup,
+  compareMetricRows,
+  formatGapRatio,
   dailyAverageMicros,
   effectiveInputTokens,
   estimateCacheSavings,
@@ -39,6 +41,7 @@ import {
   totalTokens,
 } from '../src/client/derive.ts'
 import type { FinanceTierGroup } from 'dsh-spark-finance/types'
+import type { ModelComparisonRow } from '../src/client/derive.ts'
 
 const buckets = (input: number, cacheRead: number, cacheWrite: number, output: number): FinanceTokenBuckets => ({
   uncachedInputTokens: input,
@@ -576,5 +579,102 @@ describe('derive: relativeTime（人类易读相对时间）', () => {
     expect(relativeTime(Date.now() - 7 * 3_600_000, t)).toBe('timeHours:7')
     expect(relativeTime(Date.now() - 2 * 86_400_000, t)).toBe('timeDays:2')
     expect(relativeTime(Date.now() - 45 * 86_400_000, t)).toBe('timeMonths:1')
+  })
+})
+
+/**
+ * 转置对比（2026-09-20）：每行一个指标、每列一个供应商；每行取最优，
+ * 其余格给出与最优的有符号相对差。
+ *
+ * 这些断言锁的是**数学**，不是排版：最优方向（单位成本/延迟取最小、命中率/速率
+ * 取最大）、相对差的符号与量级、以及两条"宁可不算"的边界（单供应商、最优值为 0）。
+ */
+describe('compareMetricRows', () => {
+  const row = (provider: string, over: Partial<ModelComparisonRow> = {}): ModelComparisonRow => ({
+    modelKey: `p/${provider}`,
+    provider,
+    model: 'llm',
+    costMicros: 1_000_000,
+    usage: { uncachedInputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 1_000_000 },
+    hitRate: 0.5,
+    unitCostMicros: 1_000_000,
+    billingMode: 'metered',
+    ...over,
+  })
+
+  it('marks the cheapest vendor best on unit cost and reports the signed gap', () => {
+    const rows = [
+      row('a', { unitCostMicros: 1_000_000 }),
+      row('b', { unitCostMicros: 1_500_000 }),
+    ]
+    const unitCost = compareMetricRows(rows).find((m) => m.metric === 'unitCost')!
+    expect(unitCost.direction).toBe('lower-better')
+    expect(unitCost.cells.map((c) => c.best)).toEqual([true, false])
+    // (1.5M − 1.0M) / 1.0M = +50%
+    expect(unitCost.cells[1].gapRatio).toBeCloseTo(0.5, 6)
+    expect(formatGapRatio(unitCost.cells[1].gapRatio)).toBe('+50.0%')
+  })
+
+  it('marks the fastest vendor best on speed (higher is better)', () => {
+    const rows = [
+      row('a', { rate: { decodeMs: 1_000, decodeTokens: 100, ttftMs: 100, ttftSteps: 1 } }),
+      row('b', { rate: { decodeMs: 1_000, decodeTokens: 50, ttftMs: 100, ttftSteps: 1 } }),
+    ]
+    const speed = compareMetricRows(rows).find((m) => m.metric === 'speed')!
+    expect(speed.direction).toBe('higher-better')
+    // a = 100 tok/s 是最优；b = 50 tok/s，与最优差 (50−100)/100 = −50%
+    expect(speed.cells[0].best).toBe(true)
+    expect(speed.cells[1].gapRatio).toBeCloseTo(-0.5, 6)
+    expect(formatGapRatio(speed.cells[1].gapRatio)).toBe('−50.0%')
+  })
+
+  it('marks the lowest first-token latency best (lower is better)', () => {
+    const rows = [
+      row('a', { rate: { decodeMs: 1_000, decodeTokens: 100, ttftMs: 200, ttftSteps: 1 } }),
+      row('b', { rate: { decodeMs: 1_000, decodeTokens: 100, ttftMs: 400, ttftSteps: 1 } }),
+    ]
+    const ttft = compareMetricRows(rows).find((m) => m.metric === 'ttft')!
+    expect(ttft.cells[0].best).toBe(true)
+    expect(ttft.cells[1].gapRatio).toBeCloseTo(1, 6) // 400 vs 200 -> +100%
+  })
+
+  it('never ranks total cost (it tracks usage volume, not quality)', () => {
+    const rows = [
+      row('a', { costMicros: 10_000_000 }),
+      row('b', { costMicros: 1_000_000 }),
+    ]
+    const cost = compareMetricRows(rows).find((m) => m.metric === 'cost')!
+    expect(cost.direction).toBe('neutral')
+    expect(cost.hasBest).toBe(false)
+    expect(cost.cells.every((c) => c.best === false && c.gapRatio === null)).toBe(true)
+  })
+
+  it('refuses to rank with a single vendor or a zero best value', () => {
+    const single = compareMetricRows([row('a')])
+    expect(single.every((m) => m.hasBest === false)).toBe(true)
+
+    // 最优值为 0 时放弃判定（否则相对差是 ∞%）。
+    const zeroBest = compareMetricRows([
+      row('a', { unitCostMicros: 0 }),
+      row('b', { unitCostMicros: 1_000_000 }),
+    ]).find((m) => m.metric === 'unitCost')!
+    expect(zeroBest.hasBest).toBe(false)
+  })
+
+  it('skips cells without data instead of treating them as zero', () => {
+    const rows = [
+      row('a', { unitCostMicros: 1_000_000 }),
+      row('b', { unitCostMicros: null }),
+    ]
+    const unitCost = compareMetricRows(rows).find((m) => m.metric === 'unitCost')!
+    expect(unitCost.cells[1].value).toBeNull()
+    expect(unitCost.cells[1].gapRatio).toBeNull()
+    // 只有一家有数据 -> 不判最优。
+    expect(unitCost.hasBest).toBe(false)
+  })
+
+  it('formats the zero gap without a sign', () => {
+    expect(formatGapRatio(0)).toBe('0%')
+    expect(formatGapRatio(null)).toBe('—')
   })
 })
