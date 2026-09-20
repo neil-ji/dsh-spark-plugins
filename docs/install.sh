@@ -1,7 +1,8 @@
 #!/bin/sh
 # dsh-spark-plugins 一键安装 / 更新（Linux / macOS / WSL）
 #
-# 默认路径（推荐）：从 GitHub Release 下载 CI 预构建的 tarball —— 不 clone、不构建、不需要 pnpm。
+# 默认路径（推荐）：从 GitHub Release 下载 CI 预构建的 tarball —— 不 clone、不构建。
+#   但仍需要 pnpm（把 tarball 解析进 profile 的 node_modules），见下方「前置」。
 #   1. 取 manifest.json（含版本、dsh 兼容区间、每个包的 sha256）
 #   2. 取 release-install.mjs 并按 manifest 校验其 sha256
 #   3. 由安装器下载各包 tarball、逐个校验 sha256，再写进目标 dsh profile
