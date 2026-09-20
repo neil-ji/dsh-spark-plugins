@@ -9,8 +9,6 @@ export const zh = {
   "dockName": "财务 Finance",
   "dockSub": "成本 · 对比 · 优化",
   /** 模块栏 tab 徽章的可访问名（{label} = 模块名，{n} = 待处理计数；连标点一起定）。 */
-  "badgeLabel": "{label}，{n} 项待处理",
-  "badgeTitle": "{label} · {n} 项待处理",
   "cardTabsLabel": "财务视图",
   "tabThisMonth": "成本总览",
   "tabWhoToUse": "供应商对比",
@@ -228,8 +226,6 @@ export const en: Record<keyof typeof zh, string> = {
   "dockLabel": "Finance",
   "dockName": "Finance",
   "dockSub": "What you spent · who to use · how to save",
-  "badgeLabel": "{label}, {n} pending",
-  "badgeTitle": "{label} · {n} pending",
   "cardTabsLabel": "Finance views",
   "tabThisMonth": "Cost overview",
   "tabWhoToUse": "Vendor comparison",

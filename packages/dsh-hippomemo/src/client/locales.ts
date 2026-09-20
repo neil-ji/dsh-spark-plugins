@@ -11,8 +11,6 @@ export const zh = {
   announceRemove: '删除了一条记忆',
   announceCrystallize: '结晶写入记忆库',
   /** 模块栏 tab 徽章的可访问名（{label} = 模块名，{n} = 待处理计数；连标点一起定）。 */
-  badgeLabel: '{label}，{n} 项待处理',
-  badgeTitle: '{label} · {n} 项待处理',
   intro: '统一查看和管理跨会话、跨工作区沉淀下来的共识、决策、事实、偏好与约束。',
   searchPlaceholder: '搜索记忆...',
   search: '搜索',
@@ -273,8 +271,6 @@ export const en: Record<keyof typeof zh, string> = {
   announcePut: 'A memory was written',
   announceRemove: 'A memory was removed',
   announceCrystallize: 'A crystallized memory was stored',
-  badgeLabel: '{label}, {n} pending',
-  badgeTitle: '{label} · {n} pending',
   intro: 'Browse and manage durable consensus, decisions, facts, preferences, and constraints shared across sessions and workspaces.',
   searchPlaceholder: 'Search memories...',
   search: 'Search',

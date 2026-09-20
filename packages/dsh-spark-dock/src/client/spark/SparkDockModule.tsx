@@ -94,14 +94,14 @@ function announceSparkChange(payload: SparkChangedEvent, t: SparkT): void {
  * 注册 Spark 的 dock 模块。
  *
  * 2026-09-16 加徽章 + 动态 sub：模块内部维护一份 stats（订阅 `spark/events` 帧触发
- * reload），把 `pending + pendingProposals` 暴露给 dock 的 tab badge 与 header sub。
+ * reload），把 `pending + pendingProposals` 暴露给面板标题行的 sub（角标已退役）。
  * 计数取自 `/sparks/stats`（与 SparksPane 同源），事件驱动刷新而非轮询。
  *
  * @param ctx - dock 的 client 根上下文。
  * @param inject - 注入面（事件通道 + 取词函数；apply 里已装配好）。
  */
 export function registerSparkDockModule(ctx: ClientContext, inject: SparkModuleInject): void {
-  // 模块内的 stats store：所有 tab 渲染都从这里读，确保 sub / badge / tab 数字同源。
+  // 模块内的 stats store：所有 tab 渲染都从这里读，确保 sub 与 tab 数字同源。
   let pending = 0
   let pendingProposals = 0
   const loadStats = (): void => {
@@ -133,11 +133,6 @@ export function registerSparkDockModule(ctx: ClientContext, inject: SparkModuleI
     order: 10,
     label: () => inject.t('moduleLabel'),
     name: inject.t('moduleName'),
-    // 徽章整句（含标点）由注册方本地化：kit 不再拼死中文后缀（2026-09-17）。
-    formatBadge: ({ count, label }) => ({
-      label: tm('badgeLabel', { label, n: count }),
-      title: tm('badgeTitle', { label, n: count }),
-    }),
     // 动态 sub：把待处理数拼到副标题里，让面板标题行也传达"有几条等你处理"。
     // 0 条时回退到静态描述（不显示 N=0）。
     sub: (() => {
@@ -153,9 +148,6 @@ export function registerSparkDockModule(ctx: ClientContext, inject: SparkModuleI
     icon: createElement(IconSparkles, { size: 14 }),
     accent: 'var(--spk-acc-spark, #d97706)',
     accentFg: 'var(--spk-acc-spark-fg, #92400e)',
-    // 模块级徽章：spark 这一格的待处理数（pending + pendingProposals 之和）。
-    // dock 顶层浮球的徽章由 DockOverlay 独立计算（取所有模块的 badge 之和）。
-    badge: () => pending + pendingProposals,
     inject: () => inject,
     Content: SparkDockModule,
   })

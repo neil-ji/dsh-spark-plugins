@@ -49,10 +49,6 @@ export function registerHippoDockModule(ctx: ClientContext): void {
     label: () => t('dockLabel'),
     name: t('dockName'),
     sub: t('dockSub'),
-    formatBadge: ({ count, label }) => ({
-      label: t('badgeLabel', { label, n: count }),
-      title: t('badgeTitle', { label, n: count }),
-    }),
     icon: createElement(IconThink, { size: 14 }),
     accent: 'var(--spk-acc-hippomemo, #3b82f6)',
     accentFg: 'var(--spk-acc-hippomemo-fg, #1d4ed8)',

@@ -8,8 +8,6 @@ export const zh = {
   dockName: 'npm',
   dockSub: '细粒度 Token · 注册表与套件包状态',
   /** 模块栏 tab 徽章的可访问名（{label} = 模块名，{n} = 待处理计数；连标点一起定）。 */
-  badgeLabel: '{label}，{n} 项待处理',
-  badgeTitle: '{label} · {n} 项待处理',
   /** 装配失败（宿主没提供 remote.npm）：面板兜底文案，不是控制台日志。 */
   setupFailed: 'npm 连接模块装配失败：宿主未提供 remote.npm。重载插件或检查连接器宿主后重试。',
   intro: '填入 granular token（npmjs.com → Access Tokens：All packages + Read and write + bypass 2FA）→ 测试连接 → 保存。token 存本机凭据缝，只要不失效，agent 即可全权接管 npm 平台侧管理（发布 / dist-tag / 弃用 / OIDC trust）。',
@@ -75,8 +73,6 @@ export const en: Record<NpmKey, string> = {
   dockLabel: 'npm',
   dockName: 'npm',
   dockSub: 'Granular token · registry and kit package status',
-  badgeLabel: '{label}, {n} pending',
-  badgeTitle: '{label} · {n} pending',
   setupFailed: 'The npm connector module failed to assemble: the host provides no remote.npm. Reload the plugin or check the connector host and retry.',
   intro: 'Paste a granular token (npmjs.com → Access Tokens: All packages + Read and write + bypass 2FA) → test the connection → save. The token lives in the local credentials seam; while it stays valid, the agent can fully manage the npm platform side (publish / dist-tags / deprecate / OIDC trust).',
   registry: 'npm registry',

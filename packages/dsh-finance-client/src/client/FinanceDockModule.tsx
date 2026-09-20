@@ -155,11 +155,6 @@ export function startFinanceDockModule(ctx: ClientContext): FinanceDockInject {
     label: () => tr('dockLabel'),
     name: tr('dockName'),
     sub: tr('dockSub'),
-    // 徽章整句（含标点）走字典：kit 不再拼死中文后缀。
-    formatBadge: ({ count, label }) => ({
-      label: tr('badgeLabel', { label, n: count }),
-      title: tr('badgeTitle', { label, n: count }),
-    }),
     icon: createElement(IconDollar, { size: 14 }),
     accent: 'var(--spk-acc-finance, #16a34a)',
     accentFg: 'var(--spk-acc-finance-fg, #166534)',

@@ -93,11 +93,6 @@ export async function startNpmDockModule(ctx: ClientContext): Promise<NpmDockInj
     label: () => tr('dockLabel'),
     name: tr('dockName'),
     sub: tr('dockSub'),
-    // 徽章整句（含标点）走字典：kit 不再拼死中文后缀。
-    formatBadge: ({ count, label }) => ({
-      label: tr('badgeLabel', { label, n: count }),
-      title: tr('badgeTitle', { label, n: count }),
-    }),
     icon: createElement(IconPackage, { size: 14 }),
     accent: 'var(--spk-acc-npm, #cb3837)',
     accentFg: 'var(--spk-acc-npm-fg, #991b1b)',

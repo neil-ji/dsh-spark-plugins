@@ -16,10 +16,8 @@ export const zh = {
   /** 悬浮球可访问名（无待处理）。 */
   ballOpen: '打开 Spark Dock',
   /** 悬浮球可访问名（有 N 项待处理）：{n} 是计数。 */
-  ballOpenPending: '打开 Spark Dock，{n} 项待处理',
   /** 悬浮球 title（hover 提示）。 */
   ballTitle: '打开 Spark Dock',
-  ballTitlePending: '打开 Spark Dock · {n} 项待处理',
   /** 指挥舱 dialog 的可访问名。 */
   panelAria: 'Spark Dock',
   /** 模块栏 tablist 的可访问名。 */
@@ -39,9 +37,7 @@ export type DockShellT = (key: DockShellLocaleKey, params?: Record<string, strin
 
 export const en: Record<DockShellLocaleKey, string> = {
   ballOpen: 'Open Spark Dock',
-  ballOpenPending: 'Open Spark Dock, {n} pending',
   ballTitle: 'Open Spark Dock',
-  ballTitlePending: 'Open Spark Dock · {n} pending',
   panelAria: 'Spark Dock',
   railAria: 'Plugin modules',
   collapse: 'Collapse panel',

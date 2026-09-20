@@ -79,11 +79,6 @@ export function startGithubDockModule(ctx: ClientContext): GithubDockInject {
     label: () => tr('dockLabel'),
     name: tr('dockName'),
     sub: tr('dockSub'),
-    // 徽章整句（含标点）走字典：kit 不再拼死中文后缀。
-    formatBadge: ({ count, label }) => ({
-      label: tr('badgeLabel', { label, n: count }),
-      title: tr('badgeTitle', { label, n: count }),
-    }),
     icon: createElement(IconGithub, { size: 14 }),
     accent: 'var(--spk-acc-github, #8b5cf6)',
     accentFg: 'var(--spk-acc-github-fg, #5b21b6)',

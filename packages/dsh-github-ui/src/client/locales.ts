@@ -8,8 +8,6 @@ export const zh = {
   dockName: 'GitHub',
   dockSub: '令牌 · 操作权限 · Git 身份与代理',
   /** 模块栏 tab 徽章的可访问名（{label} = 模块名，{n} = 待处理计数；连标点一起定）。 */
-  badgeLabel: '{label}，{n} 项待处理',
-  badgeTitle: '{label} · {n} 项待处理',
   /** 装配失败（宿主没提供 remote.github）：面板兜底文案，不是控制台日志。 */
   setupFailed: 'GitHub 连接模块装配失败：宿主未提供 remote.github。重载插件或检查连接器宿主后重试。',
   intro: '配置 GitHub 访问令牌与操作权限。令牌只写入本机凭据存储，永不会回显。',
@@ -103,8 +101,6 @@ export const en: Record<GithubKey, string> = {
   dockLabel: 'GitHub',
   dockName: 'GitHub',
   dockSub: 'Token · permissions · git identity and proxy',
-  badgeLabel: '{label}, {n} pending',
-  badgeTitle: '{label} · {n} pending',
   setupFailed: 'The GitHub connector module failed to assemble: the host provides no remote.github. Reload the plugin or check the connector host and retry.',
   intro: 'Configure your GitHub access token and operation permissions. The token is written only to the local credential store and never read back.',
   tokenTitle: 'Access token',

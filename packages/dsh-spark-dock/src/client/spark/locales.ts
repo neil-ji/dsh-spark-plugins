@@ -17,8 +17,6 @@ export const zh = {
   // 让面板标题行也传达有几条等你处理。0 条时 dock 仍按 moduleSub 渲染（不带数字）。
   pendingLabel: '项待处理',
   /** 模块栏 tab 徽章的可访问名（{label} = 模块名，{n} = 待处理计数；连标点一起定）。 */
-  badgeLabel: '{label}，{n} 项待处理',
-  badgeTitle: '{label} · {n} 项待处理',
   paneSparks: '火花流',
   paneProposals: '涌现提议',
   paneScripts: '脚本目录',
@@ -129,8 +127,6 @@ export const en: Record<SparkDockLocaleKey, string> = {
   moduleName: 'Spark',
   moduleSub: 'Inspiration inbox · crystallize · emergence · scripts',
   pendingLabel: 'pending',
-  badgeLabel: '{label}, {n} pending',
-  badgeTitle: '{label} · {n} pending',
   paneSparks: 'Sparks',
   paneProposals: 'Proposals',
   paneScripts: 'Scripts',

@@ -604,18 +604,10 @@ export async function run(): Promise<{ checks: Check[] }> {
       }
       brokenCtx.__preview.teardown()
 
-      // ⑥ 徽章文案：计数与整句都归注册方（kit 不拼任何语言的字符串）。
-      //    用一个探针模块走同一条 registerDockModule 路径，断言 formatBadge 真的被调用，
-      //    且产出的 aria-label / title 与字典模板逐字一致。
+      // ⑥ 待处理角标已退役（2026-09-20 用户裁决「移除这个 badge」）。
+      //    反转为**反向断言**：模块栏 tab 上不得再出现 `.dock-tab-badge`，
+      //    a11y 名也不再带 pending 后缀（否则屏幕阅读器仍会念"3 pending"）。
       const probeCtx = createMockCtx({ lang: () => 'en', scenario: () => scenario })
-      const probeT = (key: string, params?: Record<string, string | number>): string => {
-        const template = key === 'probeBadge'
-          ? '{label}, {n} pending'
-          : key === 'probeBadgeTitle' ? '{label} · {n} pending' : key
-        return params === undefined
-          ? template
-          : template.replace(/\{(\w+)\}/g, (raw, name: string) => (params[name] === undefined ? raw : String(params[name])))
-      }
       const probeDispose = registerDockModule(probeCtx as never, {
         id: 'probe-badge',
         order: 99,
@@ -625,11 +617,6 @@ export async function run(): Promise<{ checks: Check[] }> {
         icon: null,
         accent: 'var(--spk-brand)',
         accentFg: 'var(--spk-on-brand)',
-        badge: () => 3,
-        formatBadge: ({ count, label }) => ({
-          label: probeT('probeBadge', { label, n: count }),
-          title: probeT('probeBadgeTitle', { label, n: count }),
-        }),
         inject: () => ({}),
         Content: () => null,
       })
@@ -641,9 +628,16 @@ export async function run(): Promise<{ checks: Check[] }> {
             )
           : null}</div>,
       )
-      const probeOk = probeHtml.includes('aria-label="Probe, 3 pending"') && probeHtml.includes('title="Probe · 3 pending"')
-      check('en: 模块徽章文案由注册方本地化（kit 不含语言串）', probeOk, probeHtml.slice(0, 220))
-      checkNoCjk('en: 模块徽章文案无 CJK', probeHtml)
+      check(
+        'en: 模块栏 tab 不再渲染待处理角标',
+        !probeHtml.includes('dock-tab-badge') && !probeHtml.includes('data-count'),
+        probeHtml.slice(0, 220),
+      )
+      check(
+        'en: 模块栏 tab 的可访问名就是模块名（不再附加 pending 文案）',
+        probeHtml.includes('aria-label="Probe"') && probeHtml.includes('title="Probe"'),
+        probeHtml.slice(0, 220),
+      )
       probeDispose()
       probeCtx.__preview.teardown()
 
