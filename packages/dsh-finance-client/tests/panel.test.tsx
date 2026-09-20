@@ -364,6 +364,16 @@ describe('finance views', () => {
     expect(html).toContain('estimateTag')
   })
 
+  it('转置表有表头：左上角是「供应商」列头（此前留空）', () => {
+    const html = renderToStaticMarkup(createElement(WhoToUseView, { ledger: LEDGER, t }))
+    const head = /data-testid="finance-compare-head">([\s\S]*?)<\/div>/.exec(html)?.[1] ?? ''
+    // 表头行列出的是各供应商，所以角格读作「供应商」而不是「指标」——
+    // 指标名是每一行左侧的格，不在这行。
+    expect(html).toContain('compareColProvider')
+    expect(head).not.toBe('')
+    for (const provider of ['a', 'b']) expect(head).toContain(provider)
+  })
+
   it('组头不再有「仅一家在用/样本不足」结论标签与「明细」展开按钮', () => {
     const html = renderToStaticMarkup(createElement(WhoToUseView, { ledger: LEDGER, t }))
     // 无信息表述退役：单供应商时说"仅一家在用"、样本不足时说"暂不比较"都是废话

@@ -585,3 +585,10 @@
   color: var(--spk-label-3);
   font-variant-numeric: tabular-nums;
 }
+
+/* 转置表的左上角列头（指标列）：与供应商列头同档，但弱一档色
+   （它是轴名，供应商名才是这行的主体）。 */
+.compareColHead {
+  font-size: var(--spk-text-xs);
+  color: var(--spk-label-3);
+}

@@ -130,8 +130,10 @@ export function WhoToUseView({ ledger, t }: WhoToUseViewProps): ReactNode {
                 style={{ '--compare-cols': String(group.rows.length) } as CSSProperties}
                 data-testid={`finance-compare-${group.model}`}
               >
-                <div className={css.compareRow}>
-                  <span className={css.compareMetricLabel} />
+                {/* 表头行：左上角是指标列的列头（此前留空，见 2026-09-20 复核），
+                    其余是供应商名。表头与数据行共用同一套 grid（列宽才不会错位）。 */}
+                <div className={css.compareRow} data-testid="finance-compare-head">
+                  <span className={css.compareColHead}>{t('compareColProvider')}</span>
                   {group.rows.map((row) => (
                     <span key={`head:${row.provider}`} className={css.compareProvider}>{row.provider}</span>
                   ))}

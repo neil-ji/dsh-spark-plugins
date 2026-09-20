@@ -177,6 +177,7 @@ export const zh = {
   "whoTitle": "同模型跨供应商成本对比",
   "whoBest": "更省",
   // 转置对比表（2026-09-20）：行 = 指标，列 = 供应商
+  "compareColProvider": "供应商",
   "compareMetricUnitCost": "单位成本",
   "compareMetricHitRate": "缓存命中率",
   "compareMetricSpeed": "输出速率",
@@ -403,6 +404,7 @@ export const en: Record<keyof typeof zh, string> = {
   "whoTitle": "Cross-vendor cost comparison for the same model",
   "whoBest": "cheaper",
   // Transposed compare table (2026-09-20): rows = metrics, columns = vendors
+  "compareColProvider": "Vendor",
   "compareMetricUnitCost": "Unit cost",
   "compareMetricHitRate": "Cache hit",
   "compareMetricSpeed": "Output speed",
