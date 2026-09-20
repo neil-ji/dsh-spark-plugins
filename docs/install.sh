@@ -14,8 +14,14 @@
 #   sh install.sh --only dsh-spark,dsh-connector-npm   # 只装部分插件
 #   sh install.sh --base-url <url|dir>     # 换源（镜像 / 本地发布目录）
 #   sh install.sh --dry-run                # 只打印将执行的动作
+#   sh install.sh --uninstall              # 卸载（只摘本插件，保留 profile 里其它插件）
+#   sh install.sh --uninstall --dry-run    # 卸载预演：只列出将删什么
+#   sh install.sh --uninstall --keep-cache # 卸载但保留 $DSH_HOME/spark-plugins 缓存
 #   sh install.sh --from-source            # 旧路径：clone + pnpm install + build + install-profile
 #   sh install.sh --ref v0.2.0 --dir ~/src # （配合 --from-source）源码版本与目录
+#
+# 前置：Node.js >= 18；**安装/卸载都需要 pnpm**（把 tarball 解析进 profile 的 node_modules）。
+#       没有 pnpm 时可用 `corepack enable`（Node 16.9+ 自带）或 `npm install -g pnpm`。
 #
 # 幂等：重复执行 = 更新到最新（或 --version 指定的版本）。
 set -e
@@ -30,6 +36,8 @@ DIR=""
 REF="main"
 DRY=0
 FROM_SOURCE=0
+UNINSTALL=0
+KEEP_CACHE=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -42,6 +50,8 @@ while [ $# -gt 0 ]; do
     --ref) REF="$2"; shift 2 ;;
     --dry-run) DRY=1; shift ;;
     --from-source) FROM_SOURCE=1; shift ;;
+    --uninstall) UNINSTALL=1; shift ;;
+    --keep-cache) KEEP_CACHE=1; shift ;;
     --repo) REPO_URL="$2"; shift 2 ;;
     *) echo "未知参数: $1"; exit 1 ;;
   esac
@@ -82,6 +92,18 @@ if [ "$FROM_SOURCE" = "0" ]; then
   TMP="$(mktemp -d 2>/dev/null || echo "${TMPDIR:-/tmp}/dsh-spark-install.$$")"
   mkdir -p "$TMP"
   trap 'rm -rf "$TMP"' EXIT
+
+  # ── 卸载：与安装对称，只下载卸载器（不碰 tarball） ──
+  if [ "$UNINSTALL" = "1" ]; then
+    echo "==> 下载卸载器：$BASE_URL/release-uninstall.mjs"
+    fetch "$BASE_URL/release-uninstall.mjs" "$TMP/release-uninstall.mjs"
+    set -- --profile "$PROFILE" --home "$HOME_DIR"
+    if [ "$DRY" = "1" ]; then set -- "$@" --dry-run; fi
+    if [ "$KEEP_CACHE" = "1" ]; then set -- "$@" --keep-cache; fi
+    echo "==> 卸载"
+    run node "$TMP/release-uninstall.mjs" "$@"
+    exit 0
+  fi
 
   echo "==> 下载清单：$BASE_URL/manifest.json"
   fetch "$BASE_URL/manifest.json" "$TMP/manifest.json"
@@ -147,4 +169,4 @@ echo ""
 echo "✅ 完成。重启 dsh web 生效："
 echo "   dsh --profile $PROFILE"
 echo ""
-echo "   卸载：dsh plugin --profile $PROFILE remove <插件名>; rm -rf $DIR"
+echo "   卸载：sh install.sh --uninstall --profile $PROFILE"

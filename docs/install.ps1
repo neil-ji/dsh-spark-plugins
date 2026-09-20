@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
   dsh-spark-plugins 一键安装 / 更新（Windows / PowerShell）。
 
@@ -12,12 +12,20 @@
 
   目标 home 解析顺序：-DshHome > $env:DSH_HOME > $env:USERPROFILE\.dsh。
 
+  前置：Node.js >= 18；**安装/卸载都需要 pnpm**（把 tarball 解析进 profile 的
+  node_modules）。没有 pnpm 时用 `corepack enable`（Node 16.9+ 自带）或
+  `npm install -g pnpm`。安装器会在改动任何 profile 文件前先检查。
+
 .EXAMPLE
   irm https://neil-ji.github.io/dsh-spark-plugins/install.ps1 -OutFile install.ps1; .\install.ps1
 .EXAMPLE
   .\install.ps1 -Profile web -Version v0.2.0
 .EXAMPLE
   .\install.ps1 -DshHome .\.dev\home -Profile devweb -DryRun
+.EXAMPLE
+  .\install.ps1 -Uninstall                 # 卸载（保留 profile 里其它插件）
+.EXAMPLE
+  .\install.ps1 -Uninstall -DryRun         # 卸载预演
 .EXAMPLE
   .\install.ps1 -FromSource -LocalDir F:\AgentStudio\dsh-spark-plugins -NoProfile
 #>
@@ -30,6 +38,9 @@ param(
   [string]$BaseUrl,
   [string]$Repo = 'https://github.com/neil-ji/dsh-spark-plugins',
   [switch]$DryRun,
+  # ── 卸载 ──
+  [switch]$Uninstall,
+  [switch]$KeepCache,
   # ── -FromSource 老路径专用 ──
   [switch]$FromSource,
   [string]$Ref = 'main',
@@ -63,6 +74,23 @@ function Assert-Node {
   if (-not (Get-Command node -ErrorAction SilentlyContinue)) { Fail '需要 Node.js >= 18（https://nodejs.org）' }
   $major = [int](node -p "process.versions.node.split('.')[0]")
   if ($major -lt 18) { Fail "Node.js 版本过低（$major），需要 >= 18" }
+}
+
+# 安装/卸载都需要 pnpm（安装器要它把 tarball 解析进 profile 的 node_modules）。
+# 与 install.sh 同口径：先试 corepack，再退回 npm -g。必须在改动 profile 之前失败。
+function Assert-Pnpm {
+  if (Get-Command pnpm -ErrorAction SilentlyContinue) { return }
+  Write-Step '未检测到 pnpm，尝试 corepack 启用'
+  if (Get-Command corepack -ErrorAction SilentlyContinue) {
+    try { Invoke-Checked 'corepack' @('enable') } catch { }
+  }
+  if (Get-Command pnpm -ErrorAction SilentlyContinue) { return }
+  if (Get-Command npm -ErrorAction SilentlyContinue) {
+    try { Invoke-Checked 'npm' @('install', '-g', 'pnpm') } catch { }
+  }
+  if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
+    Fail "找不到 pnpm —— 安装需要它把 tarball 解析进 profile 的 node_modules。`n   装法（任选一）：`n     corepack enable          # Node 16.9+ 自带，最省事`n     npm install -g pnpm`n   装完重跑本命令即可；本次尚未改动任何 profile 文件。"
+  }
 }
 
 # 取一个资产：支持 http(s) / file:// / 本地目录（后者便于离线镜像与自测）
@@ -100,8 +128,11 @@ function Invoke-Checked {
 # ── 默认路径：Release 资产 ──────────────────────────────────────────────────
 if (-not $FromSource) {
   $versionLabel = if ($Version) { $Version } else { 'latest' }
-  Write-Step "dsh-spark-plugins 安装器（release 资产，profile=$Profile version=$versionLabel home=$homeDir）"
+  $modeLabel = if ($Uninstall) { '卸载器' } else { '安装器' }
+  Write-Step "dsh-spark-plugins $modeLabel（release 资产，profile=$Profile version=$versionLabel home=$homeDir）"
   Assert-Node
+  # dry-run 不写 profile，不需要 pnpm
+  if (-not $DryRun) { Assert-Pnpm }
 
   if (-not $BaseUrl) {
     if ($Version) { $BaseUrl = "$Repo/releases/download/$Version" }
@@ -111,6 +142,22 @@ if (-not $FromSource) {
   $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("dsh-spark-install-" + [System.Guid]::NewGuid().ToString('N'))
   New-Item -ItemType Directory -Force -Path $tmp | Out-Null
   try {
+    # ── 卸载：只下载卸载器（不碰 tarball / 清单） ──
+    if ($Uninstall) {
+      $uninstallerPath = Join-Path $tmp 'release-uninstall.mjs'
+      Write-Step "下载卸载器：$BaseUrl/release-uninstall.mjs"
+      Get-Asset "$BaseUrl/release-uninstall.mjs" $uninstallerPath
+      $uninstallArgs = @($uninstallerPath, '--profile', $Profile, '--home', $homeDir)
+      if ($DryRun) { $uninstallArgs += '--dry-run' }
+      if ($KeepCache) { $uninstallArgs += '--keep-cache' }
+      Write-Step '卸载'
+      Invoke-Checked 'node' $uninstallArgs
+      Write-Host ''
+      Write-Ok "卸载完成。重启 dsh 生效："
+      Write-Host "   dsh --profile $Profile" -ForegroundColor White
+      exit 0
+    }
+
     $manifestPath = Join-Path $tmp 'manifest.json'
     $installerPath = Join-Path $tmp 'release-install.mjs'
     Write-Step "下载清单：$BaseUrl/manifest.json"
@@ -148,7 +195,7 @@ console.log('    OK sha256 ' + got.slice(0, 12) + '... (' + manifest.tag + ')')
   Write-Host ''
   Write-Ok "完成。重启 dsh 生效："
   Write-Host "   dsh --profile $Profile" -ForegroundColor White
-  Write-Host "   卸载：dsh plugin --profile $Profile remove <插件名>; Remove-Item -Recurse -Force '$(Join-Path $homeDir 'spark-plugins')'" -ForegroundColor DarkGray
+  Write-Host "   卸载：.\install.ps1 -Uninstall -Profile $Profile" -ForegroundColor DarkGray
   exit 0
 }
 
@@ -200,4 +247,4 @@ if ($NoProfile) {
 Write-Host ''
 Write-Ok "完成。重启 dsh 生效："
 Write-Host "   dsh --profile $Profile" -ForegroundColor White
-Write-Host "   卸载：dsh plugin --profile $Profile remove <插件名>; Remove-Item -Recurse -Force '$Dir'" -ForegroundColor DarkGray
+Write-Host "   卸载：.\install.ps1 -Uninstall -Profile $Profile" -ForegroundColor DarkGray
