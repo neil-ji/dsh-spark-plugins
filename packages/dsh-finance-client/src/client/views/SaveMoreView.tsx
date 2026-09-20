@@ -141,9 +141,12 @@ export function SaveMoreView({ ledger, tiers, shadowedTierKeys = [], t }: SaveMo
               {t('contextShadowedTiers', { keys: shadowedTierKeys.join('、') })}
             </p>
           )}
+        {/* 本卡混合了「被取代提示 + 明细表」两类内容 → 表格包一层 inset 子卡，
+            与外层卡形成可辨层级（ui-kit Card variant=inset）。 */}
         {contextRows.length === 0
           ? null
           : (
+            <Card variant="inset" title={t('contextTableTitle')}>
             <div className={css.table} data-testid="finance-context-card">
               <div className={`${css.tableHead} ${css.colsContext}`}>
                 <span className={css.cell}>{t('colModel')}</span>
@@ -185,6 +188,7 @@ export function SaveMoreView({ ledger, tiers, shadowedTierKeys = [], t }: SaveMo
                 )
               })}
             </div>
+            </Card>
           )}
       </Card>
     </>

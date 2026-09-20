@@ -122,33 +122,37 @@ export function QuotaWindowCard({ ledger, plans, t }: QuotaWindowCardProps): Rea
             </p>
           )}
 
+        {/* 本卡混合了「指标区 + 模型明细」两类内容 → 表格包一层 inset 子卡，
+            与外层表单形成可辨层级（ui-kit Card variant=inset；先例见项目详情）。 */}
         {current.models.length === 0
-          ? <p className={css.hint}>{t('windowEmpty')}</p>
+          ? null
           : (
-            <div className={css.table}>
-              <div className={`${css.tableHead} ${cols}`}>
-                <span className={css.cell}>{t('windowColModel')}</span>
-                <span className={`${css.cell} ${css.cellNum}`}>{t('windowColTokens')}</span>
-                {hasDuration ? <span className={`${css.cell} ${css.cellNum}`}>{t('windowColDuration')}</span> : null}
-                <span className={`${css.cell} ${css.cellNum}`}>{t('windowColCost')}</span>
+            <Card variant="inset" title={t('windowTableTitle')}>
+              <div className={css.table}>
+                <div className={`${css.tableHead} ${cols}`}>
+                  <span className={css.cell}>{t('windowColModel')}</span>
+                  <span className={`${css.cell} ${css.cellNum}`}>{t('windowColTokens')}</span>
+                  {hasDuration ? <span className={`${css.cell} ${css.cellNum}`}>{t('windowColDuration')}</span> : null}
+                  <span className={`${css.cell} ${css.cellNum}`}>{t('windowColCost')}</span>
+                </div>
+                {current.models.map((row) => {
+                  const total = row.usage.uncachedInputTokens + row.usage.cacheReadTokens
+                    + row.usage.cacheWriteTokens + row.usage.outputTokens
+                  return (
+                    <div key={row.modelKey} className={`${css.tableRow} ${cols}`}>
+                      <CellText className={css.cell} text={row.modelKey} />
+                      <span className={`${css.cell} ${css.cellNum}`}>{formatTokens(total)}</span>
+                      {hasDuration
+                        ? <span className={`${css.cell} ${css.cellNum}`}>{formatDuration(row.decodeMs)}</span>
+                        : null}
+                      <span className={`${css.cell} ${css.cellNum}`}>
+                        <Money micros={row.costMicros} currency={currency} exact />
+                      </span>
+                    </div>
+                  )
+                })}
               </div>
-              {current.models.map((row) => {
-                const total = row.usage.uncachedInputTokens + row.usage.cacheReadTokens
-                  + row.usage.cacheWriteTokens + row.usage.outputTokens
-                return (
-                  <div key={row.modelKey} className={`${css.tableRow} ${cols}`}>
-                    <CellText className={css.cell} text={row.modelKey} />
-                    <span className={`${css.cell} ${css.cellNum}`}>{formatTokens(total)}</span>
-                    {hasDuration
-                      ? <span className={`${css.cell} ${css.cellNum}`}>{formatDuration(row.decodeMs)}</span>
-                      : null}
-                    <span className={`${css.cell} ${css.cellNum}`}>
-                      <Money micros={row.costMicros} currency={currency} exact />
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
+            </Card>
           )}
       </div>
     </Card>

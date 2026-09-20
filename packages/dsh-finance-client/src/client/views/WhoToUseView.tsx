@@ -124,7 +124,9 @@ export function WhoToUseView({ ledger, t }: WhoToUseViewProps): ReactNode {
                     {' '}<span className={css.estimate}>{t('estimateTag')}</span>
                   </p>
                 )}
-              {/* 转置表：行 = 指标、列 = 供应商。列宽由供应商数量决定（--compare-cols）。 */}
+              {/* 转置表：行 = 指标、列 = 供应商。列宽由供应商数量决定（--compare-cols）。
+                  组头（模型名 + 结论）与表格是两类内容 → 表格包一层 inset 子卡。 */}
+              <Card variant="inset">
               <div
                 className={css.compareGrid}
                 style={{ '--compare-cols': String(group.rows.length) } as CSSProperties}
@@ -146,6 +148,7 @@ export function WhoToUseView({ ledger, t }: WhoToUseViewProps): ReactNode {
                   />
                 ))}
               </div>
+              </Card>
               {open
                 ? (
                   <div className={css.detail}>

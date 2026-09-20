@@ -1,6 +1,6 @@
 {
   "name": "dsh-spark-finance-client",
-  "version": "0.5.51",
+  "version": "0.5.52",
   "description": "DSH 成本统计插件 client：四个决策视图（本月值不值 / 该用谁 / 怎么调度更省 / 项目账），UI 对齐 DSH 设计系统",
   "type": "module",
   "homepage": "https://neil-ji.github.io/dsh-spark-plugins/",

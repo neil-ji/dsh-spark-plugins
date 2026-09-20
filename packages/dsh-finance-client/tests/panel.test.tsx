@@ -653,3 +653,47 @@ describe('QuotaWindowCard 不含提示性文案（SPEC §10.8）', () => {
     expect(withPlanHtml).toMatch(/windowSavings(Up|Down)/)
   })
 })
+
+/**
+ * 卡片层级（2026-09-20 用户裁决）：一张 Card 里混了多种内容（指标区 + 表格、
+ * 提示 + 表格、组头 + 表格）时，**表格要包一层 inset 子卡**，与外层卡形成可辨层级。
+ *
+ * 反面模式是「同色卡套卡」看不出结构 —— 先例见项目详情（消耗构成 / 趋势 /
+ * 会话明细三张 inset 卡）。这条测试锁的是层级确实产生了，而不是只改了源码。
+ */
+describe('混合内容的卡：表格包一层 inset 子卡', () => {
+  const insetCount = (html: string): number => (html.match(/_inset"/g) ?? []).length
+  const cardTitles = (html: string): string[] =>
+    [...html.matchAll(/<h3 class="[^"]*title[^"]*">([^<]*)<\/h3>/g)].map((m) => m[1])
+
+  it('额度窗口归因：指标区 + 模型明细表 → 表格是 inset 子卡', () => {
+    const html = renderToStaticMarkup(createElement(ThisMonthView, {
+      ledger: { ...LEDGER, windows: [{ span: '5h', startMs: 0, endMs: 1000, anchoredAtHit: false, usage: buckets(1, 0, 0, 1), costMicros: 10, decodeMs: 1000, ttftMs: 10, steps: 1, models: [{ modelKey: 'acme/llm', provider: 'acme', usage: buckets(1, 0, 0, 1), costMicros: 10, decodeMs: 1000, ttftMs: 10, steps: 1 }], providerCount: 1 }] },
+      providerList: PROVIDERS, t, refreshProvider: async () => {}, plans: [], plansWritable: true,
+      savePlan: async () => {}, removePlan: async () => {}, onSetBillingMode: async () => {},
+      onTagProvider: async () => {}, refreshing: false, onRefresh: () => {}, lastSyncAppliedAt: undefined,
+      priceTable: undefined, priceBusy: false, priceError: null,
+      onUpdatePrices: async () => {}, onRestorePrices: async () => {},
+    } as never))
+    expect(insetCount(html)).toBeGreaterThanOrEqual(1)
+    // 外层「额度窗口归因」里嵌了「各模型明细」
+    const titles = cardTitles(html)
+    expect(titles).toContain('windowCardTitle')
+    expect(titles).toContain('windowTableTitle')
+  })
+
+  it('会话拆分节省估算：提示 + 明细表 → 表格是 inset 子卡', () => {
+    const html = renderToStaticMarkup(createElement(SaveMoreView, { ledger: LEDGER, tiers: {}, t }))
+    expect(insetCount(html)).toBeGreaterThanOrEqual(1)
+    expect(cardTitles(html)).toContain('contextTableTitle')
+  })
+
+  it('该用谁：每个模型组一张 inset 子卡（组头与指标表分离）', () => {
+    const html = renderToStaticMarkup(createElement(WhoToUseView, { ledger: LEDGER, t }))
+    // 每个模型组建一张 inset 子卡；夹具只有一个模型组，故恰好 1 张。
+    // 断言"组数 = 子卡数"而不是写死数字，夹具增组时不会假失败。
+    const groupCount = (html.match(/data-testid="finance-model-/g) ?? []).length
+    expect(groupCount).toBeGreaterThanOrEqual(1)
+    expect(insetCount(html)).toBe(groupCount)
+  })
+})
