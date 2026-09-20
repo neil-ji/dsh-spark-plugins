@@ -101,6 +101,18 @@ await esbuild({
   banner: { js: '// dsh-spark-plugins 安装器（由 scripts/release-install.mjs 打包，勿手改）' },
 })
 
+const uninstallerFile = join(flags.out, 'release-uninstall.mjs')
+await esbuild({
+  entryPoints: [join(ROOT, 'scripts', 'release-uninstall.mjs')],
+  outfile: uninstallerFile,
+  bundle: true,
+  platform: 'node',
+  format: 'esm',
+  target: 'node18',
+  legalComments: 'none',
+  banner: { js: '// dsh-spark-plugins 卸载器（由 scripts/release-uninstall.mjs 打包，勿手改）' },
+})
+
 console.log('[pack-release] 5/5 写 manifest.json / SHA256SUMS')
 const sha256 = (file) => createHash('sha256').update(readFileSync(file)).digest('hex')
 const describe = (file) => ({ sha256: sha256(file), size: statSync(file).size })
@@ -137,6 +149,7 @@ const manifest = {
   toolchain: { node: process.version, pnpm: toolVersion('pnpm --version') },
   dsh: { policy: 'latest', tested: dshTested, compat: dshCompat },
   installer: { file: 'release-install.mjs', ...describe(installerFile) },
+  uninstaller: { file: 'release-uninstall.mjs', ...describe(uninstallerFile) },
   defaultBundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'],
   bundles: packageEntries.filter((entry) => entry.bundle).map((entry) => entry.name),
   plugins: packageEntries.filter((entry) => entry.plugin).map((entry) => entry.name),
@@ -146,11 +159,12 @@ writeFileSync(join(flags.out, 'manifest.json'), JSON.stringify(manifest, null, 2
 writeFileSync(
   join(flags.out, 'SHA256SUMS'),
   packageEntries.map((entry) => `${entry.sha256}  ${entry.file}`).join('\n') +
-    `\n${manifest.installer.sha256}  ${manifest.installer.file}\n`,
+    `\n${manifest.installer.sha256}  ${manifest.installer.file}\n` +
+    `${manifest.uninstaller.sha256}  ${manifest.uninstaller.file}\n`,
 )
 
 const total = packageEntries.reduce((sum, entry) => sum + entry.size, 0)
 console.log('')
-console.log(`[pack-release] 完成：${packageEntries.length} 个 tarball + manifest.json + SHA256SUMS + release-install.mjs`)
+console.log(`[pack-release] 完成：${packageEntries.length} 个 tarball + manifest.json + SHA256SUMS + release-install.mjs + release-uninstall.mjs`)
 console.log(`[pack-release] 版本 ${tag ?? version} · dsh 兼容 ${dshCompat ?? '未声明'} · 总体积 ${(total / 1024 / 1024).toFixed(2)} MB`)
 console.log(`[pack-release] 输出目录：${flags.out}`)

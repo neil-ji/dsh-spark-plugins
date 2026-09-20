@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { inspectBundleRow, reconcileBundleRows } from '../lib/profile-install.mjs'
+import { inspectBundleRow, mergeWorkspaceYaml, reconcileBundleRows } from '../lib/profile-install.mjs'
 
 /**
  * dsh 的 loadProfileDirectory 对 dsh.profile.bundles 是**严格解析**：任何一行指向解析不到
@@ -114,5 +114,61 @@ describe('inspectBundleRow', () => {
     expect(verdict.ok).toBe(true)
     expect((verdict as { dir: string }).dir).toBe(join(root, 'node_modules', 'dsh-good-bundle'))
     expect((verdict as { patch: string }).patch).toBe('./cordis.patch.yml')
+  })
+})
+
+/**
+ * 历史缺陷回归：writeWorkspaceYaml 原先整个重写 profile/pnpm-workspace.yaml，
+ * 用户手写的 override 会在每次安装时被静默抹掉（实测种入 "user-own-pin" 后跑一次安装就没了）。
+ * profile 不是我们的地盘 —— 只允许覆盖同名键。
+ */
+describe('mergeWorkspaceYaml', () => {
+  it('用户手写的 override 在安装后仍在（本次修复的缺陷）', () => {
+    const existing = [
+      'packages:',
+      '  - .',
+      '',
+      'nodeLinker: hoisted',
+      'autoInstallPeers: false',
+      'overrides:',
+      '  "user-own-pin": "^1.0.0"',
+      '',
+    ].join('\n')
+    const out = mergeWorkspaceYaml(existing, { 'dsh-spark-dock': 'file:/cache/dock.tgz' })
+    expect(out).toContain('"user-own-pin": "^1.0.0"')
+    expect(out).toContain('"dsh-spark-dock": "file:/cache/dock.tgz"')
+    expect(out).toContain('nodeLinker: hoisted')
+  })
+
+  it('同名键由我们覆盖（升级场景）', () => {
+    const existing = ['overrides:', '  "dsh-spark-dock": "file:/old/dock-0.3.6.tgz"', ''].join('\n')
+    const out = mergeWorkspaceYaml(existing, { 'dsh-spark-dock': 'file:/new/dock-0.3.7.tgz' })
+    expect(out).toContain('file:/new/dock-0.3.7.tgz')
+    expect(out).not.toContain('0.3.6')
+  })
+
+  it('没有 overrides 段时按标准模板起一个', () => {
+    const out = mergeWorkspaceYaml('', { 'dsh-ui-kit': 'file:/cache/ui.tgz' })
+    expect(out).toContain('packages:\n  - .')
+    expect(out).toContain('nodeLinker: hoisted')
+    expect(out).toContain('"dsh-ui-kit": "file:/cache/ui.tgz"')
+  })
+
+  it('已有文件但无 overrides 段：保留原有内容，追加段', () => {
+    const out = mergeWorkspaceYaml('packages:\n  - .\n', { a: 'file:/a.tgz' })
+    expect(out).toContain('packages:\n  - .')
+    expect(out).toContain('"a": "file:/a.tgz"')
+  })
+
+  it('overrides 后面的其它顶层键不受影响', () => {
+    const existing = ['overrides:', '  "old": "1.0.0"', '', 'onlyBuiltDependencies:', '  - esbuild', ''].join('\n')
+    const out = mergeWorkspaceYaml(existing, { 'dsh-spark': 'file:/s.tgz' })
+    expect(out).toContain('onlyBuiltDependencies:')
+    expect(out).toContain('- esbuild')
+    // "old" 是用户的 override（不在本次 overrides 里）→ 必须保留
+    expect(out).toContain('"old": "1.0.0"')
+    expect(out).toContain('"dsh-spark": "file:/s.tgz"')
+    // 我们的键必须落在 overrides 段内，不能跑到 onlyBuiltDependencies 之后
+    expect(out.indexOf('"dsh-spark"')).toBeLessThan(out.indexOf('onlyBuiltDependencies:'))
   })
 })

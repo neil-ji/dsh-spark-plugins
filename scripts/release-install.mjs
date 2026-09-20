@@ -23,6 +23,7 @@ import { join, resolve } from 'node:path'
 import { execSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { installIntoProfile } from './lib/profile-install.mjs'
+import { writeState } from './lib/profile-uninstall.mjs'
 
 const REPO = 'https://github.com/neil-ji/dsh-spark-plugins'
 const DEFAULT_BASE = `${REPO}/releases/latest/download`
@@ -123,6 +124,20 @@ function dshVersion() {
 }
 
 // ── 主流程 ───────────────────────────────────────────────────────────────────
+/**
+ * 安装前必须确认 pnpm 可用。README 长期宣称「不需要 git、不需要 pnpm」，但
+ * installIntoProfile 会跑 `pnpm install --lockfile-only` —— 没有 pnpm 的用户会在
+ * **profile 已经被改脏之后**才炸掉。所以这里前置检查：早失败、且失败时不留痕。
+ * @returns {string | undefined} pnpm 版本
+ */
+function assertPnpm() {
+  try {
+    return execSync('pnpm --version', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
+  } catch {
+    return undefined
+  }
+}
+
 export async function releaseInstall(argv = process.argv.slice(2)) {
   const flags = parseArgs(argv)
   const log = (message) => console.log(message)
@@ -133,6 +148,23 @@ export async function releaseInstall(argv = process.argv.slice(2)) {
 
   log(`[release-install] 来源 ${base}`)
   log(`[release-install] home=${home} profile=${flags.profile}`)
+
+  // pnpm 前置检查：dry-run 不写 profile，不需要它
+  if (!flags.dryRun) {
+    const pnpm = assertPnpm()
+    if (pnpm === undefined) {
+      throw new Error(
+        [
+          '找不到 pnpm —— 安装需要它把 tarball 解析进 profile 的 node_modules。',
+          '  装法（任选一）：',
+          '    corepack enable                 # Node 16.9+ 自带 corepack，最省事',
+          '    npm install -g pnpm             # 用 npm 全局装',
+          '  装完重跑本命令即可；本次尚未改动任何 profile 文件。',
+        ].join('\n'),
+      )
+    }
+    log(`[release-install] pnpm ${pnpm}`)
+  }
 
   const manifestRaw = await readAsset(base, 'manifest.json')
   const manifest = JSON.parse(manifestRaw.toString('utf8'))
@@ -221,12 +253,20 @@ export async function releaseInstall(argv = process.argv.slice(2)) {
     log,
   })
 
+  // 所有权记录：卸载时靠它做外科手术式摘除（profile 里还有别人的插件，
+  // 见 lib/profile-uninstall.mjs 头注释）。装完才写，装挂了就不该登记。
+  writeState(home, {
+    profile: flags.profile,
+    tag: manifest.tag,
+    installedAt: new Date().toISOString(),
+    packages: files.map((entry) => entry.name),
+  })
+
   log('')
   log(`✅ 完成：${files.length} 个包已装进 ${result.profileRoot}`)
   log(`   bundles: ${result.bundles.join(', ')}`)
   log(`   重启生效：dsh --profile ${flags.profile}`)
-  log(`   缓存目录（可安全删除）：${cacheDir}`)
-  log(`   卸载：dsh plugin --profile ${flags.profile} remove <插件名>，并删除 ${join(home, 'spark-plugins')}`)
+  log(`   卸载：sh install.sh --uninstall --profile ${flags.profile}`)
   return { manifest, cacheDir, files, result }
 }
 

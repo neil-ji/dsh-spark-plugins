@@ -46,9 +46,69 @@ export function profilePaths(home, profile) {
 
 const WORKSPACE_YAML = 'packages:\n  - .\n\nnodeLinker: hoisted\nautoInstallPeers: false\n'
 
+/**
+ * 纯函数：把我们自己的 overrides 并进既有 pnpm-workspace.yaml（可单测）。
+ *
+ * 修复的历史缺陷：这里原先是**整个重写**该文件，于是用户手写的 override 会在每次
+ * 安装时被静默抹掉（实测：种入 `"user-own-pin": "^1.0.0"` 后跑一次安装就没了）。
+ * 用户的 profile 不是我们的地盘 —— 别人的键一律原样保留，同名键才由我们覆盖。
+ *
+ * @param {string} existing - 现有文件内容（空串 = 文件不存在）
+ * @param {Record<string,string>} overrides - 本次要写的 override
+ * @returns {string} 新文件内容
+ */
+export function mergeWorkspaceYaml(existing, overrides) {
+  const ours = Object.entries(overrides).map(([name, spec]) => `  ${JSON.stringify(name)}: ${JSON.stringify(spec)}`)
+  const text = existing ?? ''
+  const parseKey = (line) => {
+    const match = /^\s+["']?([^"':\s]+)["']?\s*:/.exec(line)
+    return match === null ? undefined : match[1]
+  }
+
+  // 没有 overrides 段：按标准模板起一个，把我们的键放进去；用户已有的其它行保留。
+  const lines = text.split('\n')
+  const headerIndex = lines.findIndex((line) => /^overrides:\s*$/.test(line))
+  if (headerIndex === -1) {
+    const kept = text.trimEnd()
+    const base = kept === '' ? WORKSPACE_YAML.trimEnd() : kept
+    if (ours.length === 0) return base + '\n'
+    return `${base}\noverrides:\n${ours.join('\n')}\n`
+  }
+
+  // 有 overrides 段：逐行重建 —— 同名键替换成我们的 spec，其余（用户的）行原样留着。
+  const oursMap = new Map(Object.entries(overrides))
+  const out = []
+  for (let index = 0; index <= headerIndex; index++) out.push(lines[index])
+  for (let index = headerIndex + 1; index < lines.length; index++) {
+    const line = lines[index]
+    if (/^\S/.test(line) && line.trim() !== '') {
+      out.push(...lines.slice(index))
+      break
+    }
+    const key = parseKey(line)
+    if (key !== undefined && oursMap.has(key)) continue
+    out.push(line)
+  }
+  // 把还没出现过的我们的键补在 overrides 段末尾
+  const present = new Set(out.map(parseKey).filter((key) => key !== undefined))
+  const missing = ours.filter((line) => !present.has(parseKey(line)))
+  if (missing.length > 0) {
+    // 定位 overrides 段的结束位置，插在段内
+    let insertAt = out.length
+    for (let index = headerIndex + 1; index < out.length; index++) {
+      if (/^\S/.test(out[index]) && out[index].trim() !== '') {
+        insertAt = index
+        break
+      }
+    }
+    out.splice(insertAt, 0, ...missing)
+  }
+  return out.join('\n').replace(/\n*$/, '\n')
+}
+
 function writeWorkspaceYaml(file, overrides) {
-  const lines = Object.entries(overrides).map(([name, spec]) => `  ${JSON.stringify(name)}: ${JSON.stringify(spec)}`)
-  writeFileSync(file, WORKSPACE_YAML + (lines.length === 0 ? '' : 'overrides:\n' + lines.join('\n') + '\n'))
+  const existing = existsSync(file) ? readFileSync(file, 'utf8') : ''
+  writeFileSync(file, mergeWorkspaceYaml(existing, overrides))
 }
 
 /**
