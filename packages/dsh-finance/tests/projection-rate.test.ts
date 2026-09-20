@@ -240,3 +240,70 @@ describe('financeRate projection on 0.1.5 hosts (embedded stream)', () => {
     expect(view.byModel['a/llm']).toBeUndefined()
   })
 })
+
+/**
+ * 升级 0.1.5-rc.2 的回归锁：`assistant/chunk` 已从会话事件联合里**移除**
+ * （换成 `assistant/attempt`）。
+ *
+ * 原先投影用 `case 'assistant/chunk':` 接这个遗留事件，升级后 TS 直接报
+ * TS2678「not comparable」并把 event 收窄成 `never`（`event.data` 全数 TS2339）——
+ * 第二道闸 dryrun 实测抓到，是真破坏。修法是移出 switch、按字符串判别
+ * （见 projection.ts 的 legacyChunkFirstTokenTime）。
+ *
+ * 这组用例锁两件事：
+ *  1) 0.1.2 语义仍然有效（遗留 chunk 事件仍被识别）；
+ *  2) 0.1.5 语义不受影响（真宿主上走 attempt / message.stream）。
+ */
+describe('assistant/chunk legacy compatibility (removed in 0.1.5)', () => {
+  const chunkEvent = (time: number, turn: number, step: number, chunk: unknown) => ({
+    type: 'assistant/chunk',
+    time,
+    data: { turn, step, chunk },
+  })
+
+  it('0.1.2: 首个可见 delta 的时刻仍被记录（遗留事件在 switch 外被识别）', () => {
+    const view = fold([
+      header(T0, 'deepseek-official', 'deepseek-flash'),
+      stepStart(T0, 1, 1),
+      chunkEvent(T0 + 700, 1, 1, { type: 'text-delta', text: 'Hi' }),
+      {
+        type: 'assistant/message',
+        time: T0 + 1_400,
+        data: { turn: 1, step: 1, usage: { inputTokens: 10, outputTokens: 100 } },
+      },
+    ])
+    // ttft = 首个可见 delta 与 step/start 的差（700ms），不是整段 decode 时间
+    expect(view.byModel['deepseek-official/deepseek-flash']?.ttftMs).toBe(700)
+  })
+
+  it('0.1.2: 非可见 delta（block-start/usage）不算首个 token', () => {
+    const view = fold([
+      header(T0, 'deepseek-official', 'deepseek-flash'),
+      stepStart(T0, 1, 1),
+      chunkEvent(T0 + 100, 1, 1, { type: 'block-start', index: 0, blockType: 'text' }),
+      chunkEvent(T0 + 200, 1, 1, { type: 'usage', usage: { inputTokens: 1, outputTokens: 2 } }),
+      chunkEvent(T0 + 900, 1, 1, { type: 'text-delta', text: 'Hi' }),
+      {
+        type: 'assistant/message',
+        time: T0 + 1_400,
+        data: { turn: 1, step: 1, usage: { inputTokens: 10, outputTokens: 100 } },
+      },
+    ])
+    expect(view.byModel['deepseek-official/deepseek-flash']?.ttftMs).toBe(900)
+  })
+
+  it('0.1.2: 归属不同 turn/step 的 chunk 不污染当前步', () => {
+    const view = fold([
+      header(T0, 'deepseek-official', 'deepseek-flash'),
+      stepStart(T0, 1, 1),
+      chunkEvent(T0 + 50, 9, 9, { type: 'text-delta', text: 'stray' }),
+      chunkEvent(T0 + 800, 1, 1, { type: 'text-delta', text: 'Hi' }),
+      {
+        type: 'assistant/message',
+        time: T0 + 1_400,
+        data: { turn: 1, step: 1, usage: { inputTokens: 10, outputTokens: 100 } },
+      },
+    ])
+    expect(view.byModel['deepseek-official/deepseek-flash']?.ttftMs).toBe(800)
+  })
+})

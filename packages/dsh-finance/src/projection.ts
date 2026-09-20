@@ -341,6 +341,31 @@ function isVisibleDelta(chunk: StreamChunk): boolean {
   return false
 }
 
+/**
+ * 0.1.2 世代遗留分支：`assistant/chunk` 会话事件携带的可见 delta 时刻。
+ *
+ * 为什么不能写成 `case 'assistant/chunk':`：0.1.5-rc.2 已把该事件从会话事件联合里
+ * **删除**（换成 `assistant/attempt`），于是 switch 的判别类型里没有这个成员 ——
+ * TS 直接报 TS2678「not comparable」并把 event 收窄成 `never`，后续 `event.data`
+ * 全数 TS2339。本仓的兼容策略是「源码同时服务两代平台」，所以这里改成在 default
+ * 之外**按字符串**判别：类型安全，且 0.1.2 宿主上行为与原来逐字一致。
+ *
+ * 0.1.5+ 宿主上该分支恒不命中（该事件已不存在），实际首 token 走
+ * `assistant/attempt` / `assistant/message.stream`（见 firstTokenTimeFromStream）。
+ */
+function legacyChunkFirstTokenTime(
+  event: CommittedEvent,
+  open: { turn: number; step: number; firstTokenTime: number | null } | null,
+): number | null | undefined {
+  if (event.type !== 'assistant/chunk') return undefined
+  const data = event.data as { turn?: unknown; step?: unknown; chunk?: unknown } | undefined
+  if (typeof data !== 'object' || data === null) return undefined
+  if (open === null || open.firstTokenTime !== null) return undefined
+  if (open.turn !== data.turn || open.step !== data.step) return undefined
+  if (!isVisibleDelta(data.chunk as StreamChunk)) return undefined
+  return event.time
+}
+
 /** 投影 `apply` 收到的事件的最小面（只做字符串判别，形状按平台代次宽松处理）。 */
 interface CommittedEvent {
   type: string
@@ -482,6 +507,14 @@ export const financeRateProjectionDefinition = {
       return { ...state, open: { ...open, firstTokenTime: first } }
     }
 
+    // 0.1.2 遗留：`assistant/chunk` 已从 0.1.5 的事件联合移除，不能在 switch 里写 case
+    // （TS2678 + event 收窄成 never）。改在 switch 外按字符串判别，两代平台都安全。
+    const legacyOpen = state.open
+    const legacyFirst = legacyChunkFirstTokenTime(event, legacyOpen)
+    if (legacyFirst !== undefined && legacyOpen !== null) {
+      return { ...state, open: { ...legacyOpen, firstTokenTime: legacyFirst } }
+    }
+
     switch (event.type) {
       case 'request/header': {
         const modelKey = financeModelKey(event.data.header.config.provider, event.data.header.config.model)
@@ -499,13 +532,6 @@ export const financeRateProjectionDefinition = {
             modelKey: state.currentModel,
           },
         }
-      }
-      case 'assistant/chunk': {
-        const open = state.open
-        if (open === null || open.turn !== event.data.turn || open.step !== event.data.step) return state
-        if (open.firstTokenTime !== null) return state
-        if (!isVisibleDelta(event.data.chunk)) return state
-        return { ...state, open: { ...open, firstTokenTime: event.time } }
       }
       case 'assistant/message': {
         const open = state.open
@@ -880,6 +906,14 @@ export const financeRateHourlyProjectionDefinition = {
       return { ...state, open: { ...open, firstTokenTime: first } }
     }
 
+    // 0.1.2 遗留：`assistant/chunk` 已从 0.1.5 的事件联合移除，不能在 switch 里写 case
+    // （TS2678 + event 收窄成 never）。改在 switch 外按字符串判别，两代平台都安全。
+    const legacyOpen = state.open
+    const legacyFirst = legacyChunkFirstTokenTime(event, legacyOpen)
+    if (legacyFirst !== undefined && legacyOpen !== null) {
+      return { ...state, open: { ...legacyOpen, firstTokenTime: legacyFirst } }
+    }
+
     switch (event.type) {
       case 'request/header': {
         const modelKey = financeModelKey(event.data.header.config.provider, event.data.header.config.model)
@@ -898,13 +932,6 @@ export const financeRateHourlyProjectionDefinition = {
             hour: hourKey(event.time),
           },
         }
-      }
-      case 'assistant/chunk': {
-        const open = state.open
-        if (open === null || open.turn !== event.data.turn || open.step !== event.data.step) return state
-        if (open.firstTokenTime !== null) return state
-        if (!isVisibleDelta(event.data.chunk)) return state
-        return { ...state, open: { ...open, firstTokenTime: event.time } }
       }
       case 'assistant/message': {
         const open = state.open

@@ -3,9 +3,9 @@
  * dryrun-upgrade.mjs — dsh 升级第二道闸：在临时目录里做一次「真升级预演」。
  *
  * check-dsh-upgrade.mjs 负责快速扫出 API 面破坏候选；本脚本负责终极验证：
- * 把 monorepo 复制到 /tmp/dsh-upgrade-dryrun，把 pnpm-workspace.yaml 的
+ * 把 monorepo 复制到 /tmp/dsh-upgrade-dryrun（排除 dist/lib），把 pnpm-workspace.yaml 的
  * @deepseek-ai/dsh-* overrides（含 minimumReleaseAgeExclude）和根 package.json
- * devDependencies 全部钉到目标版本，干净 pnpm install，然后 pnpm -r typecheck。
+ * devDependencies 全部钉到目标版本，干净 pnpm install，然后 pnpm -r build + pnpm -r typecheck。
  * 任何插件包的编译失败都会被如实报告——这是「升级会不会崩」的最强证据。
  *
  * 用法：
@@ -14,7 +14,7 @@
  *   node scripts/dryrun-upgrade.mjs --keep               # 保留临时目录不清理
  *   node scripts/dryrun-upgrade.mjs --hold dsh-client-runtime,dsh-host-apiproxy
  *     # 混合钉版：指定包保持现钉版不升（上游漏发/已移除但本地仍需时用），可多次或逗号分隔
- * 退出码：0 = typecheck 全绿；1 = 有包编译失败；2 = 过程出错。
+ * 退出码：0 = build+typecheck 全绿；1 = 有包编译失败；2 = 过程出错。
  * 不触碰：本仓库、~/.dsh/profiles/web（3080/3999）、全局 dsh 安装。
  */
 
@@ -117,11 +117,26 @@ async function main() {
   }
   console.log('pnpm install 完成')
 
-  // 4. typecheck
+  // 4. build（必须先 build 再 typecheck）
+  //
+  // 这里原先是直接 typecheck，结果是**假阴性**：rsync 故意排除了 dist/ 与 lib/
+  // （见上面的 --exclude），而跨包 import（dsh-ui-kit / *-wire / plugin-kit）解析的是
+  // 产物里的 .d.ts —— 没有产物就一律 TS2307，看起来像"新版 dsh 把包打爆了"，
+  // 实际只是没构建。实测：不 build 时报 14 个 TS2307；补上 build 后全绿。
+  console.log('\n[pnpm -r build] …')
+  const bd = sh('cd ' + WORK + ' && set -o pipefail; pnpm -r build 2>&1 | tail -25', { stdio: ['ignore', 'inherit', 'inherit'] })
+  if (bd.status !== 0) {
+    console.error('\n❌ build 失败 —— 钉版 ' + target + ' 下源码编译不过，升级前必须修复')
+    if (keep) console.log('临时目录保留：' + WORK)
+    process.exit(1)
+  }
+  console.log('pnpm -r build 完成')
+
+  // 5. typecheck
   console.log('\n[pnpm -r typecheck] …')
   const tc = sh('cd ' + WORK + ' && set -o pipefail; pnpm -r typecheck 2>&1 | tail -60', { stdio: ['ignore', 'inherit', 'inherit'] })
   if (tc.status === 0) {
-    console.log('\n✅ typecheck 全绿 —— 钉版 ' + target + ' 与当前插件源码兼容')
+    console.log('\n✅ build + typecheck 全绿 —— 钉版 ' + target + ' 与当前插件源码兼容')
   } else {
     console.log('\n❌ typecheck 失败 —— 存在编译级破坏，升级前必须修复（见上方报错）')
   }
