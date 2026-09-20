@@ -46,10 +46,10 @@ export { toast, Toaster, type ToastItem, type ToastTone, type ToasterProps } fro
 
 // 图表与金额
 export {
-  DonutChart, BarChart, TrendChart,
+  DonutChart, BarChart, StackedBar, TrendChart,
   CHART_PALETTE, OTHER_CHART_COLOR, niceCeil,
   type ChartDatum, type TrendPoint,
-  type DonutChartProps, type BarChartProps, type TrendChartProps,
+  type DonutChartProps, type BarChartProps, type StackedBarProps, type TrendChartProps,
 } from './components/Charts.tsx'
 export { Money, formatMicros, formatMicrosExact, type MoneyProps, type MoneySize } from './components/Money.tsx'
 

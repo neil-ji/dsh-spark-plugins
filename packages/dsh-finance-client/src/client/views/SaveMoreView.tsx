@@ -6,7 +6,7 @@
  */
 
 import type { ReactNode } from 'react'
-import { BarChart, Card, CHART_PALETTE, Money, formatMicros } from 'dsh-ui-kit'
+import { Card, Money, StackedBar, formatMicros } from 'dsh-ui-kit'
 import type { FinanceLedger, FinanceTierGroup } from 'dsh-spark-finance/types'
 import {
   cacheExtremes,
@@ -36,8 +36,17 @@ export interface SaveMoreViewProps {
 /** "界外"的参考上界：与常见阶梯阈值 128k 对齐（只用于分布展示）。 */
 const CONTEXT_SHARE_CEILING = 128_000
 
-/** 非 ok 的取数结果 → 文案。四个状态各有各的说法，别合并成"暂无数据"。 */
-function contextOutcomeText(outcome: SplitEstimateOutcome, t: FinanceTranslate): string {
+/**
+ * 非 ok 的取数结果 → 文案，**只对"必须给原因"的异常返回字符串**。
+ *
+ * 分界（2026-09-20 口径）：
+ *  - **异常必须解释**（否则是静默失败）：币种不匹配 / 不在生效窗口 / 多套区域价目
+ *    无法判断线路 —— 这些情况下"没有数字"本身会让人以为插件坏了，必须给原因。
+ *  - **纯空态不解释**：没填阶梯价、该档没有用量 → 直接「—」，不在单元格里写散文。
+ *
+ * @returns 需要展示的异常原因；纯空态返回 null（调用点渲染「—」）。
+ */
+function contextOutcomeText(outcome: SplitEstimateOutcome, t: FinanceTranslate): string | null {
   switch (outcome.status) {
     case 'currency-mismatch':
       return t('contextCurrencyMismatch', { currency: outcome.tierCurrency })
@@ -47,12 +56,12 @@ function contextOutcomeText(outcome: SplitEstimateOutcome, t: FinanceTranslate):
       // 同一模型有多套区域价目，而运行期拿不到"在用哪条线路"的信号（暂不区分国际/国内）。
       return t('contextAmbiguousTiers', { keys: outcome.keys.join('、') })
     case 'no-tiers':
-      return t('contextNoTiers')
     case 'no-usage':
-      return t('contextNoUsage')
+      // 纯空态：无可省金额即无可说，列头悬浮已给出口径。
+      return null
     case 'ok':
       // 调用点只在非 ok 时调这里；显式列全是为了让新增状态编译期报错。
-      return t('noData')
+      return null
   }
 }
 
@@ -75,6 +84,8 @@ export function SaveMoreView({ ledger, tiers, shadowedTierKeys = [], t }: SaveMo
   return (
     <>
       <Card title={t('peakCardTitle')} className={css.section}>
+        {/* 空态不再写"你的价目表没有峰谷窗口，或近期没有高峰时段用量"——
+            没有可省金额时就不摆金额，也不解释为什么（提示性文案只在异常且必须给原因时出现）。 */}
         {peak.shiftSavingsMicros > 0
           ? (
             <div className={css.amount} title={t('peakCardHint')}>
@@ -85,12 +96,14 @@ export function SaveMoreView({ ledger, tiers, shadowedTierKeys = [], t }: SaveMo
               {share === null ? null : <span className={css.tagMuted}>{t('peakShareLabel', { pct: formatPercent(share) })}</span>}
             </div>
           )
-          : <p className={css.hint} data-testid="finance-peak-empty">{t('peakCardEmpty')}</p>}
+          : null}
         {bands.length === 0
           ? null
           : (
-            <BarChart
-              rows={bands.map((band, index) => ({ ...band, color: CHART_PALETTE[index % CHART_PALETTE.length] }))}
+            /* 100% 堆叠条：条本体占满卡片宽度，各档宽度即真实占比。
+               不用 BarChart —— 它按 niceCeil 归一，实测最大档只占 ~52%，看构成是错的信号。 */
+            <StackedBar
+              rows={bands}
               ariaLabel={t('peakCardTitle')}
               formatValue={formatMicros}
             />
@@ -98,8 +111,9 @@ export function SaveMoreView({ ledger, tiers, shadowedTierKeys = [], t }: SaveMo
       </Card>
 
       <Card title={t('cacheCardTitle')} className={css.section}>
+        {/* 无可操作空间时不解释（原"命中率差不足 2 个百分点…"已移除）。 */}
         {savings === null || extremes === null
-          ? <p className={css.hint} data-testid="finance-cache-empty">{t('cacheCardEmpty')}</p>
+          ? null
           : (
             <>
               <div className={css.amount} title={t('cacheSavingsNote')}>
@@ -128,7 +142,7 @@ export function SaveMoreView({ ledger, tiers, shadowedTierKeys = [], t }: SaveMo
             </p>
           )}
         {contextRows.length === 0
-          ? <p className={css.hint} data-testid="finance-context-empty">{t('contextNoData')}</p>
+          ? null
           : (
             <div className={css.table} data-testid="finance-context-card">
               <div className={`${css.tableHead} ${css.colsContext}`}>
@@ -161,7 +175,11 @@ export function SaveMoreView({ ledger, tiers, shadowedTierKeys = [], t }: SaveMo
                             )}
                           </span>
                         )
-                        : <span className={css.hint}>{contextOutcomeText(outcome, t)}</span>}
+                        : (() => {
+                          const reason = contextOutcomeText(outcome, t)
+                          // 异常给原因；纯空态给「—」。
+                          return <span className={reason === null ? css.tagMuted : css.hint}>{reason ?? '—'}</span>
+                        })()}
                     </span>
                   </div>
                 )

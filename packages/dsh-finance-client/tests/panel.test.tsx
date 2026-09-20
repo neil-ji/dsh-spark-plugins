@@ -382,13 +382,28 @@ describe('finance views', () => {
     expect(html).toContain('estimateTag')
   })
 
-  it('SaveMore says there is nothing actionable when there is no peak window', () => {
+  it('SaveMore 无可省金额时「不摆金额、也不解释」（2026-09-20 口径）', () => {
     const html = renderToStaticMarkup(createElement(SaveMoreView, {
       ledger: { ...LEDGER, windowedSinceMs: null, peakValley: { ...LEDGER.peakValley, shiftSavingsMicros: 0 } },
       tiers: {},
       t,
     }))
-    expect(html).toContain('finance-peak-empty')
+    // 不再渲染"你的价目表没有峰谷窗口…"这类空态散文。
+    expect(html).not.toContain('finance-peak-empty')
+    expect(html).not.toContain('peakCardEmpty')
+  })
+
+  it('错峰卡用 100% 堆叠条：各档宽度即真实占比，条本体占满卡片宽度', () => {
+    const html = renderToStaticMarkup(createElement(SaveMoreView, { ledger: LEDGER, tiers: {}, t }))
+    expect(html).toContain('stackedTrack')
+    const widths = [...html.matchAll(/data-testid="stacked-slice-([A-Za-z]+)"[^>]*?width:\s*([\d.]+)%/g)]
+    const alt = [...html.matchAll(/width:\s*([\d.]+)%[^>]*data-testid="stacked-slice-/g)]
+    const parsed = widths.length > 0 ? widths.map((m) => Number(m[2])) : alt.map((m) => Number(m[1]))
+    expect(parsed.length).toBeGreaterThanOrEqual(2)
+    // 占比合计恒为 100%（这就是"占满 Card"的机器判据）。
+    expect(parsed.reduce((a, b) => a + b, 0)).toBeCloseTo(100, 1)
+    // 不再用按 niceCeil 归一的 BarChart（最大档只占 ~52%，看构成是错的信号）。
+    expect(html).not.toContain('barFill')
   })
 
   it('拆分卡：有上下文分布 + 阶梯价时给出上限估算，没阶梯价时明说拆分不改变单价', () => {
@@ -411,7 +426,9 @@ describe('finance views', () => {
 
     const withoutTiers = renderToStaticMarkup(createElement(SaveMoreView, { ledger: LEDGER, tiers: {}, t }))
     expect(withoutTiers).toContain('finance-context-card')
-    expect(withoutTiers).toContain('contextNoTiers')
+    // 没阶梯价属"纯空态"：不再写"没有填阶梯价 → 拆分不改变单价…"，直接给「—」。
+    expect(withoutTiers).not.toContain('contextNoTiers')
+    expect(withoutTiers).toContain('—')
   })
 
   it('拆分卡：币种不匹配的阶梯价不参与估算（宁可不算，不可算错）', () => {
@@ -468,10 +485,13 @@ describe('finance views', () => {
     expect(discounted).toContain('contextOffPeakApplied')
   })
 
-  it('拆分卡：没有上下文分布的旧会话不假装上下文很短', () => {
+  it('拆分卡：没有上下文分布的旧会话不假装上下文很短（也不解释为什么）', () => {
     const noContext = { ...LEDGER, byModel: LEDGER.byModel.map(({ context: _context, ...row }) => row) }
     const html = renderToStaticMarkup(createElement(SaveMoreView, { ledger: noContext, tiers: {}, t }))
-    expect(html).toContain('finance-context-empty')
+    // 整张表不渲染（而不是渲染一段"该投影是新增的，只有新会话才有"的说明）。
+    expect(html).not.toContain('finance-context-card')
+    expect(html).not.toContain('finance-context-empty')
+    expect(html).not.toContain('contextNoData')
   })
 
   it('Projects lists workspaces with their cost', () => {

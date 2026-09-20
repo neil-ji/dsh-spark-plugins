@@ -194,3 +194,56 @@ export function TrendChart({ points, ariaLabel, formatValue, gradientId, classNa
     </div>
   )
 }
+
+/* ── StackedBar ── */
+
+export interface StackedBarProps {
+  /** 按顺序堆叠的切片；值为 0 的片段不渲染（但保留在 totals 里）。 */
+  rows: ChartDatum[]
+  ariaLabel: string
+  /** 每片悬浮文案（默认 `label: value`）。 */
+  formatValue: (value: number) => string
+  className?: string
+}
+
+/**
+ * 100% 堆叠条 —— **条本体占满容器宽度**，宽度按各片占比分配。
+ *
+ * 与 `BarChart` 的区别（为什么不是同一种图）：
+ *  - `BarChart` 是"每项一根独立条 + 按 niceCeil 归一"，用于**跨项比大小**；
+ *    归一化会让最大项不满宽（实测 10.34 → 上取整到 20 → 只占 52%），
+ *    这在"看构成"的场景反而是错的信号。
+ *  - 本组件用于**看构成**：总和恒为 100%，占比关系直接由物理宽度表达，
+ *    最小片用 minWidth 兜底保证可见（否则 0.5% 的片等于消失）。
+ *
+ * 因此两者不是替换关系：比大小用 BarChart，看构成用 StackedBar。
+ */
+export function StackedBar({ rows, ariaLabel, formatValue, className }: StackedBarProps): ReactNode {
+  const visible = rows.filter((row) => row.value > 0)
+  const total = visible.reduce((sum, row) => sum + row.value, 0)
+  if (visible.length === 0 || total <= 0) return null
+  return (
+    <div role="img" aria-label={ariaLabel} className={cx(css.stackedWrap, className)}>
+      <div className={css.stackedTrack}>
+        {visible.map((row, index) => (
+          <span
+            key={row.key}
+            className={css.stackedSlice}
+            style={{ width: `${(row.value / total) * 100}%`, background: sliceColor(visible, index) }}
+            title={`${row.label}: ${formatValue(row.value)}${row.detail === undefined ? '' : ` · ${row.detail}`}`}
+            data-testid={`stacked-slice-${row.key}`}
+          />
+        ))}
+      </div>
+      <ul className={css.stackedLegend}>
+        {visible.map((row, index) => (
+          <li key={row.key} className={css.legendItem}>
+            <span className={css.legendDot} style={{ background: sliceColor(visible, index) }} />
+            <span className={css.legendLabel}>{row.label}</span>
+            <span className={css.legendValue}>{formatValue(row.value)}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}

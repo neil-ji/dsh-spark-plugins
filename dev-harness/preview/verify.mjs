@@ -188,6 +188,9 @@ async function runServerChecks() {
     check('server: 产物含额度窗口归因卡（SPEC §10）', hasQuotaWindow, hasQuotaWindow ? '' : '未找到 finance-quota-window / QuotaWindowCard')
     const hasQuotaPill = code.includes('finance-quota-hits-') && code.includes('quotaAttemptsNote')
     check('server: 产物含额度触达明细（SPEC §10）', hasQuotaPill, hasQuotaPill ? '' : '未找到 finance-quota-hits- / quotaAttemptsNote')
+    // 错峰卡改为 100% 堆叠条（2026-09-20）：产物必须带 StackedBar 的 testid 与类名。
+    const hasStacked = code.includes('stacked-slice-') && code.includes('stackedTrack')
+    check('server: 产物含错峰 100% 堆叠条', hasStacked, hasStacked ? '' : '未找到 stacked-slice- / stackedTrack')
     const bareRequire = code.match(/require\("(?!react)/)
     check('server: 产物不含裸 require 外链', bareRequire === null, bareRequire === null ? '' : '未内联：' + bareRequire[0])
     const hasShell = code.includes('pv-shell') && code.includes('零 dsh')

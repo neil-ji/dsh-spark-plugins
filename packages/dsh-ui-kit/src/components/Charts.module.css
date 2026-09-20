@@ -52,3 +52,25 @@
   .trendArea { animation: none; }
   .barFill { transition: none; }
 }
+
+/* ── StackedBar（100% 堆叠：条本体占满容器宽度） ── */
+.stackedWrap { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+/* 占满：无固定宽度、无内边距，flex 子项按占比分配 —— 总和恒 100%。 */
+.stackedTrack {
+  display: flex;
+  width: 100%;
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--spk-layer-2);
+}
+.stackedSlice {
+  display: block;
+  height: 100%;
+  /* 最小可见宽度：占比极小的片（如 0.5%）不至于消失；代价是总和可能略超 100%，
+     由父级 overflow:hidden 裁掉溢出部分，视觉上仍是一条满宽条。 */
+  min-width: 3px;
+  transition: opacity var(--spk-dur-fast) var(--spk-ease-out);
+}
+.stackedSlice:hover { opacity: 0.82; }
+.stackedLegend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; }

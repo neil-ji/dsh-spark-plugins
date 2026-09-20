@@ -315,7 +315,8 @@ export async function run(): Promise<{ checks: Check[] }> {
     )
     expectContains('finance: 拆分卡有上下文分布', saveHtml, 'finance-context-card')
     expectContains('finance: 有阶梯价的模型给出上限估算', saveHtml, '上限可省')
-    expectContains('finance: 没有阶梯价时明说拆分不改变单价', saveHtml, '拆分不改变单价')
+    // 2026-09-20 口径：没阶梯价属"纯空态" → 直接给「—」，不再写"拆分不改变单价"。
+    expectContains('finance: 没有阶梯价时给「—」而不写空态散文', saveHtml, '—')
     expectContains('finance: 拆分口径写明是估算上限', saveHtml, '估算口径')
     // S2/S3：币种不匹配的档位不参与估算（宁可不算，不可硬换汇）。
     expectContains('finance: 币种不匹配的阶梯价不参与估算', saveHtml, '币种不匹配')
