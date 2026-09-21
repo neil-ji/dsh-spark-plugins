@@ -51,6 +51,14 @@
   gap: var(--spk-space-3);
 }
 
+/* QuotaWindowCard 的内容包裹层：指标区（StatGrid）与 inset 明细子卡之间
+   也要吃卡片内间距档 —— 裸 div 没有 gap，两块内容会紧贴（2026-09 真宿主截图）。 */
+.quotaWindowBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spk-gap-card, var(--spk-space-2));
+}
+
 .hint {
   margin: 0;
   color: var(--spk-label-3);

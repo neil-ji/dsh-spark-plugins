@@ -94,7 +94,7 @@ export function QuotaWindowCard({ ledger, plans, t }: QuotaWindowCardProps): Rea
         />
       )}
     >
-      <div data-testid="finance-quota-window">
+      <div data-testid="finance-quota-window" className={css.quotaWindowBody}>
         <StatGrid>
           {/* 性价比结论挂在**「按量等价」数值的正下方**（2026-09-21 用户裁决）：
               这句话说的就是这个数字与订阅估价的关系，之前单独占一行正文、飘在三个

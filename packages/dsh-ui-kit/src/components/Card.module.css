@@ -39,13 +39,13 @@
   border-color: color-mix(in srgb, var(--spk-brand) 45%, var(--spk-border-2));
 }
 
-/* 嵌套子卡：落在外层卡内的层级 —— 背景沉一层（凹陷方向）+ 边框**更弱**，
-   与外层 surface 卡形成可辨层级，避免「同色卡套卡」看不出结构。
-   描边档必须比外层弱：用 --spk-border（分隔线档），不是 border-2。
-   背景用 --spk-layer-2（凹陷档，两个主题都比 card 深/暗一档）：
-   原先用 --spk-layer-1，而亮色下 layer-1 与 surface-card **同为 #ffffff**
-   （对比度恰好 1.00:1），inset 卡在亮色里完全看不出层级。 */
+/* 嵌套子卡：落在外层卡内的层级 —— 描边**更弱**，靠轮廓弱一档表达层级。
+   背景与外层卡同为 --spk-surface-card：原先用 --spk-layer-2（凹陷档），
+   但同一张外层卡里 Stat 指标块是 surface-card（2026-09-29 用户裁决：
+   layer-2 比 surface-card 深一档算样式不一致）→ 同屏出现「白指标块 + 灰子卡」
+   两种嵌套面（2026-09 真宿主截图：额度窗口归因卡）。嵌套面统一 surface-card，
+   层级只由描边强弱表达（闸门 auditCardSurfaces 不变量 1 仍守住外强内弱）。 */
 .inset {
-  background: var(--spk-layer-2);
+  background: var(--spk-surface-card);
   border-color: var(--spk-border);
 }
