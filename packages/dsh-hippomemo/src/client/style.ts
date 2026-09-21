@@ -137,6 +137,8 @@ export const HIPPOMEMO_CSS = [
   '[data-plugin="dsh-hippomemo"] .hippomemo-pager-meta { font-size: var(--spk-text-sm); color: var(--spk-label-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-pager-controls { display: flex; flex-wrap: nowrap; gap: 4px; align-items: center; flex-shrink: 0; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-pager-gap { color: var(--spk-label-3); padding: 0 2px; }',
+  /* 每页选择器在分页器里只需容纳「每页 10」——112px 的通用下限在这里是浪费。 */
+  '[data-plugin="dsh-hippomemo"] .hippomemo-pager-size { min-width: 0; width: auto; padding-right: var(--spk-space-2); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-detail-modal-body { display: flex; flex-direction: column; gap: 12px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-detail-modal-footer { display: flex; justify-content: flex-end; gap: 8px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-detail-pills { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }',

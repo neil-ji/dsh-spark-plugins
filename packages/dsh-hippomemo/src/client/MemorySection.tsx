@@ -71,8 +71,10 @@ const BRAIN_REGIONS = ['pfc', 'amy', 'hippo', 'cortex'] as const
 type BrainRegion = typeof BRAIN_REGIONS[number]
 interface SelectOption { value: string; label: string }
 
-function HippomemoSelect({ value, placeholder, options, onChange }: {
+function HippomemoSelect({ value, placeholder, options, onChange, className }: {
   value: string; placeholder: string; options: SelectOption[]; onChange: (value: string) => void
+  /** 额外的形态修饰类（如分页器里的紧凑宽度）。 */
+  className?: string
 }): ReactNode {
   const [open, setOpen] = useState(false)
   const [side, setSide] = useState<'bottom' | 'top'>('bottom')
@@ -93,7 +95,7 @@ function HippomemoSelect({ value, placeholder, options, onChange }: {
       open={open} portal side={side}
       anchor={(
         <Button ref={triggerRef} variant='secondary' size='sm'
-          className={open ? 'hippomemo-select hippomemo-select-open' : 'hippomemo-select'}
+          className={['hippomemo-select', open ? 'hippomemo-select-open' : '', className ?? ''].filter(Boolean).join(' ')}
           onClick={openMenu}>
           <span className='hippomemo-select-label'>{label}</span>
           <span className='hippomemo-select-chevron' aria-hidden='true'>
@@ -568,11 +570,11 @@ function MemoryListPanel({ t, api, detailId, onDetail, embedded = false }: {
       ) : null}
       {total > 0 ? (
         <div className='hippomemo-pager'>
-          <span className='hippomemo-pager-meta'>
-            {t('total')} {total} {t('results')} · {t('pagePrefix')} {page} / {totalPages} {t('pageSuffix')}
-          </span>
+          {/* 只留「共 N 条」：页码由翻页按钮自己表达，写一遍是重复（2026-09 用户裁决）。
+              内容区与分页器同排（.hippomemo-pager nowrap），紧凑一行。 */}
+          <span className='hippomemo-pager-meta'>{t('total')} {total} {t('results')}</span>
           <div className='hippomemo-pager-controls'>
-            <HippomemoSelect value={String(pageSize)} placeholder={t('pageSizeLabel')}
+            <HippomemoSelect className='hippomemo-pager-size' value={String(pageSize)} placeholder={t('pageSizeLabel')}
               options={PAGE_SIZES.map(size => ({ value: String(size), label: t('pageSizeLabel') + ' ' + String(size) }))}
               onChange={changePageSize} />
             {/* 前后页收成 icon-only（aria-label 保留语义）：文本「上一页/下一页」
