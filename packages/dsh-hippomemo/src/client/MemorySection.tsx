@@ -111,6 +111,14 @@ function HippomemoSelect({ value, placeholder, options, onChange, className }: {
   )
 }
 
+/** 档位的 tag 修饰类：关键/重要给颜色（值得一眼看到），一般/次要沉下去。 */
+const IMPORTANCE_TAGS: Record<ImportanceTier, string> = {
+  critical: 'hippomemo-tag hippomemo-tag-warn',
+  high: 'hippomemo-tag hippomemo-tag-brand',
+  normal: 'hippomemo-tag hippomemo-tag-neutral',
+  low: 'hippomemo-tag hippomemo-imp-low',
+}
+
 const IMPORTANCE_KEYS: Record<ImportanceTier, HippomemoLocaleKey> = {
   critical: 'importanceCritical',
   high: 'importanceHigh',
@@ -549,7 +557,12 @@ function MemoryListPanel({ t, api, detailId, onDetail, embedded = false }: {
                       : <Pill className='hippomemo-tag hippomemo-tag-warn'>
                           {t('unproven')}{(record.seenWorkspaces?.length ?? 0) > 0 ? '·' + String(record.seenWorkspaces?.length) : ''}
                         </Pill>) : null}
-                    <span className='hippomemo-row-meta-text'>{t('importanceLabel')} {importanceText(t, record.importance)}</span>
+                    {/* 重要度不带 label，直接出 tag（2026-09 用户裁决）：一排 tag 里
+                        多一个「重要度」前缀只是噪声；原始数值留在 title 里可查。 */}
+                    <Pill className={IMPORTANCE_TAGS[importanceTier(record.importance)]}
+                      title={`${t('importanceLabel')} ${record.importance.toFixed(2)}`}>
+                      {importanceText(t, record.importance)}
+                    </Pill>
                     <span className='hippomemo-row-meta-text' title={formatDate(record.updatedAt)}>
                       {formatRelative(record.updatedAt, Date.now(), t)}
                     </span>

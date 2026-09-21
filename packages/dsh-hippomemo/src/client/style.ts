@@ -119,6 +119,8 @@ export const HIPPOMEMO_CSS = [
   '[data-plugin="dsh-hippomemo"] .hippomemo-tag-brand { background: color-mix(in srgb, var(--spk-brand, #3d5af0) 10%, transparent); color: var(--spk-brand-fg, #2f46c8); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-tag-success { color: var(--spk-success, #16A34A); background: color-mix(in srgb, var(--spk-success, #16A34A) 10%, transparent); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-tag-warn { color: var(--spk-warn, #D97706); background: color-mix(in srgb, var(--spk-warn, #D97706) 10%, transparent); }',
+  /* 次要档：描边式、字色下沉 —— 与 neutral（一般）区分开，视觉上主动退后。 */
+  '[data-plugin="dsh-hippomemo"] .hippomemo-imp-low { border: 1px solid var(--spk-border); color: var(--spk-label-3); background: transparent; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-tag-error { background: var(--spk-error-soft, rgba(220,38,38,.10)); color: var(--spk-error, #DC2626); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-tag-mono { color: var(--spk-acc-github-fg, var(--spk-acc-github, #5b21b6)); background: color-mix(in srgb, var(--spk-acc-github, #7C3AED) 10%, transparent); font-family: var(--spk-font-mono, ui-monospace, monospace); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-kind-preference { background: color-mix(in srgb, var(--spk-brand, #3d5af0) 10%, transparent); color: var(--spk-brand-fg, #2f46c8); }',
