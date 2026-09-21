@@ -7,16 +7,27 @@ import { join } from 'node:path'
 import type { ScriptView } from 'dsh-script-wire'
 import { describeStorageError, ensureJsonlPath } from './jsonl-path.ts'
 
-function parseLines<T>(text: string): T[] {
+/**
+ * 逐行解析 + **可选的读路径归一化**。
+ *
+ * `normalize` 不是装饰：JSONL 读出来的是**历史字节**，新增字段（如 `invokedWorkspaces`）
+ * 在老记录里根本不存在，而 schema 默认值只在 `parse` 时才补。少了这一步，加一个带默认值的
+ * 字段就会让审计/读模型在真宿主上抛 `Cannot read properties of undefined`——
+ * 2026-09-22 实测（旧 seed 写的 3 条记录没有 `invokedWorkspaces`，`/scripts/audit` 直接 400）。
+ *
+ * 坏行与归一化失败的行都跳过（一条烂数据不该让整个库读不出来），与原先的容错口径一致。
+ * @param text - JSONL 全文。
+ * @param normalize - 每行的契约校验/默认值补齐；缺省只做 JSON 解析 + `id` 粗判。
+ */
+function parseLines<T>(text: string, normalize?: (raw: unknown) => T): T[] {
   const records: T[] = []
   for (const raw of text.split('\n')) {
     const line = raw.trim()
     if (line.length === 0) continue
     try {
       const parsed = JSON.parse(line) as unknown
-      if (parsed !== null && typeof parsed === 'object' && 'id' in parsed) {
-        records.push(parsed as T)
-      }
+      if (parsed === null || typeof parsed !== 'object' || !('id' in parsed)) continue
+      records.push(normalize === undefined ? parsed as T : normalize(parsed))
     } catch {
       // ignore malformed line
     }
@@ -26,10 +37,13 @@ function parseLines<T>(text: string): T[] {
 
 export class JsonlScriptStorage<T = ScriptView> {
   private readonly filePath: string
+  /** 读路径归一化（补 schema 默认值 / 校验）；缺省不加工。 */
+  private readonly normalize: ((raw: unknown) => T) | undefined
   private chain: Promise<void> = Promise.resolve()
 
-  constructor(filePath: string) {
+  constructor(filePath: string, normalize?: (raw: unknown) => T) {
     this.filePath = filePath
+    this.normalize = normalize
   }
 
   private async serialize<T>(work: () => Promise<T>): Promise<T> {
@@ -56,7 +70,7 @@ export class JsonlScriptStorage<T = ScriptView> {
       if (err.code === 'ENOENT') return []
       throw describeStorageError(error, this.filePath)
     }
-    return parseLines(text)
+    return parseLines(text, this.normalize)
   }
 
   async append(record: T): Promise<void> {

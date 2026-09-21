@@ -144,6 +144,13 @@ dock 声明子槽并用平台 `renderSlot(key, { variant, activeId, onSelect }, 
 只是 dock 里永远没有这个模块（2026-09-21 dsh-script-client 实测）。改注册面按铁律 4
 用 `/__dev/probe` 的 `clientGraph.entries` 断言。
 
+**客户端取 remote 命名空间只有一条路：`ctx.reflect.get('remote.<ns>')`**。
+`remote.<ns>` 是本包 `$mount` 之后才提供的服务：写进 `inject` 会死锁，而直接在
+`ctx.remote.<ns>` 上点出来会被平台的 inject 门拦下（`cannot get property "remote.<ns>"
+without inject`）；`$stream` 载体仍是 `ctx.remote`。**这道门只在真宿主存在** —— 预览的
+mock remote 是普通对象，于是「预览全绿、真宿主事件流整条死掉且只有 console 警告」
+（2026-09-22 dsh-script-client 实测，范本见 hippomemo 的 `hippomemoChannelOf`）。
+
 ---
 
 ## 3. UI 层规范

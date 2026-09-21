@@ -459,7 +459,7 @@ try {
 
     // 5) ADR-003：五个模块全部由插件自注册（dock 不再静态 import 任何插件 UI）——
     //    真宿主里必须五个 tab 都在，且每个模块点开后渲染出内容而不是失败态。
-    const expectedTabs = ['火花', '记忆', '财务', 'GitHub', 'npm']
+    const expectedTabs = ['火花', '记忆', '财务', 'GitHub', 'npm', '脚本']
     // 徽章后缀（「火花，N 项待处理」）并入 aria-label 是有意的 a11y 行为，断言按前缀匹配。
     check('模块栏含全部自注册模块（ADR-003）', expectedTabs.every((label) => Array.isArray(tabs) && tabs.some((tab) => tab.startsWith(label))), JSON.stringify(tabs))
     for (const label of expectedTabs) {
@@ -474,6 +474,72 @@ try {
       })()`)
       check(`模块「${label}」标题行走子槽 header 位`, String(paneState.head).trim().length > 0 && !paneState.failed, JSON.stringify(paneState.head))
       check(`模块「${label}」内容走子槽 pane 位且未失败`, paneState.len > 30 && paneState.failed !== true, JSON.stringify(paneState).slice(0, 240))
+    }
+
+    // 6) 脚本沉淀库（dsh-script）：读模型 / 治理面 / 结算。
+    //    这一段的判据全部落在**宿主侧**（HTTP 读模型 + typert 注册面），不靠"面板能开"——
+    //    闸门铁律 4：面板能渲染证明不了任何注册承诺（HTTP 前缀没注册也能靠兜底渲染）。
+    const scriptTabIndex = Array.isArray(tabs) ? tabs.indexOf('脚本') : -1
+    if (scriptTabIndex >= 0) {
+      await evalJs(`document.querySelectorAll('.dock-tab')[${scriptTabIndex}].click()`)
+      await sleep(2000)
+    }
+    const scriptList = await fetch('http://127.0.0.1:3997/scripts?limit=100', { headers: { connection: 'close' } })
+      .then((r) => r.json()).catch(() => null)
+    // 只断言**不变量**（形状），不断言"恰好有调用过"这类数据巧合：
+    // 沙箱库是可变的，断言数据巧合会随验收轮次翻红（本文件 line 418 的老教训）。
+    check(
+      'GET /scripts 是真宿主的读模型（不含 steps，带 stepCount 与宿主算的 successRate）',
+      scriptList?.ok === true
+        && Array.isArray(scriptList.value)
+        && scriptList.value.length > 0
+        && scriptList.value.every((item) => item.steps === undefined
+          && typeof item.stepCount === 'number'
+          && typeof item.successRate === 'number'
+          && Array.isArray(item.invokedWorkspaces)),
+      JSON.stringify(scriptList?.value?.[0] ?? scriptList).slice(0, 240),
+    )
+    const auditRead = await fetch('http://127.0.0.1:3997/scripts/audit', { headers: { connection: 'close' } })
+      .then((r) => r.json()).catch(() => null)
+    check(
+      'GET /scripts/audit 返回审计负载（统计 + 待裁决建议，且只读不结算）',
+      auditRead?.ok === true
+        && auditRead.value?.archived === 0
+        && typeof auditRead.value?.stats?.byStatus?.active === 'number'
+        && typeof auditRead.value?.stats?.rateBuckets?.high === 'number'
+        && typeof auditRead.value?.stats?.acceptance?.ratio === 'number'
+        && Array.isArray(auditRead.value?.advices)
+        && auditRead.value.advices.every((advice) => advice.detail === undefined && typeof advice.evidence?.invocationCount === 'number'),
+      JSON.stringify(auditRead?.value?.stats ?? auditRead).slice(0, 240),
+    )
+    // 结算幂等（Spec INV-13）：连跑两次，第二次必须是 0 —— 这是"唯一自动动作"的安全边界。
+    const sweepFirst = await fetch('http://127.0.0.1:3997/scripts/sweep', { method: 'POST', headers: { 'content-type': 'application/json', connection: 'close' }, body: '{}' })
+      .then((r) => r.json()).catch(() => null)
+    const sweepSecond = await fetch('http://127.0.0.1:3997/scripts/sweep', { method: 'POST', headers: { 'content-type': 'application/json', connection: 'close' }, body: '{}' })
+      .then((r) => r.json()).catch(() => null)
+    check(
+      'POST /scripts/sweep 结算过期且幂等（第二次 0 写入）',
+      sweepFirst?.ok === true && sweepSecond?.ok === true && sweepSecond.value?.archived === 0,
+      JSON.stringify({ first: sweepFirst?.value?.archived, second: sweepSecond?.value?.archived }),
+    )
+    if (scriptTabIndex >= 0) {
+      const auditPane = await evalJs(`(() => {
+        const body = document.querySelector('.dock-body')
+        const text = (body?.textContent ?? '').replace(/\\s+/g, ' ')
+        return {
+          audit: body?.querySelector('[data-testid="script-audit"]') !== null,
+          rows: body?.querySelectorAll('[data-testid="script-row"]').length ?? 0,
+          advices: body?.querySelectorAll('[data-testid="script-advice"]').length ?? 0,
+          cjkOk: text.length > 0,
+        }
+      })()`)
+      check(
+        '「脚本」pane 渲染治理面（概览卡 + 目录行 + 待裁决行）',
+        auditPane?.audit === true && auditPane?.rows > 0,
+        JSON.stringify(auditPane),
+      )
+      const scriptWarnings = console_.filter((line) => /script 事件通道不可用|dsh-script.*mount 失败/.test(line))
+      check('脚本事件通道无告警（subscribeFrames 真的建立了）', scriptWarnings.length === 0, JSON.stringify(scriptWarnings.slice(0, 2)))
     }
 
     // F11 commit: `finance/events` typert stream 端到端断言。F11‑① 把
@@ -560,6 +626,29 @@ try {
         'finance/events 流端点已注册到 typert 注册面（非 SRC 兜底）',
         financeEvents !== undefined && financeEvents.resultMode === 'strict',
         financeEvents === undefined ? '(finance/events 缺失)' : JSON.stringify(financeEvents),
+      )
+      // dsh-script 同样用 ctx.typert.register 显式注册（AGENTS §2.3 第 1 条路径）。
+      // 缺这条断言时，「脚本 pane 有数据」只说明 HTTP 兜底能用 —— 契约注册面没被证明。
+      const scriptPackages = registered.packages ?? []
+      const scriptEvents = descriptors.find((entry) => entry.endpoint === 'script/events')
+      check(
+        'script/events 流端点已注册到 typert 注册面（strict，非 SRC 兜底）',
+        scriptEvents !== undefined && scriptEvents.resultMode === 'strict',
+        scriptEvents === undefined ? '(script/events 缺失)' : JSON.stringify(scriptEvents),
+      )
+      check(
+        'dsh-script:host 进了 typert 注册包清单（契约单源，非兜底）',
+        scriptPackages.includes('dsh-script:host'),
+        JSON.stringify(scriptPackages.filter((name) => name.startsWith('dsh-script'))),
+      )
+      // 治理读模型的 schema 必须真的注册进反射面（漏注册时 HTTP 兜底照样能用，
+      // 但 typert 侧的严格校验就没了 —— 只有 schemaKeys 能证明这件事）。
+      const schemaKeys = registered.schemaKeys ?? []
+      const expectedSchemas = ['ScriptSummary', 'ScriptAdvice', 'ScriptAuditStats', 'ScriptAudit']
+      check(
+        '治理读模型 schema（ScriptSummary / ScriptAdvice / ScriptAuditStats / ScriptAudit）进了 typert 反射面',
+        expectedSchemas.every((name) => schemaKeys.includes('dsh-script#' + name)),
+        JSON.stringify(schemaKeys.filter((key) => key.startsWith('dsh-script#'))),
       )
     }
 

@@ -21,12 +21,15 @@ import type { ScriptTranslate } from './ScriptDockModule.tsx'
 
 export interface ScriptsPaneProps {
   t: ScriptTranslate
-  remote: ScriptRemote | null
+  /** `ctx.remote`（`$stream` 载体）。 */
+  remote: StreamRemote | null
+  /** `ctx.reflect.get('remote.script')`（命名空间服务，不能走 inject 取，见 ScriptDockModule 头注）。 */
+  events: ScriptEventsFace | null
 }
 
-/** `ctx.remote.script.events()` 的最小面（wire 的 namespace map 增强提供类型）。 */
-export interface ScriptRemote extends StreamRemote {
-  script: { events: (signal?: AbortSignal) => AsyncIterable<ScriptStreamFrame> }
+/** `remote.script` 命名空间的最小面（wire 的 namespace map 增强提供类型）。 */
+export interface ScriptEventsFace {
+  events: (signal?: AbortSignal) => AsyncIterable<ScriptStreamFrame>
 }
 
 interface PaneData {
@@ -58,7 +61,7 @@ const STATUS_TONE = {
   candidate: 'brand',
 } as const
 
-export function ScriptsPane({ t, remote }: ScriptsPaneProps): JSX.Element {
+export function ScriptsPane({ t, remote, events }: ScriptsPaneProps): JSX.Element {
   const { data, error, reload } = useApiResource<PaneData>(async () => ({
     // 打开治理面即结算过期（Spec D7：唯一自动动作，不用定时器）。
     audit: await scriptApi.audit(),
@@ -72,10 +75,11 @@ export function ScriptsPane({ t, remote }: ScriptsPaneProps): JSX.Element {
   useEffect(() => () => window.clearTimeout(messageTimer.current), [])
 
   const onFrame = useCallback(() => { reload() }, [reload])
+  // 命名空间不可用时传 `remote: null` 让 kit 跳过订阅（hook 不能条件调用）。
   useFrames<ScriptStreamFrame>({
-    remote,
+    remote: events === null ? null : remote,
     name: 'script/events',
-    open: (signal) => remote!.script.events(signal),
+    open: (signal) => events!.events(signal),
     onFrame,
     onReady: onFrame,
   })

@@ -343,6 +343,28 @@ test('读模型（A8）：summary 带宿主算的 successRate 与 stepCount，�
   }
 })
 
+test('读路径归一化：缺新增字段的老记录按 schema 默认值补齐（2026-09-22 真宿主回归）', async () => {
+  const h = await harness()
+  try {
+    // 旧版本写下的记录：没有 invokedWorkspaces（本次新增字段）。
+    // 读路径若不归一化，审计会在 `record.invokedWorkspaces.length` 上抛 undefined，
+    // 表现为真宿主 `/scripts/audit` 400 —— 预览（内存夹具）永远抓不到这类字节级兼容问题。
+    const legacy = record({ id: 'legacy', name: '老版本写的脚本' }) as unknown as Record<string, unknown>
+    delete legacy['invokedWorkspaces']
+    await appendFile(h.filePath, JSON.stringify(legacy) + '\n', 'utf8')
+
+    const [summary] = await h.service.listSummaries({ limit: 10 })
+    assert.equal(summary?.id, 'legacy')
+    assert.deepEqual(summary?.invokedWorkspaces, [], '缺字段 → schema 默认值')
+
+    const audit = await h.service.readAudit(NOW)
+    assert.equal(audit.stats.total, 1)
+    assert.deepEqual(governanceAdvices([scriptViewSchema.parse({ ...legacy, invokedWorkspaces: [] })], NOW), [])
+  } finally {
+    await h.cleanup()
+  }
+})
+
 /* ───────────────────────── HTTP 面（治理端点 + 读模型） ───────────────────────── */
 
 interface FakeResponse {

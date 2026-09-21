@@ -131,7 +131,9 @@ export class ScriptService extends Service {
     super(ctx, 'script')
     this.filePath = config.filePath ?? defaultScriptsFilePath()
     this.seedEnabled = config.seed ?? true
-    this.storage = new JsonlScriptStorage<ScriptView>(this.filePath)
+    // 读路径归一化：老记录缺新字段时按 schema 默认值补齐（否则新增带默认值的字段
+    // 会让读模型/审计在真宿主上抛 undefined，2026-09-22 实测）。
+    this.storage = new JsonlScriptStorage<ScriptView>(this.filePath, raw => scriptViewSchema.parse(raw))
     this.ready = this.init(ctx)
     // **种子必须在 ready 之后**：seedDefaultScripts 走公开的 list()/save()，而它们
     // 都以 `await whenReady()` 开头。若把种子放进 init()，就是 init 等种子、种子等 init

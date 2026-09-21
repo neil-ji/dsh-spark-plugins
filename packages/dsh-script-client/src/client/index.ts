@@ -32,7 +32,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
 }
 
 export type { ScriptDockInject, ScriptTranslate } from './ScriptDockModule.tsx'
-export type { ScriptsPaneProps, ScriptRemote } from './ScriptsPane.tsx'
+export type { ScriptsPaneProps, ScriptEventsFace } from './ScriptsPane.tsx'
 export type { ScriptKey } from './locales.ts'
 export { ScriptsPane } from './ScriptsPane.tsx'
 export { scriptApi } from './api.ts'
