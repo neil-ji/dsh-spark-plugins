@@ -1218,7 +1218,6 @@ function EvolutionTab({ t, stats, usage, candidates, now, onResolve, api, reload
             <Stat label={t('usageConversion')} value={`${(usage.conversionRate * 100).toFixed(0)}%`} />
           </StatGrid>
         ) : null}
-        {usage !== null && usage.staleCount > 0 ? <p className='hippomemo-usage-hint'>{t('usageStaleHint')}</p> : null}
       </Card>
       <Card title={t('evolutionChartsTitle')}>
         <MemoryCharts api={api} t={t} stats={stats} reloadKey={reloadKey} />

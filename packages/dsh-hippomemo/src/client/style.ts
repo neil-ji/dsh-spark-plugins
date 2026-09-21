@@ -174,7 +174,6 @@ export const HIPPOMEMO_CSS = [
   '[data-plugin="dsh-hippomemo"] .hippomemo-button-danger { color: var(--spk-error) !important; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-panel { display: flex; flex-direction: column; gap: 12px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-meta { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: var(--spk-text-sm); line-height: 18px; color: var(--spk-label-2); }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-usage-hint { margin: 0; color: var(--spk-warn); font-size: var(--spk-text-xs); line-height: 16px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-chart-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-chart-card-wide { grid-column: 1 / -1; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-chart-title { font-size: var(--spk-text-md); line-height: 20px; font-weight: 600; }',
