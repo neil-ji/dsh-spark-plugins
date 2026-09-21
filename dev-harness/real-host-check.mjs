@@ -214,9 +214,19 @@ try {
     body: document.body.textContent.length,
   }))()`)
   let ready = await readReady()
-  for (let attempt = 0; attempt < 8 && ready.ball !== 1; attempt += 1) {
+  for (let attempt = 0; attempt < 12 && ready.ball !== 1; attempt += 1) {
     await sleep(2500)
     ready = await readReady()
+  }
+  // 仍没挂上就重载一次再等：宿主刚冷启动时，浏览器这一侧要拉 6MB 级 client 产物 +
+  // 装配模块图，偶发超过 30s（表现为 title 还是默认 '127.0.0.1'、body 已有内容但
+  // 悬浮球未挂）。重载是幂等的，且不放松任何断言 —— 判据仍是"球真的在"。
+  if (ready.ball !== 1) {
+    await send('Page.reload', { ignoreCache: false })
+    for (let attempt = 0; attempt < 12 && ready.ball !== 1; attempt += 1) {
+      await sleep(2500)
+      ready = await readReady()
+    }
   }
   check('真宿主首屏渲染', ready.body > 0, JSON.stringify(ready))
 

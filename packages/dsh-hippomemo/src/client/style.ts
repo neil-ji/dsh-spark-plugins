@@ -234,15 +234,20 @@ export const HIPPOMEMO_CSS = [
   // ---- portal modal 高度约束 ----
   // ui-kit Modal portal 到 document.body，dialog 无 data-plugin 祖先；hippomemo-*
   // 类名全局唯一，无前缀规则安全。dialog 限高 + 内部内容（hippomemo-modal-scope）
-  // 独立滚动：header/footer 恒可见，长内容（记忆正文/编辑表单）在 scope 内滚动，
-  // 不再撑破视口。detail 正文不再自带内滚 —— 滚动单源归 modal body。
+  // 独立滚动：header/footer 恒可见，长内容（记忆正文/编辑表单）在 body 内滚动，
+  // 不再撑破视口。滚动单源 = modal body（插件不得再自开滚动容器，否则滚动条会
+  // 被内边距顶进来、浮在面板中间）。
   // 2026-09 修复「来源溯源溢出 modal 下边缘」：旧方案 body 预算锚定 100vh-230px，
   // 而 dialog 封顶 720px 且不裁剪，高视口下 header+body+footer 总高超过 720 → 底部溢出。
   // 改为 dialog 自身 flex-column：header/footer 恒可见且不收缩，body 独占剩余空间内滚，
   // 总高永远收敛在 max-height 内。
   '.hippomemo-detail-modal, .hippomemo-edit-modal { display: flex; flex-direction: column; max-height: min(720px, calc(100vh - 40px)); }',
   '.hippomemo-detail-modal > header, .hippomemo-edit-modal > header, .hippomemo-detail-modal > footer, .hippomemo-edit-modal > footer { flex: none; }',
-  // modal 内唯一直接子 div 就是 ui-kit body；header/footer 是语义元素，不会被命中
-  '.hippomemo-detail-modal > div, .hippomemo-edit-modal > div { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden; }',
-  '.hippomemo-detail-modal .hippomemo-modal-scope, .hippomemo-edit-modal .hippomemo-modal-scope { flex: 1 1 auto; max-height: none; min-height: 0; overflow-y: auto; }',
+  // modal 内唯一直接子 div 就是 ui-kit body；header/footer 是语义元素，不会被命中。
+  // **滚动条归 body**（2026-09 用户反馈「滚动条贴着内容、离右缘一截很怪异」）：
+  // 以前是 scope 滚，而 scope 的右缘 = body 内容盒右缘，被 body 的 16px 横向内边距
+  // 顶进来一截 —— 滚动条于是浮在面板中间。ui-kit Modal 的设计本就是 body 内滚
+  // （溢出在 border-box 右缘，天然贴合 modal 边缘），这里不再覆盖它的 overflow。
+  '.hippomemo-detail-modal > div, .hippomemo-edit-modal > div { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }',
+  '.hippomemo-detail-modal .hippomemo-modal-scope, .hippomemo-edit-modal .hippomemo-modal-scope { flex: 1 1 auto; max-height: none; min-height: 0; }',
 ].join('\n')
