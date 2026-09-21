@@ -13,9 +13,9 @@
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
-  BarChart, Button, Disclosure, DonutChart,
-  Input, ListRow, Menu, Modal, Pill, SearchInput,
-  SegmentedControl, StateDot, Textarea, TrendChart,
+  BarChart, Button, Card, Disclosure, DonutChart,
+  Input, ListRow, Menu, Modal, Pill, SearchInput, SegmentedControl,
+  Stat, StatGrid, StateDot, Textarea, TrendChart,
 } from 'dsh-ui-kit'
 import type { ChartDatum } from 'dsh-ui-kit'
 import {
@@ -161,13 +161,10 @@ function BrainStrip({ t, stats, usage, preferences, narrative, reloadKey }: {
     { id: 'cortex', nameKey: 'brainRegionCortex', val: t('brainValCortex', { n: total }), descKey: 'brainRegionCortexDesc', roleKey: 'brainRoleCortex' },
   ];
   return (
-    <section className='hippomemo-brain-panel' aria-label={t('brainPanelTitle')}>
-      <div className='hippomemo-panel-head'>
-        <h3 className='hippomemo-panel-title'>{t('brainPanelTitle')}</h3>
-        {/* 「需要我处理 N」不放这里：它是进化页那一组的内容，总览页复述一遍就是同一个
-            数字挂两处；待办数由进化页的卡片头承担。 */}
-      </div>
-      <div className='hippomemo-brain-strip'>
+    // 结构统一（2026-09 用户裁决「对齐财务插件」）：卡面容器一律 ui-kit Card，
+    // 手搓的 .hippomemo-brain-panel 卡面规则退役（类名保留只承担布局语义）。
+    <Card title={t('brainPanelTitle')} className='hippomemo-brain-panel'>
+      <div className='hippomemo-brain-strip' aria-label={t('brainPanelTitle')}>
         <div className='hippomemo-brain-row'>
           {regions.map(region => {
             const pulse = pulseRegion === region.id
@@ -198,19 +195,21 @@ function BrainStrip({ t, stats, usage, preferences, narrative, reloadKey }: {
         {expanded ? (
           <div className='hippomemo-brain-expand'>
             {regions.map(region => (
-              <div className='hippomemo-brain-card' key={region.id}>
-                <h5 className='hippomemo-brain-card-title'>
-                  <StateDot status='live' size={10} className={'hippomemo-brain-dot hippomemo-brain-dot-' + region.id} />
-                  {t(region.nameKey)}
-                </h5>
+              <Card variant='inset' key={region.id}
+                title={(
+                  <>
+                    <StateDot status='live' size={10} className={'hippomemo-brain-dot hippomemo-brain-dot-' + region.id} />
+                    {' '}{t(region.nameKey)}
+                  </>
+                )}>
                 <p className='hippomemo-brain-card-desc'>{t(region.descKey)}</p>
                 <div className='hippomemo-brain-card-role'>{t(region.roleKey)}</div>
-              </div>
+              </Card>
             ))}
           </div>
         ) : null}
       </div>
-    </section>
+    </Card>
   )
 }
 
@@ -221,23 +220,15 @@ function TodoQuadrantImpl({ t, items, now, onResolve }: {
 }): ReactNode {
   if (items.length === 0) {
     return (
-      <div className='hippomemo-quadrant'>
-        <div className='hippomemo-panel-head'>
-          <h3 className='hippomemo-panel-title'>{t('todoTitle')}</h3>
-          <span className='hippomemo-panel-count'>0 项</span>
-        </div>
+      <Card title={t('todoTitle')} actions={<span className='hippomemo-panel-count'>0 项</span>}>
         <p className='hippomemo-quadrant-empty'>
           <IconWarning size={12} /> {t('todoEmpty')}
         </p>
-      </div>
+      </Card>
     );
   }
   return (
-    <div className='hippomemo-quadrant'>
-      <div className='hippomemo-panel-head'>
-        <h3 className='hippomemo-panel-title'>{t('todoTitle')}</h3>
-        <span className='hippomemo-panel-count'>{items.length} 项</span>
-      </div>
+    <Card title={t('todoTitle')} actions={<span className='hippomemo-panel-count'>{items.length} 项</span>}>
       <ul className='hippomemo-todo-list'>
         {items.map(item => {
           const kindClass = item.kind === 'expired' ? 'danger' : item.kind === 'near-duplicate' ? 'warn' : 'info';
@@ -280,7 +271,7 @@ function TodoQuadrantImpl({ t, items, now, onResolve }: {
           );
         })}
       </ul>
-    </div>
+    </Card>
   );
 }
 
@@ -336,24 +327,19 @@ function PreferenceQuadrant({ t, items, totalRecall, onAction }: {
 }): ReactNode {
   if (items.length === 0) {
     return (
-      <section className='hippomemo-pref-zone'>
-        <div className='hippomemo-panel-head'>
-          <h3 className='hippomemo-panel-title'>{t('prefTitle')}</h3>
-        </div>
+      <Card title={t('prefTitle')}>
         <p className='hippomemo-quadrant-empty'>{t('prefEmpty')}</p>
-      </section>
+      </Card>
     );
   }
   const totalHit = items.reduce((acc, item) => acc + item.hitCount, 0);
   const rate = totalRecall > 0 ? Math.round((totalHit / totalRecall) * 100) : 0;
   return (
-    <section className='hippomemo-pref-zone'>
-      <div className='hippomemo-panel-head'>
-        <h3 className='hippomemo-panel-title'>{t('prefTitle')}</h3>
-        <span className='hippomemo-panel-count'>
-          {t('prefActive', { n: items.length, rate: String(Math.min(100, rate)) })}
-        </span>
-      </div>
+    <Card title={t('prefTitle')} actions={(
+      <span className='hippomemo-panel-count'>
+        {t('prefActive', { n: items.length, rate: String(Math.min(100, rate)) })}
+      </span>
+    )}>
       <div className='hippomemo-pref-strip'>
         <ul className='hippomemo-pref-list'>
           {items.map(item => {
@@ -391,7 +377,7 @@ function PreferenceQuadrant({ t, items, totalRecall, onAction }: {
           })}
         </ul>
       </div>
-    </section>
+    </Card>
   );
 }
 
@@ -471,11 +457,8 @@ function MemoryListPanel({ t, api, detailId, onDetail, embedded = false }: {
   if (tag.length > 0) filterChips.push({ label: '#' + tag, clear: () => { setTag(''); } });
   const clearAllFilters = (): void => { setQ(''); setKind(''); setScope(''); setStatus(''); setTag(''); setPage(1); };
   return (
-    <section className='hippomemo-memory-panel'>
-      <div className='hippomemo-panel-head'>
-        {embedded ? null : <h3 className='hippomemo-panel-title'>{t('title')}</h3>}
-        <span className='hippomemo-panel-count'>{total} 条</span>
-      </div>
+    <Card title={embedded ? undefined : t('title')}
+      actions={<span className='hippomemo-panel-count'>{total} 条</span>}>
       <div className='hippomemo-toolbar'>
         <SearchInput label={t('searchPlaceholder')} className='hippomemo-search hippomemo-search-grow' value={q}
           onChange={(event) => { setQ(event.currentTarget.value) }}
@@ -621,7 +604,7 @@ function MemoryListPanel({ t, api, detailId, onDetail, embedded = false }: {
         </div>
       ) : null}
       <span hidden>{detailId === null ? '0' : '1'}</span>
-    </section>
+    </Card>
   );
 }
 
@@ -985,37 +968,32 @@ function MemoryCharts({ api, t, stats, reloadKey }: {
   return (
     <div className='hippomemo-chart-grid'>
       {kindRows.length > 0 ? (
-        <section className='hippomemo-chart-card'>
-          <div className='hippomemo-chart-title'>{t('chartKindTitle')}</div>
+        <Card variant='inset' title={t('chartKindTitle')}>
           <DonutChart rows={kindRows} centerValue={String(stats?.total ?? 0)} centerLabel={t('chartTotal')}
             ariaLabel={t('chartKindTitle')} formatValue={value => String(value)} />
-        </section>
+        </Card>
       ) : null}
       {statusRows.length > 0 ? (
-        <section className='hippomemo-chart-card'>
-          <div className='hippomemo-chart-title'>{t('chartStatusTitle')}</div>
+        <Card variant='inset' title={t('chartStatusTitle')}>
           <DonutChart rows={statusRows} centerValue={String(stats?.total ?? 0)} centerLabel={t('chartTotal')}
             ariaLabel={t('chartStatusTitle')} formatValue={value => String(value)} />
-        </section>
+        </Card>
       ) : null}
-      <section className='hippomemo-chart-card'>
-        <div className='hippomemo-chart-title'>{t('chartTopRecalledTitle')}</div>
+      <Card variant='inset' title={t('chartTopRecalledTitle')}>
         {topRecalled.length === 0 ? <p className='hippomemo-empty'>{t('chartNoData')}</p> :
           <BarChart rows={topRecalled} ariaLabel={t('chartTopRecalledTitle')}
             formatValue={value => String(value)} axisFormatter={value => String(Math.round(value))} />}
-      </section>
-      <section className='hippomemo-chart-card'>
-        <div className='hippomemo-chart-title'>{t('chartRecallByKindTitle')}</div>
+      </Card>
+      <Card variant='inset' title={t('chartRecallByKindTitle')}>
         {recallByKind.length === 0 ? <p className='hippomemo-empty'>{t('chartNoData')}</p> :
           <BarChart rows={recallByKind} ariaLabel={t('chartRecallByKindTitle')}
             formatValue={value => String(value)} axisFormatter={value => String(Math.round(value))} />}
-      </section>
-      <section className='hippomemo-chart-card hippomemo-chart-card-wide'>
-        <div className='hippomemo-chart-title'>{t('chartCitationsTrendTitle')}</div>
+      </Card>
+      <Card variant='inset' title={t('chartCitationsTrendTitle')} className='hippomemo-chart-card-wide'>
         {trendPoints.length < 2 ? <p className='hippomemo-empty'>{t('chartNoData')}</p> :
           <TrendChart points={trendPoints} ariaLabel={t('chartCitationsTrendTitle')}
             formatValue={value => String(value)} gradientId='dsh-hippomemo-citations-grad' />}
-      </section>
+      </Card>
     </div>
   );
 }
@@ -1096,11 +1074,7 @@ function EvolvePanel({ api, t }: { api: HippomemoApi; t: Translate }): ReactNode
               以前两者都先在 meta 里写一遍计数、再在卡内当分组标题写一遍 —— 同一段文本
               在一张卡里出现两次。 */}
           {report.review !== undefined && report.review.length > 0 ? (
-            <section className='hippomemo-section-card'>
-              <div className='hippomemo-panel-head'>
-                <h3 className='hippomemo-panel-title'>{t('evolveReviewedLabel')}</h3>
-                <span className='hippomemo-panel-count'>{report.review.length} 项</span>
-              </div>
+            <Card title={t('evolveReviewedLabel')} actions={<span className='hippomemo-panel-count'>{report.review.length} 项</span>}>
               <div className='hippomemo-evolve-review'>
                 {report.review.map(verdict => {
                   const kind = kindMap.get(verdict.id);
@@ -1119,13 +1093,9 @@ function EvolvePanel({ api, t }: { api: HippomemoApi; t: Translate }): ReactNode
                   );
                 })}
               </div>
-            </section>
+            </Card>
           ) : null}
-          <section className='hippomemo-section-card'>
-            <div className='hippomemo-panel-head'>
-              <h3 className='hippomemo-panel-title'>{t('evolveActionsLabel')}</h3>
-              <span className='hippomemo-panel-count'>{report.actions.length} 项</span>
-            </div>
+          <Card title={t('evolveActionsLabel')} actions={<span className='hippomemo-panel-count'>{report.actions.length} 项</span>}>
             {report.actions.length > 0 ? (
               <div className='hippomemo-evolve-actions'>
                 {report.actions.map(action => {
@@ -1145,7 +1115,7 @@ function EvolvePanel({ api, t }: { api: HippomemoApi; t: Translate }): ReactNode
             ) : (
               <p className='hippomemo-empty'>—</p>
             )}
-          </section>
+          </Card>
         </>
       ) : null}
     </div>
@@ -1169,17 +1139,15 @@ function OverviewTab({ t, stats, usage, preferences, narrative, citations, now }
           以前是「最近活动」一张无头卡套着两个 panel-head —— 「AI 最近在用」的头在卡内，
           卡头「最近活动」却包着它，读起来像「最近活动」的下级；进化页那一页是三张卡三个头，
           总览页按同一形制对齐。 */}
-      <section className='hippomemo-section-card'>
-        <div className='hippomemo-panel-head'>
-          <h3 className='hippomemo-panel-title'>{t('overviewLiveActivity')}</h3>
-          <span className='hippomemo-panel-count'>
-            {citations.length > 0 || narrative !== null
-              ? formatRelative(narrative?.ts ?? citations[0]?.ts ?? now, now, t)
-              : '—'}
-          </span>
-        </div>
+      <Card title={t('overviewLiveActivity')} actions={(
+        <span className='hippomemo-panel-count'>
+          {citations.length > 0 || narrative !== null
+            ? formatRelative(narrative?.ts ?? citations[0]?.ts ?? now, now, t)
+            : '—'}
+        </span>
+      )}>
         <ActivityFeed t={t} citations={citations} narrative={narrative} now={now} />
-      </section>
+      </Card>
     </div>
   )
 }
@@ -1205,15 +1173,10 @@ function EvolutionTab({ t, stats, usage, candidates, now, onResolve, api, reload
 }): ReactNode {
   return (
     <div className='hippomemo-tab'>
-      <section className='hippomemo-section-card'>
-        <TodoQuadrantImpl t={t} items={candidates?.items ?? []} now={now} onResolve={onResolve} />
-      </section>
+      <TodoQuadrantImpl t={t} items={candidates?.items ?? []} now={now} onResolve={onResolve} />
       {/* 存量（有多少条记忆）与用量（这些记忆被用得怎么样）是两组数，各一张卡。
           以前挤在一张「使用统计」卡里，而卡内第一行又叫「用量」—— 卡头与首行两个名字。 */}
-      <section className='hippomemo-section-card'>
-        <div className='hippomemo-panel-head'>
-          <h3 className='hippomemo-panel-title'>{t('evolutionStatsTitle')}</h3>
-        </div>
+      <Card title={t('evolutionStatsTitle')}>
         {stats !== null ? (
           <div className='hippomemo-meta'>
             <span>{t('total')} {stats.total} {t('results')}</span>
@@ -1221,30 +1184,24 @@ function EvolutionTab({ t, stats, usage, candidates, now, onResolve, api, reload
             <span>{t('archivedCount')} {stats.archived}</span>
           </div>
         ) : null}
-      </section>
-      <section className='hippomemo-section-card'>
-        <div className='hippomemo-panel-head'>
-          <h3 className='hippomemo-panel-title'>{t('usage')}</h3>
-        </div>
+      </Card>
+      <Card title={t('usage')}>
         {usage !== null ? (
-          <div className='hippomemo-usage'>
-            <span title={t('usageRecalled')}>{t('usageRecalled')} {usage.recalled}/{usage.total}</span>
-            <span>{t('usageCited')} {usage.cited}</span>
-            <span>{t('usageNeverRecalled')} {usage.neverRecalled}</span>
-            <span>{t('usageStale')} {usage.staleCount}</span>
-            <span>{t('usageRecallRate')} {(usage.recallRate * 100).toFixed(0)}%</span>
-            <span>{t('usageCitationRate')} {(usage.citationRate * 100).toFixed(0)}%</span>
-            <span>{t('usageConversion')} {(usage.conversionRate * 100).toFixed(0)}%</span>
-            {usage.staleCount > 0 ? <span className='hippomemo-usage-hint'>{t('usageStaleHint')}</span> : null}
-          </div>
+          <StatGrid>
+            <Stat label={t('usageRecalled')} value={`${String(usage.recalled)}/${String(usage.total)}`} />
+            <Stat label={t('usageCited')} value={String(usage.cited)} />
+            <Stat label={t('usageNeverRecalled')} value={String(usage.neverRecalled)} />
+            <Stat label={t('usageStale')} value={String(usage.staleCount)} />
+            <Stat label={t('usageRecallRate')} value={`${(usage.recallRate * 100).toFixed(0)}%`} />
+            <Stat label={t('usageCitationRate')} value={`${(usage.citationRate * 100).toFixed(0)}%`} />
+            <Stat label={t('usageConversion')} value={`${(usage.conversionRate * 100).toFixed(0)}%`} />
+          </StatGrid>
         ) : null}
-      </section>
-      <section className='hippomemo-section-card'>
-        <div className='hippomemo-panel-head'>
-          <h3 className='hippomemo-panel-title'>{t('evolutionChartsTitle')}</h3>
-        </div>
+        {usage !== null && usage.staleCount > 0 ? <p className='hippomemo-usage-hint'>{t('usageStaleHint')}</p> : null}
+      </Card>
+      <Card title={t('evolutionChartsTitle')}>
         <MemoryCharts api={api} t={t} stats={stats} reloadKey={reloadKey} />
-      </section>
+      </Card>
       <EvolvePanel api={api} t={t} />
     </div>
   )

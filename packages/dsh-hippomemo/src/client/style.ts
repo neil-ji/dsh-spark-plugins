@@ -39,18 +39,13 @@ export const HIPPOMEMO_CSS = [
   '[data-plugin="dsh-hippomemo"] .hippomemo-chip:hover { color: var(--spk-label); border-color: var(--spk-border-2, var(--spk-border)); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-chip[aria-label] span { font-size: var(--spk-text-sm); color: var(--spk-label-3); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-chip-clear { border-style: dashed; color: var(--spk-label-3); }',
-  /* Surface 基规则（单一来源）—— 用抬起面 surface-l1，
-     不再用 layer-2（layer-2 是凹陷/轨道色，亮色下与页面底色几乎同色）。 */
-  '[data-plugin="dsh-hippomemo"] :is(.hippomemo-section-card, .hippomemo-brain-panel, .hippomemo-brain-card, .hippomemo-todo-item, .hippomemo-pref-strip, .hippomemo-pref-zone, .hippomemo-memory-panel, .hippomemo-usage, .hippomemo-chart-card, .hippomemo-evolve-review, .hippomemo-evolve-actions, .hippomemo-detail-content) { border: 1px solid var(--spk-border); border-radius: var(--spk-radius-md); background: var(--spk-surface-card); }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-section-card, [data-plugin="dsh-hippomemo"] .hippomemo-pref-zone, [data-plugin="dsh-hippomemo"] .hippomemo-memory-panel { display: flex; flex-direction: column; gap: 8px; padding: 8px 12px; min-width: 0; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-quadrant { display: flex; flex-direction: column; gap: 8px; min-width: 0; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-panel-head { display: flex; align-items: center; gap: 8px; padding-bottom: 4px; }',
-  /* 卡片题统一 --spk-text-title（14px/600，与 ui-kit Card.title 同档）。
-     注意本选择器是 (0,2,0)，比 dock 的 `.dock-embed :is(h3)` 更specific —— 面板层兜不住它，
-     所以这一档必须在自己这套样式里写对（PCQA-017 的剩余就是这条）。 */
-  '[data-plugin="dsh-hippomemo"] .hippomemo-panel-title { margin: 0; font-size: var(--spk-text-title); line-height: 20px; font-weight: 600; }',
+  /* Surface 基规则 —— 卡面 chrome 已统一由 ui-kit Card 提供（2026-09 结构统一，
+     卡面容器迁 Card/variant=inset），这里只剩**非卡面**的内容面：列表行与详情正文。
+     不得再给任何新类手写 border/radius/background 三件套 —— 那是在重造 Card。 */
+  '[data-plugin="dsh-hippomemo"] :is(.hippomemo-todo-item, .hippomemo-pref-strip, .hippomemo-detail-content) { border: 1px solid var(--spk-border); border-radius: var(--spk-radius-md); background: var(--spk-surface-card); }',
+  /* 卡片题由 ui-kit Card.title 提供（--spk-text-title 14px/600）；
+     panel-count 保留：它现在是 Card actions 槽里的计数徽标。 */
   '[data-plugin="dsh-hippomemo"] .hippomemo-panel-count { margin-left: auto; font-size: var(--spk-text-xs); line-height: 16px; color: var(--spk-label-3, var(--spk-label-2)); font-variant-numeric: tabular-nums; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-brain-panel { display: flex; flex-direction: column; gap: 8px; padding: 8px 12px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-brain-strip { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; border-top: 1px dashed var(--spk-border); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-brain-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-brain-region { display: inline-flex; align-items: center; gap: 8px; padding: 4px var(--spk-space-3); border-radius: var(--spk-radius-full); border: 1px solid transparent; background: transparent; color: inherit; font: inherit; font-size: var(--spk-text-sm); line-height: 18px; cursor: pointer; transition: background 160ms, border-color 160ms; }',
@@ -64,8 +59,6 @@ export const HIPPOMEMO_CSS = [
   '[data-plugin="dsh-hippomemo"] .hippomemo-brain-narration-lbl { color: var(--spk-label-3); font-size: var(--spk-text-xs); flex: none; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-brain-narration-txt { color: var(--spk-label-2, var(--spk-label)); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-brain-expand { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; padding-top: 8px; border-top: 1px solid var(--spk-border); }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-brain-card { padding: 8px 12px; background: transparent; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-brain-card-title { font-size: var(--spk-text-sm); font-weight: 600; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-brain-card-desc { font-size: var(--spk-text-xs); line-height: 16px; color: var(--spk-label-2, var(--spk-label)); margin: 0 0 4px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-brain-card-role { font-size: var(--spk-text-xs); line-height: 16px; color: var(--spk-label-3); }',
   /* Focus 可见性：手写交互控件统一 focus-visible 描边（ui-kit Button 自带，无需重复） */
@@ -98,7 +91,6 @@ export const HIPPOMEMO_CSS = [
   '[data-plugin="dsh-hippomemo"] .hippomemo-recall-what { font-size: var(--spk-text-md); line-height: 20px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-recall-m { font-weight: 500; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-recall-sub { color: var(--spk-label-2, var(--spk-label)); font-size: var(--spk-text-sm); }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-pref-zone { display: flex; flex-direction: column; gap: 8px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-pref-strip { overflow: hidden; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-pref-list { list-style: none; padding: 0; margin: 0; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-pref-row { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--spk-border); }',
@@ -112,7 +104,6 @@ export const HIPPOMEMO_CSS = [
   '[data-plugin="dsh-hippomemo"] .hippomemo-pref-ops { display: flex; gap: 4px; flex: none; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-pref-op-confirm:hover { background: color-mix(in srgb, var(--spk-success, #16A34A) 12%, transparent); color: var(--spk-success, #16A34A); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-pref-op-forget:hover { background: color-mix(in srgb, var(--spk-error, #DC2626) 12%, transparent); color: var(--spk-error, #DC2626); }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-memory-panel { display: flex; flex-direction: column; gap: 8px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-search { flex: 1; min-width: 160px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-search-grow { flex: 1 1 220px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-select { display: inline-flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 112px; height: var(--spk-control-h, 32px); padding: 0 8px 0 var(--spk-space-3); border: 1px solid var(--spk-border); border-radius: 8px; background: var(--spk-layer-2); color: var(--spk-label-2); font: inherit; font-size: var(--spk-text-sm); line-height: 1.4; cursor: pointer; }',
@@ -181,11 +172,8 @@ export const HIPPOMEMO_CSS = [
   '[data-plugin="dsh-hippomemo"] .hippomemo-button-danger { color: var(--spk-error) !important; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-panel { display: flex; flex-direction: column; gap: 12px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-meta { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: var(--spk-text-sm); line-height: 18px; color: var(--spk-label-2); }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-usage { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 8px 12px; font-size: var(--spk-text-sm); color: var(--spk-label); }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-usage-label { font-weight: 600; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-usage-hint { color: var(--spk-warn); }',
+  '[data-plugin="dsh-hippomemo"] .hippomemo-usage-hint { margin: 0; color: var(--spk-warn); font-size: var(--spk-text-xs); line-height: 16px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-chart-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-chart-card { display: flex; flex-direction: column; gap: 8px; padding: 8px 12px; min-width: 0; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-chart-card-wide { grid-column: 1 / -1; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-chart-title { font-size: var(--spk-text-md); line-height: 20px; font-weight: 600; }',
   /* 2026-09 重构：`.hippomemo-evolve-report` / `.hippomemo-evolve-block-title` /

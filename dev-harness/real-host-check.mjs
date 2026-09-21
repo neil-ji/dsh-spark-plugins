@@ -948,8 +948,9 @@ try {
     }
   }
 
-  // 6h) PCQA-017 剩余：记忆模块的卡片题走自有类名 .hippomemo-panel-title（(0,2,0) 压过 dock 的
-  //     .dock-embed :is(h3)），所以必须在它自己那套样式里也钉在 --spk-text-title。
+  // 6h) PCQA-017 剩余：记忆模块卡片题 14px。2026-09 结构统一后卡片题由 ui-kit Card.title
+  //     （h3）提供，字号由 dock 的 `.dock-embed :is(h3)`（--spk-text-title）兜住；
+  //     自有类名 .hippomemo-panel-title 已随手搓卡面一并退役，这里断言卡头 h3 落在规范档。
   const memIndex = await evalJs(`(() => Array.from(document.querySelectorAll('.dock-tab')).findIndex((b) => (b.getAttribute('aria-label') ?? '').startsWith('记忆')))()`)
   if (memIndex >= 0) {
     await evalJs(`(() => { const p = document.querySelector('.dock-panel'); if (!p.classList.contains('open')) document.querySelector('.dock-ball').click() })()`)
@@ -957,13 +958,13 @@ try {
     await evalJs('document.querySelectorAll(\'.dock-tab\')[' + memIndex + '].click()')
     await sleep(1300)
     const memTitle = await evalJs(`(() => {
-      const h3 = document.querySelector('.dock-embed h3.hippomemo-panel-title')
+      const h3 = document.querySelector('.dock-embed h3')
       if (!h3) return null
       const cs = getComputedStyle(h3)
       return { text: (h3.textContent ?? '').trim().slice(0, 12), font: cs.fontSize, weight: cs.fontWeight, color: cs.color }
     })()`)
     check(
-      'PCQA-017 记忆模块卡片题 14px（自有类名不再压过规范档）',
+      'PCQA-017 记忆模块卡片题 14px（ui-kit Card.title 落在规范档）',
       memTitle !== null && memTitle.font === '14px' && memTitle.weight === '600',
       JSON.stringify(memTitle),
     )
