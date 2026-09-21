@@ -341,19 +341,17 @@ function SparkList({ sparks, reload, t, confirmDrop }: {
               : s.inboxState === 'pending'
                 ? (
                   <>
+                    {/* 动作二选一（2026-09 用户裁决）：归档=逻辑删除与丢弃并存是给用户
+                        出选择题，心智负担重。归档动作移除，丢弃=物理删除且必走二次
+                        确认；「结晶」改为直白的「转为记忆」。 */}
                     <RowAction label={t('actionCrystallize')} busyLabel={t('crystallizing')} busy={busyId === s.id}
                       onRun={() => run(s.id, async () => { await api.crystallize(s.id) })} />
-                    <RowAction label={t('actionArchive')} busyLabel={t('archiving')} busy={busyId === s.id}
-                      onRun={() => run(s.id, async () => { await api.archive(s.id) })} />
                     <RowAction danger label={t('actionDrop')} busyLabel={t('dropping')} busy={busyId === s.id}
                       onRun={async () => { confirmDrop(s) }} />
                   </>
                 )
                 : s.inboxState === 'crystallized'
-                  ? (
-                    <RowAction label={t('actionArchive')} busyLabel={t('archiving')} busy={busyId === s.id}
-                      onRun={() => run(s.id, async () => { await api.archive(s.id) })} />
-                  )
+                  ? null
                   : (
                     <RowAction label={t('actionToInbox')} busyLabel={t('toInboxing')} busy={busyId === s.id}
                       onRun={() => run(s.id, async () => { await api.setInboxState(s.id, 'pending') })} />

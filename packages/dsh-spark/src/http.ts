@@ -106,6 +106,13 @@ async function handleSparks(
       send(res, record === null ? 404 : 200, okEnvelope(record))
       return
     }
+    if (req.method === 'POST' && /\/purge$/.test(sub)) {
+      // 物理删除（不可恢复）：UI「丢弃」的落点，二次确认在客户端。
+      const id = decodeURIComponent(sub.slice(1, -'/purge'.length))
+      const removed = await service.purge(id as Parameters<typeof service.purge>[0])
+      send(res, removed ? 200 : 404, okEnvelope({ removed }))
+      return
+    }
     if (req.method === 'DELETE' && sub.startsWith('/')) {
       const id = decodeURIComponent(sub.slice(1))
       const removed = await service.remove(id as Parameters<typeof service.remove>[0])

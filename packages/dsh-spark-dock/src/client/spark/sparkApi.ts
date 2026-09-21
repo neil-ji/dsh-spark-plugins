@@ -35,7 +35,8 @@ export interface DockSparksApi {
   capture(input: { title: string; content: string; scope: 'project' | 'global'; tags: string[] }): Promise<SparkView>
   setInboxState(id: string, inboxState: SparkInboxState): Promise<SparkView>
   archive(id: string): Promise<SparkView>
-  drop(id: string): Promise<SparkView>
+  /** 丢弃＝物理删除（不可恢复）；二次确认由 UI 的 Modal 负责。 */
+  drop(id: string): Promise<{ removed: boolean }>
   restore(id: string): Promise<SparkView>
   crystallize(id: string): Promise<unknown>
   listProposals(query?: { status?: ProposalStatus; limit?: number }): Promise<ProposalView[]>
@@ -81,9 +82,8 @@ export function createDockSparksApi(): DockSparksApi {
       })
     },
     async drop(id) {
-      return request<SparkView>('/sparks/' + enc(id), {
-        method: 'PATCH', body: JSON.stringify({ inboxState: 'dropped' }),
-      })
+      // 物理删除端点（宿主 storage.purge）：不再是 inboxState='dropped' 的逻辑删除。
+      return request<{ removed: boolean }>('/sparks/' + enc(id) + '/purge', { method: 'POST', body: '{}' })
     },
     async restore(id) {
       return request<SparkView>('/sparks/' + enc(id) + '/restore', { method: 'POST', body: '{}' })

@@ -276,12 +276,14 @@ try {
         && typeof statsValue.deleted === 'number' && typeof statsValue.pendingProposals === 'number',
       JSON.stringify(statsProbe).slice(0, 220),
     )
-    // 断言放在**面板文本**上而不是某个 CSS 选择器上：行内的「结晶/归档/丢弃」动作钮
-    // 与筛选胶囊同类名，按类名取会取错（第一版就是这么误判的）。
+    // 断言放在**面板文本**上而不是某个 CSS 选择器上：行内的动作钮与筛选位同类名，
+    // 按类名取会取错（第一版就是这么误判的）。
+    // 2026-09 词表更新：筛选位改 SegmentedControl，且「结晶」→「转为记忆」（用户裁决
+    // 「结晶」不够直白）；「已删除」由开关并入第 5 个互斥位。
     const inboxText = String(pane.text ?? '')
     check(
-      '收件箱四个筛选位可见（待处理/已沉淀/已归档/已丢弃）',
-      ['待处理', '已沉淀', '已归档', '已丢弃'].every((label) => inboxText.includes(label)),
+      '收件箱筛选位可见（待处理/已转为记忆/已归档/已丢弃）',
+      ['待处理', '已转为记忆', '已归档', '已丢弃'].every((label) => inboxText.includes(label)),
       inboxText.slice(0, 160),
     )
     // 破坏性变更的可观测证据：旧 `status` 参数被忽略（返回全量），新 `inboxState` 才过滤。

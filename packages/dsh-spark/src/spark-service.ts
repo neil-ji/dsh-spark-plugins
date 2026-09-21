@@ -240,6 +240,20 @@ export class SparkService extends Service {
     return { spark: next, record: { id: record.id, kind: opts.kind } }
   }
 
+  /**
+   * 物理删除（不可恢复）。UI 的「丢弃」走这条：用户裁决「不要给出选择题 ——
+   * 归档(逻辑删)与丢弃(物理删)并存心智负担重」，只保留丢弃一个破坏性动作，
+   * 且语义就是真删（区别于 `remove` 的墓碑：后者可由 `restore` 复原）。
+   * 二次确认在 UI 层（Modal）完成，宿主这里只负责执行。
+   */
+  async purge(id: SparkId): Promise<boolean> {
+    await this.whenReady()
+    const purged = await this.storage.purge(id)
+    if (!purged) return false
+    this.ctx.emit('sparks/changed', { operation: 'delete', id, record: null, at: Date.now() })
+    return true
+  }
+
   /** 软删除（墓碑）。可被 `restore` 复原，也可在"最近删除"里看到。 */
   async remove(id: SparkId, now: number = Date.now()): Promise<boolean> {
     await this.whenReady()
