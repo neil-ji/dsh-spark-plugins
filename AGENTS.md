@@ -168,6 +168,11 @@ dock 声明子槽并用平台 `renderSlot(key, { variant, activeId, onSelect }, 
    对照，不凭空发明样式。
 7. **组件/页面/形制的完整规范见 `docs/UI-UX-SPEC.md`**（token 语义、间距/圆角/字号标度、
    组件状态矩阵、四种页面模板、四态反馈、aria 模式表、密度变体模式）。UI 改动前必读。
+8. **业务口径不在 UI 重算**：成功率 / 占比 / 分档这类**结论**由宿主算好、随读模型下发
+   （UI 拿不到原文，也就没有算错的机会）；宿主只下发病据**数字**，用户可见措辞一律走
+   locale 字典（宿主写死中文句子会泄漏到 `en` 面）。全仓口径除法**只允许出现在它的
+   定义文件里**，闸门 `ratemetric` 逐文件拦截（先例：`dsh-script` 的 `src/metrics.ts`，
+   规范源 `docs/SCRIPT-LIBRARY-SPEC.md` INV-7 / D10）。
 
 ---
 

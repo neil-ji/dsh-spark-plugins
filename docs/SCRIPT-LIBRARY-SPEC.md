@@ -259,6 +259,10 @@ F1 继续用 JSONL（无新依赖、现有实现已在用）。`dsh-storage-doma
 - 审计负载 `ScriptAudit`：`{ settledAt, archived, stats, advices }`，其中
   `stats = { total, byStatus, byScope, rateBuckets, acceptance: { withAcceptanceStep, total, ratio }, zombies }`。
   `rateBuckets` 三档边界 `low < 0.5 ≤ mid < 0.9 ≤ high`，`untested` 单列（`invocationCount === 0`）。
+  `total` / `byStatus` / `byScope` 统计**全库**；`rateBuckets` / `acceptance` / `zombies` 只统计 **`active` 条目**
+  （审计要看的是"在用的库有多健康"，退场条目进来只会稀释比例）。
+- 建议**不下发句子**：`ScriptAdvice.evidence` 只带病据数字（`invocationCount` / `successRate` /
+  `idleDays` / `workspaces`），措辞由 pane 走 locale 字典渲染 —— 宿主写死中文句子会泄漏到 `en` 面（AGENTS §3.4）。
 - 治理动作端点：`POST /scripts/:id/status { status, supersededBy? }`、`POST /scripts/:id/scope { scope }`、
   `DELETE /scripts/:id`（物理删除仅限已归档，INV-11）。**所有动作都由点击触发，宿主不自作主张。**
 
