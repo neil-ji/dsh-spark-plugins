@@ -37,6 +37,13 @@ pnpm monorepo。`packages/*` 里每个包必须落在 `plugin-registry.json` 的
 依赖闭包内（架构闸门第 1 查 orphans 清退孤包）。发布产物是 tarball（`pnpm release:pack`），
 插件以 tarball 拷贝形态装入真宿主沙箱——与用户安装完全一致。
 
+**打包清单纪律（闸门 `packaging` 逐包拦截）**：`package.json` 的 `files` 必须覆盖
+`exports` 指向的每个产物，`cordis.patch.yml` 的每个 loader 行必须指向真实存在的
+`exports` 子路径。两个方向的漏项都**不会**在 build/test/typecheck 里响，只会让用户装到
+起不来的插件（2026-09-22：给 `dsh-script` 加了 `./terms` 入口却忘了同步 `files`，
+tarball 里没有 `lib/terms.js` → 宿主 boot `ERR_MODULE_NOT_FOUND`；多入口包用
+`lib/**/*.js` 这类 glob，别逐个枚举）。
+
 ### 1.2 本地验证工作流（install 通道无 HMR）
 
 ```
