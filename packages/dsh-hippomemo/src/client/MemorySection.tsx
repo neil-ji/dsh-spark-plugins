@@ -528,14 +528,6 @@ function MemoryListPanel({ t, api, detailId, onDetail, embedded = false }: {
       {records.length > 0 ? (
         <div className='hippomemo-list'>
           {records.map(record => {            const archived = record.status === 'archived' || record.status === 'superseded';
-            /** meta 片段：文本 + 可选 title。相对时间配绝对时间的 title（UI-UX-SPEC §6）。 */
-            const meta: Array<{ text: string; title?: string }> = [];
-            meta.push({ text: t(record.scope) });
-            if (record.scope === 'global') {
-              meta.push({ text: record.globalProven ? t('proven') : t('unproven') + '·' + (record.seenWorkspaces?.length ?? 0) });
-            }
-            meta.push({ text: t('importanceLabel') + ' ' + record.importance.toFixed(2) });
-            meta.push({ text: formatRelative(record.updatedAt, Date.now(), t), title: formatDate(record.updatedAt) });
             const scoped = (record.modelIds?.length ?? 0) > 0;
             return (
               <ListRow
@@ -553,12 +545,19 @@ function MemoryListPanel({ t, api, detailId, onDetail, embedded = false }: {
                         {(record.modelIds ?? [])[0] + ((record.modelIds?.length ?? 0) > 1 ? ' +' + String((record.modelIds?.length ?? 0) - 1) : '')}
                       </Pill>
                     ) : null}
-                    {meta.map((part, index) => (
-                      <span key={index} title={part.title}>
-                        {index > 0 ? <span className='hippomemo-row-meta-sep'>·</span> : null}
-                        {part.text}
-                      </span>
-                    ))}
+                    {/* scope / 证明态升成 tag：一行里「分类标签一眼可扫」，数值与时间
+                        保持安静文本 —— tag 之间及 tag 与文本的间距由 ListRow meta 槽
+                        的 gap 统一撑开（2026-09 用户反馈：不要紧贴）。 */}
+                    <Pill className='hippomemo-tag hippomemo-tag-neutral'>{t(record.scope)}</Pill>
+                    {record.scope === 'global' ? (record.globalProven
+                      ? <Pill className='hippomemo-tag hippomemo-tag-success'>{t('proven')}</Pill>
+                      : <Pill className='hippomemo-tag hippomemo-tag-warn'>
+                          {t('unproven')}{(record.seenWorkspaces?.length ?? 0) > 0 ? '·' + String(record.seenWorkspaces?.length) : ''}
+                        </Pill>) : null}
+                    <span className='hippomemo-row-meta-text'>{t('importanceLabel')} {record.importance.toFixed(2)}</span>
+                    <span className='hippomemo-row-meta-text' title={formatDate(record.updatedAt)}>
+                      {formatRelative(record.updatedAt, Date.now(), t)}
+                    </span>
                   </>
                 )}
                 trailing={(

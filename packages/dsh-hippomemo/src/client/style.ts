@@ -114,7 +114,8 @@ export const HIPPOMEMO_CSS = [
   '[data-plugin="dsh-hippomemo"] .hippomemo-select-chevron { display: inline-flex; color: var(--spk-label-3); transition: transform 160ms ease; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-select-open .hippomemo-select-chevron { transform: rotate(180deg); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-list { display: flex; flex-direction: column; gap: 8px; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-row-meta-sep { color: var(--spk-border-2, var(--spk-label-3)); }',
+  /* meta 行的安静文本（重要性 / 时间）：可收缩省略，间距由 ListRow meta 槽 gap 撑开。 */
+  '[data-plugin="dsh-hippomemo"] .hippomemo-row-meta-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-icon-btn-danger:hover { background: color-mix(in srgb, var(--spk-error, #DC2626) 14%, transparent); color: var(--spk-error, #DC2626); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-tag { font-size: var(--spk-text-xs); line-height: 16px; padding: 1px 8px; flex: none; font-weight: 500; text-transform: none; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-tag .hippomemo-tag-icon { display: inline-flex; color: inherit; }',

@@ -31,12 +31,15 @@
   text-overflow: ellipsis;
 }
 .meta {
-  display: block;
+  /* meta 槽是 flex 行：tag 与文本之间由 gap 撑开间距，不再紧贴
+     （2026-09 用户反馈）。文本子项各自省略。 */
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font: 400 var(--spk-text-xs, 11px) / 1.4 var(--spk-font);
   color: var(--spk-label-3);
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 /* 归档态：删除线 + 降级到 label-3，而不是 opacity —— opacity 会把
    label 已经达标的对比度再打折（0.55 × label ≈ 3:1 以下）。 */
