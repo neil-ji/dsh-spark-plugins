@@ -188,6 +188,9 @@ export const HIPPOMEMO_CSS = [
   '[data-plugin="dsh-hippomemo"] .hippomemo-edit-modal-body { display: flex; flex-direction: column; gap: 12px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-edit-modal-footer { display: flex; justify-content: flex-end; gap: 8px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-form-label { display: flex; flex-direction: column; gap: 4px; font-size: var(--spk-text-sm); line-height: 18px; color: var(--spk-label-2); }',
+  /* 表单里的段控按内容宽度（seg 是 inline-flex，但作为 column flex 的子项会被
+     align-items: stretch 拉满整行 → 右侧一大片死区，2026-09 用户反馈）。 */
+  '[data-plugin="dsh-hippomemo"] .hippomemo-seg-inline { align-self: flex-start; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-button-danger { color: var(--spk-error) !important; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-panel { display: flex; flex-direction: column; gap: 12px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-meta { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: var(--spk-text-sm); line-height: 18px; color: var(--spk-label-2); }',

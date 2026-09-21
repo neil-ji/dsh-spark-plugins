@@ -176,6 +176,30 @@ try {
   // 这个坑极具迷惑性：dock 实现是对的，不注入键盘的独立复现一切正常。
   await send('Emulation.setFocusEmulationEnabled', { enabled: true })
   await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false })
+  // 宿主装配就绪再导航：dev-up 一拿到 token 就写 state.json，此时插件可能还在装配
+  // （client 模块图未就绪 → 页面里根本没有悬浮球）。用 `/__dev/probe` 作为就绪信号：
+  // clientModules 服务在位、且被测插件的 host typert 已注册 —— 这是"可以开始断言"的
+  // 客观条件，比 sleep 猜时长可靠（2026-09 冷启动首跑假失败就是这么来的）。
+  const waitHostAssembled = async () => {
+    const port = new URL(URL_TARGET).port
+    const deadline = Date.now() + 60_000
+    let last = ''
+    while (Date.now() < deadline) {
+      try {
+        const probe = await fetch(`http://127.0.0.1:${port}/__dev/probe`).then((r) => r.json())
+        last = JSON.stringify(probe.services ?? {})
+        const packages = probe.typert?.packages ?? []
+        if (probe.services?.clientModules === true && packages.includes('dsh-spark:host')) return true
+      } catch (error) {
+        last = error instanceof Error ? error.message : String(error)
+      }
+      await sleep(1000)
+    }
+    console.warn('宿主装配等待超时（继续跑，后续断言会体现真实状态）：' + last)
+    return false
+  }
+  await waitHostAssembled()
+
   await send('Page.navigate', { url: URL_TARGET })
   await sleep(4000)
 

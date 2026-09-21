@@ -881,6 +881,7 @@ function MemoryEditorModal({ api, t, initial, onCancel, onSaved }: {
       <label className='hippomemo-form-label'>{t('importanceLabel')}
         {/* 四档段控取代 0~1 的数字输入：数字对用户没有判断标准（2026-09 用户裁决）。 */}
         <SegmentedControl
+          className='hippomemo-seg-inline'
           aria-label={t('importanceLabel')}
           value={importanceTier(importance)}
           onChange={(value) => { setImportance(tierValue(value as ImportanceTier)) }}
