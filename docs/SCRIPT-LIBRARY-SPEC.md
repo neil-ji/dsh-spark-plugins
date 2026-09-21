@@ -1,8 +1,10 @@
 # 脚本沉淀库 · Spec（规范）
 
-> 状态：**v1.1（2026-09-22）**，本文件是脚本能力的**唯一规范源**。
+> 状态：**v1.2（2026-09-22）**，本文件是脚本能力的**唯一规范源**。
 > v1.1 变化：F3 治理口径落地（§6.2–§6.5）、`invokedWorkspaces` 字段（§2.1）、
 > 审计读模型强制携带宿主算好的 `successRate`（INV-7 + 闸门 `ratemetric`，§6.5）。
+> v1.2 变化：`searchTerms` 从**死字段**变成真参与检索（§5.4/§5.5）：纳入匹配并按字段权重排序、
+> `script_save` 开放入参、新增事件驱动的检索词富化插件 `dsh-script/terms`（D11）。
 > 实现与本文冲突时**先改本文**（commit 用 `docs(script):`），再改码。
 > 相关背景材料：`docs/skills-vs-script-plugin-2026-09-21.md`（为什么**不**接平台 `ctx.skills` 缝的调研）。
 >
@@ -44,6 +46,7 @@
 | **D7**（F3） | 过期结算是**惰性扫描**（服务 ready 之后一次 + `POST /scripts/sweep`），**不引定时器** | 过期条目本来已被 `isVisible` 挡在可见面外，扫描只是让 `status` 与审计面诚实；轮询会违 INV-12，而"真·时间驱动"要写豁免注释，没必要为一次枚举付出这个代价 |
 | **D8**（F3） | `global` **不做** `globalProven` 式确认；改为「降级作用域建议」（人工确认） | 目录注入与记忆注入不同：记忆是进上下文的事实断言，脚本只是可选的"操作清单"。自动注入代价可控，收敛交给建议面（关闭 P-4） |
 | **D9**（F3） | **人面不计量**：dock pane 只读（查看步骤 / 治理动作），不再调 `POST /invoke` | 计量口径（INV-8）描述的是 **agent 按脚本执行**这件事；人在 pane 上点一下不是执行证据，留在库里会污染退役建议的病据 |
+| **D11**（F4） | `searchTerms` 走「写入方（agent）显式给 + 辅助模型富化」两路；**富化只写检索词，不动 `updatedAt`、不派发客户端事件** | 对齐记忆的实现（`dsh-hippomemo` 的 `memory-terms` + `memory-core.ts:602` 把 searchTerms 当日志权重索引）。富化是**内部检索索引**，不是内容修订：动 `updatedAt` 会重新排序列表、还会把"僵尸脚本"的病据（`updatedAt < now-30d`）悄悄治没，等于污染治理证据 |
 | **D10**（F3） | 成功率**随读模型下发**（`ScriptSummary.successRate` 由宿主计算），UI 侧禁止任何除法；闸门 `ratemetric` 逐文件拦截 | INV-7 原文只写了口径单源，但 F1 验收时 UI 仍在重算（`ScriptsPane` 的 `successCount / invocationCount`）。把口径做进读模型，UI 就**没有算错的机会**，而不是靠人自觉 |
 
 ---
@@ -81,7 +84,7 @@ ScriptView {
   steps: ScriptStep[]           // 1..50，结构见下
   triggers: string[]            // ≤16，路由用（等值/子串匹配最近工具调用）
   tags: string[]                // ≤32，检索用（与记忆同义）
-  searchTerms?: string[]        // ≤32，写入时生成的双语同义词（与记忆同形）
+  searchTerms?: string[]        // ≤32，检索词：与 tags 同权重参与匹配（与记忆同形，见 §5.4/§5.5）
   scope: 'global'|'workspace'|'project'   // 默认 'workspace'
   workspacePath: string|null    // = 写入时 session cwd
   status: 'active'|'archived'|'superseded'|'candidate'  // 默认 'active'
@@ -202,7 +205,42 @@ F1 继续用 JSONL（无新依赖、现有实现已在用）。`dsh-storage-doma
 
 ### 5.4 检索
 
-`script_list` 的匹配口径（纯函数、可单测）：`q` 对 `name`/`description`/`tags`/`triggers` 做大小写不敏感子串匹配；`scope` 为显式过滤（`current` 语义 = global ∨ workspacePath 匹配）；默认按 `updatedAt` 倒序。
+匹配口径是**一个纯函数**（`src/retrieval.ts` 的 `matchScore`，可单测），`script_list`、HTTP `GET /scripts?q=`、
+人面检索框共用它 —— 三处不许各写一套（先例：成功率只用 `metrics.ts` 那一处除法）。
+
+`q` 做大小写不敏感**子串**匹配，按字段加权累加得分（命中即非 0 = 通过过滤）：
+
+| 字段 | 权重 | 理由 |
+|---|---|---|
+| `name` | 4 | 名字命中基本就是它 |
+| `tags` / `triggers` / `searchTerms` | 2 | 人工与富化过的检索面（§5.5）；与记忆的索引口径一致（`memory-core.ts:602` 把 searchTerms 与 tags 同权重） |
+| `description` | 1 | 最宽的面，命中未必精准 |
+
+排序：**有 `q` 时按得分倒序**（同分按 `updatedAt` 倒序）；无 `q` 时按 `updatedAt` 倒序（与今天一致）。
+`scope` 为显式过滤（`current` 语义 = global ∨ workspacePath 匹配）。
+
+### 5.5 检索词富化（searchTerms）
+
+`searchTerms` 是"让另一种语言的查询也能找到这条脚本"的索引面，与记忆同形。三条来源，按优先级：
+
+1. **写入方显式给**（`script_save` 的 `searchTerms` 入参，逗号分隔；对齐 `memory_remember`）——这是首选，
+   agent 在沉淀时最清楚该用什么词（它也可以顺手给双语）；
+2. **辅助模型富化**（`dsh-script/terms` 入口，D11）：`scripts/changed{operation:'save'}` 且该条
+   `searchTerms` 为空时，fire-and-forget 一次小模型调用生成 `maxTerms` 个短词并回写；
+3. 都没有 → 检索退化为 name/description/tags/triggers（功能不损，只是少一层召回）。
+
+富化的硬约束（都有单测/闸门盯着）：
+
+- **只填空**：已有 `searchTerms` 的记录不再调用模型（幂等，也是防自激的闸门）；
+- **不动 `updatedAt`**（`storage.patch(..., { touch: false })`）：它是索引不是内容修订 ——
+  动它会重排列表，并把"僵尸脚本"的病据悄悄治没（D11）；
+- **不派发客户端事件**：检索词不上屏（读模型 `ScriptSummary` 本来就不带 `searchTerms`），
+  多派一帧只会让一次 save 触发两次面板重载；
+- **可选组合**：入口 `inject = ['llm', 'script', 'agentDefaultModel']` —— 平台没有这些服务时
+  插件整体不激活（headless 组合照常可用，AGENTS §2.5）；
+- **失败只 warn**：生成失败/超时不得影响写入主路径（与 `memory-terms` 同口径）；
+- **配置**（`cordis.patch.yml` 的 loader 行）：`enabled`（默认 true）/ `provider`+`model`（成对，
+  缺省用 `agentDefaultModel.currentSelection()`）/ `maxTerms`（默认 12）/ `maxOutputTokens` / `timeoutMs`。
 
 ---
 
@@ -306,13 +344,15 @@ name: 'dsh-script-client'`，写在 `dsh-script/cordis.patch.yml`）带进组合
 
 | # | 验收 |
 |---|---|
-| **A1** | 单测：Schema 边界（INV-10）、`steps → 文本` 渲染纯函数（INV-9）、`projectRoot` 解析（§2.3）、判重规则（§3.2）、目录指纹（INV-4）、注入状态读写与清理（INV-5）、每 agent 门控（INV-6）、`successRate` 口径（INV-7）、状态机可逆性（INV-11） |
+| **A1** | 单测：Schema 边界（INV-10）、`steps → 文本` 渲染纯函数（INV-9）、`projectRoot` 解析（§2.3）、判重规则（§3.2）、目录指纹（INV-4）、注入状态读写与清理（INV-5）、每 agent 门控（INV-6）、`successRate` 口径（INV-7）、状态机可逆性（INV-11）、`matchScore` 字段权重与排序（§5.4） |
 | **A2** | 闸门：`check:domain-vocabulary`（INV-2 跨包字面量等价）、`cross-plugin-refs`（INV-1）、`esmrequire`（已存在）、`ratemetric`（INV-7 成功率除法单源）、`check:version-bump`（每个改发布输入的 commit 带 bump） |
 | **A3** | 迁移：旧 `scripts.jsonl` → 新路径的搬迁幂等；`session` → `workspace`；`sourceSparkId` 不再出现 |
 | **A4** | 真宿主：`sandbox:install` + 重启宿主 → `/scripts` 200、`script/events` 接到 ready 帧、连续两次启动**不重复注入**目录（INV-5）、`real-host-check` 退出码 0 |
 | **A5** | 预览与界面：`pnpm preview:verify` 全过；「脚本」pane 在 dock 中可开、文案走 locale 字典、无 CJK 泄漏（`en` 面）；治理面（概览统计 / 待裁决 / 状态徽章 / 动作）在预览 fixture 下有可断言的 testid |
 | **A6** | 全链：`pnpm -r build` → `pnpm -r typecheck` → `pnpm -r test`（顺序执行）→ `pnpm check:all` |
 | **A7**（F3） | 治理引擎单测：退役 / 僵尸 / 降级 / 合并四类建议的**触发与不触发**、结算幂等（INV-13，两次结算第二次 0 写入）、审计调用**不写库**（INV-14，调用前后 JSONL 逐字节相同）、`toSummary` 的 `successRate` 与 `ScriptService.successRate` 恒等 |
+| **A9**（F4） | 检索词：`searchTerms` 真的参与 `script_list` / HTTP `q` / 人面检索框三处（同一 `matchScore`）；`script_save` 能把入参落库；有 `q` 时按得分倒序、无 `q` 时按 `updatedAt` 倒序 |
+| **A10**（F4） | 富化：只填空（已有检索词不调用模型）、**不动 `updatedAt`**（僵尸病据不被治没）、不派发客户端事件、失败只 warn 不影响写入；纯函数（prompt 构造 / 解析）单测 + 假 ctx 驱动事件桥 |
 | **A8**（F3） | 读模型防线：`GET /scripts` 的响应**不含 `steps`**（防止 UI 拿全文再自己算），且带 `stepCount` + `successRate`；闸门 `ratemetric` 在注入一处违规除法时**必须红**（闸门自身的回归测试） |
 
 ---
@@ -323,6 +363,7 @@ name: 'dsh-script-client'`，写在 `dsh-script/cordis.patch.yml`）带进组合
 |---|---|---|
 | **F1 迁出与域对齐** | 建三个包 + registry/patch + 迁移存储 + 记录字段落地（D1/D2/D4）+ 删除火花侧脚本代码 + 域词汇闸门；行为与今天等价（除作用域收敛与新字段） | A1/A2/A3/A6 全绿；dock 里「脚本」模块可见 |
 | **F2 发现升级** | 目录注入升级（指纹/状态/替换帧/门控）+ `script_list` 检索 + 主动建议迁移 | INV-4/5/6 有单测 + A4 真宿主通过 |
+| **F4 检索** | `searchTerms` 落地（§5.4/§5.5）：`matchScore` 统一检索口径 + 写入路径开放 + 富化插件 + 人面检索框 | A1/A9/A10 全绿 + A5 重跑 |
 | **F3 治理** | 治理动作与审计面（§6.2）：建议引擎纯函数（§6.4）+ 审计读模型（§6.5）+ 过期惰性结算 + pane 从只读目录升级为治理面（概览 / 待裁决 / 状态动作 / 步骤详情） | A7/A8 全绿 + A4/A5 重跑（真宿主与预览都断言治理面） |
 
 ---
@@ -335,6 +376,8 @@ name: 'dsh-script-client'`，写在 `dsh-script/cordis.patch.yml`）带进组合
 4. **不做跨工作区共享/导入导出/远端仓库**（治理阶段之后再评估）。
 5. **不做脚本市场的元数据 manifest、不做嵌套分类目录**（若未来需要，另开 Spec）。
 6. **不做 LLM 自动生成步骤**（`script_save` 只接受显式入参）。
+   注意与 §5.5 的区别：检索词富化**允许**一次辅助模型调用，但它只写 `searchTerms` 这一个索引字段，
+   不生成/修改任何 `steps`。
 
 ---
 
@@ -354,6 +397,8 @@ name: 'dsh-script-client'`，写在 `dsh-script/cordis.patch.yml`）带进组合
 | dock 模块自注册（ADR-003） | `packages/dsh-plugin-kit/src/client/dock-module.ts:133` 的 `registerDockModule<I>(ctx, spec)`；调用范例 `packages/dsh-finance-client/src/client/FinanceDockModule.tsx:152`、`packages/dsh-hippomemo/src/client/HippoDockModule.tsx:46` |
 | 客户端订阅流 | `packages/dsh-spark-dock/src/client/spark/SparkDockModule.tsx:73` 的 `subscribeFrames` |
 | 闸门范式（Spec 单源 + 漂移检查） | `scripts/check-finance-price-drift.mjs` + `docs/FINANCE-PRICING-SPEC.md` |
+| 检索词富化（事件驱动 + 可选注入 + 只填空 + 回写） | `packages/dsh-hippomemo/src/memory-terms.ts`（子路径插件入口 `./terms` + bundle patch 的 loader 行） |
+| 检索词当索引（与 tags 同权重） | `packages/dsh-hippomemo/src/memory-core.ts:598-603` |
 
 **F1 执行顺序建议**（每步都可独立验证）：
 
