@@ -25,6 +25,8 @@ export const HIPPOMEMO_CSS = [
   '[data-plugin="dsh-hippomemo"] .hippomemo-intro { margin: 0; font-size: var(--spk-text-sm); line-height: 18px; color: var(--spk-label-2, var(--spk-label)); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-tabs { align-self: flex-start; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }',
+  /* 进化页顶部操作行（财务形制）：运行身份在左、动作按钮在右。 */
+  '[data-plugin="dsh-hippomemo"] .hippomemo-evolve-head { justify-content: space-between; }',
   /* 工具栏重做：筛选折叠面板 + 活跃筛选 chips */
   '[data-plugin="dsh-hippomemo"] .hippomemo-filters { border: 1px solid var(--spk-border); border-radius: var(--spk-radius-md); background: var(--spk-layer-2); margin-top: 8px; }',
   /* 2026-09：details/summary + 字符 ▸ 已退役，折叠统一 ui-kit Disclosure（标准 chevron）。

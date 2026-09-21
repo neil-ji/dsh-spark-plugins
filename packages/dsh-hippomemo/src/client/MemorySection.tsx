@@ -1050,26 +1050,33 @@ function EvolvePanel({ api, t }: { api: HippomemoApi; t: Translate }): ReactNode
   };
   return (
     <div className='hippomemo-panel'>
-      <p className='hippomemo-intro'>{t('evolveIntro')}</p>
-      <div className='hippomemo-toolbar'>
-        <Button variant='secondary' size='md' loading={running === 'dry'} disabled={running !== false} onClick={() => { void run(true); }}>
-          {running !== false ? t('evolveRunning') : t('evolveRunDry')}
-        </Button>
-        <Button variant='primary' size='md' loading={running === 'apply'} disabled={running !== false} onClick={() => { void run(false); }}>
-          {running !== false ? t('evolveRunning') : t('evolveRunApply')}
-        </Button>
+      {/* 顶部操作行（对齐财务形制，2026-09 用户裁决）：运行身份（时间/预演态）在左，
+          动作按钮在右；提示性长文案移除 —— 扫掠语义已由四个动作标签自解释。 */}
+      <div className='hippomemo-toolbar hippomemo-evolve-head'>
+        <div className='hippomemo-meta'>
+          {report !== null ? (
+            <>
+              <span>{t('evolveRunAt')} {formatDate(report.runAt)}</span>
+              <span>{report.dryRun ? t('evolveDryRun') : t('evolveApplied')}</span>
+            </>
+          ) : (
+            <span>{t('evolveNoReport')}</span>
+          )}
+        </div>
+        <div className='hippomemo-toolbar'>
+          <Button variant='secondary' size='md' loading={running === 'dry'} disabled={running !== false} onClick={() => { void run(true); }}>
+            {running !== false ? t('evolveRunning') : t('evolveRunDry')}
+          </Button>
+          <Button variant='primary' size='md' loading={running === 'apply'} disabled={running !== false} onClick={() => { void run(false); }}>
+            {running !== false ? t('evolveRunning') : t('evolveRunApply')}
+          </Button>
+        </div>
       </div>
       {error.length > 0 ? <p className='hippomemo-error'>{t('loadFailed')}: {error}</p> : null}
       {report === null && error.length === 0
         ? <p className='hippomemo-empty'>{t('evolveNoReport')}</p> : null}
       {report !== null ? (
         <>
-          {/* 本次运行的身份：时间 + 是不是预演。它不属于任何一组结果，所以留在组外面
-              （卡头放它会让「这张卡」读起来只有元信息）。 */}
-          <p className='hippomemo-meta'>
-            <span>{t('evolveRunAt')} {formatDate(report.runAt)}</span>
-            <span>{report.dryRun ? t('evolveDryRun') : t('evolveApplied')}</span>
-          </p>
           {/* 复核结论与动作各是一组 → 各一张卡，组名写在卡头上；数量作为卡头的状态位。
               以前两者都先在 meta 里写一遍计数、再在卡内当分组标题写一遍 —— 同一段文本
               在一张卡里出现两次。 */}
