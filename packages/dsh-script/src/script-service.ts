@@ -35,6 +35,7 @@ import { isVisible } from './scope.ts'
 import { registerScriptHttpRoutes } from './http.ts'
 import { seedDefaultScripts } from './seed-scripts.ts'
 import { findDuplicate } from './dedupe.ts'
+import { matchScore, normalizeNeedle } from './retrieval.ts'
 import { successRate, toSummary } from './metrics.ts'
 import { auditStats, expiredIds, governanceAdvices, invokedWorkspacesPatch } from './governance.ts'
 
@@ -42,6 +43,8 @@ import { auditStats, expiredIds, governanceAdvices, invokedWorkspacesPatch } fro
 export { findDuplicate, jaccard, normalizeName, stepsFingerprint } from './dedupe.ts'
 /** 计量口径从 `metrics.ts` 再导出（单源在那里，服务只是公开别名）。 */
 export { successRate } from './metrics.ts'
+/** 检索口径从 `retrieval.ts` 再导出（单源在那里）。 */
+export { matchScore, normalizeNeedle, searchHits } from './retrieval.ts'
 
 export interface ScriptConfig {
   /** 存储文件；默认 `$DSH_HOME/storages/script/scripts.jsonl`。 */
@@ -260,6 +263,25 @@ export class ScriptService extends Service {
     return updated
   }
 
+  /**
+   * 写回检索词（Spec §5.5 富化的落点）。
+   *
+   * 三条约束都是**故意的**：
+   *  - `touch: false` —— 检索词是索引不是内容修订，动 `updatedAt` 会重排列表，还会把
+   *    「僵尸脚本」的病据（`updatedAt < now - 30 天`）悄悄治没（D11）；
+   *  - **不派发 `scripts/changed`** —— 检索词不上屏（读模型不带它），多派一帧只会让一次
+   *    save 触发两次面板重载；
+   *  - 去重 + 封顶 32（与 schema 上限一致，超限会让记录再也解析不过）。
+   * @returns 写回后的记录；记录不存在或检索词为空时返回 null（不写）。
+   */
+  async setSearchTerms(id: string, terms: readonly string[], now: number = Date.now()): Promise<ScriptView | null> {
+    await this.whenReady()
+    const unique = [...new Set(terms.map(term => term.trim()).filter(term => term.length > 0))].slice(0, 32)
+    if (unique.length === 0) return null
+    if (await this.storage.get(id) === null) return null
+    return this.storage.patch(id, { searchTerms: unique }, now, { touch: false })
+  }
+
   /** 物理删除：只允许已归档条目（Spec INV-11）。 */
   async remove(id: string, now: number = Date.now()): Promise<boolean> {
     const current = await this.storage.get(id)
@@ -360,13 +382,15 @@ export class ScriptService extends Service {
     if (query.status !== undefined) filtered = filtered.filter(record => record.status === query.status)
     if (query.scope !== undefined) filtered = filtered.filter(record => record.scope === query.scope)
     if (query.tag !== undefined) filtered = filtered.filter(record => record.tags.includes(query.tag as string))
-    const needle = query.q?.trim().toLowerCase()
-    if (needle !== undefined && needle.length > 0) {
-      filtered = filtered.filter(record =>
-        record.name.toLowerCase().includes(needle)
-        || record.description.toLowerCase().includes(needle)
-        || record.tags.some(tag => tag.toLowerCase().includes(needle))
-        || record.triggers.some(trigger => trigger.toLowerCase().includes(needle)))
+    const needle = normalizeNeedle(query.q ?? '')
+    if (needle.length > 0) {
+      // 检索口径单源（Spec §5.4）：过滤与排序都由 `matchScore` 一个函数决定 ——
+      // 有 q 时按得分倒序（同分按 updatedAt 倒序），没有 q 时维持 updatedAt 倒序。
+      const scored = filtered
+        .map(record => ({ record, score: matchScore(record, needle) }))
+        .filter(entry => entry.score > 0)
+        .sort((a, b) => b.score - a.score || b.record.updatedAt - a.record.updatedAt)
+      return scored.slice(0, query.limit).map(entry => entry.record)
     }
     filtered = [...filtered].sort((a, b) => b.updatedAt - a.updatedAt)
     return filtered.slice(0, query.limit)

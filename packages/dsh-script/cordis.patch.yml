@@ -7,6 +7,16 @@
     - id: script-client
       name: 'dsh-script-client'
 
+    # 检索词富化（Spec §5.5 / D11）：save 后 fire-and-forget 一次小模型调用，只填空、
+    # 不动 updatedAt、不派发客户端事件。平台缺 llm/agentDefaultModel 时整条不激活。
+    - id: script-terms
+      name: 'dsh-script/terms'
+      config:
+        enabled: true
+        maxTerms: 12
+        maxOutputTokens: 256
+        timeoutMs: 60000
+
     - id: script
       name: 'dsh-script'
       config:

@@ -12,10 +12,6 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { appendFile, readFile } from 'node:fs/promises'
-import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { scriptViewSchema, type ScriptAdvice, type ScriptView } from 'dsh-script-wire'
 import { ScriptService } from '../src/script-service.ts'
 import { registerScriptHttpRoutes } from '../src/http.ts'
@@ -33,23 +29,7 @@ import {
   isZombie,
 } from '../src/governance.ts'
 import { assertPureModule } from './helpers/pure-module.ts'
-
-const NOW = 1_700_000_000_000
-
-function record(overrides: Partial<ScriptView> = {}): ScriptView {
-  const id = overrides.id ?? 's1'
-  return scriptViewSchema.parse({
-    id,
-    name: overrides.name ?? '跑全套闸门',
-    description: overrides.description ?? '合并前跑一次 check:all',
-    // 默认步骤带上 id：否则两个不相干的夹具会因「同步骤 + 空 triggers」互相判重
-    // （判重规则本该命中这种情况），把不相干的断言搅黄。
-    steps: overrides.steps ?? [{ kind: 'tool-call', payload: 'pnpm check:all # ' + id }],
-    createdAt: NOW,
-    updatedAt: NOW,
-    ...overrides,
-  })
-}
+import { NOW, appendRaw, harness, record, seed, snapshot, type Harness } from './helpers/service-harness.ts'
 
 const kindsOf = (advices: readonly ScriptAdvice[]): string[] => advices.map(advice => advice.kind)
 const idsOf = (advices: readonly ScriptAdvice[]): string[] => advices.map(advice => advice.id)
@@ -217,54 +197,6 @@ test('过期结算只挑 active 的过期条目，所以第二次结算必然是
 
 /* ───────────────────────── 服务级（真实实现 + 临时文件） ───────────────────────── */
 
-interface Harness {
-  readonly service: ScriptService
-  readonly filePath: string
-  readonly routes: { kind: string; path: string; handler: (req: unknown, res: unknown) => void }[]
-  readonly cleanup: () => Promise<void>
-}
-
-async function harness(): Promise<Harness> {
-  const dir = await mkdtemp(join(tmpdir(), 'dsh-script-gov-'))
-  const routes: Harness['routes'] = []
-  const ctx = {
-    reflect: { provide: () => {} },
-    logger: { info: () => {}, warn: () => {}, error: () => {} },
-    emit: () => {},
-    effect: (callback: () => unknown) => callback(),
-    webServer: {
-      register: (route: Harness['routes'][number]) => { routes.push(route); return () => {} },
-    },
-  }
-  const filePath = join(dir, 'scripts.jsonl')
-  const service = new ScriptService(ctx as never, { filePath, seed: false })
-  await service.whenReady()
-  return { service, filePath, routes, cleanup: async () => { await rm(dir, { recursive: true, force: true }) } }
-}
-
-async function seed(service: ScriptService, input: Partial<Record<string, unknown>> = {}): Promise<ScriptView> {
-  const result = await service.save({
-    name: '探针脚本',
-    description: '用于治理回归',
-    steps: [{ kind: 'tool-call', payload: 'pnpm check:all' }],
-    ...input,
-  }, { updatedBy: 'system' })
-  assert.equal(result.kind, 'created')
-  return (result as { kind: 'created'; record: ScriptView }).record
-}
-
-/**
- * 直接落一行到 JSONL：`save` 只接受写入口径（计量与状态由宿主维护），
- * 而治理回归需要造「调用过 6 次、成功率 0.2」这类历史数据。
- */
-async function appendRecord(filePath: string, value: ScriptView): Promise<ScriptView> {
-  await appendFile(filePath, JSON.stringify(value) + '\n', 'utf8')
-  return value
-}
-
-/** 读原文用途的字节快照（INV-14 的判据）。 */
-const snapshot = async (filePath: string): Promise<string> => await readFile(filePath, 'utf8')
-
 test('INV-13（服务级）：第一次结算归档过期条目，第二次返回 0 且不改一个字节', async () => {
   const h = await harness()
   try {
@@ -284,7 +216,7 @@ test('INV-13（服务级）：第一次结算归档过期条目，第二次返�
 test('INV-14（服务级）：只读审计 / 建议 / 统计调用前后 JSONL 逐字节相同', async () => {
   const h = await harness()
   try {
-    await appendRecord(h.filePath, record({
+    await appendRaw(h.filePath, record({
       id: 'retiring',
       name: '退役候选',
       invocationCount: 6,
@@ -351,7 +283,7 @@ test('读路径归一化：缺新增字段的老记录按 schema 默认值补齐
     // 表现为真宿主 `/scripts/audit` 400 —— 预览（内存夹具）永远抓不到这类字节级兼容问题。
     const legacy = record({ id: 'legacy', name: '老版本写的脚本' }) as unknown as Record<string, unknown>
     delete legacy['invokedWorkspaces']
-    await appendFile(h.filePath, JSON.stringify(legacy) + '\n', 'utf8')
+    await appendRaw(h.filePath, legacy)
 
     const [summary] = await h.service.listSummaries({ limit: 10 })
     assert.equal(summary?.id, 'legacy')

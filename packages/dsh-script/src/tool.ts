@@ -19,7 +19,7 @@ const TEXT_OUTPUT = {
 const GUIDANCE = [
   'The script library stores reusable multi-step procedures (structured steps: instruction | tool-call).',
   'After finishing a multi-step procedure that will be needed again, persist it with script_save — write steps that are executable, not vague ("run pnpm check:all", not "verify things").',
-  'Before writing multi-step commands from scratch, call script_list (or read the script catalog when it appears) to check whether a stored procedure already covers the task; script_invoke returns its full steps.',
+  'Before writing multi-step commands from scratch, call script_list (or read the script catalog when it appears) to check whether a stored procedure already covers the task; script_invoke returns its full steps. script_list matches name, description, tags, triggers and searchTerms.',
   'Always close the loop with script_result(id, success) after invoking a script, so the catalog success rate stays honest.',
   'Default scope is "workspace" (bound to the current cwd). Use "global" only for procedures that are genuinely workspace-independent, and "project" for procedures tied to the project root.',
 ].join('\n')
@@ -44,6 +44,7 @@ export function registerScriptTools(ctx: Context): RegisteredScriptTools {
       steps: { type: 'string', required: true, description: 'JSON array: [{"kind":"instruction"|"tool-call","payload":"...","note":"optional"}]. 1-50 steps.' },
       triggers: { type: 'string', description: 'Comma-separated patterns matched against recent tool calls for proactive suggestions.' },
       tags: { type: 'string', description: 'Comma-separated retrieval keywords.' },
+      searchTerms: { type: 'string', description: 'Comma-separated bilingual/synonym keywords that help a Chinese or English query find this script later (searched with the same weight as tags). Supply them when you already know the other-language terms; the host also enriches empty ones in the background.' },
       scope: { type: 'string', enum: ['global', 'workspace', 'project'], description: 'Defaults to workspace (bound to this cwd).' },
       expiresAt: { type: 'number', description: 'Optional absolute epoch ms after which the script is no longer injected.' },
       supersedes: { type: 'string', description: 'Optional id of the script this revision replaces (it becomes status=superseded).' },
@@ -66,6 +67,7 @@ export function registerScriptTools(ctx: Context): RegisteredScriptTools {
         steps,
         triggers: split(args.triggers),
         tags: split(args.tags),
+        ...(split(args.searchTerms).length > 0 ? { searchTerms: split(args.searchTerms) } : {}),
         scope: args.scope ?? 'workspace',
         workspacePath: agent?.session.header.cwd ?? null,
         expiresAt: typeof args.expiresAt === 'number' ? args.expiresAt : null,

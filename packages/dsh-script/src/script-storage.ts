@@ -107,13 +107,29 @@ export class JsonlScriptStorage<T = ScriptView> {
     return all.find(record => (record as { id?: string }).id === id) ?? null
   }
 
-  async patch(id: string, patch: Partial<T>, now: number): Promise<T | null> {
+  /**
+   * 局部更新一条记录。
+   * @param id - 记录 id。
+   * @param patch - 要改的字段。
+   * @param now - 新的 `updatedAt`。
+   * @param options.touch - `false` 时**保留原 `updatedAt`**（默认 true）。
+   *   给"改索引不改内容"的写入用（检索词富化，Spec §5.5/D11）：`updatedAt` 是列表排序键
+   *   与"僵尸脚本"病据，被一次内部索引写入推新，等于把治理证据悄悄改掉。
+   */
+  async patch(id: string, patch: Partial<T>, now: number, options: { touch?: boolean } = {}): Promise<T | null> {
+    const touch = options.touch ?? true
     return this.serialize(async () => {
       const all = await this.readAll()
       const idx = all.findIndex(record => (record as { id?: string }).id === id)
       if (idx < 0) return null
       const current = all[idx]!
-      const next = { ...current, ...patch, updatedAt: now, id: (current as unknown as { id: string }).id, createdAt: (current as unknown as { createdAt: number }).createdAt } as T
+      const next = {
+        ...current,
+        ...patch,
+        updatedAt: touch ? now : (current as unknown as { updatedAt: number }).updatedAt,
+        id: (current as unknown as { id: string }).id,
+        createdAt: (current as unknown as { createdAt: number }).createdAt,
+      } as T
       all[idx] = next
       await this.writeAllRaw(all)
       return next

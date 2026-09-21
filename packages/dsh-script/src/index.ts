@@ -70,6 +70,12 @@ export type { HasProjectMarker } from './scope.ts'
 export { collectRecentCalls, matchScripts, renderScriptSuggestion, stringifyArgs } from './script-match.ts'
 export type { RecentToolCall, ScriptMatch } from './script-match.ts'
 export { seedDefaultScripts } from './seed-scripts.ts'
+export { SEARCH_FIELD_WEIGHTS, matchScore, normalizeNeedle, searchHits, searchableFields } from './retrieval.ts'
+export type { SearchField, SearchHit, SearchableRecord } from './retrieval.ts'
+export {
+  buildSearchTermsPrompt, enrichRecord, parseSearchTerms, resolveConfig as resolveTermsConfig,
+} from './terms.ts'
+export type { EnrichableRecord, ScriptTermsConfig, TermsDeps } from './terms.ts'
 export type {
   ScriptView, ScriptSummary, ScriptStep, ScriptStepKind, ScriptScope, ScriptStatus, ScriptAuthor,
   ScriptSaveInput, ScriptListQuery, ScriptInvokeResult, ScriptsChangedEvent, ScriptStreamFrame, ScriptTopic,

@@ -10,7 +10,8 @@ rmSync('lib', { recursive: true, force: true })
 execSync('npx --no-install tsc -p tsconfig.json', { stdio: 'inherit' })
 
 await build({
-  entryPoints: { 'index': 'src/index.ts' },
+  // 两个入口：主插件 + 检索词富化（Spec §5.5 的子路径插件入口，与 hippomemo 的 ./terms 同形）。
+  entryPoints: { 'index': 'src/index.ts', 'terms': 'src/terms.ts' },
   outdir: 'lib',
   bundle: true,
   format: 'esm',

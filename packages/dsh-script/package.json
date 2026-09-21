@@ -1,6 +1,6 @@
 {
   "name": "dsh-script",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "DSH 脚本沉淀库 host：程序性记录（结构化步骤）+ JSONL 持久化 + agent 工具 + 目录注入",
   "type": "module",
   "main": "lib/index.js",
@@ -10,11 +10,14 @@
       "types": "./lib/types/index.d.ts",
       "default": "./lib/index.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./terms": {
+      "types": "./lib/types/terms.d.ts",
+      "default": "./lib/terms.js"
+    }
   },
   "files": [
-    "lib/index.js",
-    "lib/types/**/*.js",
+    "lib/**/*.js",
     "lib/types/**/*.d.ts",
     "cordis.patch.yml"
   ],
@@ -46,7 +49,9 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-agent-default-model": "0.1.2-rc.1",
     "@deepseek-ai/dsh-host-webserver": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-llm": "0.1.2-rc.1",
     "@deepseek-ai/dsh-tools": "0.1.2-rc.1",
     "@deepseek-ai/dsh-typert-protocol": "^0.1.2-rc.1",
     "@deepseek-ai/dsh-typert-registry": "^0.1.2-rc.1",
