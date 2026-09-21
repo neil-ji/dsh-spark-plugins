@@ -70,6 +70,16 @@ async function handleSparks(
       send(res, 200, okEnvelope(await service.stats(await pendingProposalCount(ctx))))
       return
     }
+    // 必须排在「按 id 取」之前（同 /stats 的理由）。
+    if (req.method === 'GET' && sub === '/graph') {
+      const query: Record<string, unknown> = {}
+      const limit = url.searchParams.get('limit')
+      if (limit !== null) query.limit = Number(limit)
+      const tagMinShared = url.searchParams.get('tagMinShared')
+      if (tagMinShared !== null) query.tagMinShared = Number(tagMinShared)
+      send(res, 200, okEnvelope(await service.graph(await listProposals(ctx), query)))
+      return
+    }
     if (req.method === 'GET' && sub.startsWith('/')) {
       const id = decodeURIComponent(sub.slice(1))
       const record = await service.get(id as Parameters<typeof service.get>[0])
@@ -270,6 +280,17 @@ function queryFromUrl(url: URL): Record<string, unknown> {
   const limit = url.searchParams.get('limit')
   if (limit !== null) query.limit = Number(limit)
   return query
+}
+
+/** 全部提议（图谱的关联边来源）；emerge 不可用时按空表处理。 */
+async function listProposals(ctx: Context): Promise<readonly ProposalView[]> {
+  try {
+    const emerge = ctx.emerge as EmergeService | undefined
+    if (emerge === undefined) return []
+    return await emerge.list()
+  } catch {
+    return []
+  }
 }
 
 /** 待决提议数；emerge 服务不可用时按 0 处理（统计端点不该因为它的缺失而 500）。 */

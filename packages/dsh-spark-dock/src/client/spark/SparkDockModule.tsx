@@ -17,7 +17,8 @@ import {
   type DockModuleOwnerProps,
 } from 'dsh-spark-plugin-kit/client'
 import type { SparkChangedEvent, SparkStreamFrame } from 'dsh-spark-wire'
-import { GraphPane, ProposalsPane, ScriptsPane, SparksPane } from './SparkModule.tsx'
+import { ProposalsPane, ScriptsPane, SparksPane } from './SparkModule.tsx'
+import { GraphPane } from './GraphPane.tsx'
 import { SPARK_EVENTS_STREAM, type SparkEventChannel } from './remote.ts'
 import type { SparkDockLocaleKey, SparkT } from './locales.ts'
 

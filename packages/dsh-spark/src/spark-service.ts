@@ -29,7 +29,12 @@ import {
   type SparkCrystallized,
   type SparkStats,
   type SparkId,
+  type SparkGraph,
+  type SparkGraphQuery,
+  type ProposalView,
 } from 'dsh-spark-wire'
+import { sparkGraphQuerySchema } from 'dsh-spark-wire'
+import { buildSparkGraph } from './graph.ts'
 import { JsonlSparkStorage } from './storage.ts'
 import { SparkMetaStore, defaultMetaPath, type SparkMeta } from './meta-store.ts'
 import { ensureJsonlPath } from './jsonl-path.ts'
@@ -153,6 +158,20 @@ export class SparkService extends Service {
     await this.enforceLimit()
     this.ctx.emit('sparks/changed', { operation: 'capture', id: record.id, record, at: now })
     return record
+  }
+
+  /**
+   * 关联图谱：火花间的标签亲和 + 涌现提议关联 + 火花→记忆的结晶谱系。
+   *
+   * 计算全在 `graph.ts` 的纯函数里（口径单源，可以脱离 cordis 单测）；
+   * 本方法只负责取数据：火花读自己的存储，提议由调用方从 emerge 服务取
+   * （服务间不互相属性访问 —— 见 AGENTS §2.5 的 inject 规则）。
+   */
+  async graph(proposals: readonly ProposalView[] = [], input: unknown = {}): Promise<SparkGraph> {
+    await this.whenReady()
+    const query: SparkGraphQuery = sparkGraphQuerySchema.parse(input)
+    const all = await this.storage.readAll()
+    return buildSparkGraph(all, proposals, { limit: query.limit, tagMinShared: query.tagMinShared })
   }
 
   /** 列表默认隐藏墓碑；`includeDeleted: true` 时为"最近删除"视图。 */

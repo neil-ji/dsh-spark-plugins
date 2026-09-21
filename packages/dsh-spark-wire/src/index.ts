@@ -196,6 +196,60 @@ export const scriptInvokeResultSchema = z.object({
   successRate: z.number().min(0).max(1),
 })
 
+/**
+ * 关联图谱（Graph 子页）：火花之间、火花与结晶记忆之间的边。
+ *
+ * 单一来源：host 侧 `buildSparkGraph` 是唯一计算者，客户端只渲染 —— 关联口径
+ * 不允许在 UI 里再算一遍（与窗口归因同一原则）。节点 id 带类型前缀
+ * （`spark:<id>` / `memory:<hippoId>`），两类节点同图共存。
+ */
+export const sparkGraphNodeKindSchema = z.enum(['spark', 'memory'])
+
+/** 边的语义：crystallized=结晶谱系；tag=共享标签；proposal=涌现提议判定的关联。 */
+export const sparkGraphEdgeKindSchema = z.enum(['crystallized', 'tag', 'proposal'])
+
+export const sparkGraphNodeSchema = z.object({
+  /** `spark:<sparkId>` 或 `memory:<hippoId>`。 */
+  id: z.string().min(1).max(120),
+  kind: sparkGraphNodeKindSchema,
+  label: z.string().min(1).max(200),
+  /** spark 节点专属；memory 节点为 null。 */
+  inboxState: sparkInboxStateSchema.nullable().default(null),
+  scope: sparkScopeSchema.nullable().default(null),
+  tags: z.array(z.string().min(1).max(50)).max(32).default([]),
+  /** 节点度（连边数）—— 客户端据此定节点尺寸，不再自算。 */
+  degree: z.number().int().nonnegative().default(0),
+})
+
+export const sparkGraphEdgeSchema = z.object({
+  source: z.string().min(1).max(120),
+  target: z.string().min(1).max(120),
+  kind: sparkGraphEdgeKindSchema,
+  /** 强度：tag=共享标签数；proposal=同现提议条数；crystallized=1。 */
+  weight: z.number().int().positive().default(1),
+})
+
+export const sparkGraphSchema = z.object({
+  generatedAt: z.number().int().nonnegative(),
+  nodes: z.array(sparkGraphNodeSchema).max(500),
+  edges: z.array(sparkGraphEdgeSchema).max(2_000),
+  /** 节点数触及上限被裁剪（图只呈现最近活跃的那批火花）。 */
+  truncated: z.boolean().default(false),
+})
+
+export const sparkGraphQuerySchema = z.object({
+  limit: z.number().int().min(5).max(200).default(60),
+  /** 共享标签达到几条才算一条 tag 边。 */
+  tagMinShared: z.number().int().min(1).max(10).default(2),
+})
+
+export type SparkGraphNodeKind = z.infer<typeof sparkGraphNodeKindSchema>
+export type SparkGraphEdgeKind = z.infer<typeof sparkGraphEdgeKindSchema>
+export type SparkGraphNode = z.infer<typeof sparkGraphNodeSchema>
+export type SparkGraphEdge = z.infer<typeof sparkGraphEdgeSchema>
+export type SparkGraph = z.infer<typeof sparkGraphSchema>
+export type SparkGraphQuery = z.infer<typeof sparkGraphQuerySchema>
+
 export type SparkScope = z.infer<typeof sparkScopeSchema>
 export type SparkInboxState = z.infer<typeof sparkInboxStateSchema>
 export type SparkId = z.infer<typeof sparkIdSchema>

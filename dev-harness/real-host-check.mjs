@@ -276,6 +276,75 @@ try {
         && typeof statsValue.deleted === 'number' && typeof statsValue.pendingProposals === 'number',
       JSON.stringify(statsProbe).slice(0, 220),
     )
+    // 3b-2) 关联图谱（2026-09 补齐 Graph 子页）：契约与图算法不变量。
+    //     这里断言的是**结构不变量**而不是数据巧合：边两端必须都在节点表里、
+    //     id 带类型前缀、度数与边数自洽 —— 沙箱数据是可变的，节点数不能断言。
+    const graphProbe = await evalJs(`fetch('/sparks/graph?limit=60').then(async (r) => ({ ok: r.ok, status: r.status, value: await r.json() }))`)
+    const graphValue = graphProbe?.value?.value
+    const graphNodes = Array.isArray(graphValue?.nodes) ? graphValue.nodes : []
+    const graphEdges = Array.isArray(graphValue?.edges) ? graphValue.edges : []
+    const nodeIds = new Set(graphNodes.map((n) => n.id))
+    const endpointsOk = graphEdges.every((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
+    const idsOk = graphNodes.every((n) => n.kind === 'memory' ? n.id.startsWith('memory:') : n.id.startsWith('spark:'))
+    const kindsOk = graphEdges.every((e) => ['crystallized', 'tag', 'proposal'].includes(e.kind))
+    const degreeOk = graphNodes.every((n) => {
+      const deg = graphEdges.filter((e) => e.source === n.id || e.target === n.id).length
+      return n.degree === deg
+    })
+    check(
+      'GET /sparks/graph 返回图谱（边两端在图内 · id 带类型前缀 · 度数与边自洽）',
+      graphProbe?.ok === true && Array.isArray(graphValue?.nodes) && Array.isArray(graphValue?.edges)
+        && typeof graphValue?.truncated === 'boolean'
+        && endpointsOk && idsOk && kindsOk && degreeOk,
+      JSON.stringify({ nodes: graphNodes.length, edges: graphEdges.length, endpointsOk, idsOk, kindsOk, degreeOk }),
+    )
+
+    // 3b-3) 图谱的**渲染面**：只断言 API 形状证明不了图能画出来（铁律 4 的镜像）。
+    //     造两条共享 2 个标签的火花 → 必产生一条 tag 边 → 切到 Graph 页，
+    //     断言 SVG 里真的有节点与边元素、且图例在场。
+    const pairStamp = Date.now().toString(36)
+    for (const suffix of ['a', 'b']) {
+      await evalJs(`fetch('/sparks', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          title: '图谱验收 ' + ${JSON.stringify(pairStamp)} + '-' + '${suffix}',
+          content: 'graph probe ' + '${suffix}',
+          scope: 'project',
+          tags: ['graph-probe', ${JSON.stringify(pairStamp)}],
+          sourceSessionId: 'real-host-check',
+          sourceAgentId: null,
+          sourceTurn: null,
+        }),
+      })`)
+    }
+    // 子页条是模块自己的 SegmentedControl（不是 dock 的 .dock-tab —— 那是模块级 tab，
+    // 点它会重新选中「火花」模块本身，第一版就是这么空转的）。
+    const graphTab = await evalJs(`(() => {
+      const btns = Array.from(document.querySelectorAll('.dock-embed button'))
+      const target = btns.find((b) => (b.textContent ?? '').trim() === 'Graph')
+      if (target === undefined) return null
+      target.click()
+      return (target.textContent ?? '').trim()
+    })()`)
+    await sleep(1400)
+    const graphDom = await evalJs(`(() => {
+      const svg = document.querySelector('.dock-graph-svg')
+      return {
+        hasSvg: svg !== null,
+        nodes: document.querySelectorAll('.dock-graph-node').length,
+        edges: document.querySelectorAll('.dock-graph-edge').length,
+        legend: document.querySelectorAll('.dock-graph-legend li').length,
+        summary: document.querySelector('.dock-graph-summary')?.textContent ?? null,
+      }
+    })()`)
+    check(
+      'Graph 子页渲染关联图（SVG 节点/边/图例在场，共享标签产生边）',
+      graphTab !== null && graphDom.hasSvg === true && graphDom.nodes > 0
+        && graphDom.edges > 0 && graphDom.legend >= 6,
+      JSON.stringify(graphDom),
+    )
+
     // 断言放在**面板文本**上而不是某个 CSS 选择器上：行内的动作钮与筛选位同类名，
     // 按类名取会取错（第一版就是这么误判的）。
     // 2026-09 词表更新：筛选位改 SegmentedControl，且「结晶」→「转为记忆」（用户裁决

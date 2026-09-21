@@ -12,11 +12,12 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Button, Card, Disclosure, Input, Modal, SegmentedControl, Textarea } from 'dsh-ui-kit'
 import { useFrames } from 'dsh-spark-plugin-kit/client'
 import type { SparkView, SparkInboxState, SparkStats, ProposalView, ScriptView } from 'dsh-spark-wire'
-import { createDockSparksApi, type DockSparksApi } from './sparkApi.ts'
+import { api } from './sparkApi.ts'
+import { useApiResource } from './useApiResource.ts'
 import { SPARK_EVENTS_STREAM, type SparkEventChannel } from './remote.ts'
 import type { SparkT } from './locales.ts'
 
-const api: DockSparksApi = createDockSparksApi()
+
 
 /** 子页依赖面：事件通道 + 取词函数，都由 dock 通过插槽 inject 面下发。 */
 export interface SparkPaneDeps {
@@ -48,23 +49,6 @@ function timeAgo(ts: number, t: SparkT): string {
   if (s < 3600) return `${Math.floor(s / 60)} ${t('timeMinutes')}`
   if (s < 86400) return `${Math.floor(s / 3600)} ${t('timeHours')}`
   return `${Math.floor(s / 86400)} ${t('timeDays')}`
-}
-
-function useApiResource<T>(loader: () => Promise<T>, deps: unknown[]): { data: T | null; error: string | null; reload: () => void } {
-  const [data, setData] = useState<T | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [tick, setTick] = useState(0)
-  const reload = useCallback(() => setTick((t) => t + 1), [])
-  useEffect(() => {
-    let alive = true
-    loader().then(
-      (d) => { if (alive) { setData(d); setError(null) } },
-      (e) => { if (alive) setError(e instanceof Error ? e.message : String(e)) },
-    )
-    return () => { alive = false }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...deps, tick])
-  return { data, error, reload }
 }
 
 function ErrorNote({ error }: { error: string | null }) {
@@ -524,13 +508,4 @@ export function ScriptsPane({ channel, t }: SparkPaneDeps): JSX.Element {
   )
 }
 
-/* ─────────── Graph：占位 ─────────── */
-
-export function GraphPane({ t }: { t: SparkT }): JSX.Element {
-  return (
-    <Empty
-      text={t('graphEmpty')}
-      hint={t('graphHint')}
-    />
-  )
-}
+/* ─────────── Graph：实现在 GraphPane.tsx（口径在宿主 graph.ts） ─────────── */

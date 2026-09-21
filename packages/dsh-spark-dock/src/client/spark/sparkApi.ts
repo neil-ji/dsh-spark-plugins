@@ -5,7 +5,7 @@
  * 2026-09-14：收件箱化 —— 列表按 `inboxState` 过滤（取代旧的 status=active|archived），
  * 新增 `/sparks/stats`（计数）与 `/sparks/:id/restore`（从墓碑恢复）。
  */
-import type { SparkView, SparkCapture, SparkInboxState, SparkStats, ProposalView, ProposalStatus, ScriptView } from 'dsh-spark-wire'
+import type { SparkView, SparkCapture, SparkInboxState, SparkStats, SparkGraph, ProposalView, ProposalStatus, ScriptView } from 'dsh-spark-wire'
 
 interface Envelope { ok: boolean; value?: unknown; error?: { code: string; message: string } }
 
@@ -29,9 +29,14 @@ export interface SparkListQuery {
   limit?: number
 }
 
+/** 面板各 pane 共用的单例：图 pane 拆到独立文件后不再靠「同文件 const」共享。 */
+export const api: DockSparksApi = createDockSparksApi()
+
 export interface DockSparksApi {
   list(query?: SparkListQuery): Promise<SparkView[]>
   stats(): Promise<SparkStats>
+  /** 关联图谱（节点/边口径全在宿主，客户端只渲染）。 */
+  graph(limit?: number): Promise<SparkGraph>
   capture(input: { title: string; content: string; scope: 'project' | 'global'; tags: string[] }): Promise<SparkView>
   setInboxState(id: string, inboxState: SparkInboxState): Promise<SparkView>
   archive(id: string): Promise<SparkView>
@@ -60,6 +65,10 @@ export function createDockSparksApi(): DockSparksApi {
       if (query.limit !== undefined) params.set('limit', String(query.limit))
       const qs = params.toString()
       return request<SparkView[]>('/sparks' + (qs.length > 0 ? '?' + qs : ''))
+    },
+    async graph(limit) {
+      const qs = limit === undefined ? '' : '?limit=' + String(limit)
+      return request<SparkGraph>('/sparks/graph' + qs)
     },
     async stats() {
       return request<SparkStats>('/sparks/stats')

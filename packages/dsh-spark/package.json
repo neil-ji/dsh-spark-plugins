@@ -1,6 +1,6 @@
 {
   "name": "dsh-spark",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "DSH 火花认知层 host：spark 流（情景记忆）+ JSONL 持久化 + HTTP API + agent 工具",
   "type": "module",
   "main": "lib/index.js",
