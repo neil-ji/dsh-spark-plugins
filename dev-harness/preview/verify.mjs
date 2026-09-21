@@ -186,8 +186,11 @@ async function runServerChecks() {
     // SPEC §10 回归线：额度触达与窗口归因必须真进产物（不是只存在于源码）。
     const hasQuotaWindow = code.includes('finance-quota-window') && code.includes('QuotaWindowCard')
     check('server: 产物含额度窗口归因卡（SPEC §10）', hasQuotaWindow, hasQuotaWindow ? '' : '未找到 finance-quota-window / QuotaWindowCard')
-    const hasQuotaPill = code.includes('finance-quota-hits-') && code.includes('quotaAttemptsNote')
-    check('server: 产物含额度触达明细（SPEC §10）', hasQuotaPill, hasQuotaPill ? '' : '未找到 finance-quota-hits- / quotaAttemptsNote')
+    // SPEC §10.5 修订（2026-09-21）：额度触达明细仍在详情弹窗（`finance-quota-hits-`），
+// 但表内 pill 与 `quotaAttemptsNote`（「N 次断供 · M 次失败尝试」）已随布局修复退役
+// —— 摘要行改用 pill 原先的三态文案。所以这里只钉"明细列表进了产物"。
+    const hasQuotaHits = code.includes('finance-quota-hits-')
+    check('server: 产物含额度触达明细（SPEC §10.5）', hasQuotaHits, hasQuotaHits ? '' : '未找到 finance-quota-hits-')
     // 错峰卡改为 100% 堆叠条（2026-09-20）：产物必须带 StackedBar 的 testid 与类名。
     const hasStacked = code.includes('stacked-slice-') && code.includes('stackedTrack')
     check('server: 产物含错峰 100% 堆叠条', hasStacked, hasStacked ? '' : '未找到 stacked-slice- / stackedTrack')

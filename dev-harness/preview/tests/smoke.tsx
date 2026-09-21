@@ -292,13 +292,24 @@ export async function run(): Promise<{ checks: Check[] }> {
     expectContains('finance: 余额行按已接入 provider 渲染', html, 'finance-provider-deepseek')
     expectContains('finance: 四个决策视图页签（zh 字典）', html, '节省分析')
     expectContains('finance: 供应商总表存在', html, 'finance-provider-table')
+    // 2026-09-21 供应商总表布局不变量（用户裁决「table 布局混乱」的确定性回归线）。
+    // 预览夹具带配额数据（zai 命中），所以这里能真正跑起来；真宿主沙箱账本常为空、
+    // 表格走空态，那边只能做补充抽样 —— 主判据在这里 + dom-audit 的重叠/溢出/折行。
+    {
+      const tableHtml = /data-testid="finance-provider-table"[\s\S]*?(?=<section|$)/.exec(html)?.[0] ?? ''
+      check('finance: 表内无额度触达 testid（已移进详情弹窗）', !tableHtml.includes('finance-quota-'), '')
+      check('finance: 表内无「超值」tag', !tableHtml.includes('超值'), '')
+      check('finance: 表内无「手填」角标', !tableHtml.includes('手填'), '')
+    }
     // 写回路径真的通：给有用量、无显式标记的 openai 填一次月费 → 落到 settings 的
     // plans，并推出「省了多少」结论（deepseek/tencent 已显式标记为按量，不进订阅卡）。
     await injected.controller.savePlan({ provider: 'openai', monthlyMicros: 1, currency: 'CNY', periodLabel: 'month', effectiveFrom: 0 })
     const afterPlan = renderToString(<FinancePanel {...injected.panel} /> as ReactElement)
     expectContains('finance: 填过月费的厂商进总表并标订阅', afterPlan, 'finance-provider-openai')
-    // SPEC §5.4：结论列改为「按量等价节省 + 超值 tag」。
-    expectContains('finance: 填月费后给出按量等价节省与超值 tag', afterPlan, '超值')
+    // 2026-09-21 用户裁决：非付费类型列的 tag 一律移除（列窄，tag 挤金额）。
+    // 省额降级为悬浮提示，表格里只剩金额与付费类型 Tag。
+    check('finance: 填月费后不再渲染「超值」tag（改悬浮提示）', !afterPlan.includes('超值'), '')
+    check('finance: 付费类型 Tag 仍在（表格唯一合法 tag）', afterPlan.includes('按量') || afterPlan.includes('订阅'), '')
     // P1-B：该用谁 —— 输出速率列 + 同一模型跨供应商的时间成本比较。
     check('finance: 账本带上了速率样本', state.ledger?.byModel.some((row) => row.rate !== undefined) === true, '')
     const whoHtml = renderToString(
@@ -307,6 +318,15 @@ export async function run(): Promise<{ checks: Check[] }> {
     expectContains('finance: 该用谁有输出速率列', whoHtml, '输出速率')
     expectContains('finance: 速率渲染为 tok/s', whoHtml, 'tok/s')
     expectContains('finance: 同一模型跨供应商给出时间成本比较', whoHtml, 'finance-time-compare')
+    // 2026-09-21 用户裁决：模型一多就"全展开平铺"读不动 → 改手风琴，默认只展开首项；
+    // 手风琴已起分割作用 → 移除原先每个组的嵌套 inset Card。
+    {
+      const heads = (whoHtml.match(/<button[^>]*aria-expanded=/g) ?? []).length
+      const openHeads = (whoHtml.match(/<button[^>]*aria-expanded="true"/g) ?? []).length
+      check('finance: 该用谁改手风琴（每组一个折叠头）', heads >= 1, 'heads=' + heads)
+      check('finance: 手风琴默认只展开首项（不是全展开）', openHeads === 1, 'open=' + openHeads + '/' + heads)
+      check('finance: 该用谁不再嵌套 inset 卡（手风琴已起分割作用）', !whoHtml.includes('_inset'), '')
+    }
     // P2：拆分会话 —— 上下文分布 + 按阶梯价的上限估算（估算必须标注）。
     // 走与真面板同一条路：seam 归一化后的 `state.tiers`（分组形状），不是 settings 里的
     // 原始值 —— 两者的形状差异正是 S1 归一化契约所在，这里顺带把它也冒烟了。
@@ -314,14 +334,39 @@ export async function run(): Promise<{ checks: Check[] }> {
       <SaveMoreView ledger={state.ledger!} tiers={state.tiers} t={ctx.locale.bind('settings.finance')} /> as ReactElement,
     )
     expectContains('finance: 拆分卡有上下文分布', saveHtml, 'finance-context-card')
-    expectContains('finance: 有阶梯价的模型给出上限估算', saveHtml, '上限可省')
-    // 2026-09-20 口径：没阶梯价属"纯空态" → 直接给「—」，不再写"拆分不改变单价"。
-    expectContains('finance: 没有阶梯价时给「—」而不写空态散文', saveHtml, '—')
+    // 2026-09-21：空数据下省额卡给 EmptyState 占位，不留"一行光标题"（用户截图实测：
+    // 空数据时缓存卡只有 48px 高、正文仅 8 字符 = 标题本身，看起来像渲染坏了）。
+    // 预览夹具是有数据的，所以这里断言的是"有数据时不误报空态"这一侧；
+    // 真空侧的判据在 panel.test.tsx（三张卡各自的空夹具）。
+    check('finance: 有数据时省额卡不误报空占位', !saveHtml.includes('cacheEmpty') && !saveHtml.includes('peakEmpty'), '')
+    // 注意：本冒烟跑的是**真 zh 字典**，标题渲染成中文而不是 key 字面量。
+    check('finance: 三张省额卡的卡壳始终在（标题不随数据消失）',
+      ['错峰执行节省估算', '缓存复用节省估算', '会话拆分节省估算'].every((k) => saveHtml.includes(k)), '')
+    expectContains('finance: 有阶梯价的模型给出上限估算', saveHtml, '压进最小档可省')
+    // 2026-09-21 用户裁决：「上限可省，无法明确表意」→ 列头改成可自解释的说法；
+    // 「128K 太小了」→ 分界线改为**各模型自己的最小档**，不再写死 128k
+    // （预览夹具里 deepseek-v4.1-flash 的最小档是 32k，所以这里断言 32K 出现）。
+    expectContains('finance: 列头改成可表意的说法（压进最小档可省）', saveHtml, '超出最小档的输入')
+    check('finance: 分界线取该模型自己的最小档（不写死 128k）', saveHtml.includes('超过 32K'), '')
+    // 仅渲染命中阶梯价的模型：没命中的（hunyuan-4-preview / gpt-5-codex）不出现 ——
+    // 它们原先各占一行、除了模型名就是一个「—」，纯噪声（用户截图 5 行有 4 行是破折号）。
+    {
+      const noTier = ['hunyuan-4-preview', 'gpt-5-codex'].filter((m) => saveHtml.includes(`finance-context-${m}`))
+      check('finance: 没命中阶梯价的模型不进这张表', noTier.length === 0, noTier.join(','))
+    }
     expectContains('finance: 拆分口径写明是估算上限', saveHtml, '估算口径')
     // S2/S3：币种不匹配的档位不参与估算（宁可不算，不可硬换汇）。
     expectContains('finance: 币种不匹配的阶梯价不参与估算', saveHtml, '币种不匹配')
     // 新形状的错峰折扣在金额旁标注，且确实把金额缩了。
     expectContains('finance: 错峰折扣在金额旁标注', saveHtml, '错峰')
+    // 2026-09-21 用户裁决「没有标货币」：错峰卡的堆叠条图例曾渲染成裸数字
+    // （8.57 / 10.34 / 3.03），而同屏表格金额都是 ¥… —— 一屏两种货币表达。
+    // 这里直接断言图例数值带符号（图例是 legendValue，与表格的 Money 是两条渲染路径）。
+    {
+      const bareLegend = (saveHtml.match(/legendValue[^>]*>\s*[\d,]+(\.\d+)?\s*</g) ?? [])
+      check('finance: 图表图例的金额都带货币符号（不裸数字）', bareLegend.length === 0, bareLegend.join(' | '))
+      check('finance: 错峰卡图例确实渲染了带 ¥ 的金额', saveHtml.includes('¥'), '')
+    }
     // S4 / INV-1：releaseBase 是唯一结构源。预览夹具把 tiers 放在 scope 的 `base` 层
     // （= 真宿主里 cordis.patch.yml 的位置），用户层为空 → 不该报"被取代"。
     check('finance: releaseBase 的阶梯价不被误报为被用户覆盖', !saveHtml.includes('已被发行版官方表取代'), '')

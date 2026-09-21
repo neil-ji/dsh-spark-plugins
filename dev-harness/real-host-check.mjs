@@ -178,6 +178,40 @@ try {
   check('真宿主首屏渲染', ready.body > 0, JSON.stringify(ready))
   check('dock 悬浮球挂载（client bundle 由 profile 加载）', ready.ball === 1, 'ball=' + ready.ball)
 
+  // 0) 先过掉宿主的**首启引导模态**（dsh 0.1.5-rc.x 新增：内测声明 → 添加一个 API Key → …）。
+  //
+  // 为什么必须先做：引导模态会把 `#root` 整个置为 `inert`，于是**任何** `element.focus()`
+  // 都变成空操作 —— 表现为 PCQA-001 三条断言全红（"焦点落不进面板"/"关闭态 inert"/"焦点回球"）
+  // 与 PCQA-004/005/009 的键盘类断言连锁失败。这是宿主行为，不是 dock/插件的缺陷；
+  // harness 的职责是把宿主前置状态归零再断言。
+  //
+  // 步骤数不确定（不同 profile 首次启动停在不同页），所以循环点「继续 / 稍后配置」直到
+  // `#root` 不再是 inert —— 用**状态**收敛而不是猜步数。
+  let onboarding = { steps: [], rootInert: true }
+  for (let i = 0; i < 6; i += 1) {
+    const step = await evalJs(`(() => {
+      const root = document.getElementById('root')
+      const rootInert = root?.hasAttribute('inert') === true
+      if (rootInert === false) return { done: true, rootInert }
+      // 引导模态挂在 #root 之外的独立 layer 上；它的按钮文案是「继续 / 稍后配置 / 跳过」。
+      const digits = [...document.querySelectorAll('button,[role="button"]')]
+        .filter((b) => /^(继续|稍后配置|跳过|知道了|开始使用)$/.test((b.textContent ?? '').trim()))
+      const text = digits.map((b) => (b.textContent ?? '').trim()).join('/')
+      for (const b of digits) b.click()
+      return { done: false, rootInert, clicked: text }
+    })()`)
+    onboarding.steps.push(step)
+    if (step?.done === true) break
+    await sleep(900)
+  }
+  await sleep(500)
+  const rootInertAfter = await evalJs(`document.getElementById('root')?.hasAttribute('inert') === true`)
+  check(
+    '宿主首启引导模态已过掉（#root 不再 inert —— 前置条件，非插件断言）',
+    rootInertAfter === false,
+    JSON.stringify({ steps: onboarding.steps.map((s) => s?.clicked ?? s?.done), rootInertAfter }),
+  )
+
   if (ready.ball === 1) {
     // 1) 事件通道：捕获一条 → 只有 mux stream 还在（产品已无 SSE 端点）才能弹气泡
     //    注意：真宿主的 capture schema 要求 sourceSessionId（预览 fixture 会给默认值，
@@ -748,10 +782,46 @@ try {
       return true
     })()`)
     let restore = await findRestore()
-    if (restore !== null && restore.disabled === true) {
-      // 「更新价格表」→ 社区目录价落库是**异步**的（overlayKeyCount 要等同步写回），
-      // 实测 12s 窗口经常不够；这里给到 30s，并每 10s 切走再切回强制重取状态。
-      await clickBtn('更新价格表')
+    // 「更新价格表」→ 社区目录价落库是**异步**的（overlayKeyCount 要等同步写回），
+    // 实测 12s 窗口经常不够；这里给到 30s，并每 10s 切走再切回强制重取状态。
+    //
+    // 2026-09-21 新增（用户主诉）：点击后**立刻**断言按钮进了 loading 形制（aria-busy +
+    // spinner）。会话多时「同步目录价 → 原子替换覆盖层 → 重算整个账本」要跑秒级到十秒级，
+    // 只置 disabled 会让人以为按钮失灵、反复点。这条断言必须在点击后的**第一个采样点**
+    // 完成（先于下面的 30s 轮询），否则动作已经结束就看不到了。
+    //
+    // 注意：这段**不放进** `if (restore.disabled)` 里 —— 上一轮实测沙箱里已存在价格覆盖层
+    // （restore 直接可用）时整个分支被跳过，loading 断言一次都没跑到（假绿）。
+    const updateClicked = await clickBtn('更新价格表')
+    if (updateClicked === true) {
+      await sleep(150)
+      const priceLoading = await evalJs(`(() => {
+        const pane = document.querySelector('.dock-body')
+        const b = [...pane.querySelectorAll('button')].find((x) => (x.getAttribute('aria-label') ?? '').includes('更新价格表'))
+        if (!b) return null
+        return {
+          ariaBusy: b.getAttribute('aria-busy'),
+          spinner: b.querySelector('span[aria-hidden="true"]') !== null,
+          disabled: b.disabled,
+        }
+      })()`)
+      if (priceLoading !== null && priceLoading.disabled === true) {
+        // 动作还没结束（仍在飞）→ 必须同时给出 aria-busy 与 spinner。
+        check(
+          '价格动作进行中：按钮走 loading 形制（aria-busy + spinner），不是只 disabled',
+          priceLoading.ariaBusy === 'true' && priceLoading.spinner === true,
+          JSON.stringify(priceLoading),
+        )
+      } else {
+        // 沙箱里同步可能快到 150ms 内就结束（缓存/本地目录价）。此时按钮必须**回到**
+        // 空闲态 —— 「动作结束后仍在转」是同一类缺陷的另一半，也必须钉住。
+        check(
+          '价格动作已完成：按钮回到空闲态（无 aria-busy 残留、无 spinner 残留）',
+          priceLoading !== null && priceLoading.ariaBusy === null && priceLoading.spinner === false,
+          JSON.stringify(priceLoading),
+        )
+      }
+      // 等这次同步落定，后续还原分支才看得到覆盖层。
       for (let i = 0; i < 30; i += 1) {
         await sleep(1000)
         restore = await findRestore()
@@ -815,6 +885,67 @@ try {
     }
   } else {
     check('复核遗留 #2 财务模块可定位（前置条件）', false, '未找到财务 tab')
+  }
+
+  // 6j) 供应商总表布局不变量（2026-09-21 用户裁决「table 布局混乱」的回归线）。
+  //
+  // 修前的真因：额度触达 pill（最长 170px）挂在 140px 的供应商列里 → 溢出 30px 被裁，
+  // 并把行高从 50px 撑到 65px。修法 = 表内只留「付费类型」一个 tag（额度触达移进详情
+  // 弹窗、超值与手填降级为悬浮）。这条断言钉的是**结构不变量**，不是某次截图：
+  //  1. 表格内不得出现额度触达的 testid（它只在详情弹窗里）；
+  //  2. 每行的高度必须一致（pill 溢出会把单行撑高，这是最直接的病灶信号）；
+  //  3. 表头不得折行（付费类型列收到 56px 后，四字表头仍须单行）。
+  if (finIndex >= 0) {
+    await evalJs(`(() => { const p = document.querySelector('.dock-panel'); if (!p.classList.contains('open')) document.querySelector('.dock-ball').click() })()`)
+    await sleep(600)
+    await evalJs('document.querySelectorAll(\'.dock-tab\')[' + finIndex + '].click()')
+    await sleep(1500)
+    const tableLayout = await evalJs(`(() => {
+      const table = document.querySelector('[data-testid="finance-provider-table"]')
+      if (table === null) return { present: false }
+      const head = table.firstElementChild
+      const headerWrapped = [...head.children].some((c) => c.getBoundingClientRect().height > 24)
+      const rows = [...table.querySelectorAll('[data-testid^="finance-provider-"]')]
+      const heights = [...new Set(rows.map((r) => Math.round(r.getBoundingClientRect().height)))]
+      // 表内不得有额度触达 testid（它已移进详情弹窗）。
+      const quotaInTable = table.querySelector('[data-testid^="finance-quota-"]') !== null
+      // 行内 tag 只允许「付费类型」那一个 pill。
+      const pillsPerRow = rows.map((r) => r.querySelectorAll('span[class*="pill"]').length)
+      return { present: true, headerWrapped, heights, quotaInTable, maxPills: Math.max(0, ...pillsPerRow), rowCount: rows.length }
+    })()`)
+    if (tableLayout.present === true) {
+      check(
+        '供应商总表：额度触达不在表内（已移进详情弹窗）',
+        tableLayout.quotaInTable === false,
+        JSON.stringify(tableLayout),
+      )
+      check(
+        '供应商总表：每行高度一致（tag 溢出不再撑高单行）',
+        tableLayout.heights.length === 1,
+        JSON.stringify(tableLayout.heights),
+      )
+      check(
+        '供应商总表：表头单行不折行',
+        tableLayout.headerWrapped === false,
+        JSON.stringify(tableLayout),
+      )
+      check(
+        '供应商总表：行内至多一个 tag（付费类型）',
+        tableLayout.maxPills <= 1,
+        JSON.stringify(tableLayout),
+      )
+    } else {
+      // 空账本沙箱（没有已持久化会话）里表格根本不存在，走的是空态。
+      // **显式记一条 skip 而不是静默跳过** —— 静默跳过会让这条回归线在沙箱里
+      // 永远是"绿"的（本轮就踩了：第一版没记，66/66 全绿但断言一次没跑）。
+      // 表内布局的真正机器判据在 `dev-harness/preview/dom-audit.mjs --pane finance`
+      // （有夹具数据，重叠/溢出/折行三项硬判据），这里只做真宿主的补充抽样。
+      check(
+        '供应商总表布局断言（本次跳过：沙箱账本为空，表格走空态）',
+        true,
+        'SKIPPED — 需确定性夹具，见 preview:dom-audit --pane finance',
+      )
+    }
   }
 
   // 6h) PCQA-017 剩余：记忆模块的卡片题走自有类名 .hippomemo-panel-title（(0,2,0) 压过 dock 的

@@ -380,6 +380,16 @@ export const FINANCE_BASE_CONFIG = {
   providerDefaults: { deepseek: { inputMicrosPerMtok: 2_000_000, cacheReadMicrosPerMtok: 200_000, cacheWriteMicrosPerMtok: 2_000_000, outputMicrosPerMtok: 8_000_000 } },
   prices: {},
   /**
+   * 订阅月费（可选）：额度窗口卡的「性价比结论」需要某厂商的月费才算得出来
+   * （`windowPlanVerdict` 用 dominantPlanFee）。窗口明细里的厂商是 deepseek，
+   * 所以给 deepseek 填一条 —— 否则「窗口估价」永远是「—」，那句结论在预览画布上
+   * **一次都看不到**（2026-09-21 加 Stat.description 形制时实测踩到）。
+   * 金额刻意取偏大的月费（¥580），让 5 小时窗口的「窗口估价」高于按量等价 ——
+   * 于是结论走「比订阅估价**多花**」分支（与用户截图同形），便于走查；
+   * 调小这个值就会切到「省」分支，两种形制共用 Stat.description 同一个槽。
+   */
+  plans: [{ provider: 'deepseek', monthlyMicros: 580_000_000, currency: 'CNY', periodLabel: 'month', effectiveFrom: 0 }],
+  /**
    * context 阶梯价（P2，可选）：只给部分模型填 —— 预览画布因此能同时看到
    * 三种形态：
    * 1. 旧形状（裸数组）→ 给上限估算；
