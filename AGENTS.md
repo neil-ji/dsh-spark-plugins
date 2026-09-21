@@ -40,7 +40,8 @@ pnpm monorepo。`packages/*` 里每个包必须落在 `plugin-registry.json` 的
 ### 1.2 本地验证工作流（install 通道无 HMR）
 
 ```
-pnpm sandbox:install   # 重装沙箱插件（改码后必须重跑）
+pnpm sandbox:install   # 重装沙箱插件（改码后必须重跑）；末尾自动跑启动冒烟
+pnpm sandbox:smoke     # 单独跑启动冒烟（临时端口起真实例：不抛异常 / 页面能开 / 模块不崩）
 pnpm sandbox:up        # 启动真宿主（默认 127.0.0.1:3997，前台阻塞，放后台跑）
 node dev-harness/real-host-check.mjs   # 真宿主验收（CDP 无头 Edge）
 pnpm preview           # 组件级预览（mock 通道）
@@ -48,6 +49,10 @@ pnpm preview:verify    # 预览保真断言
 ```
 
 **改了 src 必须重跑 `sandbox:install` 并重启宿主**，否则验证的是旧产物。
+`install-profile` 只**打印**过「启动验证」命令、从不真启动，所以装成功 ≠ 起得来：
+`pnpm sandbox:install` 末尾会真的起一个临时实例，断言「启动不抛异常（日志 + 探针条目/服务面）+
+页面能开（无头浏览器）+ 每个模块点开不崩 + 声明 `dsh.client` 的包都进了 clientGraph」，
+失败即非零退出（`--no-smoke` 只用于临时迭代）。
 `.dev/state.json` 存宿主 url；真宿主脚本默认读它。
 
 ### 1.3 文档与评审
@@ -199,7 +204,7 @@ dock 声明子槽并用平台 `renderSlot(key, { variant, activeId, onSelect }, 
 - [ ] `pnpm -r build` → `pnpm -r typecheck` → `pnpm -r test` 全绿（顺序执行）
 - [ ] `pnpm check:all` 全 PASS；动了发布输入的 commit 都带 bump
 - [ ] `pnpm preview:verify` 全过；UI 改动另跑 `pnpm check:contrast`
-- [ ] 动了 host / 注册面 / stream：`pnpm sandbox:install` + 重启宿主 + real-host-check
-      退出码 0，且断言了注册面（不止看渲染）
+- [ ] 动了 host / 注册面 / stream：`pnpm sandbox:install`（自带启动冒烟必须过）+ 重启宿主
+      + real-host-check 退出码 0，且断言了注册面（不止看渲染）
 - [ ] commit 符合 Conventional Commits；评审项关闭口径写清
 - [ ] 新增反模式防线 → 加进对应闸门脚本，而不是只写文档
