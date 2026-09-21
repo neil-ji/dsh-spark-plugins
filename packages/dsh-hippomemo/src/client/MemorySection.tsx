@@ -20,7 +20,7 @@ import {
 import type { ChartDatum } from 'dsh-ui-kit'
 import {
   IconBranch, IconChevronDown, IconChevronLeft, IconChevronRight, IconChevronUp,
-  IconEdit, IconPlus, IconThink, IconTrash, IconWarning,
+  IconEdit, IconPlus, IconTrash, IconWarning,
 } from './icons.tsx'
 import type { HippomemoApi, MemoryTagCount } from './api.ts'
 import { IMPORTANCE_TIERS, importanceTier, tierValue, type ImportanceTier } from '../importance.ts'
@@ -544,10 +544,7 @@ function MemoryListPanel({ t, api, detailId, onDetail, embedded = false }: {
                         preference 以前被单独挪到行尾用品牌色渲染，于是同一列里
                         它的 tag 位置与配色都和别的记忆不一样。图标是 kind 自身的
                         标识（详情弹窗同样带），不是位置差异。 */}
-                    <Pill className={'hippomemo-tag hippomemo-kind-' + record.kind}>
-                      {record.kind === 'preference' ? <IconThink size={12} className='hippomemo-tag-icon' /> : null}
-                      {t(record.kind)}
-                    </Pill>
+                    <Pill className={'hippomemo-tag hippomemo-kind-' + record.kind}>{t(record.kind)}</Pill>
                     {scoped ? (
                       <Pill className='hippomemo-tag hippomemo-tag-mono' title={(record.modelIds ?? []).join(', ')}>
                         {(record.modelIds ?? [])[0] + ((record.modelIds?.length ?? 0) > 1 ? ' +' + String((record.modelIds?.length ?? 0) - 1) : '')}
@@ -718,10 +715,7 @@ function MemoryDetailModal({ api, t, id, refreshKey, onBack, onEdit, onDeleted }
     >
       <div data-plugin='dsh-hippomemo' className='hippomemo-modal-scope'>
       <div className='hippomemo-detail-pills'>
-        <Pill className={'hippomemo-tag hippomemo-kind-' + record.kind}>
-          {record.kind === 'preference' ? <IconThink size={12} className='hippomemo-tag-icon' /> : null}
-          {t(record.kind)}
-        </Pill>
+        <Pill className={'hippomemo-tag hippomemo-kind-' + record.kind}>{t(record.kind)}</Pill>
         <Pill className='hippomemo-tag hippomemo-tag-neutral'>{t(record.scope)}</Pill>
         {record.scope === 'global' ? (
           <Pill className={'hippomemo-tag hippomemo-tag-neutral hippomemo-proven-' + (record.globalProven ? 'yes' : 'no')}>

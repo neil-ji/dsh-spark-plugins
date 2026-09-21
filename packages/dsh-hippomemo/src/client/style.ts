@@ -123,8 +123,11 @@ export const HIPPOMEMO_CSS = [
   '[data-plugin="dsh-hippomemo"] .hippomemo-imp-low { border: 1px solid var(--spk-border); color: var(--spk-label-3); background: transparent; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-tag-error { background: var(--spk-error-soft, rgba(220,38,38,.10)); color: var(--spk-error, #DC2626); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-tag-mono { color: var(--spk-acc-github-fg, var(--spk-acc-github, #5b21b6)); background: color-mix(in srgb, var(--spk-acc-github, #7C3AED) 10%, transparent); font-family: var(--spk-font-mono, ui-monospace, monospace); }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-kind-preference { background: color-mix(in srgb, var(--spk-brand, #3d5af0) 10%, transparent); color: var(--spk-brand-fg, #2f46c8); }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-kind-insight, [data-plugin="dsh-hippomemo"] .hippomemo-kind-fact, [data-plugin="dsh-hippomemo"] .hippomemo-kind-decision, [data-plugin="dsh-hippomemo"] .hippomemo-kind-constraint { color: var(--spk-label-2); }',
+  /* kind 标签**不定义颜色**（2026-09 用户裁决：要么各自定义一种色、要么都不定义）：
+     设计 token 里没有"记忆类型"这一维度的语义色，硬凑只能借模块 accent 或自造色 ——
+     两者都是设计系统明确反对的（模块 accent 有归属、自造色过不了闸门）。
+     于是统一中性文字：类型由**文字**区分，颜色只留给属性态（scope/重要度/证明态）。 */
+  '[data-plugin="dsh-hippomemo"] :is(.hippomemo-kind-insight, .hippomemo-kind-decision, .hippomemo-kind-fact, .hippomemo-kind-preference, .hippomemo-kind-constraint, .hippomemo-kind-unknown) { color: var(--spk-label-2); background: transparent; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-status-archived, [data-plugin="dsh-hippomemo"] .hippomemo-status-superseded { color: var(--spk-label-3); text-decoration: line-through; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-status-candidate { color: var(--spk-warn); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-proven-yes { color: var(--spk-success); font-weight: 500; }',
