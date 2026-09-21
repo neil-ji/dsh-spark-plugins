@@ -180,11 +180,16 @@ export const HIPPOMEMO_CSS = [
   '[data-plugin="dsh-hippomemo"] .hippomemo-lineage-crystal { color: var(--spk-label-2); background: var(--spk-layer-2); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-lineage-hippo { color: var(--spk-label); border-color: var(--spk-border-2, var(--spk-border)); background: var(--spk-layer-1, var(--spk-layer-2)); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-lineage-arrow { color: var(--spk-label-3); font-size: var(--spk-text-xs); }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-related { display: flex; flex-direction: column; gap: 8px; }',
+  /* 相关记忆：**条目行**而不是两个内联 span 挤在一起（2026-09 用户反馈「乱、过紧」）。
+     以前 title 与 meta 是 ghost Button 里的两个 inline 子项：窄面板下 meta 被压到
+     换行（类型 · 日期断成两行）、也没有行内边距与悬停面。现在每条是一行
+     「标题(可省略) | 类型 · 时间(不换行)」，行内有 padding、行间有间距。 */
+  '[data-plugin="dsh-hippomemo"] .hippomemo-related { display: flex; flex-direction: column; gap: var(--spk-space-2); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-related-label { font-size: var(--spk-text-sm); color: var(--spk-label-2); }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-related-list { display: flex; flex-direction: column; gap: 4px; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-related-title { font-weight: 600; font-size: var(--spk-text-md); line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-related-meta { font-size: var(--spk-text-sm); color: var(--spk-label-2); }',
+  '[data-plugin="dsh-hippomemo"] .hippomemo-related-list { display: flex; flex-direction: column; gap: var(--spk-space-1); }',
+  '[data-plugin="dsh-hippomemo"] .hippomemo-related-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--spk-space-3); width: 100%; padding: var(--spk-space-2) var(--spk-space-3); border-radius: var(--spk-radius-sm); text-align: left; }',
+  '[data-plugin="dsh-hippomemo"] .hippomemo-related-title { min-width: 0; font-weight: 600; font-size: var(--spk-text-md); line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
+  '[data-plugin="dsh-hippomemo"] .hippomemo-related-meta { white-space: nowrap; font-size: var(--spk-text-xs); line-height: 16px; color: var(--spk-label-3); font-variant-numeric: tabular-nums; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-edit-modal-body { display: flex; flex-direction: column; gap: 12px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-edit-modal-footer { display: flex; justify-content: flex-end; gap: 8px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-form-label { display: flex; flex-direction: column; gap: 4px; font-size: var(--spk-text-sm); line-height: 18px; color: var(--spk-label-2); }',
