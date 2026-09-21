@@ -144,13 +144,18 @@ export const HIPPOMEMO_CSS = [
   '[data-plugin="dsh-hippomemo"] .hippomemo-detail-modal-body { display: flex; flex-direction: column; gap: 12px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-detail-modal-footer { display: flex; justify-content: flex-end; gap: 8px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-detail-pills { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-detail-content { margin: 0; padding: 8px 12px; max-height: 360px; overflow-y: auto; white-space: pre-wrap; font-size: var(--spk-text-md); line-height: 20px; }',
+  /* 内滚退役（2026-09 用户反馈「滚动条与 modal 滚动条紧贴」）：ui-kit Modal 已有
+     max-height + body 内滚，这里再滚就是两条滚动条叠在同一个边缘。正文块只保留
+     面底与阅读排版，高度放开，滚动单源归 modal body。 */
+  '[data-plugin="dsh-hippomemo"] .hippomemo-detail-content { margin: 0; padding: 12px 14px; white-space: pre-wrap; font-size: var(--spk-text-md); line-height: 1.7; overflow-wrap: anywhere; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-tag-list { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-tag-label { font-size: var(--spk-text-sm); color: var(--spk-label-2); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-form-hint { font-size: var(--spk-text-xs); color: var(--spk-label-3); line-height: 16px; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px 16px; margin: 0; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-fact { display: flex; flex-direction: column; gap: 2px; min-width: 0; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-fact dt { font-size: var(--spk-text-sm); color: var(--spk-label-2); }',
+  /* 字段行：行距 14px（相邻行不再贴着），label 走 xs/label-3 小标签层级，
+     值是主体 —— dt/dd 的视觉权重差让两列栅格可扫（2026-09 用户反馈）。 */
+  '[data-plugin="dsh-hippomemo"] .hippomemo-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px 20px; margin: 0; }',
+  '[data-plugin="dsh-hippomemo"] .hippomemo-fact { display: flex; flex-direction: column; gap: 4px; min-width: 0; }',
+  '[data-plugin="dsh-hippomemo"] .hippomemo-fact dt { font-size: var(--spk-text-xs); line-height: 16px; color: var(--spk-label-3); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-fact dd { margin: 0; font-size: var(--spk-text-md); line-height: 20px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-fact-spark { color: var(--spk-brand-fg); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-source-spark-pill { display: inline-flex; align-items: center; gap: 4px; color: var(--spk-brand-fg); font-size: var(--spk-text-sm); }',
@@ -217,7 +222,7 @@ export const HIPPOMEMO_CSS = [
   // ui-kit Modal portal 到 document.body，dialog 无 data-plugin 祖先；hippomemo-*
   // 类名全局唯一，无前缀规则安全。dialog 限高 + 内部内容（hippomemo-modal-scope）
   // 独立滚动：header/footer 恒可见，长内容（记忆正文/编辑表单）在 scope 内滚动，
-  // 不再撑破视口。detail 正文区另有 360px 内滚（.hippomemo-detail-content）。
+  // 不再撑破视口。detail 正文不再自带内滚 —— 滚动单源归 modal body。
   // 2026-09 修复「来源溯源溢出 modal 下边缘」：旧方案 body 预算锚定 100vh-230px，
   // 而 dialog 封顶 720px 且不裁剪，高视口下 header+body+footer 总高超过 720 → 底部溢出。
   // 改为 dialog 自身 flex-column：header/footer 恒可见且不收缩，body 独占剩余空间内滚，
