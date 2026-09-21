@@ -90,6 +90,7 @@ export const zh = {
   archivedCount: '归档',
   usage: '用量',
   usageRecalled: '被召回',
+  usageTimes: '{n} 次',
   usageCited: '被引用',
   usageNeverRecalled: '从未召回',
   usageStale: '30天未召回',
@@ -246,8 +247,6 @@ export const zh = {
   modalLineageCrystallize: 'kind={kind} · importance {importance}',
   modalLineageMemory: 'memory · {id}',
   modalLineageDirect: '直接写入',
-  modalLineageSparkNote: '这条记忆由 spark 流结晶而来 · 在 dsh-spark 火花流面板里查看原文。',
-  modalLineageDirectNote: '这条记忆由工具/手动直接写入，无 spark 来源。',
   modalContent: '内容',
 } as const
 
@@ -340,6 +339,7 @@ export const en: Record<keyof typeof zh, string> = {
   archivedCount: 'Archived',
   usage: 'Usage',
   usageRecalled: 'recalled',
+  usageTimes: '{n}×',
   usageCited: 'cited',
   usageNeverRecalled: 'never recalled',
   usageStale: 'stale (>30d)',
@@ -491,8 +491,6 @@ export const en: Record<keyof typeof zh, string> = {
   modalLineageCrystallize: 'kind={kind} · importance {importance}',
   modalLineageMemory: 'memory · {id}',
   modalLineageDirect: 'direct write',
-  modalLineageSparkNote: 'This memory was crystallised from a spark stream. View the source in dsh-spark.',
-  modalLineageDirectNote: 'This memory was written directly (tool / manual). No spark lineage.',
   modalContent: 'Content',
 }
 

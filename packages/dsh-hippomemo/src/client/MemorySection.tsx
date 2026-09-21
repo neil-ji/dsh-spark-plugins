@@ -761,8 +761,16 @@ function MemoryDetailModal({ api, t, id, refreshKey, onBack, onEdit, onDeleted }
         ) : null}
         <div className='hippomemo-fact'><dt>{t('createdAt')}</dt><dd>{formatDate(record.createdAt)}</dd></div>
         <div className='hippomemo-fact'><dt>{t('updatedAt')}</dt><dd>{formatDate(record.updatedAt)}</dd></div>
-        <div className='hippomemo-fact'><dt>{t('usageRecalled')}</dt><dd>{record.recallCount} · {record.lastRecalledAt === null ? '—' : formatDate(record.lastRecalledAt)}</dd></div>
-        <div className='hippomemo-fact'><dt>{t('usageCited')}</dt><dd>{record.citationCount} · {record.lastCitedAt === null ? '—' : formatDate(record.lastCitedAt)}</dd></div>
+        {/* 计数带单位、没有日期就不写分隔符：原先恒出「0 · —」，用户读到的是
+            两个符号而不是一句人话（2026-09 用户反馈）。 */}
+        <div className='hippomemo-fact'>
+          <dt>{t('usageRecalled')}</dt>
+          <dd>{t('usageTimes', { n: String(record.recallCount) })}{record.lastRecalledAt === null ? '' : ' · ' + formatDate(record.lastRecalledAt)}</dd>
+        </div>
+        <div className='hippomemo-fact'>
+          <dt>{t('usageCited')}</dt>
+          <dd>{t('usageTimes', { n: String(record.citationCount) })}{record.lastCitedAt === null ? '' : ' · ' + formatDate(record.lastCitedAt)}</dd>
+        </div>
       </dl>
       <div className='hippomemo-lineage'>
         <h4 className='hippomemo-lineage-title'><IconBranch size={14} /> {t('modalLineage')}</h4>
@@ -789,7 +797,6 @@ function MemoryDetailModal({ api, t, id, refreshKey, onBack, onEdit, onDeleted }
             </Pill>
           </div>
         )}
-        <p className='hippomemo-lineage-note'>{hasSpark ? t('modalLineageSparkNote') : t('modalLineageDirectNote')}</p>
       </div>
       {related.length > 0 ? (
         <div className='hippomemo-related'>

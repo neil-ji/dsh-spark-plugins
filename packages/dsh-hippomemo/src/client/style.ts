@@ -155,7 +155,7 @@ export const HIPPOMEMO_CSS = [
   /* 弹窗内容列：分区（pills / 正文 / 标签 / 字段 / 谱系 / 关联）之间统一间距。
      此前 scope 是无间距的裸 div，只靠个别块自带 margin，正文与相邻块会紧贴
      （2026-09 用户反馈）。 */
-  '[data-plugin="dsh-hippomemo"] .hippomemo-modal-scope { display: flex; flex-direction: column; gap: var(--spk-space-3); }',
+  '[data-plugin="dsh-hippomemo"].hippomemo-modal-scope { display: flex; flex-direction: column; gap: var(--spk-space-3); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-tag-label { font-size: var(--spk-text-sm); color: var(--spk-label-2); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-form-hint { font-size: var(--spk-text-xs); color: var(--spk-label-3); line-height: 16px; }',
   /* 字段行：行距 14px（相邻行不再贴着），label 走 xs/label-3 小标签层级，
@@ -180,7 +180,6 @@ export const HIPPOMEMO_CSS = [
   '[data-plugin="dsh-hippomemo"] .hippomemo-lineage-crystal { color: var(--spk-label-2); background: var(--spk-layer-2); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-lineage-hippo { color: var(--spk-label); border-color: var(--spk-border-2, var(--spk-border)); background: var(--spk-layer-1, var(--spk-layer-2)); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-lineage-arrow { color: var(--spk-label-3); font-size: var(--spk-text-xs); }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-lineage-note { font-size: var(--spk-text-xs); color: var(--spk-label-3); margin: 0; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-related { display: flex; flex-direction: column; gap: 8px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-related-label { font-size: var(--spk-text-sm); color: var(--spk-label-2); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-related-list { display: flex; flex-direction: column; gap: 4px; }',
