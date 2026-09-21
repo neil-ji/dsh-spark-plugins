@@ -212,26 +212,52 @@ describe('FinancePanelController', () => {
     expect(remote.syncCommunityPrices).toHaveBeenCalledWith({})
   })
 
-  it('价格动作结束后 priceBusy 必须复位（成功路径不得永久禁用两枚价格按钮）', async () => {
+  it('价格动作结束后 priceAction 必须复位（成功路径不得永久禁用两枚价格按钮）', async () => {
     // 回归：runPriceAction 成功时会 await this.load()，而 load() 自己 ++generation；
-    // 若 finally 用动作开始时的 generation 做守卫，priceBusy 就永远停在 true，
+    // 若 finally 用动作开始时的 generation 做守卫，priceAction 就永远停在 'update'，
     // 「更新价格表」「还原到发版快照」两枚按钮从此 disabled 且不给原因（UI-UX-SPEC §3.1）。
     const controller = new FinancePanelController(fakeRemote() as never)
     await controller.load()
-    expect(controller.store.getSnapshot().priceBusy).toBe(false)
+    expect(controller.store.getSnapshot().priceAction).toBeUndefined()
     await controller.updatePrices()
-    expect(controller.store.getSnapshot().priceBusy).toBe(false)
+    expect(controller.store.getSnapshot().priceAction).toBeUndefined()
     await controller.restorePrices()
-    expect(controller.store.getSnapshot().priceBusy).toBe(false)
+    expect(controller.store.getSnapshot().priceAction).toBeUndefined()
   })
 
-  it('价格动作失败时同样复位 priceBusy，并把失败写进 priceError', async () => {
+  it('价格动作期间 priceAction 指向在飞的那个动作（按钮据此点亮自己的 spinner）', async () => {
+    // 中途快照：mock 的 promise 未落定前读一次，确认「是哪个动作」而不只是"有人在忙"。
+    let release: (() => void) | undefined
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    const remote = fakeRemote({
+      syncCommunityPrices: vi.fn().mockImplementation(async () => { await gate; return { ok: true, value: STUB_SYNC_RESULT } }),
+    })
+    const controller = new FinancePanelController(remote as never)
+    await controller.load()
+    const inflight = controller.updatePrices()
+    await Promise.resolve()
+    expect(controller.store.getSnapshot().priceAction).toBe('update')
+    release?.()
+    await inflight
+    expect(controller.store.getSnapshot().priceAction).toBeUndefined()
+  })
+
+  it('load() 期间 refreshing 置位并在结束时复位（刷新钮的 spinner 与 disabled 同源）', async () => {
+    const controller = new FinancePanelController(fakeRemote() as never)
+    const inflight = controller.load()
+    await Promise.resolve()
+    expect(controller.store.getSnapshot().refreshing).toBe(true)
+    await inflight
+    expect(controller.store.getSnapshot().refreshing).toBe(false)
+  })
+
+  it('价格动作失败时同样复位 priceAction，并把失败写进 priceError', async () => {
     const remote = fakeRemote({ syncCommunityPrices: vi.fn().mockResolvedValue({ ok: false, error: { message: 'sync down' } }) })
     const controller = new FinancePanelController(remote as never)
     await controller.load()
     await controller.updatePrices()
     const state = controller.store.getSnapshot()
-    expect(state.priceBusy).toBe(false)
+    expect(state.priceAction).toBeUndefined()
     expect(state.priceError).toBe('sync down')
   })
 

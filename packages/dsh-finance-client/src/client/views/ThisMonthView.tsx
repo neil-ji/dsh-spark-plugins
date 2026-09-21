@@ -7,7 +7,7 @@
  */
 
 import { useState, type ReactNode } from 'react'
-import { Button, Card, CellText, Checkbox, EmptyState, Input, Modal, Money, Pill, RowActions, SegmentedControl, Stat, StatGrid, TrendChart, formatMicros } from 'dsh-ui-kit'
+import { Button, Card, CellText, Checkbox, EmptyState, Input, Modal, Money, Pill, RowActions, SegmentedControl, Stat, StatGrid, TrendChart, formatMoneyMicros } from 'dsh-ui-kit'
 import type {
   FinanceLedger,
   FinanceListProvidersEntry,
@@ -34,6 +34,7 @@ import {
   resetCountdown,
 } from '../derive.ts'
 import { FINANCE_PLAN_PERIODS, majorToMicros, microsToMajor } from '../plans.ts'
+import type { FinancePriceAction } from '../controller.ts'
 import { QuotaWindowCard } from './QuotaWindowCard.tsx'
 import type { FinanceTranslate } from '../locales.ts'
 import css from '../panel.module.css'
@@ -60,8 +61,8 @@ export interface ThisMonthViewProps {
   lastSyncAppliedAt: number | undefined
   /** 价格表状态：基础快照完整性/来源 + 覆盖层 + 被形状守卫拒绝的键。 */
   priceTable: FinancePriceTableStatus | undefined
-  /** 价格表操作进行中（更新 / 还原）。 */
-  priceBusy: boolean | undefined
+  /** 价格表操作进行中的动作（更新 / 还原 / undefined = 空闲）。 */
+  priceAction: FinancePriceAction | undefined
   /** 价格表操作失败信息。 */
   priceError: string | null | undefined
   onUpdatePrices: () => Promise<void>
@@ -86,7 +87,7 @@ export function ThisMonthView({
   onRefresh,
   lastSyncAppliedAt,
   priceTable,
-  priceBusy,
+  priceAction,
   priceError,
   onUpdatePrices,
   onRestorePrices,
@@ -100,7 +101,8 @@ export function ThisMonthView({
   const [confirmRestore, setConfirmRestore] = useState(false)
   /** 没有覆盖层时「还原」没有可回退的东西 —— 禁用必须给原因（UI-UX-SPEC §3.1 Don't）。 */
   const restoreBlocked = priceTable !== undefined && priceTable.overlayKeyCount + priceTable.userKeyCount === 0
-  const restoreDisabled = Boolean(priceBusy) || restoreBlocked
+  const priceBusy = priceAction !== undefined
+  const restoreDisabled = priceBusy || restoreBlocked
   const trendPoints = ledger.byDay.map((row) => ({ key: row.day, label: row.day.slice(5), value: row.costMicros }))
   const topModels = modelComparisonRows(ledger)
     .filter((row) => row.unitCostMicros !== null)
@@ -142,8 +144,6 @@ export function ThisMonthView({
   ])].sort((a, b) => a.localeCompare(b))
   const spendByProvider = new Map(ledger.byProvider.map((row) => [providerKey(row.provider), row.costMicros]))
   const providerRowOf = new Map(allProviders.map((row) => [providerKey(row.provider), row]))
-  /** SPEC §10：本月的额度触达（按 provider 归一键）。空账本 / 旧宿主 -> 空表。 */
-  const quotaByProvider = new Map((ledger.quota?.rows ?? []).map((row) => [providerKey(row.provider), row]))
   const planEntryOf = (provider: string): FinancePlanEntry | undefined =>
     planEntries.find((plan) => plan.provider === provider)
   /** Action 列「…」菜单（UI-UX-SPEC §3.5）：修改 / 详情收敛进下拉。 */
@@ -177,25 +177,54 @@ export function ThisMonthView({
         </span>
         {/* 刷新是**次操作**（UI-UX-SPEC §4.2 仪表盘模板）；价格表两枚操作与之同排同尺寸
             （sm，同属一个 group ⇒ 不混高）。「更新价格表」是真写操作保留 primary，
-            「还原到发版快照」按 §4.2 危险操作取 danger。 */}
+            「还原到发版快照」按 §4.2 危险操作取 danger。
+
+            三枚按钮都是**异步动作**，一律走 ui-kit Button 的 loading 形制（spinner +
+            aria-busy + 锁点击）。会话多时「更新价格表」要「同步目录价 → 原子替换覆盖层 →
+            重算整个账本」，实测秒级到十秒级 —— 只置 disabled 会让按钮看起来失灵、
+            用户重复点（2026-09-21 用户实测反馈）。aria-busy 断言见 panel.test.tsx 与
+            real-host-check 的 6i。 */}
         <span className={css.planActions} role="group" aria-label={t('priceActionsLabel')}>
-          <Button variant="primary" size="sm" disabled={priceBusy} onClick={() => { void onUpdatePrices() }} aria-label={t('updatePrices')}>
+          <Button
+            variant="primary"
+            size="sm"
+            loading={priceAction === 'update'}
+            disabled={priceBusy}
+            onClick={() => { void onUpdatePrices() }}
+            aria-label={t('updatePrices')}
+          >
             {t('updatePrices')}
           </Button>
           <Button
             variant="danger"
             size="sm"
+            loading={priceAction === 'restore'}
             disabled={restoreDisabled}
+            aria-describedby={restoreBlocked ? 'finance-restore-hint' : undefined}
             onClick={() => { setConfirmRestore(true) }}
             aria-label={t('restorePrices')}
           >
             {t('restorePrices')}
           </Button>
-          <Button variant="secondary" size="sm" onClick={onRefresh} disabled={refreshing} aria-label={t('refresh')}>
-            {refreshing ? t('refreshing') : t('refresh')}
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={refreshing}
+            disabled={refreshing}
+            onClick={onRefresh}
+            aria-label={t('refresh')}
+          >
+            {t('refresh')}
           </Button>
         </span>
       </div>
+      {/* 禁用必须给原因：没有覆盖层时「还原」没有可回退的东西（UI-UX-SPEC §3.1）。
+          一行就够，不铺段落文案。
+          位置在 **toolbar 之外**：toolbar 是 `space-between` 的，把提示塞成第三个子项
+          会与按钮同排、挤在右侧（真宿主实测 x=494 与按钮同行）。 */}
+      {restoreBlocked
+        ? <p id="finance-restore-hint" className={css.hint} role="status">{t('restoreDisabledHint')}</p>
+        : null}
 
       <StatGrid className={css.stats}>
         <div data-testid="finance-stat-cost">
@@ -235,7 +264,7 @@ export function ThisMonthView({
                   <TrendChart
                     points={trendPoints}
                     ariaLabel={t('trendTitle')}
-                    formatValue={formatMicros}
+                    formatValue={(v) => formatMoneyMicros(v, currency)}
                     gradientId="finance-trend"
                   />
                 )}
@@ -260,9 +289,6 @@ export function ThisMonthView({
                     const isPlan = mode === 'plan'
                     const insight = insightByProvider.get(provider)
                     const row = providerRowOf.get(providerKey(provider))
-                    /** SPEC §10：该 provider 本月的额度触达（无则 undefined，不渲染角标）。 */
-                    const quotaRow = quotaByProvider.get(providerKey(provider))
-                    const quotaEpisodes = quotaRow === undefined ? [] : quotaEpisodesOf(ledger, provider)
                     const spend = spendByProvider.get(providerKey(provider)) ?? 0
                     // 「余额 / 月费」列：订阅行取月费（free 强制 0，SPEC §5.4），按量行取余额。
                     const feeOrBalance = isPlan || isFree
@@ -270,35 +296,25 @@ export function ThisMonthView({
                         ? <Money micros={0} currency={currency} exact />
                         : insight === undefined ? '—' : <Money micros={insight.monthlyMicros} currency={insight.currency} exact />)
                       : (row !== undefined ? balanceValue(ledger, row.balance, t) : '')
-                    // 「按量等价」列：订阅行给目录价等价（省了才亮「超值」），按量行即本月支出。
+                    // 「按量等价」列：订阅行给目录价等价，按量行即本月支出。
+                    // 省额只在悬浮里给（`planSaved`），不再挂「超值」tag —— 表格列窄，
+                    // tag 会把金额挤到换行（2026-09-21 用户裁决：非付费类型列的 tag 一律移除）。
                     const equiv = isPlan && insight !== undefined
                       ? (
-                        <span title={insight.savingsMicros > 0 ? t('planSaved', { amount: formatMicros(insight.savingsMicros) }) : undefined}>
+                        <span title={insight.savingsMicros > 0 ? t('planSaved', { amount: formatMoneyMicros(insight.savingsMicros, currency) }) : undefined}>
                           <Money micros={insight.equivalentMicros} currency={currency} exact />
-                          {insight.savingsMicros > 0 ? <Pill tone="success" className={css.cellNum}>{t('superValue')}</Pill> : null}
                         </span>
                       )
                       : <Money micros={spend} currency={currency} exact />
                     return (
                       <div key={provider}>
                         <div className={cx(css.tableRow, css.colsProviders)} data-testid={`finance-provider-${provider}`}>
+                          {/* 供应商列**只放名字**：额度触达 pill（最长 170px）塞进本列会
+                              溢出被裁 + 把行高从 50px 撑到 65px，整张表看起来错位
+                              （2026-09-21 真宿主实测）。额度信号改由详情弹窗承载
+                              （SPEC §10.5 修订）。 */}
                           <span className={cx(css.cell, css.balanceName, css.clamp2)} title={provider}>
                             {provider}
-                            {/* SPEC §10：额度触达角标 —— **仅命中时出现**。
-                                无命中什么都不显示（不显示"正常"、不摆绿点）：这是
-                                克制的口径，避免把"本月没被挡"变成一条需要阅读的信息。 */}
-                            {quotaRow !== undefined
-                              ? (
-                                <Pill
-                                  tone="warn"
-                                  className={css.quotaPill}
-                                  aria-label={quotaPillLabel(quotaRow, quotaEpisodes, t)}
-                                  data-testid={`finance-quota-${provider}`}
-                                >
-                                  {quotaPillLabel(quotaRow, quotaEpisodes, t)}
-                                </Pill>
-                              )
-                              : null}
                           </span>
                           <span className={css.cell}>
                             <Pill tone={mode === 'plan' ? 'brand' : mode === 'free' ? 'success' : 'neutral'} title={billingLabel(mode, t)}>
@@ -377,6 +393,7 @@ export function ThisMonthView({
               <Button variant="ghost" onClick={() => { setConfirmRestore(false) }}>{t('cancel')}</Button>
               <Button
                 variant="danger"
+                loading={priceAction === 'restore'}
                 disabled={priceBusy}
                 onClick={() => { setConfirmRestore(false); void onRestorePrices() }}
               >
@@ -619,58 +636,85 @@ function ProviderDetailModal({ provider, mode, row, plan, insight, spend, curren
   onClose: () => void
 }): ReactNode {
   const balance = row?.balance
-  const details: Array<{ label: string; value: ReactNode }> = [
-    { label: t('colBillingType'), value: billingLabel(mode, t) },
-    { label: t('detailSources'), value: (row?.sources ?? []).length > 0 ? (row?.sources ?? []).join(', ') : t('detailNone') },
+  /**
+   * 详情字段**分组**呈现（2026-09-21 用户反馈「可读性做的不好，不易读」）。
+   *
+   * 原来 17 行全部同级平铺：既看不出"哪些是宿主给的、哪些是我自己配的"，
+   * 也找不到余额/月费在哪；屏幕阅读器同样读作 17 条并列。
+   * 按**信息来源与用途**分三组（三组各自内部才有可比性）：
+   *  1. 计费方式：宿主判定 + 我打的标记（谁决定这行怎么算钱）
+   *  2. 余额与支出：金额事实（INV-9 来源三态都落在这里）
+   *  3. 订阅与节省：套餐配置 + 与按量价的对比结论
+   */
+  const groups: Array<{ title: string; rows: Array<{ label: string; value: ReactNode }> }> = [
     {
-      label: t('detailDefaultMode'),
-      value: row?.hostMeta === undefined ? t('detailNone') : billingLabel(row.hostMeta.defaultBillingMode, t),
-    },
-    { label: t('detailDefaultCurrency'), value: row?.hostMeta?.defaultCurrency ?? t('detailNone') },
-    {
-      label: t('detailSupportsFetch'),
-      value: row?.hostMeta === undefined ? t('detailNone') : row.hostMeta.supportsBalanceFetch ? t('autoFetchLabel') : t('balanceUnsupported'),
-    },
-    {
-      label: t('detailLock'),
-      value: row?.hostMeta?.lockBillingModeAndCurrency === true ? t('detailYes') : t('detailNo'),
-    },
-    {
-      label: t('balanceLabel'),
-      value: balance === undefined ? t('detailNone') : balanceValue({ currency } as FinanceLedger, balance, t),
-    },
-    { label: t('meteredSpend'), value: <Money micros={spend} currency={currency} exact /> },
-    {
-      label: t('planMonthly'),
-      value: plan === undefined ? t('detailNone') : <Money micros={plan.monthlyMicros} currency={plan.currency} exact />,
-    },
-    { label: t('planPeriod'), value: plan?.periodLabel === undefined ? t('detailNone') : periodLabel(plan.periodLabel, t) },
-    {
-      label: t('detailQuota'),
-      value: plan?.quotaTokens === undefined ? t('detailNone') : String(plan.quotaTokens),
+      title: t('detailGroupBilling'),
+      rows: [
+        { label: t('colBillingType'), value: billingLabel(mode, t) },
+        {
+          label: t('detailDefaultMode'),
+          value: row?.hostMeta === undefined ? t('detailNone') : billingLabel(row.hostMeta.defaultBillingMode, t),
+        },
+        { label: t('detailDefaultCurrency'), value: row?.hostMeta?.defaultCurrency ?? t('detailNone') },
+        {
+          label: t('detailLock'),
+          value: row?.hostMeta?.lockBillingModeAndCurrency === true ? t('detailYes') : t('detailNo'),
+        },
+        { label: t('detailSources'), value: (row?.sources ?? []).length > 0 ? (row?.sources ?? []).join(', ') : t('detailNone') },
+      ],
     },
     {
-      label: t('manualBalanceLabel'),
-      value: row?.userEntry?.manualBalanceMicros === undefined
-        ? t('detailNone')
-        : <Money micros={row.userEntry.manualBalanceMicros} currency={row.userEntry.currency} exact />,
+      title: t('detailGroupBalance'),
+      rows: [
+        {
+          label: t('balanceLabel'),
+          value: balance === undefined ? t('detailNone') : balanceValue({ currency } as FinanceLedger, balance, t),
+        },
+        { label: t('meteredSpend'), value: <Money micros={spend} currency={currency} exact /> },
+        {
+          label: t('detailSupportsFetch'),
+          value: row?.hostMeta === undefined ? t('detailNone') : row.hostMeta.supportsBalanceFetch ? t('autoFetchLabel') : t('balanceUnsupported'),
+        },
+        {
+          label: t('manualBalanceLabel'),
+          value: row?.userEntry?.manualBalanceMicros === undefined
+            ? t('detailNone')
+            : <Money micros={row.userEntry.manualBalanceMicros} currency={row.userEntry.currency} exact />,
+        },
+        {
+          label: t('autoFetchLabel'),
+          value: row?.userEntry === undefined ? t('detailNone') : row.userEntry.autoFetchBalance ? t('detailYes') : t('detailNo'),
+        },
+      ],
     },
     {
-      label: t('autoFetchLabel'),
-      value: row?.userEntry === undefined ? t('detailNone') : row.userEntry.autoFetchBalance ? t('detailYes') : t('detailNo'),
-    },
-    { label: t('planCurrency'), value: row?.userEntry?.currency ?? t('detailNone') },
-    {
-      label: t('planSavingsCol'),
-      value: insight === undefined ? t('planNoUsage') : <Money micros={insight.savingsMicros} currency={currency} exact />,
-    },
-    {
-      label: t('planDiscount'),
-      value: insight?.discountRate == null ? t('planNoUsage') : `${Math.round(insight.discountRate * 100)}%`,
-    },
-    {
-      label: t('planBreakEven'),
-      value: insight?.breakEvenRatio == null ? t('planNoUsage') : `${Math.round(insight.breakEvenRatio * 100)}%`,
+      title: t('detailGroupPlan'),
+      rows: [
+        {
+          label: t('planMonthly'),
+          value: plan === undefined ? t('detailNone') : <Money micros={plan.monthlyMicros} currency={plan.currency} exact />,
+        },
+        { label: t('planPeriod'), value: plan?.periodLabel === undefined ? t('detailNone') : periodLabel(plan.periodLabel, t) },
+        { label: t('planCurrency'), value: row?.userEntry?.currency ?? t('detailNone') },
+        {
+          label: t('detailQuota'),
+          value: plan?.quotaTokens === undefined ? t('detailNone') : String(plan.quotaTokens),
+        },
+        {
+          label: t('planSavingsCol'),
+          value: insight === undefined ? t('planNoUsage') : <Money micros={insight.savingsMicros} currency={currency} exact />,
+        },
+        {
+          // label 走**无占位符**的 key：原来用 `planDiscount`（值是「折扣 {pct}」）而 t()
+          // 没传 pct → 占位符原样上屏（图片6 实测「折扣 {pct}」）。标签与数值分开即可。
+          label: t('planDiscountCol'),
+          value: insight?.discountRate == null ? t('planNoUsage') : `${Math.round(insight.discountRate * 100)}%`,
+        },
+        {
+          label: t('planBreakEvenCol'),
+          value: insight?.breakEvenRatio == null ? t('planNoUsage') : `${Math.round(insight.breakEvenRatio * 100)}%`,
+        },
+      ],
     },
   ]
   return (
@@ -681,11 +725,16 @@ function ProviderDetailModal({ provider, mode, row, plan, insight, spend, curren
       footer={<Button variant="ghost" onClick={onClose}>{t('cancel')}</Button>}
     >
       <div className={css.detailList} data-testid={`finance-provider-detail-${provider}`}>
-        {details.map((item) => (
-          <div key={item.label} className={css.detailRow}>
-            <span className={css.detailLabel}>{item.label}</span>
-            <span className={css.detailValue}>{item.value}</span>
-          </div>
+        {groups.map((group) => (
+          <section key={group.title} className={css.detailGroup} aria-label={group.title}>
+            <h4 className={css.detailGroupTitle}>{group.title}</h4>
+            {group.rows.map((item) => (
+              <div key={item.label} className={css.detailRow}>
+                <span className={css.detailLabel}>{item.label}</span>
+                <span className={css.detailValue}>{item.value}</span>
+              </div>
+            ))}
+          </section>
         ))}
       </div>
 
@@ -713,22 +762,11 @@ function quotaWindowLabel(window: FinanceQuotaWindow, t: FinanceTranslate): stri
 }
 
 /**
- * 额度触达角标的文案。
+ * 每 provider 的触达明细（详情弹窗用），按时间倒序。
  *
- * 三种形态对应三种已知程度（与 SPEC §10 的"不确定不猜"一致）：
- *  - 能算出倒计时 → 给出"还有多久能再用"；
- *  - 有原文但没时区 → 显示原文（不硬补时区）；
- *  - 都没有 → 只报次数，不假装知道重置时间。
+ * 2026-09-21 起额度信号的**唯一呈现处**就是详情弹窗（`QuotaHitList`）：
+ * 表内 pill 已移除（SPEC §10.5 修订），所以这个 helper 不再被表格路径调用。
  */
-function quotaPillLabel(row: FinanceQuotaProviderRow, episodes: readonly FinanceQuotaEpisodeRow[], t: FinanceTranslate): string {
-  const countdown = resetCountdown(row.nextResetAtMs, Date.now())
-  if (countdown !== null) return t('quotaPillReset', { hits: row.hits, countdown })
-  const raw = episodes.find((episode) => episode.resetRaw !== null)?.resetRaw
-  if (raw !== undefined && raw !== null) return t('quotaPillResetRaw', { hits: row.hits, raw })
-  return t('quotaPill', { hits: row.hits })
-}
-
-/** 每 provider 的触达明细（详情弹窗用），按时间倒序。 */
 function quotaEpisodesOf(ledger: FinanceLedger, provider: string): readonly FinanceQuotaEpisodeRow[] {
   const key = providerKey(provider)
   return (ledger.quota?.episodes ?? []).filter((episode) => providerKey(episode.provider) === key)
@@ -737,17 +775,35 @@ function quotaEpisodesOf(ledger: FinanceLedger, provider: string): readonly Fina
 function balanceValue(ledger: FinanceLedger, balance: FinanceProviderBalance, t: FinanceTranslate): ReactNode {
   if (balance.status === 'ok' && balance.totalMicros !== undefined) {
     const currency = balance.currency === undefined || balance.currency === '' ? ledger.currency : balance.currency
-    // INV-9：手填值与自动获取值可区分（悬浮提示 + 「手填」角标）。
+    // INV-9：手填值与自动获取值可区分 —— 走**悬浮提示**（权威正文在详情弹窗的
+    // 「手动余额」行）。2026-09-21 起不再挂「手填」角标：表格列窄，tag 挤金额。
     return (
       <span title={balance.source === 'manual' ? t('manualBalanceLabel') : undefined}>
         <Money micros={balance.totalMicros} currency={currency} />
-        {balance.source === 'manual' ? <Pill className={css.cellNum}>{t('balanceManual')}</Pill> : null}
       </span>
     )
   }
-  if (balance.status === 'missing-credential') return t('balanceMissingKey')
-  if (balance.status === 'unsupported') return t('balanceUnsupported')
-  return t('balanceError')
+  // 非金额的余额状态是**文字**（最长「该厂商没有余额查询接口」≈132px），而这一列
+// 在窄面板下只有 ~104px → 会被 `.cell` 的 ellipsis 截断。挂 title 保住全文
+// （UI-UX-SPEC §4.5：关键结论不允许被省略号吃掉）。
+  if (balance.status === 'missing-credential') return <span title={t('balanceMissingKey')}>{t('balanceMissingKey')}</span>
+  if (balance.status === 'unsupported') return <span title={t('balanceUnsupported')}>{t('balanceUnsupported')}</span>
+  return <span title={t('balanceError')}>{t('balanceError')}</span>
+}
+
+/**
+ * 该 provider 的额度触达摘要（详情弹窗用）。
+ *
+ * 2026-09-21：表内 pill 移除后，这条摘要**接管**了 pill 原先承载的三态文案
+ * （能算倒计时 → 倒计时；只有原文 → 原文；都没有 → 只报次数），口径与原
+ * `quotaPillLabel` 逐字一致 —— 信号没丢，只是从"一眼可见"降到"点进详情可见"。
+ */
+function quotaSummaryText(row: FinanceQuotaProviderRow, episodes: readonly FinanceQuotaEpisodeRow[], t: FinanceTranslate): string {
+  const countdown = resetCountdown(row.nextResetAtMs, Date.now())
+  if (countdown !== null) return t('quotaPillReset', { hits: row.hits, countdown })
+  const raw = episodes.find((episode) => episode.resetRaw !== null)?.resetRaw
+  if (raw !== undefined && raw !== null) return t('quotaPillResetRaw', { hits: row.hits, raw })
+  return t('quotaPill', { hits: row.hits })
 }
 
 /**
@@ -755,6 +811,7 @@ function balanceValue(ledger: FinanceLedger, balance: FinanceProviderBalance, t:
  *
  * 为什么放在详情而不是主表：主表列宽是稀缺资源（UI-UX-SPEC §3.5），
  * 而这里是"偶尔要查证"的信息（哪次、哪个窗口、厂商码、重试了几次）。
+ * 2026-09-21 用户裁决后，这里更是额度信号的**唯一**呈现处。
  *
  * 三种"已知程度"如实呈现，不猜：能算出倒计时就给倒计时，只有原文就给原文，
  * 都没有就只显示次数（`resetAtMs` 缺失不是错误，是厂商没给时区）。
@@ -772,7 +829,10 @@ function QuotaHitList({ ledger, provider, t }: {
     <div className={css.quotaHits} data-testid={`finance-quota-hits-${provider}`}>
       <div className={css.quotaHitsHead}>
         <span className={css.detailLabel}>{t('quotaDetailTitle')}</span>
-        <span className={css.hint}>{t('quotaAttemptsNote', { hits: row.hits, attempts: row.attempts })}</span>
+        {/* 摘要行 = 原表内 pill 的文案（hits + 重置倒计时/原文）。 */}
+        <span className={css.hint} data-testid={`finance-quota-${provider}`}>
+          {quotaSummaryText(row, episodes, t)}
+        </span>
       </div>
       <div className={css.table}>
         <div className={`${css.tableHead} ${css.colsQuotaHits}`}>

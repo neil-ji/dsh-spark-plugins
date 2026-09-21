@@ -138,11 +138,11 @@ export function FinancePanel(props: FinancePanelInjected): ReactNode {
               removePlan={props.removePlan}
               onSetBillingMode={props.setBillingMode}
               onTagProvider={props.tagProvider}
-              refreshing={state.status === 'loading'}
+              refreshing={state.refreshing === true}
               onRefresh={props.refresh}
               lastSyncAppliedAt={state.lastSyncAppliedAt}
               priceTable={state.priceTable}
-              priceBusy={state.priceBusy}
+              priceAction={state.priceAction}
               priceError={state.priceError}
               onUpdatePrices={props.updatePrices}
               onRestorePrices={props.restorePrices}

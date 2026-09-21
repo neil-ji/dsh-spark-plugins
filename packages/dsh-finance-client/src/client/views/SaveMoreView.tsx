@@ -6,16 +6,19 @@
  */
 
 import type { ReactNode } from 'react'
-import { Card, Money, StackedBar, formatMicros } from 'dsh-ui-kit'
+import { Card, EmptyState, Money, StackedBar, formatMoneyMicros } from 'dsh-ui-kit'
 import type { FinanceLedger, FinanceTierGroup } from 'dsh-spark-finance/types'
 import {
   cacheExtremes,
   contextProfile,
   estimateCacheSavings,
   formatPercent,
+  formatTokens,
   modelComparisonRows,
   peakShare,
+  smallestTierCeiling,
   splitEstimateForModel,
+  tierGroupFor,
 } from '../derive.ts'
 import type { SplitEstimateOutcome } from '../derive.ts'
 import type { FinanceTranslate } from '../locales.ts'
@@ -32,9 +35,6 @@ export interface SaveMoreViewProps {
   shadowedTierKeys?: readonly string[]
   t: FinanceTranslate
 }
-
-/** "界外"的参考上界：与常见阶梯阈值 128k 对齐（只用于分布展示）。 */
-const CONTEXT_SHARE_CEILING = 128_000
 
 /**
  * 非 ok 的取数结果 → 文案，**只对"必须给原因"的异常返回字符串**。
@@ -79,13 +79,30 @@ export function SaveMoreView({ ledger, tiers, shadowedTierKeys = [], t }: SaveMo
   const rows = modelComparisonRows(ledger)
   const extremes = cacheExtremes(rows)
   const savings = estimateCacheSavings(rows)
-  const contextRows = rows.filter((row) => row.context !== undefined)
+  /**
+   * 拆分卡只渲染**命中阶梯价**的模型（2026-09-21 用户裁决）。
+   *
+   * 动机（用户原话）：「此处改为仅渲染我们已知支持梯度上下文 size 的模型，没命中的
+   * 模型没必要展示在这里」。原先把"有用量但没填阶梯价"的模型也列出来，那一列全是
+   * 「—」—— 一行只有模型名和破折号，纯噪声，还让真正有结论的行被淹没
+   * （用户截图里 5 行有 4 行是「—」）。
+   *
+   * 判据用 `tierGroupFor(...).status === 'found'`（**有价表**），而不是
+   * `outcome.status === 'ok'`：币种不匹配 / 生效窗口不覆盖也属"我们确实知道它有
+   * 梯度价"，必须展示并说明原因 —— 否则用户会以为这张表根本没收录该模型
+   * （SPEC §2.3 规则 5：静默不展示 = 静默失败）。
+   */
+  const tieredRows = rows.filter((row) => (row.context ?? []).length > 0 && tierGroupFor(tiers, row.modelKey).status !== 'none')
 
   return (
     <>
       <Card title={t('peakCardTitle')} className={css.section}>
-        {/* 空态不再写"你的价目表没有峰谷窗口，或近期没有高峰时段用量"——
-            没有可省金额时就不摆金额，也不解释为什么（提示性文案只在异常且必须给原因时出现）。 */}
+        {/* 空态（2026-09-21 用户裁决「缺乏空占位」）：无可省金额、也没有构成数据时
+            给 EmptyState，**而不是静默 null** —— 静默的后果是整张卡只剩一行标题，
+            看起来像渲染坏了（用户截图实测：卡高 48px、正文仅 8 字符）。
+            与 2026-09-20 退役的**解释性散文**区分：那时删掉的是"你的价目表没有峰谷
+            窗口，或近期没有高峰时段用量"这类**技术推理**；现在补的是"这里缺什么"的
+            空占位。口径见 UI-UX-SPEC §4.4「Empty」。 */}
         {peak.shiftSavingsMicros > 0
           ? (
             <div className={css.amount} title={t('peakCardHint')}>
@@ -98,22 +115,25 @@ export function SaveMoreView({ ledger, tiers, shadowedTierKeys = [], t }: SaveMo
           )
           : null}
         {bands.length === 0
-          ? null
+          ? (peak.shiftSavingsMicros > 0
+            // 有金额但没有构成数据：金额本身已是内容，不必再补占位。
+            ? null
+            : <EmptyState message={t('peakEmpty')} />)
           : (
             /* 100% 堆叠条：条本体占满卡片宽度，各档宽度即真实占比。
                不用 BarChart —— 它按 niceCeil 归一，实测最大档只占 ~52%，看构成是错的信号。 */
             <StackedBar
               rows={bands}
               ariaLabel={t('peakCardTitle')}
-              formatValue={formatMicros}
+              formatValue={(v) => formatMoneyMicros(v, currency)}
             />
           )}
       </Card>
 
       <Card title={t('cacheCardTitle')} className={css.section}>
-        {/* 无可操作空间时不解释（原"命中率差不足 2 个百分点…"已移除）。 */}
+        {/* 空态同上：无可估算的跨供应商差异时给占位，不留一行光标题。 */}
         {savings === null || extremes === null
-          ? null
+          ? <EmptyState message={t('cacheEmpty')} />
           : (
             <>
               <div className={css.amount} title={t('cacheSavingsNote')}>
@@ -143,34 +163,44 @@ export function SaveMoreView({ ledger, tiers, shadowedTierKeys = [], t }: SaveMo
           )}
         {/* 本卡混合了「被取代提示 + 明细表」两类内容 → 表格包一层 inset 子卡，
             与外层卡形成可辨层级（ui-kit Card variant=inset）。 */}
-        {contextRows.length === 0
-          ? null
+        {tieredRows.length === 0
+          ? <EmptyState message={t('contextEmpty')} />
           : (
             <Card variant="inset" title={t('contextTableTitle')}>
             <div className={css.table} data-testid="finance-context-card">
+              {/* 列头**不写死阈值**：分界线由各模型自己的价表决定（32k/128k/256k…），
+                  同一张表里不同模型的分界可能不同 —— 所以阈值落在**每个单元格**里，
+                  列头只说"相对你价表最小档要多付的输入占比"。 */}
               <div className={`${css.tableHead} ${css.colsContext}`}>
                 <span className={css.cell}>{t('colModel')}</span>
                 <span className={css.cell} title={t('contextCardHint')}>{t('colContextShare')}</span>
                 <span className={css.cell} title={t('contextNote')}>{t('colSavingUpper')}</span>
               </div>
-              {contextRows.map((row) => {
+              {tieredRows.map((row) => {
                 const buckets = row.context ?? []
-                const profile = contextProfile(buckets, CONTEXT_SHARE_CEILING)
-                // 选组 + 币种/生效窗口守卫 + 错峰折扣都在 derive 里（可单测），
-                // 视图只负责把 status 翻成文案。
                 const outcome = splitEstimateForModel(buckets, tiers, row.modelKey, ledger.currency, ledger.generatedAt)
+                // 分界线取**该模型价表的最小档**（与 splitEstimate 同源），不在视图里写死。
+                // 注意：`tierGroupFor` 对"多套变体"返回 ambiguous、对"没有价"返回 none，
+                // 两种都没有分界线 → 不编造，占比列给「—」。
+                const lookup = tierGroupFor(tiers, row.modelKey)
+                const ceiling = lookup.status === 'found' ? smallestTierCeiling(lookup.group.tiers) : null
+                const profile = ceiling === null ? null : contextProfile(buckets, ceiling)
                 return (
                   <div className={`${css.tableRow} ${css.colsContext}`} key={`context:${row.modelKey}`} data-testid={`finance-context-${row.modelKey}`}>
                     {/* 模型 + 厂商合并为一列 provider/model：可换行、两行截断、悬浮全文。 */}
                     <span className={`${css.cell} ${css.modelKey} ${css.clamp2}`} title={`${row.provider}/${row.model}`}>
                       {row.provider}/{row.model}
                     </span>
-                    <span className={`${css.cell} ${css.cellWrap}`}>{t('contextAboveShare', { pct: formatPercent(profile.shareAbove) })}</span>
+                    <span className={`${css.cell} ${css.cellWrap}`} data-testid={`finance-context-above-${row.modelKey}`}>
+                      {profile === null || profile.shareAbove === null
+                        ? '—'
+                        : t('contextAboveShare', { pct: formatPercent(profile.shareAbove), tokens: formatTokens(ceiling ?? 0) })}
+                    </span>
                     <span className={`${css.cell} ${css.cellWrap}`} data-testid={`finance-context-cost-${row.modelKey}`}>
                       {outcome.status === 'ok'
                         ? (
                           <span className={css.tagMuted}>
-                            {formatMicros(Math.round(outcome.estimate.savedMicros))} · <span className={css.estimate}>{t('estimateTag')}</span>
+                            {formatMoneyMicros(Math.round(outcome.estimate.savedMicros), currency)} · <span className={css.estimate}>{t('estimateTag')}</span>
                             {outcome.estimate.discountApplied === 1 ? null : (
                               <span data-testid={`finance-context-discount-${row.modelKey}`}>
                                 {' · '}{t('contextOffPeakApplied', { pct: formatPercent(outcome.estimate.discountApplied) })}

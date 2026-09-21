@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { FinanceLedger, FinanceListProvidersResult, FinanceTokenBuckets } from 'dsh-spark-finance/types'
+import { Pill, formatMicros, formatMoneyMicros } from 'dsh-ui-kit'
+import { zh } from '../src/client/locales.ts'
 import { FinancePanel, type FinancePanelInjected } from '../src/client/FinancePanel.tsx'
 import { ProjectDetail, ProjectsView } from '../src/client/views/ProjectsView.tsx'
 import { SaveMoreView } from '../src/client/views/SaveMoreView.tsx'
@@ -215,10 +218,47 @@ describe('FinancePanel shell', () => {
     expect(html).toContain('updatePrices')
     expect(html).toContain('restorePrices')
     expect(html).toContain('refresh')
-    // 已移除的脚注文案不得回潮
-    for (const key of ['priceNoteNever', 'restoreDisabledHint', 'estimateNote', 'unreadableNote']) {
+    // 已移除的脚注段落文案不得回潮（禁用原因那一行是 §3.1 的硬要求，不在此列）
+    for (const key of ['priceNoteNever', 'estimateNote', 'unreadableNote']) {
       expect(html).not.toContain(key)
     }
+  })
+
+  it('价格动作/刷新进行中时按钮走 loading 形制（spinner + aria-busy），不是只置 disabled', () => {
+    // 2026-09-21 用户实测反馈：点「更新价格表」后没有任何 loading 动效，而会话多时
+    // 重算要跑秒级到十秒级 —— 只 disabled 会让人以为按钮失灵。ui-kit Button 的 loading
+    // 同时给 spinner、aria-busy 与锁点击，是这三件事的唯一实现处。
+    const idle = render({ status: 'ready', ledger: LEDGER, providerList: PROVIDERS, refreshing: false })
+    // 空闲时三枚按钮都不该是 busy 态（否则"进行中"这个信号就永远为真、等于没有）。
+    expect(idle).not.toContain('aria-busy="true"')
+
+    const updating = render({ status: 'ready', ledger: LEDGER, providerList: PROVIDERS, priceAction: 'update' })
+    expect(updating).toContain('aria-busy="true"')
+
+    const restoring = render({ status: 'ready', ledger: LEDGER, providerList: PROVIDERS, priceAction: 'restore' })
+    expect(restoring).toContain('aria-busy="true"')
+
+    const refreshing = render({ status: 'ready', ledger: LEDGER, providerList: PROVIDERS, refreshing: true })
+    expect(refreshing).toContain('aria-busy="true"')
+  })
+
+  it('「还原」禁用时给可见原因并挂到按钮上（UI-UX-SPEC §3.1 禁用必须给原因）', () => {
+    // priceTable 存在且 overlayKeyCount + userKeyCount === 0 → 没有可回退的东西。
+    const html = render({
+      status: 'ready',
+      ledger: LEDGER,
+      providerList: PROVIDERS,
+      priceTable: {
+        base: { ok: true, source: 'stub', updated: '2026-09-16T00:00:00.000Z', expected: 'stub', actual: 'stub' },
+        overlay: null,
+        overlayKeyCount: 0,
+        userKeyCount: 0,
+        rejected: [],
+      },
+    })
+    expect(html).toContain('restoreDisabledHint')
+    expect(html).toContain('id="finance-restore-hint"')
+    expect(html).toContain('aria-describedby="finance-restore-hint"')
   })
 })
 
@@ -278,9 +318,73 @@ describe('finance views', () => {
       onRefresh: () => {},
       lastSyncAppliedAt: undefined,
     }))
-    // 等价按量价 10_000_000 > 月费 1_000_000 → 按量等价列 + 超值 tag（SPEC §5.4）
+    // 等价按量价 10_000_000 > 月费 1_000_000 → 按量等价列给出金额（SPEC §5.4）
     expect(withPlan).toContain('planEquivalent')
-    expect(withPlan).toContain('superValue')
+    // 2026-09-21 用户裁决：非付费类型列的 tag 一律移除（列窄，tag 挤金额）。
+    // 省额降级为悬浮提示（planSaved），不再渲染「超值」tag。
+    expect(withPlan).not.toContain('superValue')
+    expect(withPlan).toContain('planSaved')
+  })
+
+  it('供应商总表内只留付费类型一个 tag（额度触达/超值/手填都不在表里）', () => {
+    // 真宿主实测：额度触达 pill 长 170px 塞进 140px 的供应商列会溢出被裁 +
+    // 把行高从 50px 撑到 65px，整张表看起来错位。修法 = 这些 tag 移出表格，
+    // 额度信号改由详情弹窗承载（SPEC §10.5 修订）。
+    const html = renderToStaticMarkup(createElement(ThisMonthView, {
+      ledger: {
+        ...LEDGER,
+        quota: {
+          rows: [{ provider: 'a', hits: 2, attempts: 11, lastHitAtMs: 1, nextResetAtMs: Date.now() + 3_600_000, windows: [] }],
+          totalHits: 2,
+          episodes: [{
+            provider: 'a', modelKey: 'acme/llm', window: '5h', firstAtMs: 1, lastAtMs: 2,
+            attempts: 6, final: true, resetAtMs: Date.now() + 3_600_000, resetRaw: null, vendorCode: '1308',
+          }],
+        },
+      } as FinanceLedger,
+      providerList: PROVIDERS,
+      t,
+      refreshProvider: async () => {},
+      plans: [{ provider: 'a', monthlyMicros: 1_000_000, currency: 'CNY', effectiveFrom: 0 }],
+      plansWritable: true,
+      savePlan: async () => {},
+      removePlan: async () => {},
+      refreshing: false,
+      onRefresh: () => {},
+      lastSyncAppliedAt: undefined,
+    }))
+    // 付费类型 Tag 保留（唯一合法 tag）。
+    expect(html).toContain('billing_metered')
+    // 其余三处一律不在表格里（详情弹窗未展开 → 整页也不该有）。
+    expect(html).not.toContain('finance-quota-a')
+    expect(html).not.toContain('quotaPill')
+    expect(html).not.toContain('superValue')
+    expect(html).not.toContain('balanceManual')
+  })
+
+  it('ui-kit Pill 透传 data-testid / aria-label（不透传会让断言验一个不存在的节点）', () => {
+    // 2026-09-21 实测发现：`Pill` 原先只解构固定几个 prop、**不透传其余属性**，
+    // 于是调用方传的 `data-testid` / `aria-label` 被静默丢弃 —— finance 的额度触达
+    // pill 就带着 SPEC §10.5 要求的 `aria-label` + `data-testid` 传进来，实际 DOM
+    // 里两个都没有（断言因此在验一个不存在的节点）。这里直接用 ui-kit 钉住透传。
+    const html = renderToStaticMarkup(createElement(Pill, {
+      tone: 'warn',
+      'data-testid': 'probe-pill',
+      'aria-label': '探针胶囊',
+      title: '悬浮',
+    }, '内容'))
+    expect(html).toContain('data-testid="probe-pill"')
+    expect(html).toContain('aria-label="探针胶囊"')
+    expect(html).toContain('title="悬浮"')
+    // 可点分支（button）同样透传。
+    const clickable = renderToStaticMarkup(createElement(Pill, {
+      onClick: () => {},
+      'data-testid': 'probe-click',
+      'aria-label': '可点探针',
+    }, '内容'))
+    expect(clickable).toContain('<button')
+    expect(clickable).toContain('data-testid="probe-click"')
+    expect(clickable).toContain('aria-label="可点探针"')
   })
 
   it('free 厂商收归订阅卡：强制月费 0、不给节省列与月费编辑入口', () => {
@@ -379,10 +483,11 @@ describe('finance views', () => {
     // 无信息表述退役：单供应商时说"仅一家在用"、样本不足时说"暂不比较"都是废话
     expect(html).not.toContain('whoSingle')
     expect(html).not.toContain('whoNoVerdict')
-    // 「明细」展开整个退役：它藏的 token 分桶已提升为表格的行
+    // 「明细」这个**旧的**展开块整块退役：它藏的 token 分桶已提升为表格的行。
+    // 注意：aria-expanded 现在是手风琴（2026-09-21 新增）在用的，不再是"退役"标志 ——
+    // 这条断言只钉旧块自己的 key，不再拿 aria-expanded 当替身。
     expect(html).not.toContain('detailToggle')
     expect(html).not.toContain('detailBuckets')
-    expect(html).not.toContain('aria-expanded')
   })
 
   it('明细不再是展开区，而是表格里多出的四行 token 桶', () => {
@@ -416,6 +521,17 @@ describe('finance views', () => {
     expect(html).not.toContain('finance-time-compare')
   })
 
+  it('金额不裸数字：formatMoneyMicros 真的带货币符号（否则闸门等于没修）', () => {
+    // 实测缺陷（用户截图）：错峰卡图例渲染成 8.57 / 10.34 / 3.03，而同屏表格是 ¥…
+    // 这道断言钉的是"修法本身有效"——同一个 micros，裸数字与带符号必须真的不同。
+    // 静态闸门（check:contrast 的 auditBareMoney）负责"没人再用裸格式化器"，
+    // 这里负责"替代品确实带符号"，两条缺一不可。
+    expect(formatMicros(8_570_000)).toBe('8.57')
+    expect(formatMoneyMicros(8_570_000, 'CNY')).toBe('¥8.57')
+    // 未知币种用码 + 空格（与 Money 的 currencySymbol 同口径）。
+    expect(formatMoneyMicros(1_000_000, 'SGD')).toBe('SGD 1')
+  })
+
   it('SaveMore shows both actionable estimates with their basis', () => {
     const html = renderToStaticMarkup(createElement(SaveMoreView, { ledger: LEDGER, tiers: {}, t }))
     expect(html).toContain('finance-peak-savings')
@@ -426,15 +542,67 @@ describe('finance views', () => {
     expect(html).toContain('estimateTag')
   })
 
-  it('SaveMore 无可省金额时「不摆金额、也不解释」（2026-09-20 口径）', () => {
+  it('SaveMore 无可省金额时：不给解释性散文，但**给空占位**（2026-09-21 修订）', () => {
+    // 真正"空"= 既无可省金额、**也没有构成数据**（bands 为空）。
+    // 只把 savings 归零但留着 peakValley 各档，卡片仍有堆叠条可看 —— 那不算空。
     const html = renderToStaticMarkup(createElement(SaveMoreView, {
-      ledger: { ...LEDGER, windowedSinceMs: null, peakValley: { ...LEDGER.peakValley, shiftSavingsMicros: 0 } },
+      ledger: {
+        ...LEDGER,
+        peakValley: {
+          ...LEDGER.peakValley,
+          shiftSavingsMicros: 0,
+          peakCostMicros: 0, offPeakCostMicros: 0, flatCostMicros: 0, legacyCostMicros: 0,
+        },
+      },
       tiers: {},
       t,
     }))
-    // 不再渲染"你的价目表没有峰谷窗口…"这类空态散文。
-    expect(html).not.toContain('finance-peak-empty')
+    // 2026-09-20 退役的是**解释性散文**（"你的价目表没有峰谷窗口，或近期没有高峰时段
+    // 用量"这类技术推理）—— 这条继续成立：那个 key 不许回来。
     expect(html).not.toContain('peakCardEmpty')
+    // 2026-09-21 用户裁决「缺乏空占位」：真空时不再是静默 null（那会让整张卡只剩一行
+    // 标题、看起来像渲染坏了），改为 EmptyState 占位（说"缺什么"）。
+    expect(html).toContain('peakEmpty')
+    expect(html).toContain('role="status"')
+    expect(html).not.toContain('finance-peak-savings')
+  })
+
+  it('有构成数据、只是没有可省金额时：仍给堆叠条，不误判为空', () => {
+    // 反面：把 savings 归零但保留各档 → 卡片有内容，不该显示空占位。
+    const html = renderToStaticMarkup(createElement(SaveMoreView, {
+      ledger: { ...LEDGER, peakValley: { ...LEDGER.peakValley, shiftSavingsMicros: 0 } },
+      tiers: {},
+      t,
+    }))
+    expect(html).toContain('stackedTrack')
+    expect(html).not.toContain('peakEmpty')
+  })
+
+  it('三张省额卡在无数据时都给空占位（不留"一行光标题"）', () => {
+    // 用户截图实测：空数据下缓存卡只有 48px 高、正文仅 8 字符（= 标题），
+    // 看起来像渲染失败。三张卡（错峰/缓存/拆分）统一补 EmptyState。
+    // 造"真空"夹具：
+    //  · 错峰：各档全 0 → bands 空；
+    //  · 缓存：byModel 里每个 model 只留一行 → 没有跨供应商可比对象（cacheExtremes 为 null）；
+    //  · 拆分：去掉 context → contextRows 空。
+    const singlePerModel = LEDGER.byModel.filter((row) => row.provider === 'a')
+      .map(({ context: _c, ...row }) => row)
+    const html = renderToStaticMarkup(createElement(SaveMoreView, {
+      ledger: {
+        ...LEDGER,
+        peakValley: {
+          ...LEDGER.peakValley,
+          shiftSavingsMicros: 0,
+          peakCostMicros: 0, offPeakCostMicros: 0, flatCostMicros: 0, legacyCostMicros: 0,
+        },
+        byModel: singlePerModel,
+      },
+      tiers: {},
+      t,
+    }))
+    for (const key of ['peakEmpty', 'cacheEmpty', 'contextEmpty']) {
+      expect(html, `缺少空占位 ${key}`).toContain(key)
+    }
   })
 
   it('错峰卡用 100% 堆叠条：各档宽度即真实占比，条本体占满卡片宽度', () => {
@@ -469,10 +637,39 @@ describe('finance views', () => {
     expect(withTiers).toContain('contextNote')
 
     const withoutTiers = renderToStaticMarkup(createElement(SaveMoreView, { ledger: LEDGER, tiers: {}, t }))
-    expect(withoutTiers).toContain('finance-context-card')
-    // 没阶梯价属"纯空态"：不再写"没有填阶梯价 → 拆分不改变单价…"，直接给「—」。
+    // 2026-09-21 用户裁决：「此处改为仅渲染我们已知支持梯度上下文 size 的模型，
+    // 没命中的模型没必要展示在这里」—— 一张阶梯价都没有时，整张表不渲染（给空占位），
+    // 而不是列出一堆只有「—」的行（用户截图里 5 行有 4 行是破折号）。
+    expect(withoutTiers).not.toContain('finance-context-card')
+    expect(withoutTiers).toContain('contextEmpty')
     expect(withoutTiers).not.toContain('contextNoTiers')
-    expect(withoutTiers).toContain('—')
+  })
+
+  it('拆分卡：分界线取**各模型自己的最小档**，不在视图里写死 128k', () => {
+    // 2026-09-21 用户裁决：「128K 太小了，几乎随便一个任务就能超过」。
+    // 实测 7 家真实价表里有 32k/128k/200k/256k/272k/512k 六种档位 ——
+    // 写死 128k 会让 256k 档的模型永远显示"界外输入占 ~100%"。
+    const make = (ceiling: number) => ({
+      key: 'acme/llm', modelKey: 'acme/llm', currency: 'CNY', offPeakDiscount: 1,
+      tiers: [{ maxPromptTokens: ceiling, inputMicrosPerMtok: 1_000_000, outputMicrosPerMtok: 4_000_000 }],
+    })
+    // 必须用**真字典**：测试的 t 是 key 回显桩，不会插值 {tokens}，
+    // 那样这条断言就只是在检查字符串 "contextAboveShare" 存在与否（永远为真）。
+    const realT = ((key: string, params?: Record<string, string | number>) => {
+      const template = (zh as Record<string, string>)[key] ?? key
+      if (params === undefined) return template
+      return template.replace(/\{(\w+)\}/g, (_m, name: string) => String(params[name] ?? `{${name}}`))
+    }) as unknown as FinanceTranslate
+    const html = (ceiling: number): string => renderToStaticMarkup(createElement(SaveMoreView, {
+      ledger: LEDGER, tiers: { 'acme/llm': [make(ceiling)] }, t: realT,
+    }))
+    // 单元格里带出**该模型**的阈值（超过 256k / 超过 32k），且两者确实不同。
+    expect(html(256_000)).toContain('256K')
+    expect(html(32_000)).toContain('32K')
+    expect(html(256_000)).not.toContain('128K')
+    // 列头不再写死任何一个阈值（阈值逐行不同，写进列头必然对某些行是错的）。
+    const head = /<div class="[^"]*tableHead[^"]*"[^>]*>([\s\S]*?)<\/div>/.exec(html(256_000))?.[1] ?? ''
+    expect(head).not.toContain('128K')
   })
 
   it('拆分卡：币种不匹配的阶梯价不参与估算（宁可不算，不可算错）', () => {
@@ -629,7 +826,7 @@ describe('QuotaWindowCard 不含提示性文案（SPEC §10.8）', () => {
       onRefresh: () => {},
       lastSyncAppliedAt: undefined,
       priceTable: undefined,
-      priceBusy: false,
+      priceAction: undefined,
       priceError: null,
       onUpdatePrices: async () => {},
       onRestorePrices: async () => {},
@@ -675,14 +872,68 @@ describe('QuotaWindowCard 不含提示性文案（SPEC §10.8）', () => {
         onRefresh: () => {},
         lastSyncAppliedAt: undefined,
         priceTable: undefined,
-        priceBusy: false,
+        priceAction: undefined,
         priceError: null,
         onUpdatePrices: async () => {},
         onRestorePrices: async () => {},
       } as never),
     )
-    // 有月费 -> 出现结论行；无月费 -> 一个字都不多说（首次 render() 已断言）。
+    // 有月费 -> 出现结论；无月费 -> 一个字都不多说（首次 render() 已断言）。
     expect(withPlanHtml).toMatch(/windowSavings(Up|Down)/)
+    // 2026-09-21 用户裁决：结论句从「指标区下方另起一行的正文」改为
+    // **「按量等价」数值下方的小字说明**（ui-kit Stat.description）。断言它确实
+    // 落在 statDesc 里、且不再有旧的 windowVerdict 段落 —— 否则就是"改了文案没改形制"。
+    expect(withPlanHtml).toContain('statDesc')
+    expect(withPlanHtml).not.toContain('windowVerdict')
+  })
+
+  it('「按量等价」的结论句渲染在数值下方（Stat.description），不是另起一行正文', () => {
+    // 形制不变量：结论必须在 Stat 的 description 槽里，与"按量等价"那个大数字同卡。
+    // 断言结构而不是文案 —— 值域由 t() 决定，形制才是这次裁决的对象。
+    const html = renderToStaticMarkup(
+      createElement(ThisMonthView, {
+        ledger: windowLedger,
+        providerList: PROVIDERS,
+        t,
+        refreshProvider: async () => {},
+        plans: [{ provider: 'acme', monthlyMicros: 10_000_000, currency: 'CNY', effectiveFrom: 0 }],
+        plansWritable: true,
+        savePlan: async () => {},
+        removePlan: async () => {},
+        refreshing: false,
+        onRefresh: () => {},
+        lastSyncAppliedAt: undefined,
+        priceTable: undefined,
+        priceAction: undefined,
+        priceError: null,
+        onUpdatePrices: async () => {},
+        onRestorePrices: async () => {},
+      } as never),
+    )
+    // statDesc 紧跟 statValue，且结论 key 出现在 statDesc 之后（即同一张 Stat 内）。
+    const i = html.indexOf('statDesc')
+    expect(i).toBeGreaterThan(-1)
+    const savingsAt = html.search(/windowSavings(Up|Down)/)
+    expect(savingsAt).toBeGreaterThan(i)
+    // 三张 Stat 里只有「按量等价」那一张带 description。
+    expect((html.match(/statDesc/g) ?? []).length).toBe(1)
+  })
+
+  it('各模型明细的模型名走 CellText 2 行截断，且不被外层的 nowrap 压回单行', () => {
+    // 2026-09-21 用户裁决：模型名要「支持换行，最多 2 行，超出截断」。
+    // 实测缺陷：CellText 与 `.cell` 连用时，后者的 `white-space: nowrap` 与
+    // CellText 的单类选择器同特异度 → 谁胜出取决于样式注入顺序，实测 nowrap 胜出、
+    // `-webkit-line-clamp` 静默失效（模型名退化成单行省略）。
+    // 修法：换行语义完全归 CellText（组件自带 white-space:normal），调用方**不再传 .cell**。
+    const repoRoot = new URL('../../../', import.meta.url)
+    const cellTextSrc = readFileSync(new URL('packages/dsh-ui-kit/src/components/CellText.module.css', repoRoot), 'utf8')
+    // CellText 自己必须声明 normal（否则再次输给 nowrap）。
+    expect(cellTextSrc).toMatch(/\.cellText\s*\{[\s\S]*white-space:\s*normal/)
+    expect(cellTextSrc).toMatch(/-webkit-line-clamp:\s*var\(--cell-lines,\s*2\)/)
+    // 调用方不得再把它和 nowrap 的 .cell 拼在一起。
+    const viewSrc = readFileSync(new URL('packages/dsh-finance-client/src/client/views/QuotaWindowCard.tsx', repoRoot), 'utf8')
+    expect(viewSrc).not.toMatch(/<CellText className=\{css\.cell\}/)
+    expect(viewSrc).toMatch(/<CellText className=\{css\.cellTextOnly\}/)
   })
 })
 
@@ -704,7 +955,7 @@ describe('混合内容的卡：表格包一层 inset 子卡', () => {
       providerList: PROVIDERS, t, refreshProvider: async () => {}, plans: [], plansWritable: true,
       savePlan: async () => {}, removePlan: async () => {}, onSetBillingMode: async () => {},
       onTagProvider: async () => {}, refreshing: false, onRefresh: () => {}, lastSyncAppliedAt: undefined,
-      priceTable: undefined, priceBusy: false, priceError: null,
+      priceTable: undefined, priceAction: undefined, priceError: null,
       onUpdatePrices: async () => {}, onRestorePrices: async () => {},
     } as never))
     expect(insetCount(html)).toBeGreaterThanOrEqual(1)
@@ -715,17 +966,55 @@ describe('混合内容的卡：表格包一层 inset 子卡', () => {
   })
 
   it('会话拆分节省估算：提示 + 明细表 → 表格是 inset 子卡', () => {
-    const html = renderToStaticMarkup(createElement(SaveMoreView, { ledger: LEDGER, tiers: {}, t }))
+    // 必须给**阶梯价**：2026-09-21 起没命中阶梯价的模型不再出现在这张表里，
+    // 空 tiers 时整表不渲染（上面那条测试钉住了这一点）。
+    const tierGroup = {
+      key: 'acme/llm',
+      modelKey: 'acme/llm',
+      currency: 'CNY',
+      offPeakDiscount: 1,
+      tiers: [{ maxPromptTokens: 128_000, inputMicrosPerMtok: 1_000_000, outputMicrosPerMtok: 4_000_000 }],
+    }
+    const html = renderToStaticMarkup(createElement(SaveMoreView, {
+      ledger: LEDGER,
+      tiers: { 'acme/llm': [tierGroup] },
+      t,
+    }))
     expect(insetCount(html)).toBeGreaterThanOrEqual(1)
     expect(cardTitles(html)).toContain('contextTableTitle')
   })
 
-  it('该用谁：每个模型组一张 inset 子卡（组头与指标表分离）', () => {
-    const html = renderToStaticMarkup(createElement(WhoToUseView, { ledger: LEDGER, t }))
-    // 每个模型组建一张 inset 子卡；夹具只有一个模型组，故恰好 1 张。
-    // 断言"组数 = 子卡数"而不是写死数字，夹具增组时不会假失败。
+  it('该用谁：每个模型组一个手风琴项，默认只展开首项、且不再嵌套 inset 卡', () => {
+    // **必须用多组夹具**：默认夹具只有一个模型组（acme/llm × 2 家），
+    // 此时"只展开首项"与"全部展开"在渲染结果上**无法区分**（index===0 恒真）
+    // —— 第一版就是这样写了条永远绿的断言（负向验证时没抓住 defaultOpen={true}）。
+    // 这里加第二个模型组，让"展开数 = 1"真正可判。
+    const twoGroups: FinanceLedger = {
+      ...LEDGER,
+      byModel: [
+        ...LEDGER.byModel,
+        {
+          modelKey: 'acme/other',
+          provider: 'a',
+          model: 'other',
+          usage: buckets(500_000, 100_000, 0, 50_000),
+          costMicros: 5_000_000,
+        },
+      ],
+    }
+    const html = renderToStaticMarkup(createElement(WhoToUseView, { ledger: twoGroups, t }))
+    // 2026-09-21 用户裁决：接入模型一多，"全展开平铺"读不动 → 改手风琴；
+    // 手风琴本身已起内容分割作用 → **移除原先的嵌套 inset Card**。
     const groupCount = (html.match(/data-testid="finance-model-/g) ?? []).length
-    expect(groupCount).toBeGreaterThanOrEqual(1)
-    expect(insetCount(html)).toBe(groupCount)
+    expect(groupCount).toBe(2)
+    // 每个组一个 Disclosure。注意 ui-kit Disclosure 把 aria-expanded **同时**挂在
+    // 外层 div 与头行 button 上（wrapper 供 CSS 选择 `[aria-expanded="true"]` 驱动动画，
+    // button 供无障碍），所以按"元素数"数会得到 2×；这里只数头行 button（折叠头）。
+    const headCount = (html.match(/<button[^>]*aria-expanded=/g) ?? []).length
+    expect(headCount).toBe(groupCount)
+    // 默认展开**恰好一个**（首项 = 总成本最高的组，最可能先看）。
+    expect((html.match(/<button[^>]*aria-expanded="true"/g) ?? []).length).toBe(1)
+    // 嵌套 inset 卡已移除：本视图不再渲染任何 inset。
+    expect(html).not.toContain('_inset"')
   })
 })

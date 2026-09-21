@@ -17,7 +17,7 @@
  */
 
 import type { CSSProperties, ReactNode } from 'react'
-import { Card, EmptyState, Money, Pill } from 'dsh-ui-kit'
+import { Card, Disclosure, EmptyState, Money, Pill } from 'dsh-ui-kit'
 import type { FinanceLedger } from 'dsh-spark-finance/types'
 import {
   cheapestInGroup,
@@ -51,6 +51,18 @@ function metricLabel(metric: CompareMetricKey, t: FinanceTranslate): string {
   if (metric === 'cacheWrite') return t('compareMetricCacheWrite')
   if (metric === 'output') return t('compareMetricOutput')
   return t('compareMetricCost')
+}
+
+/**
+ * 组头副标题 = **在用的供应商名单**。
+ *
+ * 折叠态下组头是唯一可见的信息，而"这个模型我在哪几家用过"正是决定要不要展开的依据
+ * （名单本身要展开后才会在表头出现）。刻意**不**写成"N 家供应商在用"：那是数量而非身份，
+ * 且与右侧「更省 · X」pill 的结论重复；单供应商时"1 家在用"更接近废话
+ * （2026-09-20 已退役过同类表述）。
+ */
+function groupSummary(rows: readonly ModelComparisonRow[]): string {
+  return rows.map((row) => row.provider).join(' · ')
 }
 
 /**
@@ -91,23 +103,30 @@ export function WhoToUseView({ ledger, t }: WhoToUseViewProps): ReactNode {
 
   return (
     <Card title={t('whoTitle')} className={css.section}>
-      <div className={css.table}>
-        {groups.map((group) => {
+      {/* 手风琴（2026-09-21 用户裁决）：接入的模型一多，"每个模型一坨、全展开平铺"
+          就读不动了 —— 改成每个模型组一个可折叠项，**默认只展开首项**。
+          首项 = `groupByModel` 排在最前的那个（组内成本降序、组间按总成本降序）=
+          本月花钱最多的模型，是用户最可能先看的那一个。
+
+          手风琴本身已经起到内容分割作用 → **移除原先的嵌套 inset Card**
+          （用户明确要求）。表头 + 指标行直接落在折叠体里，不再多套一层卡。 */}
+      <div className={css.accordion}>
+        {groups.map((group, index) => {
           const best = cheapestInGroup(group.rows)
           const speed = speedComparison(group.rows)
           const metrics = compareMetricRows(group.rows)
           return (
-            <div className={css.group} key={group.model} data-testid={`finance-model-${group.model}`}>
-              {/* 组头只留模型名 + （多供应商时）谁更省的结论。
-                  「仅一家在用 / 样本不足」标签与「明细」展开按钮均已退役（2026-09-20）：
-                  前者在只有一家时是无信息表述，后者藏的 token 分桶已提升为表格的行。 */}
-              <div className={css.groupHead}>
-                <span className={`${css.groupTitle} ${css.modelKey}`} title={group.model}>{group.model}</span>
-                {best === null
-                  ? null
-                  : <Pill accentColor="var(--spk-acc-finance-fg)">{t('whoBest')} · {best.provider}</Pill>}
-              </div>
-              {/* 时间成本放在组头下面常显：慢多少分钟比"谁快"更值得一眼看到。 */}
+            // 外层 div 保留 `data-testid="finance-model-{model}"`（既有断言与 harness 的选择器）。
+            // `Disclosure` 目前不透传 rest 属性（与 Pill 同类），所以 testid 挂在包裹层上，
+            // 而不是去改 ui-kit 的组件契约。
+            <div key={group.model} className={css.accordionItem} data-testid={`finance-model-${group.model}`}>
+            <Disclosure
+              defaultOpen={index === 0}
+              name={<span className={`${css.groupTitle} ${css.modelKey}`} title={group.model}>{group.model}</span>}
+              description={groupSummary(group.rows)}
+              trailing={best === null ? undefined : <Pill accentColor="var(--spk-acc-finance-fg)">{t('whoBest')} · {best.provider}</Pill>}
+            >
+              {/* 时间成本放在折叠体内首行常显：慢多少分钟比"谁快"更值得一眼看到。 */}
               {speed === null
                 ? null
                 : (
@@ -122,9 +141,7 @@ export function WhoToUseView({ ledger, t }: WhoToUseViewProps): ReactNode {
                     {' '}<span className={css.estimate}>{t('estimateTag')}</span>
                   </p>
                 )}
-              {/* 转置表：行 = 指标、列 = 供应商。列宽由供应商数量决定（--compare-cols）。
-                  组头（模型名 + 结论）与表格是两类内容 → 表格包一层 inset 子卡。 */}
-              <Card variant="inset">
+              {/* 转置表：行 = 指标、列 = 供应商。列宽由供应商数量决定（--compare-cols）。 */}
               <div
                 className={css.compareGrid}
                 style={{ '--compare-cols': String(group.rows.length) } as CSSProperties}
@@ -148,7 +165,7 @@ export function WhoToUseView({ ledger, t }: WhoToUseViewProps): ReactNode {
                   />
                 ))}
               </div>
-              </Card>
+            </Disclosure>
             </div>
           )
         })}

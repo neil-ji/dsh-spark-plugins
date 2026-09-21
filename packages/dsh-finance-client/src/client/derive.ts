@@ -505,6 +505,24 @@ export function splitEstimate(
   }
 }
 
+/**
+ * 该阶梯价表的**最小档上界** —— 也就是"界外"的分界线本身（`maxPromptTokens > 0` 的第一档）。
+ *
+ * 为什么单独暴露这个：分界线必须由**价表自己**决定，不能在视图里写死。
+ * 2026-09-21 用户裁决：「128K 太小了，几乎随便一个任务就能超过」—— 实测 7 家真实价表里
+ * 有 32k / 128k / 200k / 256k / 272k / 512k 六种档位，写死 128k 会让 256k 档的模型
+ * （13 处价表）永远显示"界外输入占 ~100%"，而那个"界外"根本不是它的分界。
+ *
+ * 复用它而不是在视图里另算：`splitEstimate` 内部的"最小档"与这里**同源**，
+ * 否则会出现"列头说 >256k、金额却按 32k 档折算"这类自相矛盾。
+ *
+ * @returns 最小档上界；全是兜底档（`maxPromptTokens = 0`）或没有档位时 null。
+ */
+export function smallestTierCeiling(tiers: readonly FinanceTierEntry[]): number | null {
+  const smallest = tiers.find((tier) => tier.maxPromptTokens > 0)
+  return smallest === undefined ? null : smallest.maxPromptTokens
+}
+
 /** 面板要能区分"没有阶梯价"与"有价但不可用"——两者文案完全不同（SPEC §2.3 规则 5）。 */
 export type SplitEstimateOutcome =
   | { status: 'ok'; estimate: SplitEstimate }

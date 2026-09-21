@@ -18,7 +18,7 @@
  */
 
 import { useState, type ReactNode } from 'react'
-import { Card, CellText, Money, Pill, SegmentedControl, Stat, StatGrid, formatMicros } from 'dsh-ui-kit'
+import { Card, CellText, Money, Pill, SegmentedControl, Stat, StatGrid, formatMoneyMicros } from 'dsh-ui-kit'
 import type {
   FinanceLedger,
   FinancePlanEntry,
@@ -96,7 +96,19 @@ export function QuotaWindowCard({ ledger, plans, t }: QuotaWindowCardProps): Rea
     >
       <div data-testid="finance-quota-window">
         <StatGrid>
-          <Stat label={t('windowEquivalent')} value={<Money micros={verdict.equivalentMicros} currency={currency} exact />} />
+          {/* 性价比结论挂在**「按量等价」数值的正下方**（2026-09-21 用户裁决）：
+              这句话说的就是这个数字与订阅估价的关系，之前单独占一行正文、飘在三个
+              指标卡下面，既与指标区割裂、又要读者自己把句子和上面的数字对上。
+              只在真能算出来时给（savingsMicros === null → 不带 description）。 */}
+          <Stat
+            label={t('windowEquivalent')}
+            value={<Money micros={verdict.equivalentMicros} currency={currency} exact />}
+            description={verdict.savingsMicros === null
+              ? undefined
+              : (verdict.savingsMicros >= 0
+                ? t('windowSavingsUp', { amount: formatMoneyMicros(verdict.savingsMicros, currency) })
+                : t('windowSavingsDown', { amount: formatMoneyMicros(-verdict.savingsMicros, currency) }))}
+          />
           <Stat
             label={t('windowPlanned')}
             value={verdict.plannedMicros === null
@@ -108,19 +120,6 @@ export function QuotaWindowCard({ ledger, plans, t }: QuotaWindowCardProps): Rea
             + current.usage.cacheWriteTokens + current.usage.outputTokens,
           )} />
         </StatGrid>
-
-        {/* 性价比结论：**只在真能算出来时**出现，且只给数字。
-            不给"未填月费…"这类解释 —— 窗口估价那格已是「—」，无数据本身就是说明；
-            也不给厂商数、口径脚注（提示性文案只在异常且必须给原因时出现）。 */}
-        {verdict.savingsMicros === null
-          ? null
-          : (
-            <p className={css.windowVerdict}>
-              {verdict.savingsMicros >= 0
-                ? t('windowSavingsUp', { amount: formatMicros(verdict.savingsMicros) })
-                : t('windowSavingsDown', { amount: formatMicros(-verdict.savingsMicros) })}
-            </p>
-          )}
 
         {/* 本卡混合了「指标区 + 模型明细」两类内容 → 表格包一层 inset 子卡，
             与外层表单形成可辨层级（ui-kit Card variant=inset；先例见项目详情）。 */}
@@ -140,7 +139,10 @@ export function QuotaWindowCard({ ledger, plans, t }: QuotaWindowCardProps): Rea
                     + row.usage.cacheWriteTokens + row.usage.outputTokens
                   return (
                     <div key={row.modelKey} className={`${css.tableRow} ${cols}`}>
-                      <CellText className={css.cell} text={row.modelKey} />
+                      {/* 模型名允许换行、最多 2 行（UI-UX-SPEC §3.5）。**不传 `css.cell`** ——
+                          那个类带 `white-space: nowrap`，会把 CellText 的 2 行截断压回
+                          单行（2026-09-21 实测：clamp 静默失效）。换行语义归 CellText 所有。 */}
+                      <CellText className={css.cellTextOnly} text={row.modelKey} />
                       <span className={`${css.cell} ${css.cellNum}`}>{formatTokens(total)}</span>
                       {hasDuration
                         ? <span className={`${css.cell} ${css.cellNum}`}>{formatDuration(row.decodeMs)}</span>

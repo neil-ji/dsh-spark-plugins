@@ -25,6 +25,9 @@ import type {
 } from 'dsh-spark-finance/types'
 import { providerKey } from './derive.ts'
 
+/** 价格表两个写动作：`update` = 拉最新目录价，`restore` = 丢弃覆盖层回发版快照。 */
+export type FinancePriceAction = 'update' | 'restore'
+
 export interface FinancePanelState {
   status: 'idle' | 'loading' | 'ready' | 'error'
   ledger?: FinanceLedger
@@ -41,8 +44,15 @@ export interface FinancePanelState {
   lastSyncAppliedAt?: number
   /** 价格表状态（基础快照完整性 + 覆盖层 + 被形状守卫拒绝的键）。 */
   priceTable?: FinancePriceTableStatus
-  /** 价格表操作进行中（更新 / 还原）。可选：旧测试夹具不必补该字段。 */
-  priceBusy?: boolean
+  /**
+   * 价格表操作进行中的那个动作（更新 / 还原 / undefined = 空闲）。
+   *
+   * 2026-09-21：从 `boolean` 改成「是哪个动作」——按钮要点亮自己的 spinner，
+   * 就不能只知道"有人在忙"。可选：旧测试夹具不必补该字段。
+   */
+  priceAction?: FinancePriceAction
+  /** 刷新（重拉账本 + provider 列表）进行中：按钮 spinner 与 disabled 同源。 */
+  refreshing?: boolean
   /** 价格表操作失败信息；不改账本状态，只在价格行显示。 */
   priceError?: string | null
   /** 静态套餐定义（`finance.plans`，用户填一次）。 */
@@ -97,7 +107,8 @@ export class FinancePanelController {
     tiers: {},
     shadowedTierKeys: [],
     plansWritable: false,
-    priceBusy: false,
+    priceAction: undefined,
+    refreshing: false,
     priceError: null,
     progressLines: [],
   })
@@ -145,6 +156,9 @@ export class FinancePanelController {
     const firstLoad = this.store.getSnapshot().ledger === undefined
     this.store.update((state) => {
       state.status = firstLoad ? 'loading' : 'ready'
+      // 刷新进行中要能被按钮读到（spinner + disabled 同源）。首开走整面板 loading 态，
+      // 这枚按钮还没上屏，但仍置位以免「load 中」与「按钮可点」同时成立。
+      state.refreshing = true
       state.error = null
       if (firstLoad) {
         state.progress = undefined
@@ -179,6 +193,10 @@ export class FinancePanelController {
     } catch (error) {
       if (generation !== this.generation) return
       this.fail(messageOf(error))
+    } finally {
+      // 原地复位，不用上面那条代次守卫 —— 与 runPriceAction 同一类坑（2026-09-18 实测）：
+      // 本方法自己 ++generation，守卫恒为假，标记就永远停在"忙"。动作结束即业务结束。
+      this.store.update((state) => { state.refreshing = false })
     }
   }
 
@@ -259,7 +277,7 @@ export class FinancePanelController {
 
   /** 一键更新价格表：拉最新目录价 → 覆盖层原子替换 → 刷新状态与账本（SPEC §5.1）。 */
   async updatePrices(): Promise<void> {
-    await this.runPriceAction(async () => {
+    await this.runPriceAction('update', async () => {
       // 平台客户端会校验 arity：这条端点在 wire 上声明了 1 个业务参数，必须显式传（空对象即默认值）。
       const result = await this.remote.syncCommunityPrices({})
       return { ok: result.ok, failure: remoteFailureOf(result) }
@@ -268,7 +286,7 @@ export class FinancePanelController {
 
   /** 还原到发版快照：丢弃用户侧覆盖（SPEC §5.1）。 */
   async restorePrices(): Promise<void> {
-    await this.runPriceAction(async () => {
+    await this.runPriceAction('restore', async () => {
       const result = await this.remote.clearPriceOverlay()
       return { ok: result.ok, failure: remoteFailureOf(result) }
     }, 'clearPriceOverlay failed')
@@ -277,13 +295,17 @@ export class FinancePanelController {
   /**
    * 两个价格动作共用的一条路径：失败**保留原快照**并只写 priceError（不把整个面板切到错误态），
    * 成功则刷新状态与账本。原子性由宿主保证（拉取失败不替换覆盖层）。
+   *
+   * 2026-09-21：`action` 参数不只是记录"哪个按钮该转" —— 它同时是**唯一在飞的动作**：
+   * 期间两枚按钮都禁用（互斥），面板据此逐枚点亮 spinner。
    */
   private async runPriceAction(
+    action: FinancePriceAction,
     run: () => Promise<{ ok: boolean; failure: string | undefined }>,
     fallbackMessage: string,
   ): Promise<void> {
     const generation = this.generation
-    this.store.update((state) => { state.priceBusy = true; state.priceError = null })
+    this.store.update((state) => { state.priceAction = action; state.priceError = null })
     try {
       const outcome = await run()
       if (generation !== this.generation) return
@@ -298,11 +320,11 @@ export class FinancePanelController {
         this.store.update((state) => { state.priceError = error instanceof Error ? error.message : String(error) })
       }
     } finally {
-      // priceBusy 必须**原地复位**，不能用上面 load 的代次守卫：成功路径里 `await this.load()`
+      // priceAction 必须**原地复位**，不能用上面 load 的代次守卫：成功路径里 `await this.load()`
       // 自己会 ++generation（见 load()），守卫恒为假 —— 于是「更新一次价格表」之后两枚价格按钮
       // 永久 disabled 且不给原因（2026-09-18 真宿主实测 ≥29s 不复位，切页签也不恢复，违反
       // UI-UX-SPEC §3.1「禁用必须给原因」）。动作结束即业务结束，与快照代次无关。
-      this.store.update((state) => { state.priceBusy = false })
+      this.store.update((state) => { state.priceAction = undefined })
     }
   }
 

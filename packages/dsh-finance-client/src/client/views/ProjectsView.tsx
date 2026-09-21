@@ -7,7 +7,7 @@
  */
 
 import { useState, type ReactNode } from 'react'
-import { Button, Card, CellText, EmptyState, Money, TrendChart, formatMicros } from 'dsh-ui-kit'
+import { Button, Card, CellText, EmptyState, Money, TrendChart, formatMoneyMicros } from 'dsh-ui-kit'
 import type { FinanceLedger, FinancePlanEntry, FinanceSessionRow } from 'dsh-spark-finance/types'
 import { formatTokens, projectCostRows, sessionsOfWorkspace, sessionsTrend } from '../derive.ts'
 import type { FinanceTranslate } from '../locales.ts'
@@ -58,7 +58,7 @@ export function ProjectsView({ ledger, plans, t }: ProjectsViewProps): ReactNode
             onKeyDown={(event) => { if (event.key === 'Enter') setSelected(keyOf(row)) }}
             role="button"
             tabIndex={0}
-            aria-label={`${displayTitle(row, t)} · ${t('colCost')} ${formatMicros(row.totalMicros)}`}
+            aria-label={`${displayTitle(row, t)} · ${t('colCost')} ${formatMoneyMicros(row.totalMicros, currency)}`}
           >
             <span className={css.cell}>
               {/* 合并渲染：项目名 + 会话数副行。 */}
@@ -118,7 +118,7 @@ export function ProjectDetail({ row, ledger, currency, t, onBack }: {
           {/* 数据不足（<2 天）画不出趋势：给空占位而不是一块空白画布。 */}
           {points.length < 2
             ? <EmptyState message={t('projectTrendEmpty')} />
-            : <TrendChart points={points} ariaLabel={t('projectTrendTitle', { title })} formatValue={formatMicros} gradientId="finance-project-trend" />}
+            : <TrendChart points={points} ariaLabel={t('projectTrendTitle', { title })} formatValue={(v) => formatMoneyMicros(v, currency)} gradientId="finance-project-trend" />}
         </Card>
         <Card variant="inset" title={t('projectSessionsTitle')} actions={<span className={css.tagMuted}>{t('projectSessions', { count: sessions.length })}</span>}>
           <div className={css.table}>

@@ -117,6 +117,15 @@
   overflow-wrap: anywhere;
 }
 
+/* 纯换行单元格（换行语义完全归 ui-kit CellText 所有）。
+   为什么需要它：CellText 自带 `display:-webkit-box` + `line-clamp`，
+   只要**不**被 `.cell` 的 `white-space:nowrap` 命中，它自己就能正确截断。
+   这里只补 `min-width:0`（grid 子项默认 min-width:auto，不压到 0 时
+   内容会把列撑宽、grid 反而不收缩）。 */
+.cellTextOnly {
+  min-width: 0;
+}
+
 .colsBalance {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr) auto;
 }
@@ -181,12 +190,18 @@
 
 /* 供应商总表：供应商 | 付费类型 | 余额/月费 | 按量等价 | 操作。
    表头与数据行是两个独立 grid，max-content 在两边算宽会不同
-   （「付费类型」四字 vs 行内 Tag），后面列随之错位 —— 该列必须用固定宽度
-   （72px 容纳四字表头，行内 Tag 居中留白即可）。 */
+   （「付费类型」四字 vs 行内 Tag），后面列随之错位 —— 该列必须用固定宽度。
+
+   2026-09-21 列宽重排（用户裁决「table 布局混乱」+ 真宿主实测）：
+   付费类型列里只有一个 40px 的 Tag（表头「付费类型」52px 是最宽项），72px 里空着
+   约 32px；而供应商列同时要放厂商名（109px）**和**额度触达 pill（170px）—— pill
+   溢出 30px 被裁、行高从 50px 撑到 65px，整张表看起来错位。
+   修法：**非付费类型列的 tag 全部移除**（额度触达移进详情弹窗，超值与手填降级为
+   悬浮提示），付费类型列收到 56px（表头 52px 仍不折行），省下的 16px 给其余列。 */
 .colsProviders {
   /* 操作列同样必须固定宽：表头「操作」二字 vs 行内「…」按钮宽度不同，
      auto 会让两个 grid 的 fr 列边界再次错开（第三轮真宿主截图实测）。 */
-  grid-template-columns: minmax(120px, 1.4fr) 72px minmax(96px, 1fr) minmax(96px, 1fr) 56px;
+  grid-template-columns: minmax(132px, 1.6fr) 56px minmax(104px, 1fr) minmax(104px, 1fr) 52px;
 }
 
 /* modal 里的纵向表单（修改供应商）：字段组纵排，联动显隐。 */
@@ -202,19 +217,45 @@
   gap: var(--spk-space-1);
 }
 
-/* 详情 modal 的键值列表。 */
+/* 详情 modal 的键值列表。
+   2026-09-21 可读性重构（用户反馈「可读性做的不好，不易读」）：
+   原来 17 行**全部同级平铺**、每行一条强档分隔线、标签 11px 用 label-3 —— 三个问题：
+   1. 无分组 → 找不到"余额类在哪"，屏幕阅读器也读作 17 条并列；
+   2. 分隔线用 border-2（强档）→ 17 条重线视觉噪声大，且与「内层用弱档」口径相悖；
+   3. **标签用 label-3 在暗色浮层只有 4.39:1，不达 AA**（MASTER 明确记过
+      「浮层上禁用 label-3」，闸门里也一直没有 label-3 on float 配对）。
+   现在：分组小标题 + 分组内弱档分隔 + 标签 label-2（亮 6.85 / 暗 5.56，两主题都过 AA）。 */
 .detailList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spk-space-3);
+}
+
+.detailGroup {
   display: flex;
   flex-direction: column;
 }
 
+/* 分组小标题：用 `--spk-label`（最强正文档）+ 600 字重 —— **不能用 label-3**：
+   label-3 在暗色浮层上只有 4.39:1，不达 AA（MASTER 明确记过「浮层上禁用 label-3」，
+   check:contrast 也因此没有 label-3 on float 这条硬配对）。
+   层级靠「字重 + 字号」而不靠色阶：标题 600/11px、值 400/12px、行标签 400/12px 退到 label-2。 */
+.detailGroupTitle {
+  margin: 0 0 var(--spk-space-1);
+  color: var(--spk-label);
+  font-size: var(--spk-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
 .detailRow {
   display: grid;
-  grid-template-columns: minmax(96px, 0.9fr) minmax(0, 1.4fr);
-  gap: var(--spk-space-2);
+  grid-template-columns: minmax(104px, 0.8fr) minmax(0, 1.6fr);
+  gap: var(--spk-space-3);
   align-items: baseline;
   padding: var(--spk-space-2) 0;
-  border-bottom: 1px solid var(--spk-border-2);
+  /* 弱档：行间只是"同一组里的分隔"，用分隔线档 border（不是容器轮廓档 border-2）。 */
+  border-bottom: 1px solid var(--spk-border);
   font-size: var(--spk-text-sm);
 }
 
@@ -223,14 +264,17 @@
 }
 
 .detailLabel {
-  color: var(--spk-label-3);
-  font-size: var(--spk-text-xs);
+  /* label-2 而非 label-3：label-3 在暗色浮层上 4.39:1 不达 AA（见上方注释）。 */
+  color: var(--spk-label-2);
+  font-size: var(--spk-text-sm);
 }
 
 .detailValue {
   min-width: 0;
   overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;
+  /* 值比标签重一档，让「标签 → 值」的重心落在值上（17 行扫读时先看值）。 */
+  color: var(--spk-label);
 }
 
 .planForm {
@@ -268,25 +312,22 @@
   font-size: var(--spk-text-xs);
 }
 
-/* ── 分组（同一模型跨供应商） ─────────────────────────────── */
+/* ── 手风琴（同一模型跨供应商，2026-09-21） ──────────────────
+   原先每个模型组是「自定义组头 + inset 子卡」的堆叠，模型一多就读不动；
+   改成手风琴后由 ui-kit `Disclosure` 自身负责分割（头行 hover 底 + 展开动画 +
+   aria-expanded/aria-controls），所以这里**不再需要**自定义卡片式组头。
+   已删除的死类：`.group`（组容器）/`.groupHead`（组头行）/
+   `.groupHead` 里的 Tag 布局 —— 它们只服务旧结构。
 
-.group {
+   包裹层的存在理由：`Disclosure` 目前不透传 rest 属性，而既有断言与 harness 按
+   `data-testid="finance-model-{model}"` 取组，所以 testid 挂在这一层。 */
+.accordion {
   display: flex;
   flex-direction: column;
-  gap: var(--spk-space-2);
-  padding: var(--spk-space-3) 0 var(--spk-space-4);
-  border-bottom: 1px solid var(--spk-border-2);
 }
 
-.group:last-child {
-  border-bottom: none;
-}
-
-.groupHead {
-  display: flex;
-  align-items: center;
-  gap: var(--spk-space-2);
-  flex-wrap: wrap;
+.accordionItem {
+  min-width: 0;
 }
 
 .groupTitle {
@@ -488,13 +529,16 @@
 /* 窗口归因表：模型 | 用量 | 解码时长 | 金额。
    时长列在旧会话（无 financeRateHourly）时不渲染，所以用两套列宽。 */
 .colsQuotaWindow {
-  grid-template-columns: minmax(140px, 1.6fr) minmax(80px, 1fr) minmax(80px, 1fr) minmax(88px, 1fr);
+  /* 首列给换行留余地：模型名最长约 60 字符（anthropic/claude-sonnet-4-5-…），
+     CellText 按 2 行截断，所以这里比单行时代宽 —— 两行放得下更多字符，
+     比"单行 + 省略号"更可读（2026-09-21 用户裁决）。 */
+  grid-template-columns: minmax(160px, 1.6fr) minmax(80px, 1fr) minmax(80px, 1fr) minmax(88px, 1fr);
 }
 
 /* 无时长列时的三列布局：表头与行必须用同一套（否则两个 grid 列宽不一致会整行错位，
    UI-UX-SPEC §3.5 第 5 条 —— finance 供应商表三轮真宿主截图实测沉淀）。 */
 .colsQuotaWindowNoDuration {
-  grid-template-columns: minmax(140px, 1.6fr) minmax(80px, 1fr) minmax(88px, 1fr);
+  grid-template-columns: minmax(160px, 1.6fr) minmax(80px, 1fr) minmax(88px, 1fr);
 }
 
 /* 额度触达明细（供应商详情弹窗内）：标题行 + 只读表。 */
@@ -515,13 +559,6 @@
    表头与数据行是两个独立 grid，非 fr 列宽必须固定值）。 */
 .colsQuotaHits {
   grid-template-columns: minmax(120px, 1.4fr) 76px 64px 48px minmax(84px, 1fr);
-}
-
-/* 窗口归因的性价比结论行：只承载数字结论（口径解释不进 UI）。 */
-.windowVerdict {
-  margin: 0;
-  color: var(--spk-label);
-  font-size: var(--spk-text-sm);
 }
 
 /* ── 转置对比表（该用谁，2026-09-20）：行 = 指标，列 = 供应商 ── */
