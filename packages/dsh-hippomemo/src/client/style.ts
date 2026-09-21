@@ -152,19 +152,27 @@ export const HIPPOMEMO_CSS = [
      面底与阅读排版，高度放开，滚动单源归 modal body。 */
   '[data-plugin="dsh-hippomemo"] .hippomemo-detail-content { margin: 0; padding: 12px 14px; white-space: pre-wrap; font-size: var(--spk-text-md); line-height: 1.7; overflow-wrap: anywhere; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-tag-list { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }',
+  /* 弹窗内容列：分区（pills / 正文 / 标签 / 字段 / 谱系 / 关联）之间统一间距。
+     此前 scope 是无间距的裸 div，只靠个别块自带 margin，正文与相邻块会紧贴
+     （2026-09 用户反馈）。 */
+  '[data-plugin="dsh-hippomemo"] .hippomemo-modal-scope { display: flex; flex-direction: column; gap: var(--spk-space-3); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-tag-label { font-size: var(--spk-text-sm); color: var(--spk-label-2); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-form-hint { font-size: var(--spk-text-xs); color: var(--spk-label-3); line-height: 16px; }',
   /* 字段行：行距 14px（相邻行不再贴着），label 走 xs/label-3 小标签层级，
      值是主体 —— dt/dd 的视觉权重差让两列栅格可扫（2026-09 用户反馈）。 */
-  '[data-plugin="dsh-hippomemo"] .hippomemo-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px 20px; margin: 0; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-fact { display: flex; flex-direction: column; gap: 4px; min-width: 0; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-fact dt { font-size: var(--spk-text-xs); line-height: 16px; color: var(--spk-label-3); }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-fact dd { margin: 0; font-size: var(--spk-text-md); line-height: 20px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }',
+  /* 字段：**label | value 两列**（2026-09 用户反馈「label 和 value 很难辨识」）。
+     此前是「小标签在上、值在下」的两列小卡：标签与值的字号只差一档、又都左对齐，
+     读起来像两行同级文本。现在标签固定成左侧一列（小字、次要色），值独占右列，
+     纵向看是一条整齐的值列 —— 扫读时不再需要先判断哪行是标签。 */
+  '[data-plugin="dsh-hippomemo"] .hippomemo-facts { display: flex; flex-direction: column; gap: var(--spk-space-3); margin: 0; }',
+  '[data-plugin="dsh-hippomemo"] .hippomemo-fact { display: grid; grid-template-columns: minmax(64px, max-content) minmax(0, 1fr); gap: var(--spk-space-3); align-items: baseline; min-width: 0; }',
+  '[data-plugin="dsh-hippomemo"] .hippomemo-fact dt { font-size: var(--spk-text-xs); line-height: 18px; color: var(--spk-label-3); }',
+  '[data-plugin="dsh-hippomemo"] .hippomemo-fact dd { margin: 0; font-size: var(--spk-text-md); line-height: 18px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-fact-spark { color: var(--spk-brand-fg); }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-source-spark-pill { display: inline-flex; align-items: center; gap: 4px; color: var(--spk-brand-fg); font-size: var(--spk-text-sm); }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-source-spark-id { font-family: var(--spk-font-mono, ui-monospace, monospace); font-size: var(--spk-text-xs); }',
+  '[data-plugin="dsh-hippomemo"] .hippomemo-source-spark-pill { display: inline-flex; align-items: center; gap: var(--spk-space-1); color: var(--spk-brand-fg); font-size: inherit; }',
+  '[data-plugin="dsh-hippomemo"] .hippomemo-source-spark-id { font-family: var(--spk-font-mono, ui-monospace, monospace); font-size: inherit; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-row-spark { display: inline-flex; color: var(--spk-brand-fg); }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-lineage { margin-top: 8px; border-top: 1px solid var(--spk-border); padding-top: 8px; display: flex; flex-direction: column; gap: 8px; }',
+  '[data-plugin="dsh-hippomemo"] .hippomemo-lineage { margin-top: 0; border-top: 1px solid var(--spk-border); padding-top: var(--spk-space-3); display: flex; flex-direction: column; gap: var(--spk-space-2); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-lineage-title { font-size: var(--spk-text-sm); font-weight: 600; margin: 0; display: flex; align-items: center; gap: 8px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-lineage-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: var(--spk-text-sm); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-lineage-node { padding: 4px var(--spk-space-3); border-radius: 8px; border: 1px solid var(--spk-border); font-size: var(--spk-text-xs); }',
