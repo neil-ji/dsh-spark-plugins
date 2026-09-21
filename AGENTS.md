@@ -134,6 +134,10 @@ dsh-hippomemo、dsh-spark）：
 dock 声明子槽并用平台 `renderSlot(key, { variant, activeId, onSelect }, { only, fallback })`
 渲染 rail/header/pane 三位。插件 inject 需自带原由 dock 代持的服务
 （locale / remote / remote.credentials / settingsScope / slots），由架构闸门 inject 面守护。
+**纯 UI 插件（只有 `dsh.client`、没有 `dsh.bundle`）必须在某个 bundle patch 里有 loader 行**
+（`- id: x-client, name: 'pkg-client'`），否则 `dsh-client-modules` 不会扫到它 —— 不报错，
+只是 dock 里永远没有这个模块（2026-09-21 dsh-script-client 实测）。改注册面按铁律 4
+用 `/__dev/probe` 的 `clientGraph.entries` 断言。
 
 ---
 

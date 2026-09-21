@@ -242,6 +242,13 @@ F1 继续用 JSONL（无新依赖、现有实现已在用）。`dsh-storage-doma
 （都被 `init` 的 catch 收进 `ctx.logger`）。正确顺序：`init = 建目录 + 迁移 + 注册 HTTP`；
 种子挂在 `ready.then()` 之后再跑。
 
+**纯 UI 插件的 loader 行（2026-09-21 实测）**：`dsh-script-client` 只有 `dsh.client`
+声明，没有 `dsh.bundle`。它必须**由某个 bundle patch 里的 loader 行**（`- id: script-client,
+name: 'dsh-script-client'`，写在 `dsh-script/cordis.patch.yml`）带进组合 —— 缺这一行时
+`dsh-client-modules` 不会把它扫进客户端模块表，表现为**不报错、只是 dock 里永远没有这个模块**
+（同 npm-ui / github-ui 的形态）。改动注册面后必须按 AGENTS §0 铁律 4 用探针断言
+`clientGraph.entries` 里出现该包。
+
 **事件/推送**：`script/events` stream（AGENTS §2.4 模板）——wire 描述符（service `scriptEvents`、namespace `script`、`mode: 'stream'`、`resultMode: 'strict'`、ready 基线帧 + 数据帧）、host `ScriptEventsService`、纯函数 `events.ts` 桥接（复用 kit `bridgeEvents`）、client `subscribeFrames`。
 
 ---
