@@ -1,8 +1,13 @@
 .card {
   --acc: var(--spk-brand-fg);
   background: var(--spk-surface-card);
-  border: 1px solid var(--spk-border);
-  border-radius: 14px;
+  /* 卡片描边/圆角与 ui-kit `Card` **逐值一致**（2026-09-21 用户裁决
+     「card border 必须统一 color、width、radius」）：
+     外层卡统一 `1px --spk-border-2` + `--spk-radius-card`(12)。
+     原先这里是 `--spk-border` + 硬编码 14px —— 14px 是 `--spk-radius-lg`
+     （文档里属"浮层大容器"档），卡片不该用；两个卡组件也不同色号。 */
+  border: 1px solid var(--spk-border-2);
+  border-radius: var(--spk-radius-card, 12px);
   overflow: hidden;
 }
 
@@ -40,11 +45,13 @@
 
 .statGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .stat {
-  /* 与 Card 同一个表面 token —— Stat 常与 Card 同屏，两者底色必须一致
-     （2026-09-29 真宿主截图：layer-2 比 surface-card 深一档，被判为样式不一致）。 */
+  /* 与 Card 同一个表面 token 与同一套描边/圆角 —— Stat 常与 Card 同屏，
+     三者（底色 / 描边 / 圆角）任一不一致都会被读成"另一个组件"
+     （2026-09-29 真宿主截图：layer-2 比 surface-card 深一档，被判为样式不一致；
+     2026-09-21 用户裁决：card border 必须统一 color、width、radius）。 */
   background: var(--spk-surface-card);
-  border: 1px solid var(--spk-border);
-  border-radius: 12px;
+  border: 1px solid var(--spk-border-2);
+  border-radius: var(--spk-radius-card, 12px);
   padding: 12px;
 }
 .statLabel {
@@ -57,5 +64,15 @@
   font: 700 17px / 1.2 var(--spk-font);
   font-variant-numeric: tabular-nums;
   color: var(--spk-label);
+}
+/* 数值下方的说明小字（Stat.description）：11px 元信息层级，与 statLabel 同 token。
+   label-3 在卡面上亮/暗两个主题都过 AA（audit-contrast 的 `label-3 on card`）。
+   margin-top 4px 与 statLabel 的 margin-bottom 对称，让「标签 / 数值 / 说明」
+   三行读起来是一个整体，而不是"句子飘在指标卡外面"。 */
+.statDesc {
+  display: block;
+  margin-top: 4px;
+  font: 400 var(--spk-text-xs, 11px) / 1.4 var(--spk-font);
+  color: var(--spk-label-3);
 }
 .pos { color: var(--spk-success); }

@@ -51,7 +51,7 @@ export {
   type ChartDatum, type TrendPoint,
   type DonutChartProps, type BarChartProps, type StackedBarProps, type TrendChartProps,
 } from './components/Charts.tsx'
-export { Money, formatMicros, formatMicrosExact, type MoneyProps, type MoneySize } from './components/Money.tsx'
+export { Money, formatMicros, formatMicrosExact, formatMoneyMicros, formatMoneyMicrosExact, type MoneyProps, type MoneySize } from './components/Money.tsx'
 
 // 终端与图表
 export { TerminalBlock, type TerminalBlockProps, type TerminalLine, type TerminalTone } from './components/TerminalBlock.tsx'

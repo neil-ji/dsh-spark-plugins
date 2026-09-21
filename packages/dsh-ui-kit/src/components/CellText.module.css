@@ -6,4 +6,11 @@
   overflow: hidden;
   overflow-wrap: anywhere;
   min-width: 0;
+  /* `white-space: normal` 是**组件契约的一部分**，不是装饰（2026-09-21 真宿主实测修复）：
+     CellText 的存在理由就是"允许换行、最多 N 行截断"，而它常与表格的 `.cell` 连用，
+     后者带 `white-space: nowrap`。两者特异度相同（都是单类），谁生效取决于样式注入
+     顺序 —— **不可依赖**。实测后果：nowrap 胜出时 `display` 也被压成 `flow-root`，
+     `-webkit-line-clamp` 静默失效，模型名退化成"单行截断"，2 行上限根本没生效。
+     显式声明 normal，让换行语义由组件自己掌握。 */
+  white-space: normal;
 }

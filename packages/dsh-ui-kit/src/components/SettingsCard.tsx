@@ -37,17 +37,27 @@ export function SettingsCard({ title, description, icon, badge, accentColor, cla
 export interface StatProps {
   label: ReactNode
   value: ReactNode
+  /**
+   * 数值下方的**小字说明**（`--spk-text-xs` / `--spk-label-3`）。
+   *
+   * 2026-09-21 新增（用户裁决）：当一个指标需要一句与其数值直接相关的话
+   * （如「比订阅估价多花 0.47」）时，把它渲染在**数值正下方**，而不是另起一行
+   * 脱离指标区的正文 —— 后者在指标卡下方"格格不入"，且读者要自己把句子和
+   * 上面哪个数字对上。说明只在**真能算出来时**才传（null/undefined 即不渲染）。
+   */
+  description?: ReactNode
   /** 正向数值着 success 色 */
   positive?: boolean
   className?: string
 }
 
 /** 卡体统计小卡（dock .stat） */
-export function Stat({ label, value, positive, className }: StatProps) {
+export function Stat({ label, value, description, positive, className }: StatProps) {
   return (
     <div className={cx(css.stat, className)}>
       <span className={css.statLabel}>{label}</span>
       <strong className={cx(css.statValue, positive && css.pos)}>{value}</strong>
+      {description ? <span className={css.statDesc}>{description}</span> : null}
     </div>
   )
 }

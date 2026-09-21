@@ -3,8 +3,13 @@
   flex-direction: column;
   gap: var(--spk-gap-card, 8px);
   min-width: 0;
-  border: 1px solid var(--spk-border);
-  border-radius: 12px;
+  /* 外层卡用**较强**的描边档（border-2 = 控件描边默认档）。
+     2026-09-21 用户裁决「border color 不合理，外浅内深」：原先外层用 border、
+     嵌套 inset 用 border-2，而 border-2 在两个主题里都**强于** border
+     （亮 1.68 vs 1.35；暗 1.35 vs 1.14）→ 视觉上"里面的框比外面的框重"，
+     层级读起来是反的。现在语义统一成「容器越靠外，轮廓越强」。 */
+  border: 1px solid var(--spk-border-2);
+  border-radius: var(--spk-radius-card, 12px);
   background: var(--spk-surface-card);
   padding: var(--spk-pad-card, 12px 14px);
 }
@@ -31,12 +36,16 @@
 }
 
 .brand {
-  border-color: color-mix(in srgb, var(--spk-brand) 45%, var(--spk-border));
+  border-color: color-mix(in srgb, var(--spk-brand) 45%, var(--spk-border-2));
 }
 
-/* 嵌套子卡：落在外层卡内的层级（背景沉一层 + 边框更弱），
-   与外层 surface 卡形成可辨层级，避免「同色卡套卡」看不出结构。 */
+/* 嵌套子卡：落在外层卡内的层级 —— 背景沉一层（凹陷方向）+ 边框**更弱**，
+   与外层 surface 卡形成可辨层级，避免「同色卡套卡」看不出结构。
+   描边档必须比外层弱：用 --spk-border（分隔线档），不是 border-2。
+   背景用 --spk-layer-2（凹陷档，两个主题都比 card 深/暗一档）：
+   原先用 --spk-layer-1，而亮色下 layer-1 与 surface-card **同为 #ffffff**
+   （对比度恰好 1.00:1），inset 卡在亮色里完全看不出层级。 */
 .inset {
-  background: var(--spk-layer-1);
-  border-color: var(--spk-border-2);
+  background: var(--spk-layer-2);
+  border-color: var(--spk-border);
 }

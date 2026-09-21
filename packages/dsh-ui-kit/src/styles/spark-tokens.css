@@ -14,7 +14,10 @@
        所有插件面板只能引用这些令牌，不得再写字面量间距
    - 分组：功能分组一律 ui-kit Card 包裹，分组标题写在**该 Card 的 title**上
      （页面级 <h2> + 无边框分组的旧写法已废弃）
-   - 卡片 surface：surface-card 底 + border 边框 + radius 12
+   - 卡片 surface：surface-card 底 + `1px --spk-border-2` 外轮廓 + radius 12
+     （2026-09-21：外轮廓用**强档** border-2、嵌套 inset 用弱档 border —— 原先反了，
+      读起来「外浅内深」；卡片族 Card/Stat/SettingsCard 三者 color/width/radius
+      必须一致。两条都由 check:contrast 的「卡片描边」段守住）
    - Tab：ui-kit SegmentedControl（面板页签用 fullWidth 通栏形态），禁止自绘
    - 折叠：ui-kit Disclosure，禁止 <details> / 按钮切换等旁路实现
    - 图标：dsh-ui-kit IconXxx（见 components/icons.tsx 规范）
