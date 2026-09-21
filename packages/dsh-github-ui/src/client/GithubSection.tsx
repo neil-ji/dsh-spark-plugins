@@ -33,6 +33,14 @@ export interface GithubSectionInjected {
 /** Props delivered by the slot outlet (inject face spread flat). */
 export type GithubSectionProps = Partial<GithubSectionInjected>
 
+/**
+ * 面板里的异步动作（同一时刻至多一个在飞）。
+ *
+ * 有了这个 id，按钮才能只让**自己**进 loading 态，而不是整面板一起变灰；
+ * 也让 loading 与 disabled 同源，不会出现「转圈但可点」或「禁用但不转」的错配。
+ */
+type GithubBusyAction = 'saveToken' | 'removeToken' | 'testConnection' | 'testProxy' | 'saveConfig' | 'reload'
+
 /** One boolean permission row. */
 function PermissionRow({ label, checked, disabled, onChange }: {
   label: string
@@ -57,7 +65,15 @@ function Loaded({ injected }: { injected: GithubSectionInjected }): ReactNode {
   const { controller, t } = injected
   const state = injected.useSnapshot(snapshot => snapshot)
   const [tokenDraft, setTokenDraft] = useState('')
-  const [busy, setBusy] = useState(false)
+  /**
+   * 在飞的异步动作 id（undefined = 空闲）。
+   *
+   * 2026-09-21：从 boolean 改成「是哪个动作」—— 只是"有人在忙"没法让**对应的**那枚
+   * 按钮亮 spinner。本面板同屏有多枚异步按钮（保存令牌 / 移除 / 测试连接 / 测试代理 /
+   * 保存配置 / 重试），全部置 disabled 会让每一枚看起来都失灵。
+   */
+  const [busyAction, setBusyAction] = useState<GithubBusyAction | undefined>(undefined)
+  const busy = busyAction !== undefined
   // 反馈是**一条**本地化文案（不再是宿主原始英文串），且是成功/失败二选一的联合
   // —— 同屏不可能出现「错误 + 已保存」两条互相矛盾的播报（PCQA-013）。
   const [feedback, setFeedback] = useState<Feedback | undefined>(undefined)
@@ -76,13 +92,19 @@ function Loaded({ injected }: { injected: GithubSectionInjected }): ReactNode {
    * 页面级动作骨架：成功播报「已保存」，失败就地显示本地化文案。
    * 结果**整体替换**那一条反馈 —— 之前用 notice + testError 两个 state，
    * 「测试连接」失败会走成 notice='已保存' 与错误行同时上屏（PCQA-013 的根因）。
+   *
+   * `action` 是按钮自己的 loading id：动作期间**只有它**进 loading 态。
+   * 用 finally 复位，抛错也不会把按钮永久卡在 busy。
    */
-  const run = async (action: () => Promise<string | undefined>): Promise<void> => {
-    setBusy(true)
+  const run = async (action: GithubBusyAction, act: () => Promise<string | undefined>): Promise<void> => {
+    setBusyAction(action)
     setFeedback(undefined)
-    const raw = await action()
-    setBusy(false)
-    setFeedback(raw !== undefined ? describeActionFailure(raw, t) : succeeded(t('saved')))
+    try {
+      const raw = await act()
+      setFeedback(raw !== undefined ? describeActionFailure(raw, t) : succeeded(t('saved')))
+    } finally {
+      setBusyAction(undefined)
+    }
   }
 
   if (state.status === 'error') {
@@ -91,7 +113,14 @@ function Loaded({ injected }: { injected: GithubSectionInjected }): ReactNode {
         <Card title={t('cardConnectionTitle')}>
           <p className={styles.error}>{t('loadFailed') + ': ' + (state.error ?? '')}</p>
           <div className={styles.actions}>
-            <Button variant="secondary" onClick={() => { void controller.load() }}>{t('retry')}</Button>
+            <Button
+            variant="secondary"
+            loading={busyAction === 'reload'}
+            disabled={busy}
+            onClick={() => { void run('reload', async () => { await controller.load(); return undefined }) }}
+          >
+            {t('retry')}
+          </Button>
           </div>
         </Card>
       </div>
@@ -123,14 +152,24 @@ function Loaded({ injected }: { injected: GithubSectionInjected }): ReactNode {
           />
           <Button
             variant="primary"
+            loading={busyAction === 'saveToken'}
             disabled={busy || tokenDraft === ''}
             aria-describedby={tokenDraft === '' ? 'github-save-hint' : undefined}
-            onClick={() => { void run(() => controller.saveToken(tokenDraft).then((f) => { if (f === undefined) setTokenDraft(''); return f })) }}
+            onClick={() => { void run('saveToken', () => controller.saveToken(tokenDraft).then((f) => { if (f === undefined) setTokenDraft(''); return f })) }}
           >
             {t('saveToken')}
           </Button>
           {credentialConfigured
-            ? <Button variant="secondary" disabled={busy} onClick={() => { void run(() => controller.removeToken()) }}>{t('removeToken')}</Button>
+            ? (
+              <Button
+                variant="secondary"
+                loading={busyAction === 'removeToken'}
+                disabled={busy}
+                onClick={() => { void run('removeToken', () => controller.removeToken()) }}
+              >
+                {t('removeToken')}
+              </Button>
+            )
             : null}
         </div>
         {tokenDraft === ''
@@ -187,10 +226,11 @@ function Loaded({ injected }: { injected: GithubSectionInjected }): ReactNode {
               「保存令牌」——之前两个实心主按钮同屏（PCQA-019）。 */}
           <Button
             variant="secondary"
+            loading={busyAction === 'testConnection'}
             disabled={busy}
             onClick={() => {
               void (async () => {
-                setBusy(true)
+                setBusyAction('testConnection')
                 setFeedback(undefined)
                 try {
                   // 前置判空（PCQA-003）：未填且未保存令牌时本地化文案直出，不发无谓请求；
@@ -202,7 +242,7 @@ function Loaded({ injected }: { injected: GithubSectionInjected }): ReactNode {
                   const raw = await controller.testConnection(tokenDraft === '' ? undefined : tokenDraft)
                   setFeedback(raw !== undefined ? describeConnectionFailure(raw, t) : succeeded(t('saved')))
                 } finally {
-                  setBusy(false)
+                  setBusyAction(undefined)
                 }
               })()
             }}
@@ -287,18 +327,21 @@ function Loaded({ injected }: { injected: GithubSectionInjected }): ReactNode {
                 />
                 <Button
                   variant="secondary"
+                  loading={busyAction === 'testProxy'}
                   disabled={busy || config.gitProxy === ''}
                   aria-describedby={config.gitProxy === '' ? 'github-proxy-hint' : undefined}
                   onClick={() => {
                     void (async () => {
-                      setBusy(true)
-                      const result = await controller.testProxy(config.gitProxy)
-                      setBusy(false)
-                      setProxyTest(result)
+                      setBusyAction('testProxy')
+                      try {
+                        setProxyTest(await controller.testProxy(config.gitProxy))
+                      } finally {
+                        setBusyAction(undefined)
+                      }
                     })()
                   }}
                 >
-                  {busy ? t('proxyTesting') : t('testProxy')}
+                  {busyAction === 'testProxy' ? t('proxyTesting') : t('testProxy')}
                 </Button>
               </div>
               {config.gitProxy === ''
@@ -327,9 +370,10 @@ function Loaded({ injected }: { injected: GithubSectionInjected }): ReactNode {
             <Button variant="secondary" disabled={busy} onClick={() => { setConfigDraft(undefined) }}>{t('discardChanges')}</Button>
             <Button
               variant="secondary"
+              loading={busyAction === 'saveConfig'}
               disabled={busy}
               onClick={() => {
-                void run(async () => {
+                void run('saveConfig', async () => {
                   const failure = await controller.saveConfig(configDraft as unknown as Record<string, unknown>)
                   if (failure === undefined) setConfigDraft(undefined)
                   return failure

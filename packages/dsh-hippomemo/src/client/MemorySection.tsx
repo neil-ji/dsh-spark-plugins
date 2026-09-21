@@ -633,6 +633,13 @@ function MemoryDetailModal({ api, t, id, refreshKey, onBack, onEdit, onDeleted }
   const [record, setRecord] = useState<MemoryRecord | null>(null);
   const [related, setRelated] = useState<MemoryRecord[]>([]);
   const [error, setError] = useState('');
+  /**
+   * 在飞的写入动作（undefined = 空闲）。
+   *
+   * 归档 / 删除都是**真写盘**（api.update / api.remove），记录多或磁盘慢时要等一下；
+   * 只置 disabled 会让按钮看起来失灵（2026-09-21 与财务面板同批修）。
+   */
+  const [detailAction, setDetailAction] = useState<'archive' | 'remove' | undefined>(undefined);
   useEffect(() => {
     let current = true;
     setError('');
@@ -674,12 +681,18 @@ function MemoryDetailModal({ api, t, id, refreshKey, onBack, onEdit, onDeleted }
   }
   const remove = async (): Promise<void> => {
     if (window.confirm(t('confirmDelete')) === false) return;
-    await api.remove(record.id);
-    onDeleted(record.id);
+    setDetailAction('remove');
+    try {
+      await api.remove(record.id);
+      onDeleted(record.id);
+    } finally { setDetailAction(undefined); }
   };
   const archiveToggle = async (): Promise<void> => {
-    await api.update(record.id, { status: record.status === 'archived' ? 'active' : 'archived' });
-    onDeleted(record.id);
+    setDetailAction('archive');
+    try {
+      await api.update(record.id, { status: record.status === 'archived' ? 'active' : 'archived' });
+      onDeleted(record.id);
+    } finally { setDetailAction(undefined); }
   };
   const hasSpark = record.sourceSparkId !== undefined && record.sourceSparkId !== null && record.sourceSparkId.length > 0;
   return (
@@ -691,10 +704,12 @@ function MemoryDetailModal({ api, t, id, refreshKey, onBack, onEdit, onDeleted }
       footer={(
         <div className='hippomemo-detail-modal-footer'>
           <Button size='sm' variant='ghost' icon={<IconEdit />} onClick={() => { onEdit(record.id); }}>{t('edit')}</Button>
-          <Button size='sm' variant='ghost' onClick={() => { void archiveToggle(); }}>
+          <Button size='sm' variant='ghost' loading={detailAction === 'archive'} disabled={detailAction !== undefined}
+            onClick={() => { void archiveToggle(); }}>
             {record.status === 'archived' ? t('restore') : t('archive')}
           </Button>
           <Button size='sm' variant='ghost' className='hippomemo-button-danger'
+            loading={detailAction === 'remove'} disabled={detailAction !== undefined}
             icon={<IconTrash />} onClick={() => { void remove(); }}>{t('delete')}</Button>
         </div>
       )}
@@ -834,7 +849,7 @@ function MemoryEditorModal({ api, t, initial, onCancel, onSaved }: {
       footer={(
         <div className='hippomemo-edit-modal-footer'>
           <Button variant='ghost' size='md' onClick={onCancel}>{t('cancel')}</Button>
-          <Button variant='primary' size='md' disabled={saving} onClick={() => { void submit(); }}>{t('save')}</Button>
+          <Button variant='primary' size='md' loading={saving} disabled={saving} onClick={() => { void submit(); }}>{t('save')}</Button>
         </div>
       )}
     >
@@ -1014,7 +1029,8 @@ const ACTION_LABELS: Record<EvolveReport['actions'][number]['action'], Hippomemo
 }
 function EvolvePanel({ api, t }: { api: HippomemoApi; t: Translate }): ReactNode {
   const [report, setReport] = useState<EvolveReport | null>(null);
-  const [running, setRunning] = useState(false);
+  /** 在飞的运行模式（false = 空闲 / 'dry' = 预演 / 'apply' = 落盘）；按钮据此只转自己。 */
+  const [running, setRunning] = useState<false | 'dry' | 'apply'>(false);
   const [error, setError] = useState('');
   const [kindMap, setKindMap] = useState<Map<string, MemoryKind>>(new Map());
   useEffect(() => {
@@ -1047,7 +1063,7 @@ function EvolvePanel({ api, t }: { api: HippomemoApi; t: Translate }): ReactNode
     return () => { current = false; };
   }, [api, report]);
   const run = async (dryRun: boolean): Promise<void> => {
-    setRunning(true); setError('');
+    setRunning(dryRun ? 'dry' : 'apply'); setError('');
     try { setReport(await api.evolveRun(dryRun)); }
     catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
     finally { setRunning(false); }
@@ -1056,11 +1072,11 @@ function EvolvePanel({ api, t }: { api: HippomemoApi; t: Translate }): ReactNode
     <div className='hippomemo-panel'>
       <p className='hippomemo-intro'>{t('evolveIntro')}</p>
       <div className='hippomemo-toolbar'>
-        <Button variant='secondary' size='md' disabled={running} onClick={() => { void run(true); }}>
-          {running ? t('evolveRunning') : t('evolveRunDry')}
+        <Button variant='secondary' size='md' loading={running === 'dry'} disabled={running !== false} onClick={() => { void run(true); }}>
+          {running !== false ? t('evolveRunning') : t('evolveRunDry')}
         </Button>
-        <Button variant='primary' size='md' disabled={running} onClick={() => { void run(false); }}>
-          {running ? t('evolveRunning') : t('evolveRunApply')}
+        <Button variant='primary' size='md' loading={running === 'apply'} disabled={running !== false} onClick={() => { void run(false); }}>
+          {running !== false ? t('evolveRunning') : t('evolveRunApply')}
         </Button>
       </div>
       {error.length > 0 ? <p className='hippomemo-error'>{t('loadFailed')}: {error}</p> : null}

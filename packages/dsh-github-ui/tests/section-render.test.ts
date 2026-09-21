@@ -8,6 +8,7 @@
  * 失败支根本不渲染成功播报）；这里额外断言静止态不预渲染任何「已保存」。
  */
 import { createElement } from 'react'
+import { readFileSync } from 'node:fs'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { Button } from 'dsh-ui-kit'
@@ -126,5 +127,26 @@ describe('github 连接页渲染面', () => {
       // 未配置令牌的页面不出现宿主英文技术串。
       expect(html).not.toContain('GITHUB_TOKEN is not configured')
     }
+  })
+
+  it('异步按钮空闲时一律不带 loading 形制（spinner / aria-busy 不得常驻）', () => {
+    // 2026-09-21：异步按钮从「只 disabled」改成 ui-kit 的 loading 形制。空闲态必须
+    // 干净 —— 常驻 spinner 等于没有信号，且会让按钮永远读起来"在忙"。
+    const html = render(READY)
+    expect(html).not.toContain('aria-busy="true"')
+  })
+
+  it('异步按钮走 loading 形制：spinner + aria-busy + 锁点击（不是只有 disabled）', () => {
+    // 与 ui-kit Button 的 loading 形制对齐：本包 6 处异步动作（保存令牌 / 移除 / 测试连接 /
+    // 测试代理 / 保存配置 / 重试）在飞时必须同时给出这三件事。这里钉的是「形态来源」——
+    // 只有 ui-kit 的 loading 会同时产出 spinner 与 aria-busy，自己写 disabled 做不到。
+    const loadingHtml = renderToStaticMarkup(createElement(Button, { loading: true }, 'x'))
+    expect(loadingHtml).toContain('aria-busy="true"')
+    expect(loadingHtml).toContain('spinner')
+    // 源码面：每个动作 id 都要有对应的 loading 站点，且与 disabled 同源
+    // （否则会出现「转圈但可点」或「禁用但不转」的错配）。
+    const src = readFileSync(new URL('../src/client/GithubSection.tsx', import.meta.url), 'utf8')
+    const loadingSites = [...src.matchAll(/loading=\{busyAction === '(\w+)'\}/g)].map(m => m[1])
+    expect(loadingSites.sort()).toEqual(['reload', 'removeToken', 'saveConfig', 'saveToken', 'testConnection', 'testProxy'])
   })
 })

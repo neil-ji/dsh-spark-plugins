@@ -37,6 +37,15 @@ export interface NpmSectionInjected {
 export type NpmSectionProps = Partial<NpmSectionInjected>
 
 /**
+ * 面板里的异步动作（同一时刻至多一个在飞）。
+ *
+ * 2026-09-21：与 GitHub 连接器同规 —— 只置 disabled 会让「保存 / 移除 / 测试连接 /
+ * 重试」四枚按钮在动作期间全部看起来失灵；改成动作 id 后**只有那一个**按钮走
+ * loading 形制（ui-kit Button 的 spinner + aria-busy + 锁点击）。
+ */
+type NpmBusyAction = 'saveToken' | 'removeToken' | 'testConnection' | 'reload'
+
+/**
  * Render the section, or null while the shell has not injected yet.
  * @param props - slot-delivered injected dependencies.
  */
@@ -50,7 +59,9 @@ function Loaded({ injected }: { injected: NpmSectionInjected }): ReactNode {
   const { controller, t } = injected
   const state = injected.useSnapshot(snapshot => snapshot)
   const [tokenDraft, setTokenDraft] = useState('')
-  const [busy, setBusy] = useState(false)
+  /** 在飞的异步动作 id（undefined = 空闲）；按钮据此只让**自己**进 loading 态。 */
+  const [busyAction, setBusyAction] = useState<NpmBusyAction | undefined>(undefined)
+  const busy = busyAction !== undefined
   const [notice, setNotice] = useState<string | undefined>(undefined)
   const [error, setError] = useState<string | undefined>(undefined)
 
@@ -59,14 +70,18 @@ function Loaded({ injected }: { injected: NpmSectionInjected }): ReactNode {
   const credentialConfigured = state.credential?.configured === true
   const tokenLogin = state.token?.login
 
-  const run = async (action: () => Promise<string | undefined>): Promise<void> => {
-    setBusy(true)
+  /** 动作骨架：期间只有 `action` 那枚按钮 busy；finally 复位，抛错也不卡在 busy。 */
+  const run = async (action: NpmBusyAction, act: () => Promise<string | undefined>): Promise<void> => {
+    setBusyAction(action)
     setError(undefined)
     setNotice(undefined)
-    const failure = await action()
-    setBusy(false)
-    if (failure !== undefined) setError(failure)
-    else setNotice(t('saved'))
+    try {
+      const failure = await act()
+      if (failure !== undefined) setError(failure)
+      else setNotice(t('saved'))
+    } finally {
+      setBusyAction(undefined)
+    }
   }
 
   if (state.status === 'error') {
@@ -75,7 +90,14 @@ function Loaded({ injected }: { injected: NpmSectionInjected }): ReactNode {
         <Card title={t('registry')}>
           <p className={styles.error}>{t('loadFailed') + ': ' + (state.error ?? '')}</p>
           <div className={styles.actions}>
-            <Button variant="secondary" onClick={() => { void controller.load() }}>{t('retry')}</Button>
+            <Button
+            variant="secondary"
+            loading={busyAction === 'reload'}
+            disabled={busy}
+            onClick={() => { void run('reload', async () => { await controller.load(); return undefined }) }}
+          >
+            {t('retry')}
+          </Button>
           </div>
         </Card>
       </div>
@@ -112,14 +134,24 @@ function Loaded({ injected }: { injected: NpmSectionInjected }): ReactNode {
           />
           <Button
             variant="primary"
+            loading={busyAction === 'saveToken'}
             disabled={busy || tokenDraft === ''}
             aria-describedby={tokenDraft === '' ? 'npm-save-hint' : undefined}
-            onClick={() => { void run(() => controller.saveToken(tokenDraft).then((f) => { if (f === undefined) setTokenDraft(''); return f })) }}
+            onClick={() => { void run('saveToken', () => controller.saveToken(tokenDraft).then((f) => { if (f === undefined) setTokenDraft(''); return f })) }}
           >
             {t('saveToken')}
           </Button>
           {credentialConfigured
-            ? <Button variant="secondary" disabled={busy} onClick={() => { void run(() => controller.removeToken()) }}>{t('removeToken')}</Button>
+            ? (
+              <Button
+                variant="secondary"
+                loading={busyAction === 'removeToken'}
+                disabled={busy}
+                onClick={() => { void run('removeToken', () => controller.removeToken()) }}
+              >
+                {t('removeToken')}
+              </Button>
+            )
             : null}
         </div>
 
@@ -141,20 +173,24 @@ function Loaded({ injected }: { injected: NpmSectionInjected }): ReactNode {
         <div className={styles.actions}>
           <Button
             variant="secondary"
+            loading={busyAction === 'testConnection'}
             disabled={busy}
             onClick={() => {
               void (async () => {
-                setBusy(true)
+                setBusyAction('testConnection')
                 setError(undefined)
                 setNotice(undefined)
-                const failure = await controller.testConnection(tokenDraft === '' ? undefined : tokenDraft)
-                setBusy(false)
-                if (failure !== undefined) setError(failure)
-                else setNotice(t('testDone'))
+                try {
+                  const failure = await controller.testConnection(tokenDraft === '' ? undefined : tokenDraft)
+                  if (failure !== undefined) setError(failure)
+                  else setNotice(t('testDone'))
+                } finally {
+                  setBusyAction(undefined)
+                }
               })()
             }}
           >
-            {busy ? t('testing') : t('testConnection')}
+            {busyAction === 'testConnection' ? t('testing') : t('testConnection')}
           </Button>
         </div>
 
@@ -182,7 +218,15 @@ function Loaded({ injected }: { injected: NpmSectionInjected }): ReactNode {
             {statusView !== undefined
               ? <Pill>{statusView.ok ? t('registryOk') : t('registryFail')}</Pill>
               : null}
-            <Button variant="secondary" size="sm" onClick={() => { void controller.load() }}>{t('retry')}</Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={busyAction === 'reload'}
+              disabled={busy}
+              onClick={() => { void run('reload', async () => { await controller.load(); return undefined }) }}
+            >
+              {t('retry')}
+            </Button>
           </>
         )}
       >
