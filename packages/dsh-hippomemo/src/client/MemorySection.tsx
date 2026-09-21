@@ -540,9 +540,14 @@ function MemoryListPanel({ t, api, detailId, onDetail, embedded = false }: {
                 onClick={() => { onDetail(record.id); }}
                 meta={(
                   <>
-                    {record.kind !== 'preference' ? (
-                      <Pill className={'hippomemo-tag hippomemo-kind-' + record.kind}>{t(record.kind)}</Pill>
-                    ) : null}
+                    {/* kind tag 对**所有** kind 一视同仁（2026-09 用户裁决）：
+                        preference 以前被单独挪到行尾用品牌色渲染，于是同一列里
+                        它的 tag 位置与配色都和别的记忆不一样。图标是 kind 自身的
+                        标识（详情弹窗同样带），不是位置差异。 */}
+                    <Pill className={'hippomemo-tag hippomemo-kind-' + record.kind}>
+                      {record.kind === 'preference' ? <IconThink size={12} className='hippomemo-tag-icon' /> : null}
+                      {t(record.kind)}
+                    </Pill>
                     {scoped ? (
                       <Pill className='hippomemo-tag hippomemo-tag-mono' title={(record.modelIds ?? []).join(', ')}>
                         {(record.modelIds ?? [])[0] + ((record.modelIds?.length ?? 0) > 1 ? ' +' + String((record.modelIds?.length ?? 0) - 1) : '')}
@@ -570,12 +575,6 @@ function MemoryListPanel({ t, api, detailId, onDetail, embedded = false }: {
                 )}
                 trailing={(
                   <>
-                    {record.kind === 'preference' ? (
-                      <Pill className='hippomemo-tag hippomemo-tag-brand'>
-                        <IconThink size={12} />
-                        {t('preference')}
-                      </Pill>
-                    ) : null}
                     {record.sourceSparkId !== undefined && record.sourceSparkId !== null && record.sourceSparkId.length > 0 ? (
                       <span className='hippomemo-row-spark' title={t('sourceSparkHint')}>
                         <IconBranch size={14} />

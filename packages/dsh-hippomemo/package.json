@@ -1,6 +1,6 @@
 {
   "name": "dsh-hippomemo",
-  "version": "0.3.22",
+  "version": "0.3.23",
   "description": "DSH 跨会话/跨工作区共享记忆插件：自动召回、显式沉淀、LLM 复核的记忆进化",
   "type": "module",
   "main": "lib/index.js",
