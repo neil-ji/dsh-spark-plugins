@@ -129,7 +129,9 @@ export class SparkService extends Service {
 
   private ensureRegistered(ctx: Context): void {
     if (this.httpRegistered) return
-    registerSparkHttpRoutes(ctx, this, this.scriptService)
+    // 只注册自己那份前缀（/sparks + /proposals）；/scripts 归 ScriptService，
+    // 重复注册会被平台 webserver 硬失败（见 http.ts 顶部注释）。
+    registerSparkHttpRoutes(ctx, this)
     this.httpRegistered = true
   }
 

@@ -2,6 +2,8 @@
  * JSONL backend for procedural scripts (Phase 5).
  */
 import { promises as fs } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import type { ScriptView } from 'dsh-spark-wire'
 import { describeStorageError, ensureJsonlPath } from './jsonl-path.ts'
 
@@ -129,14 +131,19 @@ export class JsonlScriptStorage {
   }
 }
 
-/** Default storage path. */
+/**
+ * Default storage path: `$DSH_HOME/storages/sparks/scripts.jsonl`.
+ *
+ * **静态 import，不要改成懒 require（2026-09-21 血案）**：这里曾经是
+ * `require('node:os')`「懒加载避免与 spark-service.ts 的循环依赖」，但本包产物是
+ * ESM（build.mjs: `format: 'esm'`），esbuild 把裸 `require` 原样降级成 `__require`，
+ * 而 ESM 里没有 `require`，运行时抛 `Dynamic require of "node:os" is not supported`。
+ * 两个调用方都包在 try/catch 里（ScriptService 落默认路径、SeedDefaultScripts 落
+ * best-effort），于是失败**完全静默**：`scripts.jsonl` 从未被创建，脚本目录永远空。
+ * 三个 storage（sparks / proposals / scripts）的模块图里本来就没有环，静态 import
+ * 是唯一正确写法。
+ */
 export function defaultScriptsFilePath(): string {
-  // Imported lazily to avoid circular deps with spark-service.ts (both modules
-  // need each other at runtime).
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { homedir } = require('node:os') as typeof import('node:os')
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { join } = require('node:path') as typeof import('node:path')
   const home = process.env['DSH_HOME'] ?? join(homedir(), '.dsh')
   return join(home, 'storages', 'sparks', 'scripts.jsonl')
 }

@@ -5,6 +5,14 @@
  * （`/sparks|/proposals|/scripts/events`），与 hippomemo 那条各自实现一遍流式与
  * 载荷；现在统一由 `spark.events()`（typert stream，单一 mux 载波、逐项 schema
  * 校验、可取消）下发，见 `events.ts`。本文件只剩「请求-响应」型 JSON API。
+ *
+ * 2026-09-21（脚本目录恒空的第二个根因）：注册入口按**服务归属**拆成两个函数。
+ * 以前只有一个 `registerSparkHttpRoutes(ctx, spark, script)`，ScriptService 与
+ * SparkService **各调一次**（都想把三条前缀注册齐），而平台 webserver 对同前缀
+ * 是硬失败（`webserver: duplicate prefix route "/sparks"`）。后注册的那次抛错，
+ * 恰好落在 `SparkService.init` 的 try 里 —— 于是 init 在**种子脚本之前**中断，
+ * 错误只进 ctx.logger，表现为「脚本目录永远是空的」（探针实测复现）。
+ * 现在 /sparks + /proposals 归 SparkService，/scripts 归 ScriptService，各自一次。
  */
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
@@ -24,7 +32,8 @@ interface Envelope {
   error?: { code: string; message: string }
 }
 
-export function registerSparkHttpRoutes(ctx: Context, service: SparkService, scriptService?: ScriptService): void {
+/** /sparks + /proposals —— 由 SparkService 注册（唯一注册者）。 */
+export function registerSparkHttpRoutes(ctx: Context, service: SparkService): void {
   ctx.effect(() => ctx.webServer.register({
     kind: 'prefix',
     path: PREFIX_SPARKS,
@@ -36,14 +45,15 @@ export function registerSparkHttpRoutes(ctx: Context, service: SparkService, scr
     path: PREFIX_PROPOSALS,
     handler: (req, res) => { void handleProposals(ctx, req, res, service) },
   }), 'proposals.httpRoutes')
+}
 
-  if (scriptService !== undefined) {
-    ctx.effect(() => ctx.webServer.register({
-      kind: 'prefix',
-      path: PREFIX_SCRIPTS,
-      handler: (req, res) => { void handleScripts(ctx, req, res, scriptService) },
-    }), 'scripts.httpRoutes')
-  }
+/** /scripts —— 由 ScriptService 注册（唯一注册者）。 */
+export function registerScriptHttpRoutes(ctx: Context, scriptService: ScriptService): void {
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'prefix',
+    path: PREFIX_SCRIPTS,
+    handler: (req, res) => { void handleScripts(ctx, req, res, scriptService) },
+  }), 'scripts.httpRoutes')
 }
 
 async function handleSparks(

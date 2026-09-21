@@ -528,10 +528,64 @@ export function findWindowBusUsage(root) {
   return { violations, files }
 }
 
+/**
+ * 裸 `require()` 调用点（纯函数，便于单测）。
+ *
+ * 正则带前置断言：`createRequire(` 的 `Require` 是大写 R，天然不匹配；`import(`
+ * 不是 require。`typeof require` 不是调用，同样不匹配。
+ *
+ * @param {string} rawSource
+ * @returns {{line: number, text: string}[]}
+ */
+export function findBareRequireCalls(rawSource) {
+  const source = stripComments(rawSource)
+  const out = []
+  for (const match of source.matchAll(/(?<![\w.$])require\s*\(/g)) {
+    out.push({ line: source.slice(0, match.index).split('\n').length, text: match[0] })
+  }
+  return out
+}
+
+/**
+ * 裸 `require()` 反模式：ESM 产物里运行时必炸，且常常炸在 try/catch 兜底上（静默）。
+ *
+ * 为什么是硬失败：全部插件产物都是 ESM（`build.mjs` / tsdown 的 `format: 'esm'`）。
+ * esbuild 对外部化的裸 `require('node:os')` 只做一层降级 —— 生成
+ * `__require(...)`，而 ESM 里没有 `require`，于是运行时抛
+ * `Dynamic require of "node:os" is not supported`。真正致命的是它落在兜底路径上：
+ * dsh-spark 的 `defaultScriptsFilePath()` 就是这么写的，两个调用方都 try/catch，
+ * 结果脚本目录的种子脚本从此**静默**不跑，`scripts.jsonl` 从未被创建
+ * （2026-09-21 定位，真宿主探针实测 `GET /scripts` 恒 `[]`）。
+ *
+ * 放行：`createRequire`（显式桥接）、动态 `import(`（不是 require）。
+ *
+ * @param {string} root
+ */
+export function findEsmRequireUsage(root) {
+  const packages = readWorkspacePackages(root)
+  const violations = []
+  let files = 0
+  for (const [name, record] of packages) {
+    for (const file of walkSource(join(record.dir, 'src'))) {
+      files += 1
+      const rel = posix(relative(root, file))
+      for (const call of findBareRequireCalls(readFileSync(file, 'utf8'))) {
+        violations.push({
+          pkg: name,
+          file: rel,
+          code: 'esm-require',
+          detail: `${name} 在 ESM 源码里用裸 require()（${rel}:${call.line}）—— 产物里会变成 __require 并在运行时抛 Dynamic require；改成顶层 import`,
+        })
+      }
+    }
+  }
+  return { violations, files }
+}
+
 /* ──────────────────────────── CLI ──────────────────────────── */
 
 function parseArgs(argv) {
-  const options = { only: ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus'], json: false, strictLocations: false }
+  const options = { only: ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus', 'esmrequire'], json: false, strictLocations: false }
   for (const arg of argv) {
     if (arg === '--json') options.json = true
     else if (arg === '--strict-locations') options.strictLocations = true
@@ -541,8 +595,8 @@ function parseArgs(argv) {
 }
 
 export function runChecks(root, options = {}) {
-  const only = options.only ?? ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus']
-  const report = { orphans: null, boundaries: null, contracts: null, injects: null, products: null, windowbus: null, failures: 0, warnings: 0 }
+  const only = options.only ?? ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus', 'esmrequire']
+  const report = { orphans: null, boundaries: null, contracts: null, injects: null, products: null, windowbus: null, esmrequire: null, failures: 0, warnings: 0 }
   if (only.includes('orphans')) {
     const result = findOrphanPackages(root)
     report.orphans = result
@@ -578,6 +632,11 @@ export function runChecks(root, options = {}) {
     report.windowbus = result
     report.failures += result.violations.length
   }
+  if (only.includes('esmrequire')) {
+    const result = findEsmRequireUsage(root)
+    report.esmrequire = result
+    report.failures += result.violations.length
+  }
   return report
 }
 
@@ -589,7 +648,7 @@ function main(argv) {
     process.exitCode = report.failures > 0 ? 1 : 0
     return
   }
-  console.log('══ 架构闸门（孤包 / 边界 / 契约 / 注入面 / 单产物 / 页内总线） ══')
+  console.log('══ 架构闸门（孤包 / 边界 / 契约 / 注入面 / 单产物 / 页内总线 / ESM 裸 require） ══')
   if (report.orphans !== null) {
     const { orphans, total, closureSize } = report.orphans
     if (orphans.length === 0) console.log(`  ok    workspace 孤包        0 个（${total} 个包全在 registry 闭包内，闭包 ${closureSize} 个）`)
@@ -624,6 +683,11 @@ function main(argv) {
     const { violations, files } = report.windowbus
     if (violations.length === 0) console.log(`  ok    window 事件总线     0 处（扫描 ${files} 个源文件，无 dsh-* 自定义事件）`)
     for (const violation of violations) console.log(`  FAIL  ${violation.code.padEnd(20)} ${violation.detail}（${violation.file}）`)
+  }
+  if (report.esmrequire !== null) {
+    const { violations, files } = report.esmrequire
+    if (violations.length === 0) console.log(`  ok    ESM 裸 require      0 处（扫描 ${files} 个源文件）`)
+    for (const violation of violations) console.log(`  FAIL  ${violation.code.padEnd(20)} ${violation.detail}`)
   }
   const verdict = report.failures > 0 ? 'FAIL' : 'PASS'
   console.log(`\n合计：硬失败 ${report.failures} 处 · 告警 ${report.warnings} 处\n结果：${verdict}`)

@@ -23,6 +23,8 @@ import {
   extractSourceLocations,
   findBoundaryViolations,
   findContractDrift,
+  findEsmRequireUsage,
+  findBareRequireCalls,
   findInjectGaps,
   findOrphanPackages,
   findSecondProducts,
@@ -297,8 +299,27 @@ describe('window 事件当页内总线（F11）', () => {
   })
 })
 
-describe('真实仓库不变量', () => {
-  it('没有孤包：每个 packages/* 都在 registry 闭包内', () => {
+describe('ESM 裸 require（产物里必炸）', () => {
+  it('识别裸 require，放行 createRequire / 动态 import / typeof 探测 / 注释', () => {
+    const source = [
+      "import { promises as fs } from 'node:fs'",
+      "const { homedir } = require('node:os')",
+      "const require$ = createRequire(import.meta.url)",
+      "const path = await import('node:path')",
+      "if (typeof require !== 'undefined') {}",
+      "// 注释里的 require('node:os') 不算",
+    ].join('\n')
+    expect(findBareRequireCalls(source).map((call) => call.line)).toEqual([2])
+  })
+
+  it('真实仓库：没有源码用裸 require（ESM 产物会降级成 __require）', () => {
+    const { violations, files } = findEsmRequireUsage(ROOT)
+    expect(violations).toEqual([])
+    expect(files).toBeGreaterThan(50)
+  })
+})
+
+describe('真实仓库不变量', () => {  it('没有孤包：每个 packages/* 都在 registry 闭包内', () => {
     const { orphans, total } = findOrphanPackages(ROOT)
     expect(orphans).toEqual([])
     expect(total).toBeGreaterThan(10)

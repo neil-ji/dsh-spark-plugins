@@ -6,8 +6,6 @@
  * sequence matches a script's triggers.
  */
 import { randomUUID } from 'node:crypto'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import {
@@ -21,7 +19,7 @@ import {
 } from 'dsh-spark-wire'
 import { JsonlScriptStorage, defaultScriptsFilePath } from './script-storage.ts'
 import { ensureJsonlPath } from './jsonl-path.ts'
-import { registerSparkHttpRoutes } from './http.ts'
+import { registerScriptHttpRoutes } from './http.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -36,15 +34,6 @@ export interface ScriptConfig {
   filePath?: string
 }
 
-function defaultFilePath(): string {
-  try {
-    return defaultScriptsFilePath()
-  } catch {
-    const home = process.env['DSH_HOME'] ?? join(homedir(), '.dsh')
-    return join(home, 'storages', 'sparks', 'scripts.jsonl')
-  }
-}
-
 export class ScriptService extends Service {
   static inject = ['webServer'] as const
 
@@ -54,7 +43,9 @@ export class ScriptService extends Service {
 
   constructor(ctx: Context, config: ScriptConfig = {}) {
     super(ctx, 'script')
-    this.filePath = config.filePath ?? defaultFilePath()
+    // 默认路径解析不再需要兜底 try/catch（它曾经的兜底正是把 ESM require 的
+    // 运行时报错吞掉的地方，见 script-storage.ts 的注释）：单一来源。
+    this.filePath = config.filePath ?? defaultScriptsFilePath()
     this.storage = new JsonlScriptStorage(this.filePath)
     this.ensureDir()
       .then(() => this.ensureRegistered(ctx))
@@ -69,7 +60,8 @@ export class ScriptService extends Service {
 
   private ensureRegistered(ctx: Context): void {
     if (this.httpRegistered) return
-    registerSparkHttpRoutes(ctx, ctx.spark as Parameters<typeof registerSparkHttpRoutes>[1], this)
+    // 只注册自己那份前缀（/scripts）—— 见 http.ts 顶部的重复注册血案注释。
+    registerScriptHttpRoutes(ctx, this)
     this.httpRegistered = true
   }
 
