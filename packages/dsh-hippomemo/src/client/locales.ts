@@ -168,7 +168,6 @@ export const zh = {
   evolutionCandidatesTitle: '需要我处理',
   // 这一张卡只放**存量**（多少条 / 活跃 / 归档）；用量是下一张卡，卡头直接用 `usage`。
   // 名字不能叫「使用统计」—— 那会和卡内另一组「用量」抢同一个意思。
-  evolutionStatsTitle: '记忆存量',
   evolutionChartsTitle: '图表',
 
   // ---- v3 UI: 脑区状态条 ----
@@ -424,7 +423,6 @@ export const en: Record<keyof typeof zh, string> = {
 
   // ---- v3 UI: Evolution tab subsections ----
   evolutionCandidatesTitle: 'Needs my attention',
-  evolutionStatsTitle: 'Inventory',
   evolutionChartsTitle: 'Charts',
 
   // ---- v3 UI: brain strip ----

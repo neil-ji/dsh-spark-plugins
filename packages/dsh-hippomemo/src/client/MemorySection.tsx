@@ -1195,27 +1195,29 @@ function EvolutionTab({ t, stats, usage, candidates, now, onResolve, api, reload
       {/* 页顶操作行（财务形制）：进化引擎的运行身份与动作按钮在所有内容卡之上。 */}
       <EvolveHeader t={t} evolve={evolve} />
       <TodoQuadrantImpl t={t} items={candidates?.items ?? []} now={now} onResolve={onResolve} />
-      {/* 存量（有多少条记忆）与用量（这些记忆被用得怎么样）是两组数，各一张卡。
-          以前挤在一张「使用统计」卡里，而卡内第一行又叫「用量」—— 卡头与首行两个名字。 */}
-      <Card title={t('evolutionStatsTitle')}>
-        {stats !== null ? (
-          <div className='hippomemo-meta'>
-            <span>{t('total')} {stats.total} {t('results')}</span>
-            <span>{t('activeCount')} {stats.active}</span>
-            <span>{t('archivedCount')} {stats.archived}</span>
-          </div>
-        ) : null}
-      </Card>
+      {/* 存量 + 用量合并成一张数字指标卡（2026-09 用户裁决）：两组数同属
+          「记忆层健康度」，一个 StatGrid 全量摆出，不再按叙事拆成两张卡。 */}
       <Card title={t('usage')}>
-        {usage !== null ? (
+        {stats !== null || usage !== null ? (
           <StatGrid>
-            <Stat label={t('usageRecalled')} value={`${String(usage.recalled)}/${String(usage.total)}`} />
-            <Stat label={t('usageCited')} value={String(usage.cited)} />
-            <Stat label={t('usageNeverRecalled')} value={String(usage.neverRecalled)} />
-            <Stat label={t('usageStale')} value={String(usage.staleCount)} />
-            <Stat label={t('usageRecallRate')} value={`${(usage.recallRate * 100).toFixed(0)}%`} />
-            <Stat label={t('usageCitationRate')} value={`${(usage.citationRate * 100).toFixed(0)}%`} />
-            <Stat label={t('usageConversion')} value={`${(usage.conversionRate * 100).toFixed(0)}%`} />
+            {stats !== null ? (
+              <>
+                <Stat label={t('total')} value={String(stats.total)} />
+                <Stat label={t('activeCount')} value={String(stats.active)} />
+                <Stat label={t('archivedCount')} value={String(stats.archived)} />
+              </>
+            ) : null}
+            {usage !== null ? (
+              <>
+                <Stat label={t('usageRecalled')} value={`${String(usage.recalled)}/${String(usage.total)}`} />
+                <Stat label={t('usageCited')} value={String(usage.cited)} />
+                <Stat label={t('usageNeverRecalled')} value={String(usage.neverRecalled)} />
+                <Stat label={t('usageStale')} value={String(usage.staleCount)} />
+                <Stat label={t('usageRecallRate')} value={`${(usage.recallRate * 100).toFixed(0)}%`} />
+                <Stat label={t('usageCitationRate')} value={`${(usage.citationRate * 100).toFixed(0)}%`} />
+                <Stat label={t('usageConversion')} value={`${(usage.conversionRate * 100).toFixed(0)}%`} />
+              </>
+            ) : null}
           </StatGrid>
         ) : null}
       </Card>
