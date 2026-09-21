@@ -123,7 +123,15 @@ export function BarChart({ rows, ariaLabel, formatValue, axisFormatter, classNam
   return (
     <div role="img" aria-label={ariaLabel} className={cx(css.barWrap, className)}>
       {rows.map((row, i) => (
-        <div key={row.key} className={css.barRow} title={`${row.label}: ${formatValue(row.value)}${row.detail ? ` · ${row.detail}` : ''}`}>
+        <div
+          key={row.key}
+          className={css.barRow}
+          /* data-tip 供 CSS 悬浮 tooltip（即时、可样式化）；title 留作原生兜底；
+             tabIndex 让 tooltip 也能键盘触发（focus-visible 同样式）。 */
+          data-tip={`${row.label}: ${formatValue(row.value)}${row.detail ? ` · ${row.detail}` : ''}`}
+          title={`${row.label}: ${formatValue(row.value)}${row.detail ? ` · ${row.detail}` : ''}`}
+          tabIndex={0}
+        >
           <span className={css.barLabel}>{row.label}</span>
           <span className={css.barTrack}>
             <span
