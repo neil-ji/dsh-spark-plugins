@@ -341,6 +341,15 @@ export class FinanceService extends TypertRemoteService {
   private ledgerCache: { at: number; ledger: FinanceLedger } | undefined
   /** Single-flight auto-backfill of the hourly unit (see getLedger). */
   private hourlyBackfill: Promise<void> | undefined
+  /**
+   * Single-flight **整段**首算（回填 + 冷聚合）。只单飞 backfill 不够：backfill
+   * promise 一 settle 字段就被清掉，而聚合循环还要跑很久 —— 此时第二个 getLedger
+   * 进来会缓存未命中 → 重新走一遍 ensureHourlyBackfilled（新开一个回填循环）
+   * + 再聚合一遍。两个循环各持一个 progress sink 同时往总线上发帧，回填段
+   * (0–70) 与聚合段 (70–100) 交错 → 初始化进度条在 ~50% 与 ~90% 之间来回跳
+   * （2026-09 真宿主截图），且聚合被整个做了两遍。
+   */
+  private pendingLedger: Promise<FinanceLedger> | undefined
   /** Live progress of the running backfill, polled by the loading UI. */
   private backfillProgress: FinanceBackfillProgress | undefined
   /** 首算的初始化 sink（回填 + 聚合两段共用同一个对象）。 */
@@ -1047,6 +1056,16 @@ export class FinanceService extends TypertRemoteService {
     if (this.ledgerCache !== undefined && now - this.ledgerCache.at < 5_000) {
       return this.ledgerCache.ledger
     }
+    // 单飞进行中的首算：并发的第二个 getLedger（面板双挂载 / getOverview 与
+    // 独立 getLedger 并发等）直接等同一个 promise，不重跑回填与聚合。
+    const pending = this.pendingLedger
+    if (pending !== undefined) return pending
+    const build = this.buildLedgerOnce(signal).finally(() => { this.pendingLedger = undefined })
+    this.pendingLedger = build
+    return build
+  }
+
+  private async buildLedgerOnce(signal?: AbortSignal): Promise<FinanceLedger> {
     await this.ensureHourlyBackfilled(signal)
     // 首算（本轮进程第一次冷聚合）时把初始化 sink 递给 build，聚合段进度才会上报；
     // 用完即清 —— 后续常规刷新不产生进度帧。
@@ -1055,7 +1074,7 @@ export class FinanceService extends TypertRemoteService {
     const ledger = await buildFinanceLedger(this.ctx, this.currentConfig(), signal, {
       ...(firstBuild ? { progress: this.initSink } : {}),
     })
-    this.ledgerCache = { at: now, ledger }
+    this.ledgerCache = { at: Date.now(), ledger }
     return ledger
   }
 
