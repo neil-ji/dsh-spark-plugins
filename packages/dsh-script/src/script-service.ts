@@ -100,6 +100,42 @@ export function findDuplicate(candidate: Pick<ScriptSaveInput, 'name' | 'steps' 
       || (stepsFingerprint(record.steps) === fingerprint && jaccard(record.triggers, candidate.triggers ?? []) >= 0.8)))
 }
 
+/* ─────────────────── 治理规则（纯函数，Spec INV-11 / §6.2） ─────────────────── */
+
+/** 物理删除只允许已归档条目（Spec INV-11：其余状态只能迁移，不能消失）。 */
+export function canPurge(record: Pick<ScriptView, 'status'>): boolean {
+  return record.status === 'archived'
+}
+
+/** 状态迁移的补丁（`superseded` 必须带上取代者 id，否则取代链断掉）。 */
+export function statusPatch(
+  status: ScriptStatus,
+  supersededBy: string | null,
+): Partial<ScriptView> {
+  if (status === 'superseded' && supersededBy === null) {
+    throw new Error('script: superseded 必须带 supersededBy（取代链不能断）')
+  }
+  return status === 'superseded' ? { status, supersededBy } : { status }
+}
+
+/** 调用计量补丁（Spec INV-8）。 */
+export function invokePatch(record: Pick<ScriptView, 'invocationCount'>, now: number): Partial<ScriptView> {
+  return { invocationCount: record.invocationCount + 1, lastInvokedAt: now }
+}
+
+/** 结果计量补丁（成功/失败各加一）。 */
+export function resultPatch(record: Pick<ScriptView, 'successCount' | 'failureCount'>, success: boolean): Partial<ScriptView> {
+  return success ? { successCount: record.successCount + 1 } : { failureCount: record.failureCount + 1 }
+}
+
+/**
+ * 取代链上的新记录修订号（Spec §6.2：修订产生新记录时 `revision + 1`）。
+ * 被取代者不存在时按首版处理。
+ */
+export function revisionFor(predecessor: Pick<ScriptView, 'revision'> | null): number {
+  return predecessor === null ? 1 : predecessor.revision + 1
+}
+
 export class ScriptService extends Service {
   static inject = ['webServer'] as const
 
@@ -179,8 +215,10 @@ export class ScriptService extends Service {
     const parsed: ScriptSaveInput = scriptSaveInputSchema.parse(input)
     const problems = validateSteps(parsed.steps)
     if (problems.length > 0) return { kind: 'invalid', problems }
-    const existing = findDuplicate(parsed, await this.storage.readAll())
+    const all = await this.storage.readAll()
+    const existing = findDuplicate(parsed, all)
     if (existing !== undefined) return { kind: 'duplicate', existing }
+    const predecessor = parsed.supersedes === null ? null : all.find(record => record.id === parsed.supersedes) ?? null
     const updatedBy: ScriptAuthor = write.updatedBy ?? 'agent'
     const record: ScriptView = scriptViewSchema.parse({
       id: randomUUID(),
@@ -193,7 +231,7 @@ export class ScriptService extends Service {
       scope: parsed.scope,
       workspacePath: write.workspacePath ?? parsed.workspacePath,
       status: 'active',
-      revision: 1,
+      revision: revisionFor(predecessor),
       supersedes: parsed.supersedes,
       supersededBy: null,
       updatedBy,
@@ -218,8 +256,7 @@ export class ScriptService extends Service {
 
   /** 状态迁移（归档 / 取代 / 候选）；可逆，不删数据（Spec INV-11）。 */
   async setStatus(id: string, status: ScriptStatus, now: number = Date.now(), supersededBy: string | null = null): Promise<ScriptView | null> {
-    const patch: Partial<ScriptView> = status === 'superseded' ? { status, supersededBy } : { status }
-    const updated = await this.storage.patch(id, patch, now)
+    const updated = await this.storage.patch(id, statusPatch(status, supersededBy), now)
     if (updated !== null) this.ctx.emit('scripts/changed', { at: now, operation: 'status', id })
     return updated
   }
@@ -227,7 +264,7 @@ export class ScriptService extends Service {
   /** 物理删除：只允许已归档条目（Spec INV-11）。 */
   async remove(id: string, now: number = Date.now()): Promise<boolean> {
     const current = await this.storage.get(id)
-    if (current === null || current.status !== 'archived') return false
+    if (current === null || !canPurge(current)) return false
     const removed = await this.storage.remove(id)
     if (removed) this.ctx.emit('scripts/changed', { at: now, operation: 'delete', id })
     return removed
@@ -307,10 +344,7 @@ export class ScriptService extends Service {
     await this.whenReady()
     const current = await this.storage.get(id)
     if (current === null) throw new Error('script not found: ' + id)
-    const updated = await this.storage.patch(id, {
-      invocationCount: current.invocationCount + 1,
-      lastInvokedAt: now,
-    }, now)
+    const updated = await this.storage.patch(id, invokePatch(current, now), now)
     if (updated === null) throw new Error('script disappeared mid-invoke: ' + id)
     this.ctx.emit('scripts/changed', { at: now, operation: 'invoke', id })
     return { script: updated, successRate: ScriptService.successRate(updated) }
@@ -321,10 +355,7 @@ export class ScriptService extends Service {
     await this.whenReady()
     const current = await this.storage.get(id)
     if (current === null) return null
-    const patch: Partial<ScriptView> = success
-      ? { successCount: current.successCount + 1 }
-      : { failureCount: current.failureCount + 1 }
-    const updated = await this.storage.patch(id, patch, now)
+    const updated = await this.storage.patch(id, resultPatch(current, success), now)
     if (updated !== null) this.ctx.emit('scripts/changed', { at: now, operation: 'result', id })
     return updated
   }
