@@ -662,8 +662,10 @@ function MemoryDetailModal({ api, t, id, refreshKey, onBack, onEdit, onDeleted }
     return () => { current = false; };
   }, [api, id, refreshKey]);
   if (error.length > 0) {
+    // 只读错误弹窗不放「取消」footer：遮罩 / 右上角关闭钮 / Esc 已覆盖关闭
+    // （对齐财务插件口径，2026-09 用户裁决冗余取消按钮一律移除）。
     return (
-      <Modal open={true} onClose={onBack} title={t('loadFailed')} closeLabel={t('cancel')}>
+      <Modal open={true} onClose={onBack} title={t('loadFailed')}>
         <div data-plugin='dsh-hippomemo' className='hippomemo-modal-scope'>
           <p className='hippomemo-error'>{error}</p>
         </div>
@@ -672,7 +674,7 @@ function MemoryDetailModal({ api, t, id, refreshKey, onBack, onEdit, onDeleted }
   }
   if (record === null) {
     return (
-      <Modal open={true} onClose={onBack} title={t('memoryNotFound')} closeLabel={t('cancel')}>
+      <Modal open={true} onClose={onBack} title={t('memoryNotFound')}>
         <div data-plugin='dsh-hippomemo' className='hippomemo-modal-scope'>
           <p className='hippomemo-empty'>{t('memoryNotFound')}</p>
         </div>
