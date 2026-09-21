@@ -554,17 +554,20 @@ function MemoryListPanel({ t, api, detailId, onDetail, embedded = false }: {
                         保持安静文本 —— tag 之间及 tag 与文本的间距由 ListRow meta 槽
                         的 gap 统一撑开（2026-09 用户反馈：不要紧贴）。 */}
                     <Pill className='hippomemo-tag hippomemo-tag-neutral'>{t(record.scope)}</Pill>
-                    {record.scope === 'global' ? (record.globalProven
-                      ? <Pill className='hippomemo-tag hippomemo-tag-success'>{t('proven')}</Pill>
-                      : <Pill className='hippomemo-tag hippomemo-tag-warn'>
-                          {t('unproven')}{(record.seenWorkspaces?.length ?? 0) > 0 ? '·' + String(record.seenWorkspaces?.length) : ''}
-                        </Pill>) : null}
                     {/* 重要度不带 label，直接出 tag（2026-09 用户裁决）：一排 tag 里
                         多一个「重要度」前缀只是噪声；原始数值留在 title 里可查。 */}
                     <Pill className={IMPORTANCE_TAGS[importanceTier(record.importance)]}
                       title={`${t('importanceLabel')} ${record.importance.toFixed(2)}`}>
                       {importanceText(t, record.importance)}
                     </Pill>
+                    {/* 证明态放**最后一个 tag**（2026-09 用户裁决）：每行的 tag 个数不同
+                        （kind / 模型范围 / scope / 重要度），把它固定在末尾，右侧那列
+                        tag 就跨行对齐，扫一眼就能挑出「已证明」的记忆。 */}
+                    {record.scope === 'global' ? (record.globalProven
+                      ? <Pill className='hippomemo-tag hippomemo-tag-success'>{t('proven')}</Pill>
+                      : <Pill className='hippomemo-tag hippomemo-tag-warn'>
+                          {t('unproven')}{(record.seenWorkspaces?.length ?? 0) > 0 ? '·' + String(record.seenWorkspaces?.length) : ''}
+                        </Pill>) : null}
                     <span className='hippomemo-row-meta-text' title={formatDate(record.updatedAt)}>
                       {formatRelative(record.updatedAt, Date.now(), t)}
                     </span>
