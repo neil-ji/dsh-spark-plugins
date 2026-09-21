@@ -26,8 +26,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 const enc = (id: string): string => encodeURIComponent(id)
 
 export interface ScriptsApi {
-  /** 读模型列表（含宿主算好的 `successRate`，不含 steps）。 */
-  list(limit?: number): Promise<ScriptSummary[]>
+  /**
+   * 读模型列表（含宿主算好的 `successRate`，不含 steps）。
+   * @param limit - 最多几条。
+   * @param q - 检索词：**匹配由宿主算**（`matchScore`，Spec §5.4）——
+   *   客户端不许自己过滤，否则就有了第二套检索口径（INV-7 / D10 的同一条理由）。
+   */
+  list(limit?: number, q?: string): Promise<ScriptSummary[]>
   /** 一条脚本的全文（含 steps）；**不计量**（Spec D9）。 */
   get(id: string): Promise<ScriptView>
   /** 审计 + 结算过期：打开治理面时调一次（唯一自动动作，Spec D7）。 */
@@ -40,8 +45,10 @@ export interface ScriptsApi {
 }
 
 export const scriptApi: ScriptsApi = {
-  async list(limit = 100) {
-    return request<ScriptSummary[]>('/scripts?limit=' + String(limit))
+  async list(limit = 100, q = '') {
+    const query = new URLSearchParams({ limit: String(limit) })
+    if (q.trim().length > 0) query.set('q', q.trim())
+    return request<ScriptSummary[]>('/scripts?' + query.toString())
   },
   async get(id) {
     return request<ScriptView>('/scripts/' + enc(id))

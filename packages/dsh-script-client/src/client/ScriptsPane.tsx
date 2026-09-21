@@ -12,7 +12,7 @@
  * 变更经 `script/events` 流实时刷新：`ready` 基线帧也要重取（世代之间的窗口不回放）。
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Button, Card, Pill, Stat, StatGrid } from 'dsh-ui-kit'
+import { Button, Card, Pill, SearchInput, Stat, StatGrid } from 'dsh-ui-kit'
 import { useFrames, type StreamRemote } from 'dsh-spark-plugin-kit/client'
 import type { ScriptAdvice, ScriptAudit, ScriptStreamFrame, ScriptSummary, ScriptView } from 'dsh-script-wire'
 import { scriptApi } from './api.ts'
@@ -62,11 +62,20 @@ const STATUS_TONE = {
 } as const
 
 export function ScriptsPane({ t, remote, events }: ScriptsPaneProps): JSX.Element {
+  const [q, setQ] = useState('')
+  const [committedQ, setCommittedQ] = useState('')
+  // 输入防抖（**不是轮询**，AGENTS §1.3 的两类定时器都不属于）：检索必须由宿主算
+  // （`matchScore`，Spec §5.4），逐键打一次宿主就是 N 次请求；250ms 与 hippomemo 面板同值。
+  useEffect(() => {
+    const timer = window.setTimeout(() => { setCommittedQ(q) }, 250)
+    return () => { window.clearTimeout(timer) }
+  }, [q])
+
   const { data, error, reload } = useApiResource<PaneData>(async () => ({
     // 打开治理面即结算过期（Spec D7：唯一自动动作，不用定时器）。
     audit: await scriptApi.audit(),
-    scripts: await scriptApi.list(200),
-  }), [])
+    scripts: await scriptApi.list(200, committedQ),
+  }), [committedQ])
   const [message, setMessage] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -234,10 +243,24 @@ export function ScriptsPane({ t, remote, events }: ScriptsPaneProps): JSX.Elemen
         title={t('scriptsTitle')}
         actions={scripts !== null ? <span className="dock-hint">{String(scripts.length)} {t('unitScripts')}</span> : null}
       >
+        <div className="dock-row-meter" data-testid="script-search-row">
+          <SearchInput
+            label={t('searchLabel')}
+            value={q}
+            placeholder={t('searchPlaceholder')}
+            data-testid="script-search"
+            onChange={(event) => { setQ(event.currentTarget.value) }}
+            onClear={() => { setQ('') }}
+            clearLabel={t('searchClear')}
+          />
+          {committedQ.length > 0 && <span className="dock-hint" data-testid="script-search-active">{t('searchScope')} “{committedQ}”</span>}
+        </div>
         {scripts === null
           ? <div className="dock-empty loading"><div className="empty-txt">{t('loading')}</div></div>
           : scripts.length === 0
-            ? <div className="dock-empty"><div className="empty-txt">{t('scriptsEmpty')}</div><div className="empty-hint">{t('scriptsEmptyHint')}</div></div>
+            ? (committedQ.length > 0
+                ? <div className="dock-empty" data-testid="script-empty-match"><div className="empty-txt">{t('scriptsNoMatch')}</div><div className="empty-hint">{t('scriptsNoMatchHint')}</div></div>
+                : <div className="dock-empty"><div className="empty-txt">{t('scriptsEmpty')}</div><div className="empty-hint">{t('scriptsEmptyHint')}</div></div>)
             : (
               <div className="dock-list" data-testid="script-rows">
                 {scripts.map((script) => (
