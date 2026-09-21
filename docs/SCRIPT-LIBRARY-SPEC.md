@@ -1,6 +1,8 @@
 # 脚本沉淀库 · Spec（规范）
 
-> 状态：**草案 v1（2026-09-21）**，本文件是脚本能力的**唯一规范源**。
+> 状态：**v1.1（2026-09-22）**，本文件是脚本能力的**唯一规范源**。
+> v1.1 变化：F3 治理口径落地（§6.2–§6.5）、`invokedWorkspaces` 字段（§2.1）、
+> 审计读模型强制携带宿主算好的 `successRate`（INV-7 + 闸门 `ratemetric`，§6.5）。
 > 实现与本文冲突时**先改本文**（commit 用 `docs(script):`），再改码。
 > 相关背景材料：`docs/skills-vs-script-plugin-2026-09-21.md`（为什么**不**接平台 `ctx.skills` 缝的调研）。
 >
@@ -39,6 +41,10 @@
 | **D4** | **删除 `sourceSparkId`** | 沿用"跨插件零通道、关联交 Agent 判断"的既定原则；它是脚本侧唯一的火花耦合点 |
 | **D5** | 包名 `dsh-script` / 用户可见词「脚本」；工具 `script_save` / `script_list` / `script_invoke` / `script_result` | 朴素命名（不用隐喻）；去掉 `spark_` 前缀（后两个工具与火花毫无关系） |
 | **D6** | 发现策略 F1/F2 用「目录注入 + triggers 主动建议 + `script_list` 检索」；不做"高价值子集"裁剪 | 库小时全量目录成本可控；裁剪策略属于治理阶段（F3）且需要真实数据支撑 |
+| **D7**（F3） | 过期结算是**惰性扫描**（服务 ready 之后一次 + `POST /scripts/sweep`），**不引定时器** | 过期条目本来已被 `isVisible` 挡在可见面外，扫描只是让 `status` 与审计面诚实；轮询会违 INV-12，而"真·时间驱动"要写豁免注释，没必要为一次枚举付出这个代价 |
+| **D8**（F3） | `global` **不做** `globalProven` 式确认；改为「降级作用域建议」（人工确认） | 目录注入与记忆注入不同：记忆是进上下文的事实断言，脚本只是可选的"操作清单"。自动注入代价可控，收敛交给建议面（关闭 P-4） |
+| **D9**（F3） | **人面不计量**：dock pane 只读（查看步骤 / 治理动作），不再调 `POST /invoke` | 计量口径（INV-8）描述的是 **agent 按脚本执行**这件事；人在 pane 上点一下不是执行证据，留在库里会污染退役建议的病据 |
+| **D10**（F3） | 成功率**随读模型下发**（`ScriptSummary.successRate` 由宿主计算），UI 侧禁止任何除法；闸门 `ratemetric` 逐文件拦截 | INV-7 原文只写了口径单源，但 F1 验收时 UI 仍在重算（`ScriptsPane` 的 `successCount / invocationCount`）。把口径做进读模型，UI 就**没有算错的机会**，而不是靠人自觉 |
 
 ---
 
@@ -52,12 +58,14 @@
 | **INV-4** | **目录注入幂等**：同一 `(name, description)` 集合的指纹不变则**不重复注入**；变化时发**替换帧**（明确作废旧清单） | 注入层单测（纯函数）+ 真宿主验收 |
 | **INV-5** | **注入状态耐久**：宿主重启或会话恢复后，不得重复发布同一份目录（状态持久化在 §4.2 的 sidecar） | 单测（state 读写）+ 真宿主验收（连续两次启动注入次数不增加） |
 | **INV-6** | **每 agent 门控**：仅当脚本工具对该 agent 可用（`ctx.tools.get('script_list', agent)` 命中本插件注册）时才注入目录 | 注入层单测（假 ctx） |
-| **INV-7** | **成功率口径单源**：`successRate = successCount / invocationCount`（`invocationCount === 0` 时为 `0`），只由 `ScriptService` 计算，UI 不重算 | 单测 + 闸门（UI 侧禁止出现除法） |
+| **INV-7** | **成功率口径单源**：`successRate = successCount / invocationCount`（`invocationCount === 0` 时为 `0`），**全仓只有一处定义**（`dsh-script/src/script-service.ts` 的 `ScriptService.successRate`）；跨边界一律传结果，UI 侧**禁止任何除法**（读模型 `ScriptSummary` 直接带宿主算好的 `successRate`） | 单测 + 闸门 `ratemetric`（除定义文件外，任何 `packages/*/src` 出现该除法即硬失败；`*-client` 包内一律禁止） |
 | **INV-8** | **调用即计量**：`script_invoke` 必增 `invocationCount` 并写 `lastInvokedAt`；`script_result` 必增 `successCount` 或 `failureCount` | 单测（存储往返） |
 | **INV-9** | **结构化真源**：`steps[]` 是唯一真源（`instruction` \| `tool-call`，每条有 `payload`）；markdown/目录文本都是**渲染视图**，不得反向解析 | 单测（渲染是纯函数：`steps → text`） |
 | **INV-10** | **不超过 Schema 上限**：`steps ≤ 50`、`payload ≤ 2000`、`triggers ≤ 16`、`tags ≤ 32`、`searchTerms ≤ 32`（数据在写入边界被 zod 拒绝，而不是截断） | wire schema + 单测 |
 | **INV-11** | **治理动作可审计**：归档 / 取代 / 退役 / 过期都只改 `status` 与修订字段（可逆），物理删除只允许对已归档条目 | 单测（状态机） |
 | **INV-12** | **无轮询**：宿主→客户端只有 typert stream 一条推送路径；插件源码不得引入定时器轮询（真·时间驱动须写豁免注释，见 AGENTS §1.3） | 闸门 + 代码评审 |
+| **INV-13** | **结算幂等**：过期结算可重复执行，第二次不产生任何写入（`archived = 0`）；结算只改 `status`，不动 `revision` / 修订字段 | 单测（连续两次结算） |
+| **INV-14** | **建议不定罪**：建议引擎是**只读纯函数** —— 生成建议不写库、不改状态；除过期结算（INV-13）外，所有治理动作必须由人面显式发 HTTP 请求才落库 | 单测（审计调用前后库内容逐字节相同）+ 代码评审（`advices` 路径无 `patch`/`append`） |
 
 ---
 
@@ -87,6 +95,7 @@ ScriptView {
   invocationCount: number       // 计量
   successCount: number
   failureCount: number
+  invokedWorkspaces: string[]   // ≤32，调用证据（降级作用域建议用，Spec §6.2）
   createdAt: number
   updatedAt: number
   expiresAt: number|null        // 临时性表达（替代 'session' 作用域）
@@ -204,22 +213,58 @@ F1 继续用 JSONL（无新依赖、现有实现已在用）。`dsh-storage-doma
 `invocationCount` / `successCount` / `failureCount` / `lastInvokedAt` + `successRate`（口径单源，INV-7）。
 **不做**：自动推断成功与否（工具调用是否真成功由调用方报告，`script_result` 是唯一入口）。
 
-### 6.2 治理扩展位（F3；本 Spec 先定口径）
+### 6.2 治理动作（F3 定稿口径）
 
-| 治理动作 | 口径 |
-|---|---|
-| **退役候选** | `invocationCount ≥ 5` 且 `successRate < 0.5` → 生成"建议退役"治理项（不自动归档） |
-| **过期** | `expiresAt !== null && expiresAt < now` → 自动 `status: 'archived'`（唯一自动动作，因为它有明确的用户意图） |
-| **取代** | 修订产生新记录时，旧记录 `status: 'superseded'` + `supersededBy`，新记录 `supersedes` + `revision + 1` |
-| **降级作用域** | 声称 `global` 但只在 1 个工作区被调用过（需要按工作区记录调用证据）→ 生成"降为工作区"建议（对齐记忆的 `downgrade-scope`，见 `memory-brain-ui-design.md:281`） |
-| **去重合并** | §3.2 判重规则的**回溯版**（定期扫描全库）+ 人工确认合并 |
-| **审计面** | dock 的「脚本」模块 pane 展示：状态分布、成功率分布、僵尸脚本、待裁决治理项 |
+| 治理动作 | 触发口径 | 落库方式 |
+|---|---|---|
+| **过期** | `expiresAt !== null && expiresAt <= now` 且 `status === 'active'` | **唯一的自动动作**：`status → 'archived'`，emit `scripts/changed{operation:'expire'}`。结算点见 D7（启动后一次 + `POST /scripts/sweep`），幂等（INV-13） |
+| **退役候选** | `invocationCount ≥ 5` 且 `successRate < 0.5` | 生成 `retire` 建议 → 人面 `action: archive` |
+| **僵尸脚本** | `status === 'active'` 且 `invocationCount === 0` 且 `updatedAt < now - 30 天` | 生成 `zombie` 建议 → 人面 `action: archive` |
+| **降级作用域** | `scope === 'global'` 且 `invokedWorkspaces.length === 1` | 生成 `downgrade-scope` 建议 → 人面 `action: set-scope-workspace`（`scope → 'workspace'`，`workspacePath` 不动） |
+| **去重合并** | §3.2 判重规则的**回溯版**：全库两两比对，命中则对**较新**的一条提建议（保留较早的那条为留存者） | 生成 `merge-duplicate` 建议（带 `targetId` = 留存者）→ 人面 `action: merge`（等价于把重复者 `status → 'superseded'` + `supersededBy = targetId`，取代链复用同一套字段） |
+| **取代** | 写入时显式传 `supersedes` | `save` 内自动：旧记录 `status: 'superseded'` + `supersededBy`，新记录 `supersedes` + `revision + 1`（F1 已实现，F3 只在人面呈现取代链） |
+| **审计面** | — | dock 的「脚本」模块 pane：状态分布、成功率分布、有验收步骤占比、僵尸数、待裁决治理项 |
 
 **治理动作一律"建议式 + 人工确认"**（除过期自动归档），与记忆的演进面一致。
+建议只是**读**，不写库（INV-14）；动作必须经 HTTP 显式触发。
 
-### 6.3 验收步骤（F3 引入，F1 不强制）
+阈值常量集中在 `dsh-script/src/governance.ts`（`RETIRE_MIN_INVOCATIONS = 5`、`RETIRE_MAX_SUCCESS_RATE = 0.5`、
+`ZOMBIE_IDLE_DAYS = 30`），改口径 = 改 Spec 本表 + 常量，禁止散落在 UI。
 
-`script_save` 时允许（不要求）最后一步为 `instruction`，内容以"验收："开头；F3 的治理面统计"有验收步骤的脚本占比"。
+### 6.3 验收步骤（F3 引入写入约定，F1 不强制）
+
+`script_save` 时允许（不要求）最后一步为 `instruction`，内容以"验收："开头；F3 的治理面统计"有验收步骤的脚本占比"（口径见 §6.5，由宿主算 `acceptance.ratio`，UI 不重算）。
+
+### 6.4 建议引擎（纯函数，Spec §6.2 的落地形态）
+
+`dsh-script/src/governance.ts` 只导出纯函数，输入 `(records, now)`，输出数据；**无 I/O、无 ctx**：
+
+| 函数 | 语义 |
+|---|---|
+| `toSummary(record)` | 记录 → `ScriptSummary`（补 `stepCount` 与**宿主算好的** `successRate`）；唯一的读模型构造点 |
+| `expiredIds(records, now)` | 需要结算的 id 列表（INV-13 的输入） |
+| `governanceAdvices(records, now)` | 全部建议（按 kind 优先级 + `updatedAt` 倒序稳定排序）；建议 id 形如 `retire:<id>` / `merge-duplicate:<id>-><targetId>`（稳定，供 UI 做 key 与去重） |
+| `auditStats(records, now)` | 审计统计（§6.5 的形状） |
+
+已归档 / 已取代（`superseded`）条目**不产生**退役、僵尸、合并建议（它们已经退场，再建议是噪音）；
+过期结算与降级建议也不看 `superseded`（取代链要保持完整，不被降级动作扰动）。
+
+### 6.5 审计读模型与人面（F3）
+
+`GET /scripts` 与 `GET|POST /scripts/audit` 下发的是**读模型**，不是存储记录：
+
+- `GET /scripts` → `ScriptSummary[]`（**不含 steps**：带 `stepCount` 与宿主算好的 `successRate`）。
+  人面要看步骤时单独取 `GET /scripts/:id`（**不计量**，D9）。
+- `POST /scripts/sweep` → 结算过期（INV-13）后返回审计负载；`GET /scripts/audit` 为只读同形（不结算）。
+- 审计负载 `ScriptAudit`：`{ settledAt, archived, stats, advices }`，其中
+  `stats = { total, byStatus, byScope, rateBuckets, acceptance: { withAcceptanceStep, total, ratio }, zombies }`。
+  `rateBuckets` 三档边界 `low < 0.5 ≤ mid < 0.9 ≤ high`，`untested` 单列（`invocationCount === 0`）。
+- 治理动作端点：`POST /scripts/:id/status { status, supersededBy? }`、`POST /scripts/:id/scope { scope }`、
+  `DELETE /scripts/:id`（物理删除仅限已归档，INV-11）。**所有动作都由点击触发，宿主不自作主张。**
+
+**UI 侧禁止重算任何业务口径**（INV-7 / D10）：成功率、验收占比、分档全部读宿主下发的字段；
+闸门 `ratemetric` 会对 `*-client` 包内的除法直接硬失败。
+
 
 ---
 
@@ -228,7 +273,7 @@ F1 继续用 JSONL（无新依赖、现有实现已在用）。`dsh-storage-doma
 | 包 | 角色 | 内容 |
 |---|---|---|
 | `dsh-script-wire` | wire | 记录/查询/结果 schema + `scripts/changed` 事件 + `script/events` 流帧 + host/remote contributions（照抄 `dsh-spark-wire` 的形态） |
-| `dsh-script` | host | `ScriptService`（`ctx.script`）、注入状态、存储、迁移、`script-match`、种子、HTTP `/scripts`、`script/events` 流服务、四个工具、`agent/pre-step` 注入 |
+| `dsh-script` | host | `ScriptService`（`ctx.script`）、治理引擎（`governance.ts` 纯函数，§6.4）、注入状态、存储、迁移、`script-match`、种子、HTTP `/scripts`（读模型 + 审计 + 动作）、`script/events` 流服务、四个工具、`agent/pre-step` 注入 |
 | `dsh-script-client` | client | 字典注册 + dock 模块自注册（ADR-003）+ 「脚本」pane + `subscribeFrames` 订阅 `script/events` |
 
 **从 `dsh-spark` 迁出/删除**：`script-service.ts`(150) / `script-storage.ts`(149) / `script-match.ts`(117) / `seed-scripts.ts`(94) / `http.ts` 的 `/scripts` 段（`26,51-56,207-269`）/ `tool.ts` 的脚本三件套（`143-213`）/ `inbox.ts` 的 C 档（`32,51,61,72,93-95,103,141-152`）/ wire 的 `Script*` 与 `scriptsChangedEventSchema`、`script` 流帧（`138-197,309-312,330,335,378`）/ `events.ts` 的 `script` 主题（`4,28,46`）/ `index.ts` 的 ScriptService 装配 / dock 的 `ScriptsPane`（`SparkModule.tsx:443-509`）、`sparkApi.listScripts|invokeScript`、locale 键（`paneScripts/scriptsTitle/unitScripts/scriptsEmpty/scriptsEmptyHint/invokedScript`）、`SparkDockModule.tsx:20,36,54` 的 pane 注册。
@@ -258,11 +303,13 @@ name: 'dsh-script-client'`，写在 `dsh-script/cordis.patch.yml`）带进组合
 | # | 验收 |
 |---|---|
 | **A1** | 单测：Schema 边界（INV-10）、`steps → 文本` 渲染纯函数（INV-9）、`projectRoot` 解析（§2.3）、判重规则（§3.2）、目录指纹（INV-4）、注入状态读写与清理（INV-5）、每 agent 门控（INV-6）、`successRate` 口径（INV-7）、状态机可逆性（INV-11） |
-| **A2** | 闸门：`check:domain-vocabulary`（INV-2 跨包字面量等价）、`cross-plugin-refs`（INV-1）、`esmrequire`（已存在）、`check:version-bump`（每个改发布输入的 commit 带 bump） |
+| **A2** | 闸门：`check:domain-vocabulary`（INV-2 跨包字面量等价）、`cross-plugin-refs`（INV-1）、`esmrequire`（已存在）、`ratemetric`（INV-7 成功率除法单源）、`check:version-bump`（每个改发布输入的 commit 带 bump） |
 | **A3** | 迁移：旧 `scripts.jsonl` → 新路径的搬迁幂等；`session` → `workspace`；`sourceSparkId` 不再出现 |
 | **A4** | 真宿主：`sandbox:install` + 重启宿主 → `/scripts` 200、`script/events` 接到 ready 帧、连续两次启动**不重复注入**目录（INV-5）、`real-host-check` 退出码 0 |
-| **A5** | 预览与界面：`pnpm preview:verify` 全过；「脚本」pane 在 dock 中可开、文案走 locale 字典、无 CJK 泄漏（`en` 面） |
+| **A5** | 预览与界面：`pnpm preview:verify` 全过；「脚本」pane 在 dock 中可开、文案走 locale 字典、无 CJK 泄漏（`en` 面）；治理面（概览统计 / 待裁决 / 状态徽章 / 动作）在预览 fixture 下有可断言的 testid |
 | **A6** | 全链：`pnpm -r build` → `pnpm -r typecheck` → `pnpm -r test`（顺序执行）→ `pnpm check:all` |
+| **A7**（F3） | 治理引擎单测：退役 / 僵尸 / 降级 / 合并四类建议的**触发与不触发**、结算幂等（INV-13，两次结算第二次 0 写入）、审计调用**不写库**（INV-14，调用前后 JSONL 逐字节相同）、`toSummary` 的 `successRate` 与 `ScriptService.successRate` 恒等 |
+| **A8**（F3） | 读模型防线：`GET /scripts` 的响应**不含 `steps`**（防止 UI 拿全文再自己算），且带 `stepCount` + `successRate`；闸门 `ratemetric` 在注入一处违规除法时**必须红**（闸门自身的回归测试） |
 
 ---
 
@@ -272,7 +319,7 @@ name: 'dsh-script-client'`，写在 `dsh-script/cordis.patch.yml`）带进组合
 |---|---|---|
 | **F1 迁出与域对齐** | 建三个包 + registry/patch + 迁移存储 + 记录字段落地（D1/D2/D4）+ 删除火花侧脚本代码 + 域词汇闸门；行为与今天等价（除作用域收敛与新字段） | A1/A2/A3/A6 全绿；dock 里「脚本」模块可见 |
 | **F2 发现升级** | 目录注入升级（指纹/状态/替换帧/门控）+ `script_list` 检索 + 主动建议迁移 | INV-4/5/6 有单测 + A4 真宿主通过 |
-| **F3 治理** | 治理动作与审计面（§6.2）+ 成功率/僵尸/降级建议 + pane 治理视图 | 治理不变量单测 + 新 pane 验收 |
+| **F3 治理** | 治理动作与审计面（§6.2）：建议引擎纯函数（§6.4）+ 审计读模型（§6.5）+ 过期惰性结算 + pane 从只读目录升级为治理面（概览 / 待裁决 / 状态动作 / 步骤详情） | A7/A8 全绿 + A4/A5 重跑（真宿主与预览都断言治理面） |
 
 ---
 
@@ -319,5 +366,5 @@ name: 'dsh-script-client'`，写在 `dsh-script/cordis.patch.yml`）带进组合
 | **P-1** | `project` 作用域解析口径 | HippoMemo 按 `workspacePath` 精确匹配（`memory-core.ts:572-574`）；本 Spec 定义为项目根。统一需 HippoMemo 侧修订 |
 | **P-2** | `sourceSessionId` 可空性 | HippoMemo 必填（`types.ts:32`）；脚本侧可空（种子/系统写入）。若统一为必填，种子需伪造会话 id（不接受），故暂时保留差异 |
 | **P-3** | 是否抽共享 `*wire` 包 | 出现第三个消费者再评估（D3） |
-| **P-4** | `global` 自动注入的"确认"机制 | HippoMemo 用 `globalProven + seenWorkspaces ≥ 3`；脚本侧 F3 再定（可能只需"人工确认"） |
+| **P-4** | `global` 自动注入的"确认"机制 | **已关闭（D8，F3）**：不引入 `globalProven`；`global` 照常参与目录注入，收敛改由「降级作用域建议」（人工确认）承担 |
 | **P-5** | `docs/spark-v2-design-2026-09-21.md` 的同步修订 | 该文件的模块副标题与工具表假定脚本属于火花；由持有该文件的会话改 |
