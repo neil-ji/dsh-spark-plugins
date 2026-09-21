@@ -14,9 +14,13 @@
  * 变成机械断言（2026-09-21 两次实测踩到）。
  *
  * 用法：
- *   node dev-harness/boot-check.mjs                 # 默认 --port 0（让 OS 挑空闲端口）
+ *   node dev-harness/boot-check.mjs                 # 默认 --port 0（让 OS 挑空闲端口）+ 沙箱 home
  *   node dev-harness/boot-check.mjs --port 4999
  *   node dev-harness/boot-check.mjs --keep          # 失败时保留实例便于排查
+ *   node dev-harness/boot-check.mjs --home ~/.dsh --profile web --no-probe
+ *                                                   # 装 3080/真 home 前的预检：真 home 没有
+ *                                                   # /__dev/probe（那是沙箱 home 补丁层），
+ *                                                   # 故用 --no-probe 走降级模式
  *   EDGE_PATH=/path/to/chrome node dev-harness/boot-check.mjs   # 没装浏览器时的可用性降级
  *
  * 退出码：0 = 全绿；1 = 启动/探针/页面任一条断言失败（会回放日志尾部）。
@@ -33,6 +37,10 @@ const argOf = (name, fallback) => {
 }
 const PORT = Number(argOf('port', '0'))
 const PROFILE = String(argOf('profile', 'devweb'))
+/** DSH_HOME：默认沙箱；`--home ~/.dsh` 用于真 home 预检。 */
+const HOME_DIR = String(argOf('home', join(ROOT, '.dev', 'home')))
+/** 真 home 没有 /__dev/probe（沙箱 home 补丁层才有）→ 降级：跳过探针类断言。 */
+const NO_PROBE = argv.includes('--no-probe')
 const KEEP = argv.includes('--keep')
 const NO_PAGE = argv.includes('--no-page')
 const BOOT_TIMEOUT_MS = Number(argOf('timeout', '90000'))
@@ -48,7 +56,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 /* ── 平台侧：本次装进 profile 的插件清单（registry 的插件 + 其 dsh.client 声明） ── */
 
 const registry = JSON.parse(readFileSync(join(ROOT, 'plugin-registry.json'), 'utf8'))
-const profileRoot = join(ROOT, '.dev', 'home', 'profiles', PROFILE)
+const profileRoot = join(HOME_DIR, 'profiles', PROFILE)
 const installed = []
 for (const [name, rel] of Object.entries(registry.plugins ?? {})) {
   const manifestPath = join(profileRoot, 'node_modules', name, 'package.json')
@@ -110,9 +118,14 @@ const killHost = () => {
 }
 
 const url = await (async () => {
-  log.step(`启动冒烟：dsh --profile ${PROFILE} --port ${String(PORT)} --no-open（DSH_HOME=.dev/home）`)
-  const { spawnDsh } = await import('../scripts/dev-shared.mjs')
-  child = spawnDsh({ profile: PROFILE, port: PORT, cwd: SANDBOX_WORKSPACE, args: ['--no-open'], stdio: ['ignore', 'pipe', 'pipe'] })
+  log.step(`启动冒烟：dsh --profile ${PROFILE} --port ${String(PORT)} --no-open（DSH_HOME=${HOME_DIR}）`)
+  const command = ['dsh', '--profile', PROFILE, '--port', String(PORT), '--no-open'].join(' ')
+  child = spawn(command, {
+    shell: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    cwd: SANDBOX_WORKSPACE,
+    env: { ...process.env, DSH_HOME: HOME_DIR },
+  })
   const collect = (chunk) => { output.push(chunk.toString()) }
   child.stdout?.on('data', collect)
   child.stderr?.on('data', collect)
@@ -134,10 +147,20 @@ try {
 
   const base = `http://127.0.0.1:${String(hostPort)}`
   const waitMs = Math.max(5_000, BOOT_TIMEOUT_MS - 20_000)
-  const probeOk = await waitForHttp(`${base}/__dev/probe`, { timeoutMs: waitMs }).then(() => true, () => false)
-  check('诊断探针就绪（/__dev/probe）', probeOk)
-  if (!probeOk) throw new Error('探针未就绪')
-  const probe = await fetchJson(`${base}/__dev/probe`)
+  let probe = null
+  if (NO_PROBE) {
+    log.warn('--no-probe：真 home 没有 /__dev/probe，跳过探针类断言（只验启动日志 + 页面）')
+    // 退而求其次：确认 HTTP 已经能服务**带 token 的首页**。注意裸 `/` 会 401
+    // （`dsh web authentication required`）—— 那是鉴权行为，不是没起来。
+    const homeOk = await waitForHttp(url, { timeoutMs: waitMs }).then(() => true, () => false)
+    check('宿主 HTTP 已就绪（带 token 的首页有响应）', homeOk)
+    if (!homeOk) throw new Error('宿主未在超时内就绪')
+  } else {
+    const probeOk = await waitForHttp(`${base}/__dev/probe`, { timeoutMs: waitMs }).then(() => true, () => false)
+    check('诊断探针就绪（/__dev/probe）', probeOk)
+    if (!probeOk) throw new Error('探针未就绪')
+    probe = await fetchJson(`${base}/__dev/probe`)
+  }
 
   /* ① 启动不抛异常：日志 + 条目面 + 服务面 */
 
@@ -155,6 +178,9 @@ try {
   const hits = fatalPatterns.filter(([pattern]) => pattern.test(logText)).map(([, label]) => label)
   check('启动日志无致命异常（SyntaxError / require / duplicate route / init failed / unhandled rejection）', hits.length === 0, hits.join('、'))
 
+  if (probe === null) {
+    log.info('（--no-probe：loader 行 / 服务 / clientGraph 三条断言跳过，靠页面断言兜底）')
+  } else {
   const entries = Array.isArray(probe.entries) ? probe.entries : []
   const entryNames = new Set(entries.map((entry) => String(entry.name)))
   const wantRows = expectedRows()
@@ -173,6 +199,7 @@ try {
   const graphIds = (probe.clientGraph?.entries ?? []).map((entry) => String(entry.id))
   const missingClients = clientPlugins.filter((name) => !graphIds.includes(name))
   check('声明 dsh.client 的插件都进了 clientGraph', missingClients.length === 0, missingClients.join('、') || `${String(clientPlugins.length)} 个`)
+  }
 
   if (NO_PAGE) {
     log.warn('--no-page：跳过页面断言')
@@ -245,6 +272,11 @@ try {
             if (state === null || state === undefined || state.len <= 30 || state.crashed === true || state.head.length === 0) broken.push(`${String(tabs[index])}=${JSON.stringify(state)}`)
           }
           check('每个模块点开都渲染出内容且不崩', broken.length === 0, broken.slice(0, 2).join(' | '))
+        }
+        if (NO_PROBE && Array.isArray(tabs)) {
+          // 没有 clientGraph 可读时，用模块标签兜底：我们的 locale 字典里 zh=脚本 / en=Scripts。
+          const hasScriptModule = tabs.some((label) => String(label).startsWith('脚本') || String(label).startsWith('Scripts'))
+          check('dock 里出现本次新装的「脚本」模块（自注册生效）', hasScriptModule, JSON.stringify(tabs))
         }
         if (exceptions.length > 0) failed = true
       }
