@@ -228,8 +228,107 @@ async function runServerChecks() {
     check('spark: 有活跃火花', (sparks.value?.length ?? 0) >= 2, 'items=' + (sparks.value?.length ?? 0))
     const proposals = await (await fetch('http://127.0.0.1:' + PORT + '/proposals?status=pending')).json()
     check('spark: /proposals 形状完整', proposals.ok === true && Array.isArray(proposals.value) && typeof proposals.value[0]?.confidence === 'number', JSON.stringify(proposals).slice(0, 160))
+    /* 脚本沉淀库：读模型（不含 steps）+ 治理面（真引擎算的建议）—— Spec §6.5 / A8 */
     const scripts = await (await fetch('http://127.0.0.1:' + PORT + '/scripts?limit=50')).json()
-    check('spark: /scripts 形状完整', scripts.ok === true && Array.isArray(scripts.value) && Array.isArray(scripts.value[0]?.steps), JSON.stringify(scripts).slice(0, 160))
+    check(
+      'script: /scripts 是读模型（带 stepCount + 宿主算的 successRate，且**不含 steps**）',
+      scripts.ok === true
+        && Array.isArray(scripts.value)
+        && scripts.value.length >= 5
+        && typeof scripts.value[0]?.stepCount === 'number'
+        && typeof scripts.value[0]?.successRate === 'number'
+        && scripts.value[0]?.steps === undefined,
+      JSON.stringify(scripts).slice(0, 200),
+    )
+    check(
+      'script: 读模型的 successRate 与计数自洽（1/6 ≈ 0.167，不是 UI 现算的）',
+      scripts.value.some((item) => item.id === 'scr-retire-me' && Math.abs(item.successRate - 1 / 6) < 1e-9),
+      JSON.stringify(scripts.value.map((item) => [item.id, item.successRate])).slice(0, 200),
+    )
+
+    const auditBefore = await (await fetch('http://127.0.0.1:' + PORT + '/scripts/audit')).json()
+    const kinds = (auditBefore.value?.advices ?? []).map((advice) => advice.kind)
+    check(
+      'script: 只读审计不结算（archived 0 且过期条目还没被归档）',
+      auditBefore.ok === true && auditBefore.value?.archived === 0
+        && (auditBefore.value?.stats?.byStatus?.archived ?? 0) === 1,
+      JSON.stringify(auditBefore.value?.stats?.byStatus),
+    )
+    check(
+      'script: 四类治理建议都由真引擎算出（退役 / 僵尸 / 降级 / 合并）',
+      ['retire', 'zombie', 'downgrade-scope', 'merge-duplicate'].every((kind) => kinds.includes(kind)),
+      JSON.stringify(kinds),
+    )
+    check(
+      'script: 建议只带病据数字、不带句子（宿主不下发用户可见文案）',
+      (auditBefore.value?.advices ?? []).every((advice) => advice.detail === undefined
+        && typeof advice.evidence?.invocationCount === 'number'
+        && typeof advice.evidence?.workspaces === 'number'),
+      JSON.stringify(auditBefore.value?.advices?.[0]).slice(0, 200),
+    )
+    check(
+      'script: 合并建议指向留存者（较新的那条被建议并掉）',
+      (auditBefore.value?.advices ?? []).some((advice) => advice.id === 'merge-duplicate:scr-dup-lose->scr-dup-keep'),
+      JSON.stringify((auditBefore.value?.advices ?? []).map((advice) => advice.id)),
+    )
+    check(
+      'script: 审计统计含分档与验收占比（口径在宿主，UI 不重算）',
+      auditBefore.value?.stats?.rateBuckets?.high >= 1
+        && auditBefore.value?.stats?.rateBuckets?.low >= 1
+        && auditBefore.value?.stats?.rateBuckets?.untested >= 1
+        && typeof auditBefore.value?.stats?.acceptance?.ratio === 'number',
+      JSON.stringify(auditBefore.value?.stats).slice(0, 240),
+    )
+
+    const swept = await (await fetch('http://127.0.0.1:' + PORT + '/scripts/sweep', { method: 'POST' })).json()
+    check(
+      'script: POST /scripts/sweep 结算过期条目（唯一自动动作）',
+      swept.ok === true && swept.value?.archived === 1
+        && (swept.value?.stats?.byStatus?.archived ?? 0) === 2,
+      JSON.stringify(swept.value?.stats?.byStatus),
+    )
+    const sweptAgain = await (await fetch('http://127.0.0.1:' + PORT + '/scripts/sweep', { method: 'POST' })).json()
+    check('script: 重复结算幂等（第二次 0）', sweptAgain.value?.archived === 0, JSON.stringify(sweptAgain.value?.archived))
+
+    const detail = await (await fetch('http://127.0.0.1:' + PORT + '/scripts/scr-preview-verify')).json()
+    check(
+      'script: GET /scripts/:id 给全文步骤（人面看步骤的通道，不计量）',
+      detail.ok === true && Array.isArray(detail.value?.steps) && detail.value.steps.length === 3,
+      JSON.stringify(detail).slice(0, 160),
+    )
+
+    const merged = await (await fetch('http://127.0.0.1:' + PORT + '/scripts/scr-dup-lose/status', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ status: 'superseded', supersededBy: 'scr-dup-keep' }),
+    })).json()
+    check(
+      'script: 合并动作走 /status + supersededBy（取代链不能断）',
+      merged.ok === true && merged.value?.status === 'superseded' && merged.value?.supersededBy === 'scr-dup-keep',
+      JSON.stringify(merged).slice(0, 160),
+    )
+    const brokenChain = await fetch('http://127.0.0.1:' + PORT + '/scripts/scr-dup-keep/status', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ status: 'superseded' }),
+    })
+    check('script: 不带 supersededBy 的取代被拒（400）', brokenChain.status === 400, 'status=' + String(brokenChain.status))
+
+    const downgraded = await (await fetch('http://127.0.0.1:' + PORT + '/scripts/scr-global-one-ws/scope', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ scope: 'workspace' }),
+    })).json()
+    check(
+      'script: 降级动作走 /scope（global → workspace）',
+      downgraded.ok === true && downgraded.value?.scope === 'workspace',
+      JSON.stringify(downgraded).slice(0, 160),
+    )
+
+    const purgedActive = await fetch('http://127.0.0.1:' + PORT + '/scripts/scr-sandbox-up', { method: 'DELETE' })
+    check('script: 未归档条目禁止物理删除（409）', purgedActive.status === 409, 'status=' + String(purgedActive.status))
+    const purged = await (await fetch('http://127.0.0.1:' + PORT + '/scripts/scr-archived', { method: 'DELETE' })).json()
+    check('script: 已归档条目可物理删除', purged.ok === true && purged.value?.removed === true, JSON.stringify(purged).slice(0, 160))
     const captured = await (await fetch('http://127.0.0.1:' + PORT + '/sparks', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

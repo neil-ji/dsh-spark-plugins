@@ -12,6 +12,12 @@
  * scenario：ok（默认）· empty（空库）· error（每次调用都失败）。
  */
 import { sparkCaptureSchema, sparkPatchSchema } from '../../../packages/dsh-spark-wire/lib/index.js'
+// 脚本侧**不手抄口径**：读模型与治理结论直接吃宿主 `dsh-script` 的纯函数叶子模块
+// （Node ≥23.6 原生剥类型；`pnpm -r test` 跑 `node --test test/*.ts` 早已要求同一版本）。
+// 于是预览里的「退役 / 僵尸 / 降级 / 合并」建议就是**真引擎**算的 —— 预览与真宿主的差
+// 只剩传输层，而不是两套会各自漂移的口径（AGENTS §0.5）。
+import { auditStats, expiredIds, governanceAdvices } from '../../../packages/dsh-script/src/governance.ts'
+import { toSummary } from '../../../packages/dsh-script/src/metrics.ts'
 
 const WORKSPACE = 'F:\\AgentStudio\\dsh-spark-plugins'
 const HOUR = 3600_000
@@ -73,33 +79,138 @@ const PROPOSALS = [
   },
 ]
 
+/**
+ * 脚本 fixture（治理面的素材）：每一条都刻意命中（或刻意不命中）一类建议，
+ * 这样预览/真宿主里能同时看到四种待裁决项与各种状态。
+ */
+function scriptView(overrides) {
+  const createdAt = overrides.createdAt ?? now - 6 * DAY
+  return {
+    id: overrides.id,
+    name: overrides.name,
+    description: overrides.description ?? '预览夹具：' + overrides.name,
+    steps: overrides.steps ?? [{ kind: 'tool-call', payload: 'bash: echo ' + overrides.id }],
+    triggers: overrides.triggers ?? ['预览夹具', overrides.id],
+    tags: overrides.tags ?? ['preview'],
+    scope: overrides.scope ?? 'workspace',
+    workspacePath: overrides.workspacePath ?? WORKSPACE,
+    status: overrides.status ?? 'active',
+    revision: overrides.revision ?? 1,
+    supersedes: overrides.supersedes ?? null,
+    supersededBy: overrides.supersededBy ?? null,
+    updatedBy: overrides.updatedBy ?? 'agent',
+    sourceSessionId: overrides.sourceSessionId ?? 'preview-session',
+    sourceAgentId: overrides.sourceAgentId ?? null,
+    sourceTurn: overrides.sourceTurn ?? null,
+    invocationCount: overrides.invocationCount ?? 0,
+    successCount: overrides.successCount ?? 0,
+    failureCount: overrides.failureCount ?? 0,
+    invokedWorkspaces: overrides.invokedWorkspaces ?? [],
+    createdAt,
+    updatedAt: overrides.updatedAt ?? createdAt,
+    expiresAt: overrides.expiresAt ?? null,
+    lastInvokedAt: overrides.lastInvokedAt ?? null,
+  }
+}
+
 const SCRIPTS = [
-  {
-    id: 'scr-preview-verify', name: '预览自检', description: '跑 Node 冒烟 + 服务器断言，退出码即结论。',
+  scriptView({
+    id: 'scr-preview-verify',
+    name: '预览自检',
+    description: '跑 Node 冒烟 + 服务器断言，退出码即结论。',
     steps: [
-      { kind: 'instruction', payload: 'pnpm preview:verify' },
+      { kind: 'instruction', payload: '在仓库根执行 pnpm preview:verify' },
       { kind: 'tool-call', payload: 'bash: node dev-harness/preview/verify.mjs', note: '失败时看首条 FAIL' },
+      { kind: 'instruction', payload: '验收：退出码 0 且 FAIL 计数为 0' },
     ],
-    triggers: ['改完 dev-harness/preview', '发版前'], scope: 'project', workspacePath: WORKSPACE,
+    triggers: ['改完 dev-harness/preview', '发版前'],
+    scope: 'project',
     invocationCount: 12, successCount: 11, failureCount: 1,
-    createdAt: now - 6 * DAY, updatedAt: now - 2 * HOUR, lastInvokedAt: now - 2 * HOUR, sourceSparkId: null,
-  },
-  {
-    id: 'scr-sandbox-up', name: '起沙箱联调', description: '真宿主联调（需要本机 dsh）：初始化 + link + 启动 3997。',
+    invokedWorkspaces: [WORKSPACE],
+    createdAt: now - 6 * DAY, updatedAt: now - 2 * HOUR, lastInvokedAt: now - 2 * HOUR,
+  }),
+  scriptView({
+    id: 'scr-sandbox-up',
+    name: '起沙箱联调',
+    description: '真宿主联调（需要本机 dsh）：初始化 + link + 启动 3997。',
     steps: [
-      { kind: 'instruction', payload: 'pnpm sandbox:init' },
-      { kind: 'instruction', payload: 'pnpm sandbox:link' },
+      { kind: 'instruction', payload: '先跑 pnpm sandbox:init 准备沙箱 home' },
+      { kind: 'instruction', payload: '再跑 pnpm sandbox:link 把工作区包链进 profile' },
       { kind: 'tool-call', payload: 'bash: pnpm sandbox:up --detach' },
     ],
-    triggers: ['要验证真槽位/真 RPC'], scope: 'project', workspacePath: WORKSPACE,
-    invocationCount: 5, successCount: 5, failureCount: 0,
-    createdAt: now - 10 * DAY, updatedAt: now - 3 * DAY, lastInvokedAt: now - 3 * DAY, sourceSparkId: null,
-  },
+    triggers: ['要验证真槽位/真 RPC'],
+    scope: 'project',
+    invocationCount: 5, successCount: 5,
+    invokedWorkspaces: [WORKSPACE],
+    createdAt: now - 10 * DAY, updatedAt: now - 3 * DAY, lastInvokedAt: now - 3 * DAY,
+  }),
+  // 退役候选：调用够多但成功率 1/6
+  scriptView({
+    id: 'scr-retire-me',
+    name: '过期的构建诀窍',
+    description: '早年的一条构建流程，成功率已经掉到 17%。',
+    invocationCount: 6, successCount: 1, failureCount: 5,
+    invokedWorkspaces: [WORKSPACE],
+    createdAt: now - 40 * DAY, updatedAt: now - 5 * DAY, lastInvokedAt: now - 5 * DAY,
+  }),
+  // 僵尸：活跃、从没被调用、90 天没动
+  scriptView({
+    id: 'scr-zombie',
+    name: '没人用的探查脚本',
+    description: '写好之后再没被调用过。',
+    createdAt: now - 120 * DAY, updatedAt: now - 90 * DAY,
+  }),
+  // 降级候选：号称全局，却只在一个工作区被调用过
+  scriptView({
+    id: 'scr-global-one-ws',
+    name: '假装全局的流程',
+    description: '标了 global，但调用证据只有一个工作区。',
+    scope: 'global',
+    invocationCount: 3, successCount: 3,
+    invokedWorkspaces: [WORKSPACE],
+    createdAt: now - 20 * DAY, updatedAt: now - 4 * DAY, lastInvokedAt: now - 4 * DAY,
+  }),
+  // 重复对：同名 + 同步骤 + 同 triggers → 对**较新**的一条提合并建议
+  scriptView({
+    id: 'scr-dup-keep',
+    name: '跑预览自检',
+    description: '旧的一条：保留为留存者。',
+    steps: [{ kind: 'tool-call', payload: 'bash: pnpm preview:verify' }],
+    triggers: ['预览'],
+    createdAt: now - 30 * DAY, updatedAt: now - 20 * DAY,
+    invocationCount: 2, successCount: 2, invokedWorkspaces: [WORKSPACE],
+  }),
+  scriptView({
+    id: 'scr-dup-lose',
+    name: '跑预览自检',
+    description: '新的一条：同名的重复。',
+    steps: [{ kind: 'tool-call', payload: 'bash: pnpm preview:verify' }],
+    triggers: ['预览'],
+    createdAt: now - 3 * DAY, updatedAt: now - 3 * DAY,
+  }),
+  // 已归档：状态分布 + 恢复/删除动作的素材
+  scriptView({
+    id: 'scr-archived',
+    name: '归档掉的旧脚本',
+    description: '已经被人工归档，只等清理。',
+    status: 'archived',
+    createdAt: now - 60 * DAY, updatedAt: now - 30 * DAY,
+  }),
+  // 已过期但仍是 active：POST /scripts/sweep 会把它结算为 archived
+  scriptView({
+    id: 'scr-expired',
+    name: '到期未结算的脚本',
+    description: 'expiresAt 已过：打开治理面时应当被自动归档。',
+    expiresAt: now - DAY,
+    createdAt: now - 15 * DAY, updatedAt: now - 15 * DAY,
+  }),
 ]
 
 export function createSparkStore() {
   let scenario = 'ok'
   let sparks = SPARKS.map((item) => ({ ...item, tags: [...item.tags] }))
+  // 脚本库是**可变**的：sweep / 状态动作 / 删除都会改它（与真宿主的 JSONL 语义同形）。
+  let scripts = SCRIPTS.map((item) => ({ ...item, steps: [...item.steps], triggers: [...item.triggers], tags: [...item.tags], invokedWorkspaces: [...item.invokedWorkspaces] }))
 
   const fail = () => scenario === 'error'
   const error = { code: 'preview-scenario', message: '预览故障注入：spark 数据源被切到 error 场景' }
@@ -109,6 +220,9 @@ export function createSparkStore() {
     setScenario(next) {
       scenario = ['ok', 'empty', 'error'].includes(next) ? next : 'ok'
       if (scenario === 'ok' && sparks.length === 0) sparks = SPARKS.map((item) => ({ ...item, tags: [...item.tags] }))
+      if (scenario === 'ok' && scripts.length !== SCRIPTS.length) {
+        scripts = SCRIPTS.map((item) => ({ ...item, steps: [...item.steps], triggers: [...item.triggers], tags: [...item.tags], invokedWorkspaces: [...item.invokedWorkspaces] }))
+      }
     },
 
     list(params) {
@@ -255,16 +369,92 @@ export function createSparkStore() {
       return { ok: true, value: { created: 2, skipped: 1 } }
     },
 
+    /* ─────────────── 脚本沉淀库（读模型 + 治理面，口径吃真引擎） ─────────────── */
+
+    /** `GET /scripts`：与真宿主同形的**读模型**（不含 steps，带宿主算好的 successRate）。 */
     scripts(params) {
       if (fail()) return { ok: false, error }
       const limit = Number(params.get('limit') ?? 50)
-      const items = scenario === 'empty' ? [] : SCRIPTS
-      return { ok: true, value: items.slice(0, limit) }
+      let items = scenario === 'empty' ? [] : scripts
+      const status = params.get('status')
+      if (status !== null) items = items.filter((item) => item.status === status)
+      const scope = params.get('scope')
+      if (scope !== null) items = items.filter((item) => item.scope === scope)
+      const q = params.get('q')
+      if (q !== null && q.length > 0) {
+        const needle = q.toLowerCase()
+        items = items.filter((item) => item.name.toLowerCase().includes(needle) || item.description.toLowerCase().includes(needle))
+      }
+      // 与宿主 `applyQuery` 同序：updatedAt 倒序。
+      items = [...items].sort((a, b) => b.updatedAt - a.updatedAt)
+      return { ok: true, value: items.slice(0, limit).map((item) => toSummary(item)) }
+    },
+
+    /** 一条脚本的全文（含 steps）；人面看步骤走这条，**不计量**（Spec D9）。 */
+    scriptDetail(id) {
+      if (fail()) return { ok: false, error }
+      const target = scripts.find((item) => item.id === id)
+      if (target === undefined) return { ok: false, error: { code: 'not-found', message: id } }
+      return { ok: true, value: target }
+    },
+
+    /** `GET /scripts/audit`（只读）与 `POST /scripts/sweep`（先结算过期）同形。 */
+    scriptAudit(settle) {
+      if (fail()) return { ok: false, error }
+      let archived = 0
+      if (settle === true && scenario !== 'empty') {
+        const ids = expiredIds(scripts, Date.now())
+        for (const id of ids) {
+          const target = scripts.find((item) => item.id === id)
+          if (target !== undefined) { target.status = 'archived'; target.updatedAt = Date.now() }
+        }
+        archived = ids.length
+      }
+      const at = Date.now()
+      const live = scenario === 'empty' ? [] : scripts
+      return {
+        ok: true,
+        value: { settledAt: at, archived, stats: auditStats(live, at), advices: governanceAdvices(live, at) },
+      }
+    },
+
+    /** 状态迁移（归档 / 恢复 / 取代）；取代必须带 supersededBy（Spec INV-11）。 */
+    setScriptStatus(id, status, supersededBy) {
+      if (fail()) return { ok: false, error }
+      const target = scripts.find((item) => item.id === id)
+      if (target === undefined) return { ok: false, error: { code: 'not-found', message: id } }
+      if (status === 'superseded' && (supersededBy === null || supersededBy === undefined)) {
+        return { ok: false, error: { code: 'BAD_REQUEST', message: 'script: superseded 必须带 supersededBy（取代链不能断）' } }
+      }
+      target.status = status
+      if (status === 'superseded') target.supersededBy = supersededBy
+      target.updatedAt = Date.now()
+      return { ok: true, value: target }
+    },
+
+    /** 改作用域（降级建议的落点）。 */
+    setScriptScope(id, scope) {
+      if (fail()) return { ok: false, error }
+      const target = scripts.find((item) => item.id === id)
+      if (target === undefined) return { ok: false, error: { code: 'not-found', message: id } }
+      target.scope = scope
+      target.updatedAt = Date.now()
+      return { ok: true, value: target }
+    },
+
+    /** 物理删除：只有已归档条目可删（Spec INV-11）。 */
+    removeScript(id) {
+      if (fail()) return { ok: false, error }
+      const index = scripts.findIndex((item) => item.id === id)
+      if (index < 0) return { ok: true, value: { removed: false } }
+      if (scripts[index].status !== 'archived') return { ok: false, error: { code: 'CONFLICT', message: 'only archived scripts can be purged' } }
+      scripts.splice(index, 1)
+      return { ok: true, value: { removed: true } }
     },
 
     invokeScript(id) {
       if (fail()) return { ok: false, error }
-      const target = SCRIPTS.find((item) => item.id === id)
+      const target = scripts.find((item) => item.id === id)
       if (target === undefined) return { ok: false, error: { code: 'not-found', message: id } }
       return { ok: true, value: { invoked: id, steps: target.steps.length } }
     },

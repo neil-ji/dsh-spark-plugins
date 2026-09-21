@@ -507,11 +507,34 @@ async function handleSpark(req, res, url) {
     if (result.ok === true) broadcastSpark('/proposals/events', { at: Date.now(), newProposals: [], resolvedProposal: result.value })
     return json(res, 200, result)
   }
+  /* 脚本沉淀库：读模型 / 审计（治理面）/ 动作端点，与真宿主 `dsh-script` 的 HTTP 面同形。 */
   if (path === '/scripts' && method === 'GET') return json(res, 200, spark.scripts(url.searchParams))
-  if (path.startsWith('/scripts/') && path.endsWith('/invoke') && method === 'POST') {
-    const result = spark.invokeScript(decodeURIComponent(path.slice('/scripts/'.length, -'/invoke'.length)))
-    if (result.ok === true) broadcastSpark('/scripts/events', { at: Date.now(), operation: 'invoke' })
+  if (path === '/scripts/audit' && method === 'GET') return json(res, 200, spark.scriptAudit(false))
+  if (path === '/scripts/sweep' && method === 'POST') {
+    const result = spark.scriptAudit(true)
+    if (result.ok === true && result.value.archived > 0) {
+      broadcastSpark('/scripts/events', { at: Date.now(), operation: 'expire', id: null })
+    }
     return json(res, 200, result)
+  }
+  const scriptAction = /^\/scripts\/([^/]+)\/(invoke|status|scope)$/.exec(path)
+  if (scriptAction !== null && method === 'POST') {
+    const id = decodeURIComponent(scriptAction[1])
+    const action = scriptAction[2]
+    const result = action === 'invoke' ? spark.invokeScript(id)
+      : action === 'status' ? spark.setScriptStatus(id, body.status, body.supersededBy ?? null)
+        : spark.setScriptScope(id, body.scope)
+    const operation = action === 'invoke' ? 'invoke' : action === 'status' ? 'status' : 'status'
+    if (result.ok === true) broadcastSpark('/scripts/events', { at: Date.now(), operation, id })
+    return json(res, result.ok === true ? 200 : result.error.code === 'not-found' ? 404 : 400, result)
+  }
+  if (path.startsWith('/scripts/') && method === 'GET') {
+    const result = spark.scriptDetail(decodeURIComponent(path.slice('/scripts/'.length)))
+    return json(res, result.ok === true ? 200 : 404, result)
+  }
+  if (path.startsWith('/scripts/') && method === 'DELETE') {
+    const result = spark.removeScript(decodeURIComponent(path.slice('/scripts/'.length)))
+    return json(res, result.ok === true ? 200 : 409, result)
   }
   return json(res, 404, { ok: false, error: { code: 'not-found', message: path } })
 }
