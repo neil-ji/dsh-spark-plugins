@@ -1007,7 +1007,15 @@ const ACTION_LABELS: Record<EvolveReport['actions'][number]['action'], Hippomemo
   link: 'evolveActionLink',
   'downgrade-scope': 'evolveActionDowngradeScope',
 }
-function EvolvePanel({ api, t }: { api: HippomemoApi; t: Translate }): ReactNode {
+/**
+ * 进化页的运行状态机：上次报告拉取 / 预演与落盘 / verdict↔memory 的 kind 反查。
+ * 2026-09 拆分：状态收进 hook，头部（操作行）与结果（两张卡）分开渲染 ——
+ * 操作行要挂在**页顶**（财务形制：页头行在内容卡之上），结果卡留在页尾。
+ */
+function useEvolve(api: HippomemoApi): {
+  report: EvolveReport | null; running: false | 'dry' | 'apply'; error: string;
+  kindMap: Map<string, MemoryKind>; run: (dryRun: boolean) => void;
+} {
   const [report, setReport] = useState<EvolveReport | null>(null);
   /** 在飞的运行模式（false = 空闲 / 'dry' = 预演 / 'apply' = 落盘）；按钮据此只转自己。 */
   const [running, setRunning] = useState<false | 'dry' | 'apply'>(false);
@@ -1042,90 +1050,93 @@ function EvolvePanel({ api, t }: { api: HippomemoApi; t: Translate }): ReactNode
     });
     return () => { current = false; };
   }, [api, report]);
-  const run = async (dryRun: boolean): Promise<void> => {
+  const run = (dryRun: boolean): void => {
     setRunning(dryRun ? 'dry' : 'apply'); setError('');
-    try { setReport(await api.evolveRun(dryRun)); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
-    finally { setRunning(false); }
+    api.evolveRun(dryRun).then(found => { setReport(found); })
+      .catch((cause: unknown) => { setError(cause instanceof Error ? cause.message : String(cause)); })
+      .finally(() => { setRunning(false); });
   };
+  return { report, running, error, kindMap, run };
+}
+
+/** 页顶操作行（财务形制）：运行身份在左、动作按钮在右；无运行记录时只在这里说一次。 */
+function EvolveHeader({ t, evolve }: { t: Translate; evolve: ReturnType<typeof useEvolve> }): ReactNode {
+  const { report, running, run } = evolve;
   return (
-    <div className='hippomemo-panel'>
-      {/* 顶部操作行（对齐财务形制，2026-09 用户裁决）：运行身份（时间/预演态）在左，
-          动作按钮在右；提示性长文案移除 —— 扫掠语义已由四个动作标签自解释。 */}
-      <div className='hippomemo-toolbar hippomemo-evolve-head'>
-        <div className='hippomemo-meta'>
-          {report !== null ? (
-            <>
-              <span>{t('evolveRunAt')} {formatDate(report.runAt)}</span>
-              <span>{report.dryRun ? t('evolveDryRun') : t('evolveApplied')}</span>
-            </>
-          ) : (
-            <span>{t('evolveNoReport')}</span>
-          )}
-        </div>
-        <div className='hippomemo-toolbar'>
-          <Button variant='secondary' size='md' loading={running === 'dry'} disabled={running !== false} onClick={() => { void run(true); }}>
-            {running !== false ? t('evolveRunning') : t('evolveRunDry')}
-          </Button>
-          <Button variant='primary' size='md' loading={running === 'apply'} disabled={running !== false} onClick={() => { void run(false); }}>
-            {running !== false ? t('evolveRunning') : t('evolveRunApply')}
-          </Button>
-        </div>
+    <div className='hippomemo-toolbar hippomemo-evolve-head'>
+      <div className='hippomemo-meta'>
+        {report !== null ? (
+          <>
+            <span>{t('evolveRunAt')} {formatDate(report.runAt)}</span>
+            <span>{report.dryRun ? t('evolveDryRun') : t('evolveApplied')}</span>
+          </>
+        ) : (
+          <span>{t('evolveNoReport')}</span>
+        )}
       </div>
-      {error.length > 0 ? <p className='hippomemo-error'>{t('loadFailed')}: {error}</p> : null}
-      {report === null && error.length === 0
-        ? <p className='hippomemo-empty'>{t('evolveNoReport')}</p> : null}
-      {report !== null ? (
-        <>
-          {/* 复核结论与动作各是一组 → 各一张卡，组名写在卡头上；数量作为卡头的状态位。
-              以前两者都先在 meta 里写一遍计数、再在卡内当分组标题写一遍 —— 同一段文本
-              在一张卡里出现两次。 */}
-          {report.review !== undefined && report.review.length > 0 ? (
-            <Card title={t('evolveReviewedLabel')} actions={<span className='hippomemo-panel-count'>{report.review.length} 项</span>}>
-              <div className='hippomemo-evolve-review'>
-                {report.review.map(verdict => {
-                  const kind = kindMap.get(verdict.id);
-                  return (
-                    <div className='hippomemo-evolve-verdict' key={verdict.id}>
-                      <Pill className={'hippomemo-tag hippomemo-verdict-' + verdict.verdict}>
-                        {verdict.verdict === 'keep' ? t('evolveKeep') : t('evolveNoise')}
-                      </Pill>
-                      <Pill className={'hippomemo-tag hippomemo-kind-' + (kind ?? 'unknown')}>
-                        {kind === undefined ? '—' : t(kind)}
-                      </Pill>
-                      <span className='hippomemo-evolve-verdict-id'>{verdict.id.slice(0, 8)}</span>
-                      {verdict.reason !== undefined
-                        ? <span className='hippomemo-evolve-verdict-reason'>{verdict.reason}</span> : null}
-                    </div>
-                  );
-                })}
-              </div>
-            </Card>
-          ) : null}
-          <Card title={t('evolveActionsLabel')} actions={<span className='hippomemo-panel-count'>{report.actions.length} 项</span>}>
-            {report.actions.length > 0 ? (
-              <div className='hippomemo-evolve-actions'>
-                {report.actions.map(action => {
-                  const kind = kindMap.get(action.id);
-                  return (
-                    <div className='hippomemo-evolve-action' key={action.id + action.action}>
-                      <Pill className={'hippomemo-tag hippomemo-tag-neutral hippomemo-action-' + action.action}>{t(ACTION_LABELS[action.action])}</Pill>
-                      <Pill className={'hippomemo-tag hippomemo-kind-' + (kind ?? 'unknown')}>
-                        {kind === undefined ? '—' : t(kind)}
-                      </Pill>
-                      <span className='hippomemo-evolve-action-id'>{action.id.slice(0, 8)}</span>
-                      <span className='hippomemo-evolve-action-reason'>{action.reason}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className='hippomemo-empty'>—</p>
-            )}
-          </Card>
-        </>
-      ) : null}
+      <div className='hippomemo-toolbar'>
+        <Button variant='secondary' size='md' loading={running === 'dry'} disabled={running !== false} onClick={() => { run(true); }}>
+          {running !== false ? t('evolveRunning') : t('evolveRunDry')}
+        </Button>
+        <Button variant='primary' size='md' loading={running === 'apply'} disabled={running !== false} onClick={() => { run(false); }}>
+          {running !== false ? t('evolveRunning') : t('evolveRunApply')}
+        </Button>
+      </div>
     </div>
+  );
+}
+
+/** 页尾结果区：复核结论与动作各一张卡，组名写在卡头上，数量作为卡头的状态位。 */
+function EvolveResults({ t, evolve }: { t: Translate; evolve: ReturnType<typeof useEvolve> }): ReactNode {
+  const { report, error, kindMap } = evolve;
+  if (error.length > 0) return <p className='hippomemo-error'>{t('loadFailed')}: {error}</p>;
+  if (report === null) return null;
+  return (
+    <>
+      {report.review !== undefined && report.review.length > 0 ? (
+        <Card title={t('evolveReviewedLabel')} actions={<span className='hippomemo-panel-count'>{report.review.length} 项</span>}>
+          <div className='hippomemo-evolve-review'>
+            {report.review.map(verdict => {
+              const kind = kindMap.get(verdict.id);
+              return (
+                <div className='hippomemo-evolve-verdict' key={verdict.id}>
+                  <Pill className={'hippomemo-tag hippomemo-verdict-' + verdict.verdict}>
+                    {verdict.verdict === 'keep' ? t('evolveKeep') : t('evolveNoise')}
+                  </Pill>
+                  <Pill className={'hippomemo-tag hippomemo-kind-' + (kind ?? 'unknown')}>
+                    {kind === undefined ? '—' : t(kind)}
+                  </Pill>
+                  <span className='hippomemo-evolve-verdict-id'>{verdict.id.slice(0, 8)}</span>
+                  {verdict.reason !== undefined
+                    ? <span className='hippomemo-evolve-verdict-reason'>{verdict.reason}</span> : null}
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      ) : null}
+      <Card title={t('evolveActionsLabel')} actions={<span className='hippomemo-panel-count'>{report.actions.length} 项</span>}>
+        {report.actions.length > 0 ? (
+          <div className='hippomemo-evolve-actions'>
+            {report.actions.map(action => {
+              const kind = kindMap.get(action.id);
+              return (
+                <div className='hippomemo-evolve-action' key={action.id + action.action}>
+                  <Pill className={'hippomemo-tag hippomemo-tag-neutral hippomemo-action-' + action.action}>{t(ACTION_LABELS[action.action])}</Pill>
+                  <Pill className={'hippomemo-tag hippomemo-kind-' + (kind ?? 'unknown')}>
+                    {kind === undefined ? '—' : t(kind)}
+                  </Pill>
+                  <span className='hippomemo-evolve-action-id'>{action.id.slice(0, 8)}</span>
+                  <span className='hippomemo-evolve-action-reason'>{action.reason}</span>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className='hippomemo-empty'>—</p>
+        )}
+      </Card>
+    </>
   );
 }
 
@@ -1178,8 +1189,11 @@ function EvolutionTab({ t, stats, usage, candidates, now, onResolve, api, reload
   onResolve: (item: PendingCandidate) => void;
   api: HippomemoApi; reloadKey: number;
 }): ReactNode {
+  const evolve = useEvolve(api);
   return (
     <div className='hippomemo-tab'>
+      {/* 页顶操作行（财务形制）：进化引擎的运行身份与动作按钮在所有内容卡之上。 */}
+      <EvolveHeader t={t} evolve={evolve} />
       <TodoQuadrantImpl t={t} items={candidates?.items ?? []} now={now} onResolve={onResolve} />
       {/* 存量（有多少条记忆）与用量（这些记忆被用得怎么样）是两组数，各一张卡。
           以前挤在一张「使用统计」卡里，而卡内第一行又叫「用量」—— 卡头与首行两个名字。 */}
@@ -1209,7 +1223,7 @@ function EvolutionTab({ t, stats, usage, candidates, now, onResolve, api, reload
       <Card title={t('evolutionChartsTitle')}>
         <MemoryCharts api={api} t={t} stats={stats} reloadKey={reloadKey} />
       </Card>
-      <EvolvePanel api={api} t={t} />
+      <EvolveResults t={t} evolve={evolve} />
     </div>
   )
 }
