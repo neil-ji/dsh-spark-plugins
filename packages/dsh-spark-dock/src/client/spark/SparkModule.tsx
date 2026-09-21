@@ -285,11 +285,11 @@ export function SparksPane({ channel, t }: SparkPaneDeps): JSX.Element {
         closeAriaLabel={t('closeDialog')}
         footer={(
           <>
-            <button className="dock-btn ghost" type="button" onClick={() => setConfirmDrop(null)}>{t('cancel')}</button>
-            <button className="dock-btn" type="button" data-variant="danger"
+            <Button variant="ghost" size="sm" onClick={() => setConfirmDrop(null)}>{t('cancel')}</Button>
+            <Button variant="danger" size="sm"
               onClick={() => { const target = confirmDrop; setConfirmDrop(null); if (target !== null) void api.drop(target.id).then(refresh, refresh) }}>
               {t('confirm')}
-            </button>
+            </Button>
           </>
         )}
       >
@@ -368,11 +368,13 @@ function SparkList({ sparks, reload, t, confirmDrop }: {
 export function ProposalsPane({ channel, t }: SparkPaneDeps): JSX.Element {
   const { data: proposals, error, reload } = useApiResource<ProposalView[]>(() => api.listProposals({ status: 'pending', limit: 50 }), [])
   const [reflecting, setReflecting] = useState(false)
+  const [confirmReflect, setConfirmReflect] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
   useSparkTopicRefresh(channel, ['proposal'], reload)
 
   const reflect = async () => {
     if (reflecting) return
+    setConfirmReflect(false)
     setReflecting(true)
     try { await api.reflect() } finally { setReflecting(false); reload() }
   }
@@ -388,13 +390,10 @@ export function ProposalsPane({ channel, t }: SparkPaneDeps): JSX.Element {
       <Card
         title={t('proposalsTitle')}
         actions={(
-          <>
-            <span className="dock-hint">{t('proposalsHint')}</span>
-            <button className="dock-pill" type="button" disabled={reflecting} aria-busy={reflecting}
-              onClick={() => { void reflect() }}>
-              {reflecting ? t('reflecting') : t('reflect')}
-            </button>
-          </>
+          <Button variant="secondary" size="sm" disabled={reflecting} aria-busy={reflecting}
+            onClick={() => { setConfirmReflect(true) }}>
+            {reflecting ? t('reflecting') : t('reflect')}
+          </Button>
         )}
       >
         {proposals === null
@@ -431,6 +430,26 @@ export function ProposalsPane({ channel, t }: SparkPaneDeps): JSX.Element {
               </div>
             )}
       </Card>
+
+      {/* 涌现会写库（扫描火花 → 生成/更新提议），不是只读查询 → 二次确认，
+          并在确认框里交代作用与后果（2026-09 用户裁决）。 */}
+      <Modal
+        open={confirmReflect}
+        onClose={() => setConfirmReflect(false)}
+        title={t('reflectConfirmTitle')}
+        closeAriaLabel={t('closeDialog')}
+        footer={(
+          <>
+            <Button variant="ghost" size="sm" onClick={() => setConfirmReflect(false)}>{t('cancel')}</Button>
+            <Button variant="primary" size="sm" loading={reflecting} disabled={reflecting}
+              onClick={() => { void reflect() }}>
+              {t('reflectConfirmAction')}
+            </Button>
+          </>
+        )}
+      >
+        <p>{t('reflectConfirmBody')}</p>
+      </Modal>
     </div>
   )
 }
