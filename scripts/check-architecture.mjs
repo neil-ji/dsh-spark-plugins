@@ -707,10 +707,101 @@ export function findRateDivisionSites(root) {
   return { violations, files, definition: RATE_DIVISION_DEFINITION }
 }
 
+/**
+ * 打包清单 vs 入口清单（Spec 无编号，2026-09-22 真宿主实测）。
+ *
+ * 两个方向的漏项都会**让用户装到起不来的插件**，而且都不会在本仓库的 build/test 里响：
+ *   ① `package.json` 的 `files` 没覆盖 `exports` 指向的产物 —— 加一个子路径入口
+ *      （如 `dsh-script/terms` → `lib/terms.js`）忘了同步 `files`，tarball 里就没有这个文件，
+ *      宿主 boot 时 `ERR_MODULE_NOT_FOUND`（2026-09-22 实际发生，被启动冒烟拦下）；
+ *   ② `cordis.patch.yml` 里声明了 loader 行、包里却没有对应 `exports` 子路径 ——
+ *      装出来的 profile 会在加载那一行时失败。
+ * 发布通道（tarball → 用户 profile）没有第二次机会，所以这里逐包静态拦截。
+ *
+ * @param {string} root
+ */
+export function findPackagingGaps(root) {
+  const packages = readWorkspacePackages(root)
+  const violations = []
+  let checked = 0
+
+  /**
+   * npm `files` 的 glob → RegExp。两个容易写错的语义（注释里不写通配序列，免得提前闭合块注释）：
+   *  - 「双星 + 斜杠」必须能匹配**零层**目录：否则 `lib/types` 下的双星模式匹配不到
+   *    `lib/types/index.d.ts`，闸门当场变成"全仓 53 处假失败"；
+   *  - `files: ["dist"]` 是**目录**语义（其下全部文件都算覆盖），不是只覆盖名为 dist 的那一项。
+   */
+  const globToRegExp = (pattern) => {
+    let out = ''
+    for (let index = 0; index < pattern.length; index += 1) {
+      const char = pattern[index]
+      if (char === '*') {
+        if (pattern[index + 1] === '*') {
+          if (pattern[index + 2] === '/') { out += '(?:.*/)?'; index += 2 } else { out += '.*'; index += 1 }
+        } else { out += '[^/]*' }
+        continue
+      }
+      out += /[.+^${}()|[\]\\?]/.test(char) ? '\\' + char : char
+    }
+    return new RegExp('^' + out + '$')
+  }
+  const covered = (files, target) => (files ?? []).some((pattern) => {
+    if (globToRegExp(pattern).test(target)) return true
+    return !/[*?]/.test(pattern) && (target === pattern || target.startsWith(pattern + '/'))
+  })
+
+  for (const [name, record] of packages) {
+    const files = record.pkg.files
+    const exports = record.pkg.exports ?? {}
+    if (files === undefined || files.length === 0) continue
+    for (const [subpath, value] of Object.entries(exports)) {
+      if (subpath === './package.json') continue
+      const targets = typeof value === 'string' ? [value] : Object.values(value ?? {})
+      for (const target of targets) {
+        if (typeof target !== 'string' || !target.startsWith('./')) continue
+        checked += 1
+        if (covered(files, target.slice(2))) continue
+        violations.push({
+          code: 'packaging',
+          detail: `${name} 的 exports["${subpath}"] 指向 ${target}，但 package.json 的 files 没覆盖它 —— `
+            + `tarball 里不会有这个文件，装到用户 profile 就是 ERR_MODULE_NOT_FOUND（files=${JSON.stringify(files)}）`,
+        })
+      }
+    }
+
+    const patchPath = join(record.dir, 'cordis.patch.yml')
+    if (!existsSync(patchPath)) continue
+    let loaderNames = []
+    try {
+      loaderNames = [...readFileSync(patchPath, 'utf8').matchAll(/^\s*-?\s*name:\s*['"]?([^'"\s]+)['"]?\s*$/gm)]
+        .map((match) => match[1])
+    } catch {
+      loaderNames = []
+    }
+    for (const loaderName of loaderNames) {
+      const [pkgName, ...rest] = loaderName.split('/')
+      // 只检查指向 workspace 包的 loader 行（平台自带包不归本仓库管）。
+      const target = packages.get(pkgName)
+      if (target === undefined) continue
+      checked += 1
+      const subpath = rest.length === 0 ? '.' : './' + rest.join('/')
+      // 注意用**目标包**的 exports，不是 patch 属主的 —— 用错会让闸门"因为错误的原因通过"
+      // （patch 属主恰好也有同名子路径时），这类自欺比不写闸门更危险。
+      if ((target.pkg.exports ?? {})[subpath] !== undefined) continue
+      violations.push({
+        code: 'packaging',
+        detail: `${name} 的 cordis.patch.yml 声明了 loader 行 \`${loaderName}\`，但 ${pkgName} 的 exports 里没有 \`${subpath}\` —— `
+          + `packages 里解析不到这个入口，装出来的 profile 会在加载这一行时失败`,
+      })
+    }
+  }
+  return { violations, checked }
+}
+
 /* ──────────────────────────── CLI ──────────────────────────── */
 
 function parseArgs(argv) {
-  const options = { only: ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus', 'esmrequire', 'domainvocab', 'crossplugin', 'ratemetric'], json: false, strictLocations: false }
+  const options = { only: ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus', 'esmrequire', 'domainvocab', 'crossplugin', 'ratemetric', 'packaging'], json: false, strictLocations: false }
   for (const arg of argv) {
     if (arg === '--json') options.json = true
     else if (arg === '--strict-locations') options.strictLocations = true
@@ -720,8 +811,8 @@ function parseArgs(argv) {
 }
 
 export function runChecks(root, options = {}) {
-  const only = options.only ?? ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus', 'esmrequire', 'domainvocab', 'crossplugin', 'ratemetric']
-  const report = { orphans: null, boundaries: null, contracts: null, injects: null, products: null, windowbus: null, esmrequire: null, domainvocab: null, crossplugin: null, ratemetric: null, failures: 0, warnings: 0 }
+  const only = options.only ?? ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus', 'esmrequire', 'domainvocab', 'crossplugin', 'ratemetric', 'packaging']
+  const report = { orphans: null, boundaries: null, contracts: null, injects: null, products: null, windowbus: null, esmrequire: null, domainvocab: null, crossplugin: null, ratemetric: null, packaging: null, failures: 0, warnings: 0 }
   if (only.includes('orphans')) {
     const result = findOrphanPackages(root)
     report.orphans = result
@@ -777,6 +868,11 @@ export function runChecks(root, options = {}) {
     report.ratemetric = result
     report.failures += result.violations.length
   }
+  if (only.includes('packaging')) {
+    const result = findPackagingGaps(root)
+    report.packaging = result
+    report.failures += result.violations.length
+  }
   return report
 }
 
@@ -788,7 +884,7 @@ function main(argv) {
     process.exitCode = report.failures > 0 ? 1 : 0
     return
   }
-  console.log('══ 架构闸门（孤包 / 边界 / 契约 / 注入面 / 单产物 / 页内总线 / ESM 裸 require / 域词汇 / 跨插件 / 口径单源） ══')
+  console.log('══ 架构闸门（孤包 / 边界 / 契约 / 注入面 / 单产物 / 页内总线 / ESM 裸 require / 域词汇 / 跨插件 / 口径单源 / 打包入口） ══')
   if (report.orphans !== null) {
     const { orphans, total, closureSize } = report.orphans
     if (orphans.length === 0) console.log(`  ok    workspace 孤包        0 个（${total} 个包全在 registry 闭包内，闭包 ${closureSize} 个）`)
@@ -842,6 +938,11 @@ function main(argv) {
   if (report.ratemetric !== null) {
     const { violations, files, definition } = report.ratemetric
     if (violations.length === 0) console.log(`  ok    成功率口径单源    0 处重算（扫描 ${files} 个源文件，定义只在 ${definition}）`)
+    for (const violation of violations) console.log(`  FAIL  ${violation.code.padEnd(20)} ${violation.detail}`)
+  }
+  if (report.packaging !== null) {
+    const { violations, checked } = report.packaging
+    if (violations.length === 0) console.log(`  ok    打包清单 vs 入口    ${checked} 个入口/loader 行都被 files 覆盖`)
     for (const violation of violations) console.log(`  FAIL  ${violation.code.padEnd(20)} ${violation.detail}`)
   }
   const verdict = report.failures > 0 ? 'FAIL' : 'PASS'

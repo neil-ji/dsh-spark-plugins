@@ -18,6 +18,9 @@ import { sparkCaptureSchema, sparkPatchSchema } from '../../../packages/dsh-spar
 // 只剩传输层，而不是两套会各自漂移的口径（AGENTS §0.5）。
 import { auditStats, expiredIds, governanceAdvices } from '../../../packages/dsh-script/src/governance.ts'
 import { toSummary } from '../../../packages/dsh-script/src/metrics.ts'
+// 检索口径也吃真源：预览的 `q` 过滤/排序必须与宿主 `applyQuery` 完全同源，
+// 否则"预览里搜得到、真宿主搜不到"这种漂移只有用户能发现。
+import { matchScore, normalizeNeedle } from '../../../packages/dsh-script/src/retrieval.ts'
 
 const WORKSPACE = 'F:\\AgentStudio\\dsh-spark-plugins'
 const HOUR = 3600_000
@@ -92,6 +95,10 @@ function scriptView(overrides) {
     steps: overrides.steps ?? [{ kind: 'tool-call', payload: 'bash: echo ' + overrides.id }],
     triggers: overrides.triggers ?? ['预览夹具', overrides.id],
     tags: overrides.tags ?? ['preview'],
+    // 检索词：可选字段（不给就不写，与 schema 的 `.optional()` 一致）。
+    // **曾经漏了这一行**：夹具 helper 逐字段枚举，新增字段不显式透传就会被静默丢掉 ——
+    // 表现为"夹具里写了 searchTerms，但检索永远搜不到"，preview:verify 当场抓出来。
+    ...(overrides.searchTerms === undefined ? {} : { searchTerms: overrides.searchTerms }),
     scope: overrides.scope ?? 'workspace',
     workspacePath: overrides.workspacePath ?? WORKSPACE,
     status: overrides.status ?? 'active',
@@ -124,6 +131,7 @@ const SCRIPTS = [
       { kind: 'instruction', payload: '验收：退出码 0 且 FAIL 计数为 0' },
     ],
     triggers: ['改完 dev-harness/preview', '发版前'],
+    searchTerms: ['smoke test', 'preview self-check', '预览自检'],
     scope: 'project',
     invocationCount: 12, successCount: 11, failureCount: 1,
     invokedWorkspaces: [WORKSPACE],
@@ -149,6 +157,7 @@ const SCRIPTS = [
     id: 'scr-retire-me',
     name: '过期的构建诀窍',
     description: '早年的一条构建流程，成功率已经掉到 17%。',
+    searchTerms: ['legacy build tips', '旧构建诀窍'],
     invocationCount: 6, successCount: 1, failureCount: 5,
     invokedWorkspaces: [WORKSPACE],
     createdAt: now - 40 * DAY, updatedAt: now - 5 * DAY, lastInvokedAt: now - 5 * DAY,
@@ -380,12 +389,16 @@ export function createSparkStore() {
       if (status !== null) items = items.filter((item) => item.status === status)
       const scope = params.get('scope')
       if (scope !== null) items = items.filter((item) => item.scope === scope)
-      const q = params.get('q')
-      if (q !== null && q.length > 0) {
-        const needle = q.toLowerCase()
-        items = items.filter((item) => item.name.toLowerCase().includes(needle) || item.description.toLowerCase().includes(needle))
+      const needle = normalizeNeedle(params.get('q') ?? '')
+      if (needle.length > 0) {
+        // 与宿主 `applyQuery` 同一算法：过滤与排序都由 matchScore 一个口径决定（Spec §5.4）。
+        const scored = items
+          .map((item) => ({ item, score: matchScore(item, needle) }))
+          .filter((entry) => entry.score > 0)
+          .sort((a, b) => b.score - a.score || b.item.updatedAt - a.item.updatedAt)
+        return { ok: true, value: scored.slice(0, limit).map((entry) => toSummary(entry.item)) }
       }
-      // 与宿主 `applyQuery` 同序：updatedAt 倒序。
+      // 无 q：与宿主同序（updatedAt 倒序）。
       items = [...items].sort((a, b) => b.updatedAt - a.updatedAt)
       return { ok: true, value: items.slice(0, limit).map((item) => toSummary(item)) }
     },

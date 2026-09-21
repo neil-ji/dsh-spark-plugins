@@ -246,6 +246,35 @@ async function runServerChecks() {
       JSON.stringify(scripts.value.map((item) => [item.id, item.successRate])).slice(0, 200),
     )
 
+    /* 检索（Spec §5.4/A9）：q 的匹配与排序**必须与宿主同源**（预览直接 import 真 `matchScore`），
+       所以这里断的是"searchTerms 真的能搜到"这件事本身，而不是预览自己的一套近似。 */
+    const byEnglishTerm = await (await fetch('http://127.0.0.1:' + PORT + '/scripts?q=' + encodeURIComponent('smoke test'))).json()
+    check(
+      'script: 英文同义词（searchTerms）能搜到（F1 的死字段修复）',
+      byEnglishTerm.ok === true && byEnglishTerm.value?.length === 1 && byEnglishTerm.value[0]?.id === 'scr-preview-verify',
+      JSON.stringify(byEnglishTerm.value?.map((item) => item.id)),
+    )
+    // 中文检索词只出现在 searchTerms 里（名字/描述都不含），命中即证明索引面真的接上了。
+    const byChineseTerm = await (await fetch('http://127.0.0.1:' + PORT + '/scripts?q=' + encodeURIComponent('旧构建诀窍'))).json()
+    check(
+      'script: 中文检索词也能搜到（双语同义词的意义所在）',
+      byChineseTerm.ok === true && byChineseTerm.value?.length === 1 && byChineseTerm.value[0]?.id === 'scr-retire-me',
+      JSON.stringify(byChineseTerm.value?.map((item) => item.id)),
+    )
+    // 同一条查询里：`scr-preview-verify` 命中 name(4)+searchTerms(2)=6，
+    // 而「跑预览自检」那对只在 name 上命中(4)—— 加权让前者排在前面（字段权重真的生效）。
+    const weighted = await (await fetch('http://127.0.0.1:' + PORT + '/scripts?q=' + encodeURIComponent('预览自检'))).json()
+    check(
+      'script: 检索词加权生效（name+searchTerms 命中排在仅 name 命中之前）',
+      weighted.ok === true
+        && weighted.value?.length >= 2
+        && weighted.value[0]?.id === 'scr-preview-verify'
+        && weighted.value.some((item) => item.id === 'scr-dup-keep'),
+      JSON.stringify(weighted.value?.map((item) => item.id)),
+    )
+    const noMatch = await (await fetch('http://127.0.0.1:' + PORT + '/scripts?q=' + encodeURIComponent('绝不可能出现的词'))).json()
+    check('script: 无匹配返回空数组（不是全量兜底）', noMatch.ok === true && noMatch.value?.length === 0, JSON.stringify(noMatch.value))
+
     const auditBefore = await (await fetch('http://127.0.0.1:' + PORT + '/scripts/audit')).json()
     const kinds = (auditBefore.value?.advices ?? []).map((advice) => advice.kind)
     check(

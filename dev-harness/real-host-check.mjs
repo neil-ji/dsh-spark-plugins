@@ -522,6 +522,52 @@ try {
       sweepFirst?.ok === true && sweepSecond?.ok === true && sweepSecond.value?.archived === 0,
       JSON.stringify({ first: sweepFirst?.value?.archived, second: sweepSecond?.value?.archived }),
     )
+    // 检索面（Spec §5.4/A9）在**真宿主**上的端到端证明：写一条只带检索词的脚本 →
+    // 用同义词能搜到 → 收拾干净。断言的是"索引真的接上了"，不是"预览里像那么回事"。
+    const searchProbeName = '真宿主检索验收 ' + Date.now().toString(36)
+    const searchProbeTerm = 'realsearch-' + Date.now().toString(36)
+    const searchProbe = await fetch('http://127.0.0.1:3997/scripts', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify({
+        name: searchProbeName,
+        description: 'real host retrieval probe',
+        steps: [{ kind: 'tool-call', payload: 'bash: echo probe' }],
+        scope: 'workspace',
+        searchTerms: [searchProbeTerm],
+      }),
+    }).then((r) => r.json()).catch(() => null)
+    const probeId = searchProbe?.value?.id
+    if (typeof probeId !== 'string') {
+      check('检索验收：POST /scripts 写入带检索词的脚本', false, JSON.stringify(searchProbe).slice(0, 200))
+    } else {
+      const byTerm = await fetch('http://127.0.0.1:3997/scripts?q=' + encodeURIComponent(searchProbeTerm), { headers: { connection: 'close' } })
+        .then((r) => r.json()).catch(() => null)
+      check(
+        '检索验收：只用 searchTerms（同义词）就能搜到刚沉淀的脚本（F1 的死字段修复，真宿主）',
+        byTerm?.ok === true && Array.isArray(byTerm.value) && byTerm.value.some((item) => item.id === probeId),
+        JSON.stringify(byTerm?.value?.map((item) => item.id)).slice(0, 200),
+      )
+      const nonsense = await fetch('http://127.0.0.1:3997/scripts?q=' + encodeURIComponent('绝不可能出现的检索词-zzz'), { headers: { connection: 'close' } })
+        .then((r) => r.json()).catch(() => null)
+      check(
+        '检索验收：无匹配返回空数组（q 真的被宿主执行，不是全量兜底）',
+        nonsense?.ok === true && Array.isArray(nonsense.value) && nonsense.value.length === 0,
+        JSON.stringify(nonsense?.value).slice(0, 120),
+      )
+      // 收拾干净：归档 → 物理删除（INV-11 只允许删已归档）。
+      await fetch('http://127.0.0.1:3997/scripts/' + encodeURIComponent(probeId) + '/status', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', connection: 'close' },
+        body: JSON.stringify({ status: 'archived' }),
+      }).catch(() => null)
+      const purged = await fetch('http://127.0.0.1:3997/scripts/' + encodeURIComponent(probeId), {
+        method: 'DELETE',
+        headers: { connection: 'close' },
+      }).then((r) => r.json()).catch(() => null)
+      check('检索验收：探针脚本自清理（归档后可物理删除）', purged?.value?.removed === true, JSON.stringify(purged).slice(0, 160))
+    }
+
     if (scriptTabIndex >= 0) {
       const auditPane = await evalJs(`(() => {
         const body = document.querySelector('.dock-body')
@@ -530,12 +576,13 @@ try {
           audit: body?.querySelector('[data-testid="script-audit"]') !== null,
           rows: body?.querySelectorAll('[data-testid="script-row"]').length ?? 0,
           advices: body?.querySelectorAll('[data-testid="script-advice"]').length ?? 0,
+          search: body?.querySelector('[data-testid="script-search"]') !== null,
           cjkOk: text.length > 0,
         }
       })()`)
       check(
-        '「脚本」pane 渲染治理面（概览卡 + 目录行 + 待裁决行）',
-        auditPane?.audit === true && auditPane?.rows > 0,
+        '「脚本」pane 渲染治理面 + 检索框（概览卡 / 目录行 / 检索输入）',
+        auditPane?.audit === true && auditPane?.rows > 0 && auditPane?.search === true,
         JSON.stringify(auditPane),
       )
       const scriptWarnings = console_.filter((line) => /script 事件通道不可用|dsh-script.*mount 失败/.test(line))

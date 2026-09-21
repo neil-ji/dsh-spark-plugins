@@ -18,6 +18,7 @@ import {
   extractStringLiterals,
   findCrossPluginRefs,
   findRateDivisionSites,
+  findPackagingGaps,
   RATE_DIVISION_DEFINITION,
   findDomainVocabularyDrift,
   CONTRACTS,
@@ -381,6 +382,59 @@ describe('成功率口径单源（Spec INV-7 / D10）', () => {
       // 注释里提到这条除法不算违规（定义文件的说明文字就是这种）
       write('packages/dsh-y/src/dup.ts', '// successCount / invocationCount 是定义文件的事\n')
       expect(findRateDivisionSites(dir).violations.map((v) => v.file)).toEqual(['packages/dsh-x-client/src/pane.tsx'])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('打包清单 vs 入口（2026-09-22 真宿主 ERR_MODULE_NOT_FOUND 防线）', () => {
+  it('真实仓库：每个 exports 子路径都被 files 覆盖，每个 patch loader 行都有对应导出', () => {
+    const { violations, checked } = findPackagingGaps(ROOT)
+    expect(violations).toEqual([])
+    expect(checked).toBeGreaterThan(50)
+  })
+
+  it('闸门会红：files 漏掉子路径入口 + loader 指向不存在的导出', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dsh-pack-gate-'))
+    try {
+      const write = (rel: string, body: string): void => {
+        const full = join(dir, rel)
+        mkdirSync(dirname(full), { recursive: true })
+        writeFileSync(full, body)
+      }
+      write('package.json', JSON.stringify({ name: 'root', private: true }))
+      // A：新加了 ./terms 入口，但 files 还只列着 lib/index.js（本次真踩的坑）
+      write('packages/pkg-a/package.json', JSON.stringify({
+        name: 'pkg-a',
+        files: ['lib/index.js'],
+        exports: { '.': { default: './lib/index.js' }, './terms': { default: './lib/terms.js' } },
+      }))
+      // B：patch 里声明了指向 pkg-a 的 loader 行，但子路径不存在
+      write('packages/pkg-b/package.json', JSON.stringify({ name: 'pkg-b', files: ['lib/index.js'] }))
+      write('packages/pkg-b/cordis.patch.yml', '- insert:\n    - id: a-terms\n      name: "pkg-a/terms"\n')
+      // C：合法包（files 用目录语义 + 双星零层目录）不该被误报
+      write('packages/pkg-c/package.json', JSON.stringify({
+        name: 'pkg-c',
+        files: ['dist'],
+        exports: { '.': { default: './dist/index.js' }, './deep': { default: './dist/nested/deep.js' } },
+      }))
+      write('packages/pkg-d/package.json', JSON.stringify({
+        name: 'pkg-d',
+        files: ['lib/index.js', 'lib/types/*.d.ts'],
+        exports: { '.': { types: './lib/types/index.d.ts', default: './lib/index.js' } },
+      }))
+
+      const { violations } = findPackagingGaps(dir)
+      const details = violations.map((violation) => violation.detail)
+      expect(details.some((detail) => detail.includes('pkg-a') && detail.includes('./lib/terms.js'))).toBe(true)
+      // loader 行 `pkg-a/terms` 本身是**存在**的导出（A 有 ./terms），所以这条不该报；
+      // 真正要报的是 B 指了一个不存在的子路径 —— 用一个明确不存在的入口再验一次。
+      write('packages/pkg-b/cordis.patch.yml', '- insert:\n    - id: a-missing\n      name: "pkg-a/nope"\n')
+      const second = findPackagingGaps(dir).violations.map((violation) => violation.detail)
+      expect(second.some((detail) => detail.includes('pkg-a/nope'))).toBe(true)
+      expect(second.some((detail) => detail.includes('pkg-c'))).toBe(false)
+      expect(second.some((detail) => detail.includes('pkg-d'))).toBe(false)
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
