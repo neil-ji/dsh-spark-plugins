@@ -276,6 +276,19 @@ function install() {
   } else {
     log.ok('全部为 tarball 拷贝形态（与用户安装一致）')
   }
+  // 4) 启动冒烟：装成功 ≠ 起得来。这一步真的起一个实例（默认临时端口），断言
+  //    「不抛异常 + 页面能开 + 每个模块不崩」——`install-profile` 只打印过那行命令。
+  if (argv.includes('--no-smoke')) {
+    log.warn('--no-smoke：跳过启动冒烟（pnpm sandbox:smoke 可单独跑）')
+  } else {
+    log.step('启动冒烟（真的起一个实例：不抛异常 / 页面能开 / 模块不崩）')
+    try {
+      runShell(`node ${JSON.stringify(join(ROOT, 'dev-harness', 'boot-check.mjs'))}`, { cwd: ROOT })
+    } catch {
+      log.fail('启动冒烟未通过：装出来的宿主起不来或页面崩（日志见上；--no-smoke 可临时跳过）')
+      process.exit(1)
+    }
+  }
   log.info(`启动：pnpm sandbox:up（install 通道无 HMR，改码需重跑 sandbox:install + 重启）`)
 }
 

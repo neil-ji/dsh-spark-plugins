@@ -41,7 +41,8 @@
     "check:all": "pnpm check:architecture && pnpm check:finance-prices && pnpm check:contrast && pnpm audit-tokens && pnpm check:version-bump",
     "dryrun:dsh-upgrade": "node scripts/dryrun-upgrade.mjs",
     "finance:sync-prices": "node scripts/sync-finance-prices.mjs",
-    "publish:all": "node scripts/publish-all.mjs"
+    "publish:all": "node scripts/publish-all.mjs",
+    "sandbox:smoke": "node dev-harness/boot-check.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

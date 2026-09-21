@@ -104,7 +104,9 @@ export function apply(ctx) {
   }
 
   const services = () => {
-    const names = ['hmr', 'timer', 'webServer', 'clientModules', 'loader', 'tools', 'spark', 'hippomemo', 'github', 'npm', 'finance', 'script']
+    // 服务名 = `super(ctx, '<name>')` 里的名字：hippomemo 注册的是 `memory`（不是 `hippomemo`），
+  // 写错会永远报 false（2026-09-21 由启动冒烟发现）。
+  const names = ['hmr', 'timer', 'webServer', 'clientModules', 'loader', 'tools', 'spark', 'memory', 'github', 'npm', 'finance', 'script']
     return Object.fromEntries(names.map((service) => [service, root.get(service) !== undefined]))
   }
 
