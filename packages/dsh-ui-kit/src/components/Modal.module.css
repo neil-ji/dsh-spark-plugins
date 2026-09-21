@@ -7,7 +7,12 @@
 }
 .modal {
   position: relative;
+  display: flex;
+  flex-direction: column;
   width: min(440px, calc(100vw - 40px));
+  /* 高度上限：长内容（供应商详情等只读长表）不撑破视口 —— 超出部分由 .body 内滚
+     （2026-09 用户反馈：详情弹窗高度无上限，长内容把弹窗顶出屏幕）。 */
+  max-height: min(86vh, 720px);
   background: var(--spk-surface-float);
   border: 1px solid var(--spk-border);
   border-radius: 20px;
@@ -17,7 +22,7 @@
 @keyframes modal-in { from { opacity: 0; transform: scale(0.94); } }
 @keyframes fade-in { from { opacity: 0; } }
 
-.head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 0; }
+.head { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; padding: 14px 16px 0; }
 .title {
   margin: 0;
   font: 700 var(--spk-text-lg, 15px) / 1.3 var(--spk-font);
@@ -37,6 +42,8 @@
 .close:hover { background: var(--spk-hover); color: var(--spk-label); }
 .close:focus-visible { outline: 2px solid var(--spk-focus-ring); outline-offset: 2px; }
 
-.body { padding: 10px 16px 2px; font: 400 var(--spk-text-md, 13px) / 1.6 var(--spk-font); color: var(--spk-label-2); }
+/* min-height:0 让 .body 在 flex column 里可收缩 —— 内容溢出时滚动条出现在内容区，
+   头/底（标题与关闭钮、footer）始终可见。 */
+.body { overflow-y: auto; min-height: 0; padding: 10px 16px 2px; font: 400 var(--spk-text-md, 13px) / 1.6 var(--spk-font); color: var(--spk-label-2); }
 .body :strong { color: var(--spk-brand-fg); font-weight: 600; }
-.foot { display: flex; justify-content: flex-end; gap: 8px; padding: 16px; }
+.foot { display: flex; justify-content: flex-end; flex-shrink: 0; gap: 8px; padding: 16px; }

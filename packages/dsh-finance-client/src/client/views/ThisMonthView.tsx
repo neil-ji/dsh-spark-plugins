@@ -718,12 +718,9 @@ function ProviderDetailModal({ provider, mode, row, plan, insight, spend, curren
     },
   ]
   return (
-    <Modal
-      open
-      onClose={onClose}
-      title={`${t('providerDetailTitle')} · ${provider}`}
-      footer={<Button variant="ghost" onClick={onClose}>{t('cancel')}</Button>}
-    >
+    // 只读详情弹窗不放「取消」footer：点遮罩 / 右上角关闭钮 / Esc 都能关，
+    // 一个纯关闭按钮只重复这三条路径（2026-09 用户反馈）。
+    <Modal open onClose={onClose} title={`${t('providerDetailTitle')} · ${provider}`}>
       <div className={css.detailList} data-testid={`finance-provider-detail-${provider}`}>
         {groups.map((group) => (
           <section key={group.title} className={css.detailGroup} aria-label={group.title}>
