@@ -48,21 +48,17 @@ export const HIPPOMEMO_CSS = [
   /* 卡片题由 ui-kit Card.title 提供（--spk-text-title 14px/600）；
      panel-count 保留：它现在是 Card actions 槽里的计数徽标。 */
   '[data-plugin="dsh-hippomemo"] .hippomemo-panel-count { margin-left: auto; font-size: var(--spk-text-xs); line-height: 16px; color: var(--spk-label-3, var(--spk-label-2)); font-variant-numeric: tabular-nums; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-brain-strip { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; border-top: 1px dashed var(--spk-border); }',
+  /* 卡头与内容的分隔交给 Card 自身结构（title 槽），不另画虚线 —— 与其他 Card
+     保持一致（2026-09 用户裁决「不要虚线分割线」）。 */
+  '[data-plugin="dsh-hippomemo"] .hippomemo-brain-strip { display: flex; flex-direction: column; gap: 8px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-brain-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-brain-region { display: inline-flex; align-items: center; gap: 8px; padding: 4px var(--spk-space-3); border-radius: var(--spk-radius-full); border: 1px solid transparent; background: transparent; color: inherit; font: inherit; font-size: var(--spk-text-sm); line-height: 18px; cursor: pointer; transition: background 160ms, border-color 160ms; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-brain-region:hover { background: var(--spk-hover); border-color: var(--spk-label-3, var(--spk-border)); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-brain-name { font-weight: 500; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-brain-val { font-size: var(--spk-text-xs); color: var(--spk-label-3, var(--spk-label-2)); font-variant-numeric: tabular-nums; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-brain-spacer { flex: 1; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-chev { transition: transform 160ms; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-chev-up { transform: rotate(180deg); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-brain-narration { display: flex; align-items: center; gap: 8px; font-size: var(--spk-text-sm); line-height: 18px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-brain-narration-lbl { color: var(--spk-label-3); font-size: var(--spk-text-xs); flex: none; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-brain-narration-txt { color: var(--spk-label-2, var(--spk-label)); }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-brain-expand { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; padding-top: 8px; border-top: 1px solid var(--spk-border); }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-brain-card-desc { font-size: var(--spk-text-xs); line-height: 16px; color: var(--spk-label-2, var(--spk-label)); margin: 0 0 4px; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-brain-card-role { font-size: var(--spk-text-xs); line-height: 16px; color: var(--spk-label-3); }',
   /* Focus 可见性：手写交互控件统一 focus-visible 描边（ui-kit Button 自带，无需重复） */
   '[data-plugin="dsh-hippomemo"] .hippomemo-brain-region:focus-visible, [data-plugin="dsh-hippomemo"] .hippomemo-select:focus-visible, [data-plugin="dsh-hippomemo"] .hippomemo-chip:focus-visible, [data-plugin="dsh-hippomemo"] .hippomemo-filters > button:focus-visible { outline: 2px solid var(--spk-brand-fg, #2f46c8); outline-offset: 2px; }',
   '@keyframes hippomemo-pulse-pfc { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--spk-acc-hippomemo, #2563EB) 55%, transparent); } 100% { box-shadow: 0 0 0 14px transparent; } }',

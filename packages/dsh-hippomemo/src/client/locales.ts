@@ -182,16 +182,6 @@ export const zh = {
   // 脑区面板自己的名字：**不能**复用 title（那是页级标题 = dock 模块头），
   // 否则面板头与模块头同名，读起来像同一个东西写了两遍。
   brainPanelTitle: '记忆库',
-  brainExpand: '脑区图',
-  brainCollapse: '收起脑区图',
-  brainRegionPfcDesc: '对注入上下文的相关记忆做 relevance 过滤（阈值 + kind 加权 + 衰减）。',
-  brainRegionAmyDesc: '从你的语气强度中识别潜在偏好（"不要 X""总是 Y"），写入 preference。',
-  brainRegionHippoDesc: 'spark 流捕获灵感，结晶为长期记忆（kind/tags/importance 由你定）。',
-  brainRegionCortexDesc: '记忆的持久存储层：召回/引用/自净化都作用在这里。',
-  brainRolePfc: '认知层 Phase 3 · cognitive filter',
-  brainRoleAmy: '认知层 Phase 6 · valence miner',
-  brainRoleHippo: '认知层 Phase 1+2 · crystallize',
-  brainRoleCortex: 'hippomemo MemoryRecord',
   brainNarrationLabel: '旁白',
   brainEmptyNarration: '前额叶还没激活；开始一次会话即可。',
 
@@ -437,16 +427,6 @@ export const en: Record<keyof typeof zh, string> = {
   brainValCortex: '{n} memories',
   // The panel's own name — deliberately NOT `title` (that is the page title = dock module head).
   brainPanelTitle: 'Memory bank',
-  brainExpand: 'Brain map',
-  brainCollapse: 'Collapse brain map',
-  brainRegionPfcDesc: 'Filters relevant memories for the injected context (threshold + kind weighting + decay).',
-  brainRegionAmyDesc: 'Detects latent preferences from your tone ("avoid X" / "always Y") and writes them as preference records.',
-  brainRegionHippoDesc: 'Captures sparks and crystallises them into long-term memories (kind/tags/importance are yours to define).',
-  brainRegionCortexDesc: 'Persistent storage for every memory: recall, citation and self-purification all run here.',
-  brainRolePfc: 'Phase 3 · cognitive filter',
-  brainRoleAmy: 'Phase 6 · valence miner',
-  brainRoleHippo: 'Phase 1+2 · crystallize',
-  brainRoleCortex: 'hippomemo MemoryRecord',
   brainNarrationLabel: 'Narration',
   brainEmptyNarration: 'Prefrontal has not fired yet. Start a session to see it pulse.',
 

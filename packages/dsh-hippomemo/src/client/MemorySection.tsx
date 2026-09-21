@@ -138,7 +138,6 @@ function BrainStrip({ t, stats, usage, preferences, narrative, reloadKey }: {
   preferences: PreferenceListResult | null;
   narrative: RecallNarrative | null; reloadKey: number;
 }): ReactNode {
-  const [expanded, setExpanded] = useState(false);
   const [pulseRegion, setPulseRegion] = useState<BrainRegion | null>(null);
   const lastTsRef = useRef<number>(0);
   useEffect(() => {
@@ -154,15 +153,17 @@ function BrainStrip({ t, stats, usage, preferences, narrative, reloadKey }: {
   const preferenceCount = preferences?.total ?? 0;
   const crystallised = stats?.byKind['fact'] ?? 0;
   const total = stats?.total ?? 0;
-  const regions: Array<{ id: BrainRegion; nameKey: HippomemoLocaleKey; val: string; descKey: HippomemoLocaleKey; roleKey: HippomemoLocaleKey }> = [
-    { id: 'pfc', nameKey: 'brainRegionPfc', val: t('brainValPfc', { injected: String(injected), suppressed: String(suppressed) }), descKey: 'brainRegionPfcDesc', roleKey: 'brainRolePfc' },
-    { id: 'amy', nameKey: 'brainRegionAmy', val: t('brainValAmy', { n: preferenceCount }), descKey: 'brainRegionAmyDesc', roleKey: 'brainRoleAmy' },
-    { id: 'hippo', nameKey: 'brainRegionHippo', val: t('brainValHippo', { n: crystallised }), descKey: 'brainRegionHippoDesc', roleKey: 'brainRoleHippo' },
-    { id: 'cortex', nameKey: 'brainRegionCortex', val: t('brainValCortex', { n: total }), descKey: 'brainRegionCortexDesc', roleKey: 'brainRoleCortex' },
+  const regions: Array<{ id: BrainRegion; nameKey: HippomemoLocaleKey; val: string }> = [
+    { id: 'pfc', nameKey: 'brainRegionPfc', val: t('brainValPfc', { injected: String(injected), suppressed: String(suppressed) }) },
+    { id: 'amy', nameKey: 'brainRegionAmy', val: t('brainValAmy', { n: preferenceCount }) },
+    { id: 'hippo', nameKey: 'brainRegionHippo', val: t('brainValHippo', { n: crystallised }) },
+    { id: 'cortex', nameKey: 'brainRegionCortex', val: t('brainValCortex', { n: total }) },
   ];
   return (
     // 结构统一（2026-09 用户裁决「对齐财务插件」）：卡面容器一律 ui-kit Card，
     // 手搓的 .hippomemo-brain-panel 卡面规则退役（类名保留只承担布局语义）。
+    // 展开的脑区说明卡整体移除（2026-09 用户裁决「功能重复，保留一个」）：
+    // 数字摘要行是活数据，静态说明卡是死文档 —— 保留前者。
     <Card title={t('brainPanelTitle')} className='hippomemo-brain-panel'>
       <div className='hippomemo-brain-strip' aria-label={t('brainPanelTitle')}>
         <div className='hippomemo-brain-row'>
@@ -180,11 +181,6 @@ function BrainStrip({ t, stats, usage, preferences, narrative, reloadKey }: {
               </Button>
             )
           })}
-          <span className='hippomemo-brain-spacer' />
-          <Button size='sm' variant='secondary' onClick={() => { setExpanded(!expanded) }}
-            icon={<IconChevronDown className={expanded ? 'hippomemo-chev hippomemo-chev-up' : 'hippomemo-chev'} />}>
-            {expanded ? t('brainCollapse') : t('brainExpand')}
-          </Button>
         </div>
         <div className='hippomemo-brain-narration'>
           <span className='hippomemo-brain-narration-lbl'>{t('brainNarrationLabel')}</span>
@@ -192,22 +188,6 @@ function BrainStrip({ t, stats, usage, preferences, narrative, reloadKey }: {
             {narrative !== null ? narrative.text : t('brainEmptyNarration')}
           </span>
         </div>
-        {expanded ? (
-          <div className='hippomemo-brain-expand'>
-            {regions.map(region => (
-              <Card variant='inset' key={region.id}
-                title={(
-                  <>
-                    <StateDot status='live' size={10} className={'hippomemo-brain-dot hippomemo-brain-dot-' + region.id} />
-                    {' '}{t(region.nameKey)}
-                  </>
-                )}>
-                <p className='hippomemo-brain-card-desc'>{t(region.descKey)}</p>
-                <div className='hippomemo-brain-card-role'>{t(region.roleKey)}</div>
-              </Card>
-            ))}
-          </div>
-        ) : null}
       </div>
     </Card>
   )
