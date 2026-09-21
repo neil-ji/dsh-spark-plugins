@@ -19,7 +19,8 @@
  * 本模块同时承载三档改造的**编排**（每档的判定逻辑都是可单测的纯函数，放在各自模块里）：
  *   A（已落地）收件箱提醒        —— 本文件
  *   B 惰性涌现（§5.3）          —— `reflect-scheduler.ts`（脏标记判定）
- *   C 脚本建议（§5.4）          —— `script-match.ts`（最近工具序列 × triggers）
+ *   （C 档脚本建议已随脚本沉淀库迁出：现由独立插件 `dsh-script` 的注入层负责，
+ *    见 docs/SCRIPT-LIBRARY-SPEC.md §5）
  *   D 命令失败挖掘（§5.5）      —— `command-mining.ts`（默认关）
  */
 import type { Context } from '@deepseek-ai/cordis'
@@ -29,14 +30,12 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import type { SparkStats, SparkView } from 'dsh-spark-wire'
 import { shouldReflect } from './reflect-scheduler.ts'
-import { collectRecentCalls, matchScripts, renderScriptSuggestion } from './script-match.ts'
 import { observeSessionEvent, renderPitfallBriefing, selectPitfalls } from './command-mining.ts'
 import type {} from './spark-service.ts'
 import type {} from './emerge-service.ts'
-import type {} from './script-service.ts'
 
 export const name = 'spark-inbox'
-export const inject = ['agents', 'spark', 'emerge', 'script'] as const
+export const inject = ['agents', 'spark', 'emerge'] as const
 
 export interface SparkInboxConfig {
   /** 关掉即回到"只写不读"（默认 true）。 */
@@ -47,8 +46,6 @@ export interface SparkInboxConfig {
   maxItems?: number
   /** B 档：惰性涌现（脏标记 + 会话首步触发，无定时器）。 */
   reflect?: { enabled?: boolean; threshold?: number; minIntervalMs?: number }
-  /** C 档：命中 scripts 的 triggers 时注入"有现成脚本"建议。 */
-  scriptSuggest?: { enabled?: boolean; maxRecentCalls?: number; maxChars?: number }
   /** D 档：命令失败挖掘（**默认关**，先在沙箱观察一轮再开）。 */
   commandMining?: { enabled?: boolean; minSessions?: number; maxPitfalls?: number; maxChars?: number }
 }
@@ -58,7 +55,6 @@ export const Config: z<{
   maxChars: number
   maxItems: number
   reflect: { enabled: boolean; threshold: number; minIntervalMs: number }
-  scriptSuggest: { enabled: boolean; maxRecentCalls: number; maxChars: number }
   commandMining: { enabled: boolean; minSessions: number; maxPitfalls: number; maxChars: number }
 }> = z.object({
   enabled: z.boolean().default(true),
@@ -68,11 +64,6 @@ export const Config: z<{
     enabled: z.boolean().default(true),
     threshold: z.number().step(1).min(0).default(3),
     minIntervalMs: z.number().step(1).min(0).default(300_000),
-  }),
-  scriptSuggest: z.object({
-    enabled: z.boolean().default(true),
-    maxRecentCalls: z.number().step(1).min(1).max(50).default(8),
-    maxChars: z.number().step(1).min(120).default(600),
   }),
   commandMining: z.object({
     enabled: z.boolean().default(false),
@@ -90,17 +81,12 @@ export function apply(ctx: Context, config: SparkInboxConfig = {}): void {
   const reflectEnabled = config.reflect?.enabled ?? true
   const reflectThreshold = config.reflect?.threshold ?? 3
   const reflectMinIntervalMs = config.reflect?.minIntervalMs ?? 300_000
-  const scriptSuggestEnabled = config.scriptSuggest?.enabled ?? true
-  const maxRecentCalls = config.scriptSuggest?.maxRecentCalls ?? 8
-  const scriptMaxChars = config.scriptSuggest?.maxChars ?? 600
   const miningEnabled = config.commandMining?.enabled ?? false
   const miningMinSessions = config.commandMining?.minSessions ?? 2
   const miningMaxPitfalls = config.commandMining?.maxPitfalls ?? 3
   const miningMaxChars = config.commandMining?.maxChars ?? 600
   /** 每 agent 只注入一次（与 hippomemo 的 `injected` WeakSet 同构）。 */
   const injected = new WeakSet<object>()
-  /** 每个会话已经建议过哪些脚本，避免反复推荐同一条。 */
-  const suggestedScripts = new WeakMap<object, Set<string>>()
   /** 进程内防重入：涌现正在跑就别再触发。 */
   let reflecting = false
 
@@ -136,23 +122,6 @@ export function apply(ctx: Context, config: SparkInboxConfig = {}): void {
         : []
       const reminder = renderInboxReminder(stats, pending, maxChars)
       if (reminder !== undefined) out.push(reminder)
-
-      // C：最近工具序列命中某条脚本的 triggers → 建议直接调用而不是重写。
-      if (scriptSuggestEnabled) {
-        const scripts = await ctx.script.list({ limit: 100 })
-        const match = matchScripts(collectRecentCalls(messages, maxRecentCalls), scripts)
-        if (match !== undefined) {
-          let seen = suggestedScripts.get(agent)
-          if (seen === undefined) { seen = new Set(); suggestedScripts.set(agent, seen) }
-          if (!seen.has(match.script.id)) {
-            const suggestion = renderScriptSuggestion(match, scriptMaxChars)
-            if (suggestion !== undefined) {
-              seen.add(match.script.id)
-              out.push(suggestion)
-            }
-          }
-        }
-      }
 
       // D：当前模型的已知命令坑（默认关；没有记录时不注入）。
       if (miningEnabled) {

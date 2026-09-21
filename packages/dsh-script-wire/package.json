@@ -1,7 +1,7 @@
 {
-  "name": "dsh-spark-wire",
-  "version": "0.2.2",
-  "description": "DSH 火花认知层 wire：host/client 共享的 remote 协议与类型定义",
+  "name": "dsh-script-wire",
+  "version": "0.1.0",
+  "description": "DSH 脚本沉淀库 wire：host/client 共享的契约、域词汇与事件流帧",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -40,15 +40,8 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/neil-ji/dsh-spark-plugins.git",
-    "directory": "packages/dsh-spark-wire"
+    "directory": "packages/dsh-script-wire"
   },
-  "keywords": [
-    "dsh",
-    "deepseek-harness",
-    "plugin",
-    "spark",
-    "cognitive-layer"
-  ],
   "bugs": {
     "url": "https://github.com/neil-ji/dsh-spark-plugins/issues"
   },

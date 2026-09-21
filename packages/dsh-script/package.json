@@ -1,7 +1,7 @@
 {
-  "name": "dsh-spark",
-  "version": "0.4.4",
-  "description": "DSH 火花认知层 host：spark 流（情景记忆）+ JSONL 持久化 + HTTP API + agent 工具",
+  "name": "dsh-script",
+  "version": "0.1.0",
+  "description": "DSH 脚本沉淀库 host：程序性记录（结构化步骤）+ JSONL 持久化 + agent 工具 + 目录注入",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -10,15 +10,10 @@
       "types": "./lib/types/index.d.ts",
       "default": "./lib/index.js"
     },
-    "./inbox": {
-      "types": "./lib/types/inbox.d.ts",
-      "default": "./lib/inbox.js"
-    },
     "./package.json": "./package.json"
   },
   "files": [
     "lib/index.js",
-    "lib/inbox.js",
     "lib/types/**/*.js",
     "lib/types/**/*.d.ts",
     "cordis.patch.yml"
@@ -28,17 +23,17 @@
       "patch": "./cordis.patch.yml"
     }
   },
-  "scripts": {
-    "build": "node build.mjs",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test --test-reporter=spec test/spark-core.test.ts test/spark-migration.test.ts test/meta-store.test.ts test/reflect-scheduler.test.ts test/command-mining.test.ts test/inbox.test.ts test/inbox-orchestration.test.ts test/proposals.test.ts test/valence.test.ts test/events.test.ts"
-  },
   "publishConfig": {
     "access": "public"
   },
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test --test-reporter=spec test/*.test.ts"
+  },
   "dependencies": {
     "dsh-spark-plugin-kit": "workspace:*",
-    "dsh-spark-wire": "workspace:^"
+    "dsh-script-wire": "workspace:*"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^0.1.2-rc.1",
@@ -65,15 +60,8 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/neil-ji/dsh-spark-plugins.git",
-    "directory": "packages/dsh-spark"
+    "directory": "packages/dsh-script"
   },
-  "keywords": [
-    "dsh",
-    "deepseek-harness",
-    "plugin",
-    "spark",
-    "cognitive-layer"
-  ],
   "bugs": {
     "url": "https://github.com/neil-ji/dsh-spark-plugins/issues"
   },

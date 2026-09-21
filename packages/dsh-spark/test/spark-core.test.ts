@@ -11,7 +11,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { JsonlSparkStorage } from '../src/storage.ts'
 import { JsonlProposalStorage } from '../src/proposal-storage.ts'
-import { JsonlScriptStorage } from '../src/script-storage.ts'
 import { ensureJsonlPath } from '../src/jsonl-path.ts'
 import { buildHippoInputFromSpark, deriveTitle } from '../src/types.ts'
 import type { SparkView } from 'dsh-spark-wire'
@@ -106,10 +105,10 @@ test('JSONL backends self-heal the empty directory the old mkdir bug created', a
   await sparks.append(makeRecord({ id: 'a' }))
   assert.equal((await sparks.readAll()).length, 1, 'sparks path is a usable file location again')
 
-  // proposals + scripts: the write path heals the same way.
+  // proposals: the write path heals the same way（脚本存储已迁到 dsh-script，其
+  // 自愈行为在该包的 test/storage.test.ts 里覆盖）。
   for (const [name, storage] of [
     ['proposals.jsonl', new JsonlProposalStorage(join(dir, 'proposals.jsonl'))],
-    ['scripts.jsonl', new JsonlScriptStorage(join(dir, 'scripts.jsonl'))],
   ] as const) {
     const file = join(dir, name)
     await mkdir(file, { recursive: true })

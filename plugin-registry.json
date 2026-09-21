@@ -14,6 +14,8 @@
     "dsh-spark-finance-client": "packages/dsh-finance-client",
     "dsh-spark": "packages/dsh-spark",
     "dsh-spark-dock": "packages/dsh-spark-dock",
-    "dsh-spark-wire": "packages/dsh-spark-wire"
+    "dsh-spark-wire": "packages/dsh-spark-wire",
+    "dsh-script": "packages/dsh-script",
+    "dsh-script-wire": "packages/dsh-script-wire"
   }
 }

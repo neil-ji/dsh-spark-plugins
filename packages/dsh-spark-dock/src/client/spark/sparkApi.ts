@@ -5,7 +5,8 @@
  * 2026-09-14：收件箱化 —— 列表按 `inboxState` 过滤（取代旧的 status=active|archived），
  * 新增 `/sparks/stats`（计数）与 `/sparks/:id/restore`（从墓碑恢复）。
  */
-import type { SparkView, SparkCapture, SparkInboxState, SparkStats, SparkGraph, ProposalView, ProposalStatus, ScriptView } from 'dsh-spark-wire'
+import type { SparkView, SparkCapture, SparkInboxState, SparkStats, SparkGraph, ProposalView, ProposalStatus } from 'dsh-spark-wire'
+import type { ScriptView } from 'dsh-script-wire'
 
 interface Envelope { ok: boolean; value?: unknown; error?: { code: string; message: string } }
 

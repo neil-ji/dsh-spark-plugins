@@ -104,7 +104,7 @@ export function apply(ctx) {
   }
 
   const services = () => {
-    const names = ['hmr', 'timer', 'webServer', 'clientModules', 'loader', 'tools', 'spark', 'hippomemo', 'github', 'npm', 'finance']
+    const names = ['hmr', 'timer', 'webServer', 'clientModules', 'loader', 'tools', 'spark', 'hippomemo', 'github', 'npm', 'finance', 'script']
     return Object.fromEntries(names.map((service) => [service, root.get(service) !== undefined]))
   }
 

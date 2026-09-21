@@ -22,11 +22,6 @@
           enabled: true
           threshold: 3
           minIntervalMs: 300000
-        # C 档：最近工具序列命中 scripts.triggers 时建议用现成脚本（建议式，不拦截）。
-        scriptSuggest:
-          enabled: true
-          maxRecentCalls: 8
-          maxChars: 600
         # D 档：命令失败挖掘（模型 × 命令模式 × 错误签名）。**默认关**：
         # 先在沙箱观察一轮产出质量（噪声防线见 command-mining.ts），确认后再开。
         commandMining:

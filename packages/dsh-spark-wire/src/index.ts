@@ -135,68 +135,6 @@ export const proposalListQuerySchema = z.object({
 })
 
 /**
- * Phase 5: procedural scripts (the striatum / cerebellum of the cognitive layer).
- *
- * A script is a named, ordered sequence of steps (instructions or tool calls).
- * Scripts live across sessions; invoking one returns the steps for the agent
- * to execute (Phase 5 MVP does not execute automatically — the agent does).
- */
-/** Step kinds: 'instruction' is an LLM directive, 'tool-call' is a tool name to invoke with the captured payload. */
-export const scriptStepKindSchema = z.enum(['instruction', 'tool-call'])
-
-export const scriptStepSchema = z.object({
-  kind: scriptStepKindSchema,
-  /** For 'instruction': the directive text. For 'tool-call': the tool name. */
-  payload: z.string().min(1).max(2_000),
-  /** Optional human note shown alongside this step in the catalog. */
-  note: z.string().max(500).optional(),
-})
-
-export const scriptScopeSchema = z.enum(['session', 'project', 'global'])
-
-export const scriptViewSchema = z.object({
-  id: z.string().min(1).max(64),
-  name: z.string().min(1).max(120),
-  description: z.string().min(1).max(2_000),
-  steps: z.array(scriptStepSchema).min(1).max(50),
-  /** Pattern tags for retrieval matching (Phase 5.5: tool auto-suggest when an agent's recent tool sequence matches). */
-  triggers: z.array(z.string().min(1).max(80)).max(16).default([]),
-  scope: scriptScopeSchema.default('project'),
-  workspacePath: z.string().nullable().default(null),
-  /** Feedback counters; successRate = successCount / invocationCount. */
-  invocationCount: z.number().int().nonnegative().default(0),
-  successCount: z.number().int().nonnegative().default(0),
-  failureCount: z.number().int().nonnegative().default(0),
-  createdAt: z.number().int().nonnegative(),
-  updatedAt: z.number().int().nonnegative(),
-  lastInvokedAt: z.number().int().nonnegative().nullable().default(null),
-  /** Which spark (if any) crystallized into this script. */
-  sourceSparkId: sparkIdSchema.nullable().default(null),
-})
-
-export const scriptCaptureSchema = z.object({
-  name: z.string().min(1).max(120),
-  description: z.string().min(1).max(2_000),
-  steps: z.array(scriptStepSchema).min(1).max(50),
-  triggers: z.array(z.string().min(1).max(80)).max(16).default([]),
-  scope: scriptScopeSchema.default('project'),
-  workspacePath: z.string().nullable().default(null),
-  sourceSparkId: sparkIdSchema.nullable().default(null),
-})
-
-export const scriptListQuerySchema = z.object({
-  scope: scriptScopeSchema.optional(),
-  q: z.string().optional(),
-  limit: z.number().int().min(1).max(500).default(100),
-})
-
-export const scriptInvokeResultSchema = z.object({
-  script: scriptViewSchema,
-  /** Convenience field: successRate after this invocation, 0..1. */
-  successRate: z.number().min(0).max(1),
-})
-
-/**
  * 关联图谱（Graph 子页）：火花之间、火花与结晶记忆之间的边。
  *
  * 单一来源：host 侧 `buildSparkGraph` 是唯一计算者，客户端只渲染 —— 关联口径
@@ -266,14 +204,6 @@ export type ProposalStatus = z.infer<typeof proposalStatusSchema>
 export type ProposalView = z.infer<typeof proposalViewSchema>
 export type ReflectRequest = z.infer<typeof reflectRequestSchema>
 export type ProposalListQuery = z.infer<typeof proposalListQuerySchema>
-export type ScriptStepKind = z.infer<typeof scriptStepKindSchema>
-export type ScriptStep = z.infer<typeof scriptStepSchema>
-export type ScriptScope = z.infer<typeof scriptScopeSchema>
-export type ScriptView = z.infer<typeof scriptViewSchema>
-export type ScriptCapture = z.infer<typeof scriptCaptureSchema>
-export type ScriptListQuery = z.infer<typeof scriptListQuerySchema>
-export type ScriptInvokeResult = z.infer<typeof scriptInvokeResultSchema>
-
 export interface SparkResult<T> {
   ok: boolean
   value?: T
@@ -305,12 +235,6 @@ export const proposalsChangedEventSchema = z.object({
   resolvedProposal: proposalViewSchema.nullable(),
 })
 
-/** `scripts/changed` 的载荷。 */
-export const scriptsChangedEventSchema = z.object({
-  at: z.number().int().nonnegative(),
-  operation: z.enum(['create', 'invoke', 'delete', 'result']),
-})
-
 /**
  * 一帧流数据（`spark.events()` 的产出项）。
  *
@@ -327,12 +251,10 @@ export const sparkStreamFrameSchema = z.discriminatedUnion('kind', [
   sparkReadyFrameSchema,
   z.object({ kind: z.literal('spark'), payload: sparkChangedEventSchema }),
   z.object({ kind: z.literal('proposal'), payload: proposalsChangedEventSchema }),
-  z.object({ kind: z.literal('script'), payload: scriptsChangedEventSchema }),
 ])
 
 export type SparkChangedEvent = z.infer<typeof sparkChangedEventSchema>
 export type ProposalsChangedEvent = z.infer<typeof proposalsChangedEventSchema>
-export type ScriptsChangedEvent = z.infer<typeof scriptsChangedEventSchema>
 export type SparkStreamFrame = z.infer<typeof sparkStreamFrameSchema>
 /** 变更帧的 kind（= 事件主题），供订阅侧按主题路由。 */
 export type SparkTopic = Exclude<SparkStreamFrame['kind'], 'ready'>
@@ -375,7 +297,6 @@ export const SPARK_HOST_CONTRIBUTION: TypertContribution = {
     { name: 'ProposalView', schema: proposalViewSchema },
     { name: 'SparkChangedEvent', schema: sparkChangedEventSchema },
     { name: 'ProposalsChangedEvent', schema: proposalsChangedEventSchema },
-    { name: 'ScriptsChangedEvent', schema: scriptsChangedEventSchema },
     { name: 'SparkStreamFrame', schema: sparkStreamFrameSchema },
   ],
   model: { services: [], events: [], objects: [] },

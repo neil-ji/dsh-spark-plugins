@@ -11,7 +11,10 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Button, Card, Disclosure, Input, Modal, SegmentedControl, Textarea } from 'dsh-ui-kit'
 import { useFrames } from 'dsh-spark-plugin-kit/client'
-import type { SparkView, SparkInboxState, SparkStats, ProposalView, ScriptView } from 'dsh-spark-wire'
+import type { SparkView, SparkInboxState, SparkStats, ProposalView } from 'dsh-spark-wire'
+// 脚本记录类型随脚本沉淀库迁出（docs/SCRIPT-LIBRARY-SPEC.md）；本 pane 在下一轮
+// 随 client 包自注册搬迁，暂从新 wire 取类型。
+import type { ScriptView } from 'dsh-script-wire'
 import { api } from './sparkApi.ts'
 import { useApiResource } from './useApiResource.ts'
 import { SPARK_EVENTS_STREAM, type SparkEventChannel } from './remote.ts'
@@ -446,7 +449,8 @@ export function ScriptsPane({ channel, t }: SparkPaneDeps): JSX.Element {
   const [failed, setFailed] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
   const messageTimer = useRef(0)
-  useSparkTopicRefresh(channel, ['script'], reload)
+  // 脚本变更不再走 spark 流（独立插件有 script/events）；本 pane 迁移前只在挂载与调用后刷新。
+  void channel
   useEffect(() => () => window.clearTimeout(messageTimer.current), [])
 
   const invoke = async (sc: ScriptView) => {

@@ -18,7 +18,6 @@ import {
   SPARK_REMOTE_CONTRIBUTION,
   sparkStreamFrameSchema,
   type ProposalsChangedEvent,
-  type ScriptsChangedEvent,
   type SparkChangedEvent,
   type SparkStreamFrame,
 } from 'dsh-spark-wire'
@@ -50,7 +49,6 @@ const sparkChange: SparkChangedEvent = {
 }
 
 const proposalChange: ProposalsChangedEvent = { at: NOW, newProposals: [], resolvedProposal: null }
-const scriptChange: ScriptsChangedEvent = { at: NOW, operation: 'invoke' }
 
 /** 可控的事件源替身：记录订阅数，支持手工 emit。 */
 function createSource(): SparkEventSource & { emit: (event: string, change: unknown) => void; subscriptions: () => number } {
@@ -106,17 +104,16 @@ test('frame contract: ready 基线帧在前，随后按发生顺序给变更帧�
   assert.equal(sparkStreamFrameSchema.safeParse(first.value).success, true)
 
   source.emit('sparks/changed', sparkChange)
-  source.emit('scripts/changed', scriptChange)
   source.emit('proposals/changed', proposalChange)
 
   const kinds: string[] = []
-  for (let i = 0; i < 3; i += 1) {
+  for (let i = 0; i < 2; i += 1) {
     const frame = await nextFrame(iterator)
     assert.equal(frame.done, false)
     assert.equal(sparkStreamFrameSchema.safeParse(frame.value).success, true, '每帧都必须过 wire schema')
     kinds.push(frame.value!.kind)
   }
-  assert.deepEqual(kinds, ['spark', 'script', 'proposal'], '帧序 = emit 顺序')
+  assert.deepEqual(kinds, ['spark', 'proposal'], '帧序 = emit 顺序（script 主题已随脚本库迁出）')
   await iterator.return?.(undefined)
 })
 
@@ -125,7 +122,7 @@ test('cancellation: abort 结束迭代并解除全部订阅', async () => {
   const controller = new AbortController()
   const iterator = sparkStreamFrames(source, controller.signal)[Symbol.asyncIterator]()
   await nextFrame(iterator)
-  assert.equal(source.subscriptions(), 3, '三条 cordis 事件各订阅一次')
+  assert.equal(source.subscriptions(), 2, '两条 cordis 事件各订阅一次')
 
   controller.abort()
   const ended = await nextFrame(iterator)

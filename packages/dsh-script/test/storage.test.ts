@@ -4,7 +4,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { JsonlScriptStorage } from '../src/script-storage.ts'
-import type { ScriptView, ScriptStep } from 'dsh-spark-wire'
+import type { ScriptView, ScriptStep } from 'dsh-script-wire'
 
 function makeStep(overrides: Partial<ScriptStep> = {}): ScriptStep {
   const out: ScriptStep = { kind: overrides.kind ?? 'instruction', payload: overrides.payload ?? 'do the thing' }
@@ -20,7 +20,8 @@ function makeScript(overrides: Partial<ScriptView> = {}): ScriptView {
     description: overrides.description ?? 'Build the project and deploy to staging',
     steps: overrides.steps ?? [makeStep(), makeStep({ kind: 'tool-call', payload: 'pnpm build' })],
     triggers: overrides.triggers ?? ['deploy', 'release'],
-    scope: overrides.scope ?? 'project',
+    tags: overrides.tags ?? [],
+    scope: overrides.scope ?? 'workspace',
     workspacePath: overrides.workspacePath ?? null,
     invocationCount: overrides.invocationCount ?? 0,
     successCount: overrides.successCount ?? 0,
@@ -28,7 +29,15 @@ function makeScript(overrides: Partial<ScriptView> = {}): ScriptView {
     createdAt: overrides.createdAt ?? now,
     updatedAt: overrides.updatedAt ?? now,
     lastInvokedAt: overrides.lastInvokedAt ?? null,
-    sourceSparkId: overrides.sourceSparkId ?? null,
+    status: overrides.status ?? 'active',
+    revision: overrides.revision ?? 1,
+    supersedes: overrides.supersedes ?? null,
+    supersededBy: overrides.supersededBy ?? null,
+    updatedBy: overrides.updatedBy ?? 'system',
+    sourceSessionId: overrides.sourceSessionId ?? null,
+    sourceAgentId: overrides.sourceAgentId ?? null,
+    sourceTurn: overrides.sourceTurn ?? null,
+    expiresAt: overrides.expiresAt ?? null,
   }
 }
 

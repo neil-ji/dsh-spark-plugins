@@ -9,7 +9,7 @@
  */
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
-import type { ScriptView } from 'dsh-spark-wire'
+import type { ScriptView } from 'dsh-script-wire'
 
 export interface RecentToolCall {
   name: string
@@ -93,25 +93,32 @@ export function matchScripts(calls: readonly RecentToolCall[], scripts: readonly
  * 渲染"有现成脚本"的**建议**（不是指令 —— 设计 §2.3：一律建议式，绝不拦截）。
  * @returns 注入消息；预算装不下时返回 undefined（宁可不注入）。
  */
-export function renderScriptSuggestion(match: ScriptMatch, maxChars: number): UserMessage | undefined {
+export function renderScriptSuggestion(
+  match: ScriptMatch,
+  maxChars: number,
+  pluginName = 'dsh-script',
+  invokeToolName = 'script_invoke',
+  successRate = 0,
+): UserMessage | undefined {
   const script = match.script
+  // 成功率口径单源（Spec INV-7）：由 ScriptService.successRate 算好后传入，这里只渲染。
   const rate = script.invocationCount > 0
-    ? ' — success rate ' + String(Math.round((script.successCount / script.invocationCount) * 100)) + '% over '
+    ? ' — success rate ' + String(Math.round(successRate * 100)) + '% over '
       + String(script.invocationCount) + ' invocation' + (script.invocationCount === 1 ? '' : 's')
     : ''
   const text = [
     '<system-reminder>',
-    'Spark script catalog match (dsh-spark): a stored procedure already covers what you are about to do.',
+    'Script catalog match (dsh-script): a stored procedure already covers what you are about to do.',
     '- script: "' + script.name + '" — ' + script.description,
     '- matched triggers: ' + match.hits.join(', '),
     '- steps: ' + String(script.steps.length) + rate,
-    'Call spark_invoke_script with id "' + script.id + '" to get the ordered steps instead of rewriting them from scratch.',
+    'Call ' + invokeToolName + ' with id "' + script.id + '" to get the ordered steps instead of rewriting them from scratch.',
     'This is a suggestion, not an instruction: ignore it if the current task is genuinely different.',
     '</system-reminder>',
   ].join('\n')
   if (text.length > maxChars + 64) return undefined
   return createUserMessage({
     content: [{ type: 'text', text }],
-    source: { kind: 'plugin', plugin: 'spark-inbox', form: 'notice', summary: 'script match: ' + script.name },
+    source: { kind: 'plugin', plugin: pluginName, form: 'notice', summary: 'script match: ' + script.name },
   })
 }

@@ -1,7 +1,7 @@
 /**
  * Unified event channel for the spark domain (ADR-001) —— **纯桥接层**。
  *
- * 宿主侧只有 cordis 一条总线（`sparks/changed` / `proposals/changed` / `scripts/changed`）；
+ * 宿主侧只有 cordis 一条总线（`sparks/changed` / `proposals/changed`）；
  * 这里把它桥成一条事件帧序列，由 `events-service.ts` 的 `events()` 方法（typert stream
  * 描述符，契约在 `dsh-spark-wire`）暴露成 `ctx.remote.spark.events()`：
  *
@@ -19,13 +19,12 @@
  * （`node --test test/*.ts`）——纯函数可测，装饰器只是薄包装。
  */
 import { bridgeEvents } from 'dsh-spark-plugin-kit'
-import type { ProposalsChangedEvent, ScriptsChangedEvent, SparkChangedEvent, SparkStreamFrame } from 'dsh-spark-wire'
+import type { ProposalsChangedEvent, SparkChangedEvent, SparkStreamFrame } from 'dsh-spark-wire'
 
 /** 桥接所需的最小事件源面（cordis `Context` 结构上即满足）。 */
 export interface SparkEventSource {
   on(event: 'sparks/changed', listener: (change: SparkChangedEvent) => void): () => void
   on(event: 'proposals/changed', listener: (change: ProposalsChangedEvent) => void): () => void
-  on(event: 'scripts/changed', listener: (change: ScriptsChangedEvent) => void): () => void
 }
 
 /**
@@ -43,7 +42,6 @@ export function sparkStreamFrames(
     subscribe: (push) => [
       source.on('sparks/changed', (payload) => { push({ kind: 'spark', payload }) }),
       source.on('proposals/changed', (payload) => { push({ kind: 'proposal', payload }) }),
-      source.on('scripts/changed', (payload) => { push({ kind: 'script', payload }) }),
     ],
   })
 }

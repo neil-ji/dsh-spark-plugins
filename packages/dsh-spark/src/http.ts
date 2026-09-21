@@ -1,29 +1,25 @@
 /**
- * Plugin-owned HTTP API under /sparks/*, /proposals/*, and /scripts/*.
+ * Plugin-owned HTTP API under /sparks/* and /proposals/*.（脚本的 /scripts 已随脚本沉淀库迁出，见 docs/SCRIPT-LIBRARY-SPEC.md）
  *
  * 2026-09（ADR-001）：**事件不再走 HTTP**。原先这里注册三条 SSE 端点
  * （`/sparks|/proposals|/scripts/events`），与 hippomemo 那条各自实现一遍流式与
  * 载荷；现在统一由 `spark.events()`（typert stream，单一 mux 载波、逐项 schema
  * 校验、可取消）下发，见 `events.ts`。本文件只剩「请求-响应」型 JSON API。
  *
- * 2026-09-21（脚本目录恒空的第二个根因）：注册入口按**服务归属**拆成两个函数。
- * 以前只有一个 `registerSparkHttpRoutes(ctx, spark, script)`，ScriptService 与
- * SparkService **各调一次**（都想把三条前缀注册齐），而平台 webserver 对同前缀
- * 是硬失败（`webserver: duplicate prefix route "/sparks"`）。后注册的那次抛错，
- * 恰好落在 `SparkService.init` 的 try 里 —— 于是 init 在**种子脚本之前**中断，
- * 错误只进 ctx.logger，表现为「脚本目录永远是空的」（探针实测复现）。
- * 现在 /sparks + /proposals 归 SparkService，/scripts 归 ScriptService，各自一次。
+ * 2026-09-21：注册入口按**服务归属**拆分 —— 同前缀重复注册会被平台 webserver
+ * 硬失败（`webserver: duplicate prefix route "/x"`），而这类抛错若落在某个 init()
+ * 的 try 里，会在后续步骤之前**静默中断**（实测踩过，见 AGENTS §4）。
+ * 现况：/sparks + /proposals 归 SparkService（本文件），/scripts 已随脚本沉淀库
+ * 迁到独立插件 `dsh-script`（docs/SCRIPT-LIBRARY-SPEC.md）。
  */
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
-import type { SparkView, ProposalView, ScriptView, ScriptInvokeResult } from 'dsh-spark-wire'
+import type { SparkView, ProposalView } from 'dsh-spark-wire'
 import type { SparkService, SparkNotFoundError, SparkHippoUnavailableError } from './spark-service.ts'
 import type { EmergeService } from './emerge-service.ts'
-import type { ScriptService } from './script-service.ts'
 
 const PREFIX_SPARKS = '/sparks'
 const PREFIX_PROPOSALS = '/proposals'
-const PREFIX_SCRIPTS = '/scripts'
 const MAX_BODY_BYTES = 256 * 1024
 
 interface Envelope {
@@ -45,15 +41,6 @@ export function registerSparkHttpRoutes(ctx: Context, service: SparkService): vo
     path: PREFIX_PROPOSALS,
     handler: (req, res) => { void handleProposals(ctx, req, res, service) },
   }), 'proposals.httpRoutes')
-}
-
-/** /scripts —— 由 ScriptService 注册（唯一注册者）。 */
-export function registerScriptHttpRoutes(ctx: Context, scriptService: ScriptService): void {
-  ctx.effect(() => ctx.webServer.register({
-    kind: 'prefix',
-    path: PREFIX_SCRIPTS,
-    handler: (req, res) => { void handleScripts(ctx, req, res, scriptService) },
-  }), 'scripts.httpRoutes')
 }
 
 async function handleSparks(
@@ -204,80 +191,6 @@ async function handleProposals(
   }
 }
 
-async function handleScripts(
-  ctx: Context,
-  req: IncomingMessage,
-  res: ServerResponse,
-  service: ScriptService,
-): Promise<void> {
-  try {
-    if (isTrustedBrowserRequest(req) === false) {
-      send(res, 403, errorEnvelope('FORBIDDEN', 'cross-origin request rejected'))
-      return
-    }
-    const url = new URL(req.url ?? '/', 'http://x')
-    const sub = url.pathname.slice(PREFIX_SCRIPTS.length)
-
-    if (req.method === 'GET' && sub === '') {
-      const scope = url.searchParams.get('scope') ?? undefined
-      const q = url.searchParams.get('q') ?? undefined
-      const limitStr = url.searchParams.get('limit')
-      const limit = limitStr !== null ? Number(limitStr) : 100
-      const query: { scope?: 'session' | 'project' | 'global'; q?: string; limit: number } = { limit }
-      if (scope === 'session' || scope === 'project' || scope === 'global') query.scope = scope
-      if (q !== undefined && q.length > 0) query.q = q
-      const list = await service.list(query)
-      send(res, 200, okEnvelope(list))
-      return
-    }
-
-    if (req.method === 'GET' && sub.startsWith('/')) {
-      const id = decodeURIComponent(sub.slice(1))
-      const record = await service.get(id)
-      send(res, record === null ? 404 : 200, okEnvelope(record))
-      return
-    }
-
-    if (req.method === 'POST' && sub === '') {
-      const body = await readJsonBody(req)
-      const created = await service.create(body)
-      send(res, 200, okEnvelope(created))
-      return
-    }
-
-    if (req.method === 'POST' && /\/invoke$/.test(sub)) {
-      const id = decodeURIComponent(sub.slice(1, -'/invoke'.length))
-      try {
-        const result = await service.invoke(id)
-        send(res, 200, okEnvelope(result))
-      } catch (error) {
-        send(res, 404, errorEnvelope('SCRIPT_NOT_FOUND', error instanceof Error ? error.message : String(error)))
-      }
-      return
-    }
-
-    if (req.method === 'POST' && /\/result$/.test(sub)) {
-      const id = decodeURIComponent(sub.slice(1, -'/result'.length))
-      const body = await readJsonBody(req)
-      const success = (body as { success?: boolean }).success === true
-      const updated = await service.recordResult(id, success)
-      send(res, updated === null ? 404 : 200, okEnvelope(updated))
-      return
-    }
-
-    if (req.method === 'DELETE' && sub.startsWith('/')) {
-      const id = decodeURIComponent(sub.slice(1))
-      const removed = await service.delete(id)
-      send(res, removed ? 200 : 404, okEnvelope({ removed }))
-      return
-    }
-
-    send(res, 404, errorEnvelope('NOT_FOUND', 'unknown scripts endpoint'))
-  } catch (error) {
-    send(res, 400, errorEnvelope('BAD_REQUEST', error instanceof Error ? error.message : String(error)))
-  }
-}
-
 const INBOX_STATES = ['pending', 'crystallized', 'dropped', 'archived'] as const
 
 function queryFromUrl(url: URL): Record<string, unknown> {
@@ -398,4 +311,4 @@ function errorMessageOf(error: unknown): string {
 }
 
 /** Reserved types for future phases. */
-type _Reserved = SparkView | ProposalView | ScriptView | ScriptInvokeResult | SparkNotFoundError | SparkHippoUnavailableError
+type _Reserved = SparkView | ProposalView | SparkNotFoundError | SparkHippoUnavailableError

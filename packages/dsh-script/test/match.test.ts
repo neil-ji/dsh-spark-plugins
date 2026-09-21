@@ -2,7 +2,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { collectRecentCalls, matchScripts, renderScriptSuggestion, stringifyArgs } from '../src/script-match.ts'
-import type { ScriptView } from 'dsh-spark-wire'
+import type { ScriptView } from 'dsh-script-wire'
 
 const NOW = 1_700_000_000_000
 
@@ -74,7 +74,7 @@ test('renderScriptSuggestion is a suggestion (not an instruction) and respects t
   const match = matchScripts(calls, [script()])!
   const message = renderScriptSuggestion(match, 600)!
   const text = message.content.map(b => (b as { text?: string }).text ?? '').join('')
-  assert.match(text, /spark_invoke_script/)
+  assert.match(text, /script_invoke/)
   assert.match(text, /suggestion, not an instruction/)
   assert.equal(message.source?.form, 'notice')
   assert.equal(renderScriptSuggestion(match, 120), undefined, 'over budget -> no injection')

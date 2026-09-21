@@ -1,0 +1,17 @@
+# dsh-script bundle patch.
+# 插入宿主行：注册 ctx.script 服务 + 四个 agent 工具 + /scripts HTTP API + script/events 流。
+- insert:
+    - id: script
+      name: 'dsh-script'
+      config:
+        # 目录注入（Spec §5）：指纹去重 + 注入状态 sidecar + per-agent 门控 + 替换帧。
+        injection:
+          enabled: true
+          maxItems: 50
+          maxChars: 1200
+          catalogDescriptionMaxLength: 200
+          # triggers 命中最近工具调用时的主动建议（保留；建议式，不拦截）。
+          suggest:
+            enabled: true
+            maxRecentCalls: 8
+            maxChars: 600

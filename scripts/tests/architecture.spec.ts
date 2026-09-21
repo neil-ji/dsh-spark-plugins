@@ -14,6 +14,9 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   ALLOWED_EDGES,
+  extractStringLiterals,
+  findCrossPluginRefs,
+  findDomainVocabularyDrift,
   CONTRACTS,
   checkFileBoundaries,
   collectImports,
@@ -316,6 +319,30 @@ describe('ESM 裸 require（产物里必炸）', () => {
     const { violations, files } = findEsmRequireUsage(ROOT)
     expect(violations).toEqual([])
     expect(files).toBeGreaterThan(50)
+  })
+})
+
+describe('跨插件域词汇（Spec INV-2）', () => {
+  it('解析两种声明形态：type 联合与 as const 数组', () => {
+    expect(extractStringLiterals("export type MemoryScope = 'global' | 'workspace' | 'project'\n", 'MemoryScope'))
+      .toEqual(['global', 'workspace', 'project'])
+    expect(extractStringLiterals("export const SCRIPT_SCOPES = ['global', 'workspace'] as const\n", 'SCRIPT_SCOPES'))
+      .toEqual(['global', 'workspace'])
+    expect(extractStringLiterals('const other = 1\n', 'Missing')).toBe(undefined)
+  })
+
+  it('真实仓库：scope / status / author 三组字面量与 HippoMemo 逐字一致', () => {
+    const { violations, checked } = findDomainVocabularyDrift(ROOT)
+    expect(violations).toEqual([])
+    expect(checked).toBe(3)
+  })
+})
+
+describe('跨插件零引用（Spec INV-1）', () => {
+  it('真实仓库：脚本 / 火花 / 记忆互不引用对方的服务与包', () => {
+    const { violations, files } = findCrossPluginRefs(ROOT)
+    expect(violations).toEqual([])
+    expect(files).toBeGreaterThan(30)
   })
 })
 

@@ -9,7 +9,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { apply } from '../src/inbox.ts'
 import { emptyMeta, type SparkMeta } from '../src/meta-store.ts'
-import type { ScriptView, SparkStats, SparkView } from 'dsh-spark-wire'
+import type { SparkStats, SparkView } from 'dsh-spark-wire'
 
 const NOW = 1_700_000_000_000
 
@@ -18,7 +18,6 @@ type PreStepHandler = (payload: unknown, next: () => Promise<{ kind: string; mes
 interface FakeOptions {
   stats?: Partial<SparkStats>
   pending?: SparkView[]
-  scripts?: ScriptView[]
   modelKey?: string
   reflectResult?: { newProposals: unknown[] }
 }
@@ -28,16 +27,6 @@ function makeSpark(id: string, title: string): SparkView {
     id, title, content: 'c', scope: 'project', workspacePath: null, inboxState: 'pending', tags: [],
     sourceSessionId: 's', sourceAgentId: null, sourceTurn: null,
     createdAt: NOW, updatedAt: NOW, stateChangedAt: NOW, deletedAt: null, crystallized: null,
-  }
-}
-
-function makeScript(): ScriptView {
-  return {
-    id: 'scr-verify', name: '预览自检', description: '跑 Node 冒烟 + 服务器断言',
-    steps: [{ kind: 'instruction', payload: 'pnpm preview:verify' }],
-    triggers: ['preview:verify'], scope: 'project', workspacePath: null,
-    invocationCount: 3, successCount: 3, failureCount: 0,
-    createdAt: NOW, updatedAt: NOW, lastInvokedAt: null, sourceSparkId: null,
   }
 }
 
@@ -68,7 +57,6 @@ function makeCtx(options: FakeOptions = {}): { ctx: unknown; handlers: PreStepHa
       list: async () => [],
       reflect: async () => { calls.reflect += 1; return { newProposals: options.reflectResult?.newProposals ?? [] } },
     },
-    script: { list: async () => options.scripts ?? [] },
   }
   return { ctx, handlers, calls }
 }
@@ -103,36 +91,6 @@ test('A: pending sparks produce exactly one reminder, and only once per agent', 
   assert.match(text, /first/)
   const second = await handlers[0]!({ agent, messages: [], step: 1 }, async () => ({ ...baseDecision }))
   assert.equal(second.messages.length, baseDecision.messages.length, 'per-agent once (WeakSet guard)')
-})
-
-test('C: a matching recent tool call injects the script suggestion, and never twice', async () => {
-  const { ctx, handlers } = makeCtx({ scripts: [makeScript()] })
-  apply(ctx as never, { reflect: { enabled: false } })
-  const messages = [assistantWithBash('pnpm preview:verify')]
-  const first = await handlers[0]!({ agent, messages, step: 1 }, async () => ({ ...baseDecision }))
-  // 2026-09-16：A 档空收件箱现在也注入一条 active hook（+1），加上 C 档脚本建议（+1）= +2。
-  assert.equal(first.messages.length, baseDecision.messages.length + 2)
-  // 第二条必须是脚本建议（按 push 顺序：先 inbox 后 script）。
-  const lastText = JSON.stringify(first.messages[first.messages.length - 1])
-  assert.match(lastText, /scr-verify/)
-  // 第一条是 inbox hook。
-  const inboxText = JSON.stringify(first.messages[first.messages.length - 2])
-  assert.match(inboxText, /Spark inbox \(dsh-spark\): empty\./)
-  // 去重是**按会话**的（WeakMap<agent>），不是全局：新会话里同样的命中应当再提示一次 ——
-  // 模型在新会话里并不知道之前建议过。同一个 agent 则被 injected WeakSet 挡住（上一条测试覆盖）。
-  const otherAgent = { session: { id: 'sess-2', header: {} } }
-  const again = await handlers[0]!({ agent: otherAgent, messages, step: 1 }, async () => ({ ...baseDecision }))
-  assert.equal(again.messages.length, baseDecision.messages.length + 2, 'a new session gets its own suggestion')
-})
-
-test('C: a non-matching tool call injects no script suggestion (but inbox hook still injects)', async () => {
-  const { ctx, handlers } = makeCtx({ scripts: [makeScript()] })
-  apply(ctx as never, { reflect: { enabled: false } })
-  const out = await handlers[0]!({ agent, messages: [assistantWithBash('ls -la')], step: 1 }, async () => ({ ...baseDecision }))
-  // 2026-09-16：未匹配工具调用 → 不建议脚本；但 A 档空收件箱仍注入 hook（+1）。
-  assert.equal(out.messages.length, baseDecision.messages.length + 1)
-  assert.match(JSON.stringify(out.messages[out.messages.length - 1]), /Spark inbox \(dsh-spark\): empty\./)
-  assert.doesNotMatch(JSON.stringify(out.messages), /scr-verify/, 'no script suggestion when triggers do not match')
 })
 
 test('B: the dirty marker triggers a background reflect once, then records lastReflectAt', async () => {

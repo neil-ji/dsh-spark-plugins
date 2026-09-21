@@ -582,10 +582,100 @@ export function findEsmRequireUsage(root) {
   return { violations, files }
 }
 
+
+/**
+ * 跨插件域词汇一致性（Spec INV-2）。
+ *
+ * 脚本沉淀库与 HippoMemo 共用作用域 / 生命周期 / 写入者三组字面量（脚本→memory 的
+ * 关联由 Agent 判断，插件之间零运行时通道 —— 见 docs/SCRIPT-LIBRARY-SPEC.md §2.2/§12）。
+ * 既然共用，就必须**逐字面相同**：一侧单独加值（例如给脚本加回 `session`）会让两边
+ * 语义悄悄分叉，且没有任何运行时报错。规范源是 Spec，这里只断言代码没漂。
+ *
+ * @param {string} root
+ */
+const VOCAB_SOURCES = [
+  { id: 'scope', memory: 'MemoryScope', scripts: 'SCRIPT_SCOPES' },
+  { id: 'status', memory: 'MemoryStatus', scripts: 'SCRIPT_STATUSES' },
+  { id: 'author', memory: 'MemoryAuthor', scripts: 'SCRIPT_AUTHORS' },
+]
+export function extractStringLiterals(source, symbol) {
+  const patterns = [
+    new RegExp(`export type ${symbol} =([\\s\\S]*?)\\n`),
+    new RegExp(`export const ${symbol} = \\[([\\s\\S]*?)\\] as const`),
+  ]
+  for (const pattern of patterns) {
+    const match = pattern.exec(source)
+    if (match === null) continue
+    return [...match[1].matchAll(/'([^']+)'/g)].map(item => item[1])
+  }
+  return undefined
+}
+
+export function findDomainVocabularyDrift(root) {
+  const memoryPath = join(root, 'packages/dsh-hippomemo/src/types.ts')
+  const scriptsPath = join(root, 'packages/dsh-script-wire/src/index.ts')
+  const violations = []
+  if (!existsSync(memoryPath) || !existsSync(scriptsPath)) {
+    return { violations: [{ code: 'domain-vocabulary', detail: '域词汇来源文件缺失：' + posix(relative(root, memoryPath)) + ' / ' + posix(relative(root, scriptsPath)) }], checked: 0 }
+  }
+  const memory = readFileSync(memoryPath, 'utf8')
+  const scripts = readFileSync(scriptsPath, 'utf8')
+  let checked = 0
+  for (const entry of VOCAB_SOURCES) {
+    const left = extractStringLiterals(memory, entry.memory)
+    const right = extractStringLiterals(scripts, entry.scripts)
+    if (left === undefined || right === undefined) {
+      violations.push({ code: 'domain-vocabulary', detail: `${entry.id}: 未能解析出一侧的字面量（hippomemo ${entry.memory} / dsh-script-wire ${entry.scripts}）` })
+      continue
+    }
+    checked += 1
+    const sortedLeft = [...left].sort().join(',')
+    const sortedRight = [...right].sort().join(',')
+    if (sortedLeft !== sortedRight) {
+      violations.push({ code: 'domain-vocabulary', detail: `${entry.id}: 两侧域词汇不一致 — hippomemo=[${left.join('|')}] vs dsh-script=[${right.join('|')}]（规范源见 docs/SCRIPT-LIBRARY-SPEC.md §2.2）` })
+    }
+  }
+  return { violations, checked }
+}
+
+/**
+ * 跨插件零引用（Spec INV-1 / 2026-09-21 定位决定）。
+ *
+ * 脚本、火花、记忆三者共用**词汇与语义**，但不共享运行时通道：任何一侧出现
+ * `ctx.otherPlugin` / 对方包名 / 对方的服务符号，都会把"关联由 Agent 判断"变成
+ * 插件耦合（并让拆包失去意义）。
+ *
+ * @param {string} root
+ */
+const CROSS_PLUGIN_RULES = [
+  { pkg: 'packages/dsh-script', forbidden: [['ctx.spark', '火花服务'], ['ctx.memory', '记忆服务'], ["'dsh-spark'", '火花包'], ["'dsh-hippomemo'", '记忆包']] },
+  { pkg: 'packages/dsh-spark', forbidden: [['ctx.script', '脚本服务'], ["'dsh-script'", '脚本包'], ["'dsh-hippomemo'", '记忆包']] },
+  { pkg: 'packages/dsh-hippomemo', forbidden: [['ctx.script', '脚本服务'], ["'dsh-script'", '脚本包'], ["'dsh-spark'", '火花包']] },
+]
+export function findCrossPluginRefs(root) {
+  const violations = []
+  let files = 0
+  for (const rule of CROSS_PLUGIN_RULES) {
+    for (const file of walkSource(join(root, rule.pkg, 'src'))) {
+      files += 1
+      const source = stripComments(readFileSync(file, 'utf8'))
+      const rel = posix(relative(root, file))
+      for (const [needle, label] of rule.forbidden) {
+        if (!source.includes(needle)) continue
+        violations.push({
+          code: 'cross-plugin-refs',
+          detail: `${rel} 出现 ${label} 引用（\`${needle}\`）—— 跨插件只共用词汇，不共用运行时通道（docs/SCRIPT-LIBRARY-SPEC.md INV-1）`,
+        })
+      }
+    }
+  }
+  return { violations, files }
+}
+
 /* ──────────────────────────── CLI ──────────────────────────── */
 
 function parseArgs(argv) {
-  const options = { only: ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus', 'esmrequire'], json: false, strictLocations: false }
+  const options = { only: ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus', 'esmrequire', 'domainvocab', 'crossplugin'], json: false, strictLocations: false }
   for (const arg of argv) {
     if (arg === '--json') options.json = true
     else if (arg === '--strict-locations') options.strictLocations = true
@@ -595,8 +685,8 @@ function parseArgs(argv) {
 }
 
 export function runChecks(root, options = {}) {
-  const only = options.only ?? ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus', 'esmrequire']
-  const report = { orphans: null, boundaries: null, contracts: null, injects: null, products: null, windowbus: null, esmrequire: null, failures: 0, warnings: 0 }
+  const only = options.only ?? ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus', 'esmrequire', 'domainvocab', 'crossplugin']
+  const report = { orphans: null, boundaries: null, contracts: null, injects: null, products: null, windowbus: null, esmrequire: null, domainvocab: null, crossplugin: null, failures: 0, warnings: 0 }
   if (only.includes('orphans')) {
     const result = findOrphanPackages(root)
     report.orphans = result
@@ -637,6 +727,16 @@ export function runChecks(root, options = {}) {
     report.esmrequire = result
     report.failures += result.violations.length
   }
+  if (only.includes('domainvocab')) {
+    const result = findDomainVocabularyDrift(root)
+    report.domainvocab = result
+    report.failures += result.violations.length
+  }
+  if (only.includes('crossplugin')) {
+    const result = findCrossPluginRefs(root)
+    report.crossplugin = result
+    report.failures += result.violations.length
+  }
   return report
 }
 
@@ -648,7 +748,7 @@ function main(argv) {
     process.exitCode = report.failures > 0 ? 1 : 0
     return
   }
-  console.log('══ 架构闸门（孤包 / 边界 / 契约 / 注入面 / 单产物 / 页内总线 / ESM 裸 require） ══')
+  console.log('══ 架构闸门（孤包 / 边界 / 契约 / 注入面 / 单产物 / 页内总线 / ESM 裸 require / 域词汇 / 跨插件） ══')
   if (report.orphans !== null) {
     const { orphans, total, closureSize } = report.orphans
     if (orphans.length === 0) console.log(`  ok    workspace 孤包        0 个（${total} 个包全在 registry 闭包内，闭包 ${closureSize} 个）`)
@@ -687,6 +787,16 @@ function main(argv) {
   if (report.esmrequire !== null) {
     const { violations, files } = report.esmrequire
     if (violations.length === 0) console.log(`  ok    ESM 裸 require      0 处（扫描 ${files} 个源文件）`)
+    for (const violation of violations) console.log(`  FAIL  ${violation.code.padEnd(20)} ${violation.detail}`)
+  }
+  if (report.domainvocab !== null) {
+    const { violations, checked } = report.domainvocab
+    if (violations.length === 0) console.log(`  ok    跨插件域词汇        ${checked} 组字面量与 HippoMemo 逐字一致（scope / status / author）`)
+    for (const violation of violations) console.log(`  FAIL  ${violation.code.padEnd(20)} ${violation.detail}`)
+  }
+  if (report.crossplugin !== null) {
+    const { violations, files } = report.crossplugin
+    if (violations.length === 0) console.log(`  ok    跨插件零引用        0 处（扫描 ${files} 个源文件：脚本/火花/记忆互不引用）`)
     for (const violation of violations) console.log(`  FAIL  ${violation.code.padEnd(20)} ${violation.detail}`)
   }
   const verdict = report.failures > 0 ? 'FAIL' : 'PASS'

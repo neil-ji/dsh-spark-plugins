@@ -38,11 +38,9 @@ import { buildSparkGraph } from './graph.ts'
 import { JsonlSparkStorage } from './storage.ts'
 import { SparkMetaStore, defaultMetaPath, type SparkMeta } from './meta-store.ts'
 import { ensureJsonlPath } from './jsonl-path.ts'
-import type { ScriptService } from './script-service.ts'
 import { registerSparkHttpRoutes } from './http.ts'
 import type { SparkChangedEvent, SparkRecordId, SparkStorage, HippoPutInput } from './types.ts'
 import { buildHippoInputFromSpark, deriveTitle } from './types.ts'
-import { seedDefaultScripts } from './seed-scripts.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -89,13 +87,11 @@ export class SparkService extends Service {
   private readonly metaStore: SparkMetaStore
   private storage: SparkStorage
   private httpRegistered = false
-  private readonly scriptService: ScriptService | undefined
   /** 初始化（含幂等格式迁移）是否已完成；未完成前拒绝读，避免把老形状当新形状用。 */
   private ready: Promise<void>
 
-  constructor(ctx: Context, config: SparkConfig = {}, scriptService?: ScriptService) {
+  constructor(ctx: Context, config: SparkConfig = {}) {
     super(ctx, 'spark')
-    this.scriptService = scriptService
     this.filePath = config.filePath ?? defaultFilePath()
     this.maxRecords = config.maxRecords ?? DEFAULT_MAX_RECORDS
     this.tombstoneRetentionMs = (config.tombstoneRetentionDays ?? DEFAULT_TOMBSTONE_RETENTION_DAYS) * DAY_MS
@@ -112,11 +108,6 @@ export class SparkService extends Service {
       if (version > 1) ctx.logger?.info?.('spark: store migrated to format v' + String(version))
       await this.enforceLimit()
       this.ensureRegistered(ctx)
-      // 2026-09-16：首次启动时种子脚本。仅当 scripts.jsonl 为空时写入，
-      // 永远不覆盖用户自定义脚本。best-effort：失败只记日志，不阻断 plugin 启动。
-      if (this.scriptService !== undefined) {
-        await seedDefaultScripts(this.scriptService)
-      }
     } catch (error) {
       ctx.logger?.error?.('spark: init failed: ' + String(error))
     }
@@ -129,8 +120,8 @@ export class SparkService extends Service {
 
   private ensureRegistered(ctx: Context): void {
     if (this.httpRegistered) return
-    // 只注册自己那份前缀（/sparks + /proposals）；/scripts 归 ScriptService，
-    // 重复注册会被平台 webserver 硬失败（见 http.ts 顶部注释）。
+    // 只注册自己那份前缀（/sparks + /proposals）；重复注册会被平台 webserver
+    // 硬失败（见 http.ts 顶部注释）。/scripts 已迁到 dsh-script。
     registerSparkHttpRoutes(ctx, this)
     this.httpRegistered = true
   }
