@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { Fragment, type ReactNode } from 'react'
 import { cx } from '../cx.js'
 import css from './Charts.module.css'
 
@@ -117,31 +117,30 @@ export interface BarChartProps {
   className?: string
 }
 
-/** 横向条形图 — label 左 / 条中 / 数值右，条长按 niceCeil 归一 */
+/** 横向条形图 — label 左 / 条中 / 数值右，条长按 niceCeil 归一。
+ *  对齐模型：整张图一个 grid（.barWrap），行用 Fragment + display:contents 的
+ *  三格直铺 —— 列宽由**最宽行**统一决定，轨道同起点且短标签不留洞。 */
 export function BarChart({ rows, ariaLabel, formatValue, axisFormatter, className }: BarChartProps): ReactNode {
   const max = niceCeil(Math.max(...rows.map((r) => r.value), 1))
   return (
     <div role="img" aria-label={ariaLabel} className={cx(css.barWrap, className)}>
-      {rows.map((row, i) => (
-        <div
-          key={row.key}
-          className={css.barRow}
-          /* data-tip 供 CSS 悬浮 tooltip（即时、可样式化）；title 留作原生兜底；
-             tabIndex 让 tooltip 也能键盘触发（focus-visible 同样式）。 */
-          data-tip={`${row.label}: ${formatValue(row.value)}${row.detail ? ` · ${row.detail}` : ''}`}
-          title={`${row.label}: ${formatValue(row.value)}${row.detail ? ` · ${row.detail}` : ''}`}
-          tabIndex={0}
-        >
-          <span className={css.barLabel}>{row.label}</span>
-          <span className={css.barTrack}>
-            <span
-              className={css.barFill}
-              style={{ width: `${Math.max(2, (row.value / max) * 100)}%`, background: sliceColor(rows, i) }}
-            />
-          </span>
-          <span className={css.barValue}>{axisFormatter ? axisFormatter(row.value) : formatValue(row.value)}</span>
-        </div>
-      ))}
+      {rows.map((row, i) => {
+        const tip = `${row.label}: ${formatValue(row.value)}${row.detail ? ` · ${row.detail}` : ''}`
+        return (
+          <Fragment key={row.key}>
+            {/* data-tip 供 CSS 悬浮 tooltip（即时、可样式化）；title 留作原生兜底；
+                tabIndex 让 tooltip 键盘可达（focus-visible 同样式）。 */}
+            <span className={css.barLabel} data-tip={tip} title={tip} tabIndex={0}>{row.label}</span>
+            <span className={css.barTrack} data-tip={tip}>
+              <span
+                className={css.barFill}
+                style={{ width: `${Math.max(2, (row.value / max) * 100)}%`, background: sliceColor(rows, i) }}
+              />
+            </span>
+            <span className={css.barValue}>{axisFormatter ? axisFormatter(row.value) : formatValue(row.value)}</span>
+          </Fragment>
+        )
+      })}
     </div>
   )
 }
