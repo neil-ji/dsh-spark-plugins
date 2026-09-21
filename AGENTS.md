@@ -174,6 +174,16 @@ dock 声明子槽并用平台 `renderSlot(key, { variant, activeId, onSelect }, 
   （messageOf / remoteFailureOf / unwrapRemote），客户端不许自己发明解析。
 - **build 与 typecheck 不并行**：typecheck 会读到半写的 `lib/` 产物，产生假
   TS2307 / TS2339。顺序执行。
+- **ESM 源码禁裸 `require()`**：产物一律 ESM（`build.mjs` / tsdown 的 `format: 'esm'`），
+  esbuild 只把裸 `require('node:os')` 降级成 `__require(...)` —— ESM 里没有 `require`，
+  运行时抛 `Dynamic require of "node:os" is not supported`。它最毒的地方是常落在
+  try/catch 兜底路径上：dsh-spark 的 `defaultScriptsFilePath()` 因此**静默**失败，
+  脚本目录的种子从未跑过、`scripts.jsonl` 从未创建（2026-09-21，真宿主探针实测）。
+  路径/内置模块一律顶层 `import`；`check:architecture` 的 `esmrequire` 逐文件拦截。
+- **同一 HTTP 前缀只能有一个注册者**：`ctx.webServer.register({ kind: 'prefix' })` 对
+  重复路径是硬失败（`webserver: duplicate prefix route "/x"`）。两个服务各注册一遍
+  「三条前缀」会让后注册者抛错——若它抛在某个 `init()` 的 try 里，init 会**在后续步骤
+  之前**中断（SparkService 就是这么把种子脚本跳过的）。按服务归属拆注册函数。
 - Windows 本机：CDP / undici 收尾不要 `process.exit()`（libuv 断言 0xC0000409 会把全绿
   变非零退出），显式 `ws.close()` + `process.exitCode` 自然排空。
 - 平台版本 pin 由 `bump-dsh-pins.mjs` / `check-dsh-upgrade.mjs` 管理，不要手改。
