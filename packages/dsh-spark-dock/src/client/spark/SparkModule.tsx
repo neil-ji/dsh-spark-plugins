@@ -181,11 +181,12 @@ export function SparksPane({ channel, t }: SparkPaneDeps): JSX.Element {
 
   return (
     <div className="dock-stack">
-      {/* 收件箱计数条：A 档要求「可见」——用户和模型都能一眼看到还有多少没处理。 */}
-      <div className="dock-inbox-strip" role="status" aria-live="polite"
+      {/* 可见的标题/副标题条退役（2026-09 用户裁决）：Card 自身的 title 已表意，
+          一图两名。未处理计数的 live 通告保留为屏下状态区（读屏仍可感知，视觉零占位）；
+          视觉上的 pending 数在 Card actions 的 pill 计数里。 */}
+      <div role="status" aria-live="polite" className="dock-sr-only"
         aria-label={t('inboxTitle') + ': ' + String(stats.data?.pending ?? 0) + ' ' + t('filterPending')}>
-        <div className="ttl">{t('inboxTitle')}</div>
-        <div className="dock-hint">{t('inboxSubtitle')}</div>
+        {t('inboxTitle')}: {String(stats.data?.pending ?? 0)} {t('filterPending')}
       </div>
 
       <Card
