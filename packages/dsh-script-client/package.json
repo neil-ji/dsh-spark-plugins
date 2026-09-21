@@ -1,6 +1,6 @@
 {
   "name": "dsh-script-client",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "DSH 脚本沉淀库 client：脚本目录 pane（ADR-003 自注册 dock 模块）",
   "type": "module",
   "main": "lib/index.js",
