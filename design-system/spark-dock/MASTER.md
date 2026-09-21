@@ -53,8 +53,15 @@ n-700 #40485a · n-800 #2d3749 · n-850 #232b3a · n-900 #171c27 · n-950 #0b0e1
 | `--spk-label` | `#1a1d24` | `#e8eaf0` | 正文（≥15:1） |
 | `--spk-label-2` | `#525b6b` | `#9aa1af` | 次要正文 |
 | `--spk-label-3` | `#5f6a7d` | `#868ea0` | 元信息 / placeholder |
-| `--spk-border` | `#d9dee6` | `#232b3a` | 分隔线 |
-| `--spk-border-2` | `#c1c8d4` | `#2d3749` | 控件描边（默认档） |
+| `--spk-border` | `#d9dee6` | `#232b3a` | **弱档**：嵌套内层轮廓（Card inset）+ 分隔线 |
+| `--spk-border-2` | `#c1c8d4` | `#2d3749` | **强档**：容器外轮廓（Card / Stat）+ 控件描边（默认档） |
+
+**外深内浅（2026-09-21 用户裁决）**：`border-2` 在两个主题都强于 `border`
+（亮 1.68 vs 1.35、暗 1.35 vs 1.14）——容器越靠外，轮廓越强。
+外层卡用 `border-2`，嵌套 `Card variant="inset"` 用 `border`；
+以 `--spk-surface-card` 为底的容器（Card / Stat / SettingsCard）必须同
+**color / width / radius**（`1px --spk-border-2` + `--spk-radius-card`(12)）。
+两条都由 `pnpm check:contrast` 的「卡片描边层级与一致性」段机器守住。
 | `--spk-seg-thumb` | `#ffffff` | `#2b3444` | 分段控件滑块（抬起面） |
 | `--spk-focus-ring` | `#3d5af0` | `#93a8ff` | 焦点描边（≥3:1 非文本） |
 

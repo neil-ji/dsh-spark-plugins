@@ -91,9 +91,25 @@
 
 ### 2.5 边框
 
-- 默认 1px `--spk-border`（卡片）或 `--spk-border-2`（输入类控件——layer-2 底上控件轮廓靠它可辨，Input 先例）。
+- 始终 1px。两档语义（**`--spk-border-2` 强于 `--spk-border`**，两个主题都成立）：
+
+  | 档 | token | 用途 |
+  |---|---|---|
+  | 强（控件描边默认档） | `--spk-border-2` | **容器外轮廓**（卡片 / Stat / SettingsCard）、输入类控件（layer-2 底上靠它可辨，Input 先例） |
+  | 弱（分隔线档） | `--spk-border` | **嵌套内层轮廓**（Card `variant="inset"`）、卡片内的分隔线 / 表头下边线 / 页脚上边线 |
+
+- **外深内浅（硬约束，2026-09-21 用户裁决）**：容器**越靠外，轮廓越强**。
+  外层卡描边与其卡面的对比度必须**大于**嵌套 inset 描边与其底面的对比度。
+  实测反例（修前）：亮 1.35(外) vs 1.68(内)、暗 1.14(外) vs 1.35(内) —— 读起来层级是反的，
+  且暗色外层只有 1.14:1，卡片轮廓几乎不可见。
+- **卡片族一致（硬约束，同次裁决）**：所有以 `--spk-surface-card` 为底的容器
+  （`Card` / `Stat` / `SettingsCard`）必须**同 color、同 width、同 radius** ——
+  `1px --spk-border-2` + `--spk-radius-card`(12)。三者任一不同，同屏就会被读成"两个组件"。
 - focus / 强调描边 2px，或 `color-mix(brand 30–45%, border)`。
 - 禁止无边框阴影替代描边（浮层除外，见 2.7 `--spk-blur`）。
+- **闸门**：`pnpm check:contrast` 的「卡片描边层级与一致性」段机器校验上面两条
+  （`auditCardSurfaces`：层级用**比较**判定而非钉死 token 名，换色值不会假失败；
+  卡片族逐项比对 color/width/radius）。
 
 ### 2.6 动效
 
@@ -125,6 +141,18 @@
 - variant：`primary`（品牌实底）/ `secondary`（描边）/ `ghost`（无底）/ `danger`（错误实底）。
 - size：md = h32、pad 0 14px、radius 10（`--spk-radius-md`）；sm = h26、pad 0 11px、radius 10、字 12。触控目标 ≥26px 高。
 - loading：内置 spinner + `aria-busy`，并 disabled 点击；icon 在 children 之前。
+- **异步按钮一律走 loading 形制**（v4.4，2026-09-21）：任何会发起写请求 / 重算 / 远程调用的
+  按钮，在飞期间必须由 ui-kit `Button loading` 同时给出 **spinner + `aria-busy="true"` + 锁点击**
+  —— **只置 `disabled` 不算数**：按钮会看起来像失灵，用户重复点（用户实测：财务「更新价格表」
+  在会话多时要跑秒级到十秒级，点了毫无动效）。
+  - **loading 与 disabled 同源**：`loading={busyAction === 'save'}` + `disabled={busyAction !== undefined}`，
+    同一份状态同时驱动两者。禁止出现「转圈但可点」「禁用但不转」的错配。
+  - **只有那一枚按钮转**：busy 状态记「是哪个动作」（`'saveToken' | 'reload' | …`），不是 boolean
+    —— 同屏多枚异步按钮时，boolean 会让每一枚都看起来在忙。
+  - **必须在 `finally` 里复位**：抛错路径不得把按钮永久卡在 loading（同 `disabled` 的复位纪律）。
+  - **空闲态必须干净**：常驻 spinner / `aria-busy` 等于没有信号，属验收违规（preview 与
+    real-host-check 都断言空闲态无 `aria-busy`)。
+  - >2s 且可估进度的任务仍按 §4.4 走进度条，不是按钮 spinner 能替代的。
 - Do：**一屏一个 primary**。操作性定义（v4.2）：以「操作域」为单位 —— 一张 Card、一个
   `role="group"`、页脚操作组各算一个域，**每个域至多一个 primary**；同一域内出现第二个实心
   主操作就是验收违规（PCQA-019 的实测违规：GitHub「连接」卡里 `保存令牌` + `测试连接` 双实心）。
@@ -149,6 +177,18 @@
   **单视图模块**（连接/设置页模板 §4.2-2，如 GitHub / npm）**不分栏**，内容直接是 SettingsCard 栈
   —— 这是模板差异不是违规（复核 PCQA-001 裁决，2026-09-18）；一旦该模块出现第二个视图，就必须改为分栏。
 - **Disclosure**：折叠唯一合法形制；**禁止 `<details>` / 按钮自行切换**的旁路实现。
+  - **手风琴（同构条目 ≥3 条时的默认形制，2026-09-21 用户裁决）**：一组**同构**条目
+    （每个条目 = 头 + 同形内容）数量可能随数据增长时（如"该用谁"的每个模型组），
+    必须用 Disclosure 手风琴，而不是全部平铺展开。
+    - **默认只展开首项**（首项 = 该列表的默认排序第一名，即用户最可能先看的那条）。
+    - **折叠态头行必须自带判别信息**：收起后头行是唯一可见内容，所以要给出
+      "决定要不要展开"的那条信息 —— 是**身份/名单**（如"这个模型我在哪几家用过"）
+      而不是**数量**（"N 家在用"是数量而非身份，且易与右侧结论重复；单条时更接近废话）。
+    - **手风琴已起分割作用 → 折叠体内不要再套 Card**（尤其 `variant="inset"`）：
+      多一层卡会把"折叠"这个层级淹没。先例：该用谁 2026-09-21 移除每组 inset 卡。
+    - 折叠头自带 `aria-expanded` + `aria-controls`（ui-kit Disclosure 已实现）；
+      注意它把 `aria-expanded` **同时**挂在外层 div（供 CSS 驱动动画）与头行 button
+      （供无障碍）上 —— 写断言时按头行 `<button>` 数，别按元素总数（会得到 2×）。
 - **Menu**：radius 12、border-2、浮层阴影；Esc 关闭、方向键导航、aria-haspopup。
 - **Modal**：surface-float 层 + `--spk-blur`；Esc + 点遮罩关闭；内部密度走 compact。
 - **ListRow**：radius 10；行高受 `--spk-gap-card` 约束；整行可点击时必须是 `<button>` 语义。
@@ -173,6 +213,13 @@
 - **文本列**：单元格文本**允许换行，但最多两行**，超出截断（kit `CellText`，
   `-webkit-line-clamp: 2`）；**必须提供悬浮全文**（原生 `title` 即可）。
   禁止单行 `nowrap + ellipsis` 截掉换行信息，也禁止无上限的长文本撑破列宽。
+  - **`CellText` 不得与带 `nowrap` 的单元格类连用**（2026-09-21 实测缺陷）：
+    `.cell` 的 `white-space: nowrap` 与 `CellText` 的单类选择器**同特异度**，谁胜出只取决于
+    样式注入顺序 —— 实测 nowrap 胜出时 `-webkit-line-clamp` **静默失效**，文本退化成
+    "单行 + 省略号"，2 行上限根本没生效（finance 各模型明细的模型名实测：修前
+    `white-space: nowrap`，长模型名被压成单行）。修法是双向的：`CellText` 自带
+    `white-space: normal`（换行语义归组件自己掌握），
+    调用方**只传布局类**（`min-width: 0` 之类），不传会 nowrap 的通用单元格类。
 - **列对齐规则（表头与数据永远同侧，2026-09-29 财务表实测沉淀）**：
   1. 第一列（名称 / ID / `provider/model`）：**左对齐**；
   2. 枚举短列（付费类型 Tag 等）：**左对齐**，列宽固定（如 72px），禁 `max-content`；
@@ -183,6 +230,33 @@
      `max-content` / `auto` 在两个 grid 里按各自内容算宽，宽度不同即整行错位
      （finance 供应商表三轮真宿主截图实测沉淀）；
   6. 金额带货币符号渲染（kit `Money`），禁裸数字。
+     - **要 DOM 节点**（需要 tabular-nums / 字号 / muted）→ `<Money micros currency />`。
+     - **只要字符串**（图表 `formatValue` / `axisFormatter`、`title`、`t(key, { amount })`
+       插值）→ `formatMoneyMicros(micros, currency)`。
+     - **`formatMicros` / `formatMicrosExact` 是裸数字格式化器**，是上面两者的内部实现，
+       **插件源码不得直接调用**（实测缺陷 2026-09-21：错峰卡图例渲染成 `8.57` / `10.34` /
+       `3.03`，而同屏表格金额都是 `¥…` —— 一屏两种货币表达）。
+       **闸门**：`pnpm check:contrast` 的「金额裸数字」段（`auditBareMoney`）同时拦
+       **直接调用** `formatMicros(x)` 与**裸引用** `formatValue={formatMicros}`
+       —— 后者才是这次实测缺陷的形态，只查带括号的调用会漏掉。
+       （测试文件豁免：断言"替代品确实带符号"必须能与裸格式化器对照。）
+
+### 3.6 详情键值列表（Detail list，2026-09-21 全插件生效）
+
+只读的「属性 → 值」清单（供应商详情弹窗先例）。用户反馈「可读性做的不好，不易读」
+的直接成因是**17 行全部同级平铺**，所以三条都是硬约束：
+
+- **必须分组**：按**信息来源或用途**切组（供应商详情：计费方式 / 余额与支出 / 订阅与节省），
+  每组一个小标题（11px / 600 字重 / `--spk-label`）。**禁止 10 行以上无分组的平铺** ——
+  人眼找不到目标行，屏幕阅读器也读作一长串并列项。
+  分组用 `<section aria-label={组名}>` + `<h4>`，让结构进无障碍树。
+- **标签与值分级**：行标签 `--spk-label-2` / 12px，值 `--spk-label` / 12px（**值比标签重**，
+  17 行扫读时重心落在值上）。**禁止在浮层上用 `--spk-label-3` 做标签** ——
+  它在暗色浮层上只有 **4.39:1**，不达 AA（MASTER 已记「浮层上禁用 label-3」；
+  闸门里 `[反例] label-3 on float` 钉住这个事实）。层级靠**字重 + 字号**，
+  不靠往下压色阶。
+- **分隔线只用弱档** `--spk-border`（组内行间是"同一组里的分隔"，不是容器轮廓）；
+  组间用间距（`--spk-space-3`）而不是再加一条线。
 
 ---
 
@@ -210,6 +284,19 @@
 | **Loading（首次/可估进度）** | >2s 的任务（首开回填）：spinner + `loadingTitle/loadingDetail` + `role="progressbar"` 进度条（aria-valuemin/max/now），进度来自 `finance/events` 类 stream |
 | **Loading（常规）** | 卡片内骨架或按钮 spinner；禁止整页白屏 |
 | **Empty** | EmptyState：图标 + "这是什么" + 主操作 CTA；禁止裸"暂无数据" |
+
+**空态的两条纪律（2026-09-21 修订，常被混为一谈）**：
+
+1. **禁止"静默空"**：卡片在**无数据**时不得只渲染标题就结束。实测反例（用户截图）：
+   「缓存复用节省估算」卡在无数据时高 48px、正文仅 8 字符（= 标题本身），
+   看起来像渲染坏了。无数据 → 给 `EmptyState`（一条 message 即可，不必硬塞 CTA）。
+2. **禁止"解释性散文"**：空态说的是**缺什么**，不是**为什么缺**。
+   - ✅ `还没有可比的跨供应商缓存数据`（描述缺口）
+   - ❌ `你的价目表没有峰谷窗口，或近期没有高峰时段用量`（技术推理，已退役）
+   - 例外：**异常**必须给原因（币种不匹配 / 不在生效窗口 / 多价目无法判断线路 /
+     INV-1 手填价被取代）—— 这些不是空态，是"必须解释否则静默失败"。
+
+> 两条常被互相反对：补空占位 ≠ 把散文加回来。前者是"这里缺了"，后者是"为什么缺"。
 | **Error** | 传输错误走 kit `messageOf/remoteFailureOf`；行内 error 文案 + 重试主按钮；静默失败类（价格同步过期 >24h）降级为页头 stale hint |
 | **Stale** | 数据带"最后更新"时间戳；超过阈值（24h）出现可操作 hint |
 
@@ -232,6 +319,8 @@
 - **键盘**：Tab 序 = 视觉序；Modal/Menu 内焦点圈闭（focus trap）+ Esc 退出；SegmentedControl 方向键切换。
 - **对比度**：正文 4.5:1、大字/非文本 3:1——`pnpm check:contrast` 154 项逐条硬闸。
 - **aria 模式表**：动态状态区 `role="status" aria-live="polite"`；进度 `role="progressbar"` + 三值；异步按钮 `aria-busy`；图标按钮必须 `aria-label`；可断言节点带 `data-testid`（preview:verify / real-host-check 按此断言）。
+  **`aria-busy` 只允许由 ui-kit `Button loading` 产出**（§3.1 v4.4）—— 手工挂 `aria-busy` 而不置
+  loading 就只剩语义没有视觉，用户仍然看不出在跑。
 - **播报**：见 3.4；同一文案 4s 去重。
 
 ---
@@ -247,6 +336,12 @@
   —— 那会让所有行显示同一个 "just now"（复核 PCQA-017）。队列行的时间应取该条目自身的变动时间。
 - 数字：金额千分位 + 货币后缀；token 数用 k/m 缩写；**表格数字列金额固定两位小数**（Money `exact`）。
 - locale key：`<模块>.<域>.<名>`（如 `finance.sync.staleHint`）；两个语言字典必须同 key 集。
+- **占位符必须传参**（2026-09-21 实测缺陷）：字典值含 `{name}` 时，`t(key)` **必须**传第二参数，
+  否则占位符**原样上屏**（finance 详情弹窗曾渲染出字面量「折扣 {pct}」/「回本 {pct}」）。
+  纯标签与数值应**分开**：标签用无占位符的静态词，数值作 value —— 别把数值塞进标签模板。
+  **闸门**：`pnpm check:contrast` 的「文案占位符泄漏」段（`auditPlaceholderLeaks`）
+  **按包作用域**判定（跨包按 key 名匹配会误报：spark-dock 的 `timeSeconds` 是无占位符的
+  纯单位 `'秒前'`，finance 的同名 key 却是 `"{n} 秒前"`）。
 
 ---
 

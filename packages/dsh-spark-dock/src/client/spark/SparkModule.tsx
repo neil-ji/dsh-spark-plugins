@@ -41,6 +41,9 @@ function useSparkTopicRefresh(channel: SparkEventChannel | null, kinds: readonly
 
 function timeAgo(ts: number, t: SparkT): string {
   const s = Math.max(1, Math.floor((Date.now() - ts) / 1000))
+  // 本包的字典值是**无占位符的纯单位**（'秒前' / 's ago'），数值由这里前置拼接 ——
+  // `SparkT` 也不接受第二参数。不要照搬 finance 的 `t('timeSeconds', { n })` 写法：
+  // 那边的值是 "{n} 秒前"（自带占位符），两包同名不同形。
   if (s < 60) return `${s} ${t('timeSeconds')}`
   if (s < 3600) return `${Math.floor(s / 60)} ${t('timeMinutes')}`
   if (s < 86400) return `${Math.floor(s / 3600)} ${t('timeHours')}`
