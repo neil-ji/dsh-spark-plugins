@@ -59,7 +59,7 @@ export { Sparkline, type SparklineProps } from './components/Sparkline.tsx'
 
 // 图标：lucide-react 驱动的工作区唯一图标层（规范见 components/icons.tsx 头注释）
 export {
-  IconBranch, IconChevronDown, IconChevronLeft, IconChevronRight, IconChevronUp,
+  IconArchive, IconBranch, IconChevronDown, IconChevronLeft, IconChevronRight, IconChevronUp,
   IconDollar, IconEdit, IconEllipsis, IconGithub, IconPackage, IconPlus, IconSparkles,
   IconThink, IconTrash, IconWarning, type IconProps,
 } from './components/icons.tsx'
@@ -67,7 +67,7 @@ export {
 // 遗留命名（0.3.x，@deprecated）：指向新图标，待下游迁移后移除
 export {
   IconChevronDownOutline14, IconChevronUpOutline14, IconChevronLeftOutline14, IconChevronRightOutline14,
-  IconPlusOutline16, IconTrashOutline16, IconEditOutline16, IconBranchOutline16,
+  IconPlusOutline16, IconTrashOutline16, IconEditOutline16, IconBranchOutline16, IconArchiveOutline16,
   IconThinkOutline16, IconWarningOutline16,
 } from './components/icons.tsx'
 

@@ -15,6 +15,7 @@
  */
 import type { ReactNode } from 'react';
 import type { LucideIcon, LucideProps } from 'lucide-react';
+import * as ArchiveModule from 'lucide-react/dist/esm/icons/archive.mjs';
 import * as BrainModule from 'lucide-react/dist/esm/icons/brain.mjs';
 import * as ChevronDownModule from 'lucide-react/dist/esm/icons/chevron-down.mjs';
 import * as ChevronLeftModule from 'lucide-react/dist/esm/icons/chevron-left.mjs';
@@ -74,6 +75,7 @@ export const IconEdit = icon(PencilModule);
 export const IconTrash = icon(Trash2Module);
 export const IconWarning = icon(TriangleAlertModule);
 export const IconThink = icon(BrainModule);
+export const IconArchive = icon(ArchiveModule);
 export const IconBranch = icon(GitBranchModule);
 export const IconSparkles = icon(SparklesModule);
 export const IconDollar = icon(CircleDollarSignModule);
@@ -97,6 +99,7 @@ export const IconTrashOutline16 = IconTrash;
 /** @deprecated 改用 IconEdit */
 export const IconEditOutline16 = IconEdit;
 /** @deprecated 改用 IconBranch */
+export const IconArchiveOutline16 = IconArchive;
 export const IconBranchOutline16 = IconBranch;
 /** @deprecated 改用 IconThink */
 export const IconThinkOutline16 = IconThink;

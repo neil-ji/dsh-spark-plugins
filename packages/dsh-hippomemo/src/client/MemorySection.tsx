@@ -20,7 +20,7 @@ import {
 import type { ChartDatum } from 'dsh-ui-kit'
 import {
   IconBranch, IconChevronDown, IconChevronLeft, IconChevronRight, IconChevronUp,
-  IconEdit, IconPlus, IconTrash, IconWarning,
+  IconArchive, IconEdit, IconPlus, IconTrash, IconWarning,
 } from './icons.tsx'
 import type { HippomemoApi, MemoryTagCount } from './api.ts'
 import { IMPORTANCE_TIERS, importanceTier, tierValue, type ImportanceTier } from '../importance.ts'
@@ -706,7 +706,10 @@ function MemoryDetailModal({ api, t, id, refreshKey, onBack, onEdit, onDeleted }
       footer={(
         <div className='hippomemo-detail-modal-footer'>
           <Button size='sm' variant='ghost' icon={<IconEdit />} onClick={() => { onEdit(record.id); }}>{t('edit')}</Button>
-          <Button size='sm' variant='ghost' loading={detailAction === 'archive'} disabled={detailAction !== undefined}
+          {/* 三个页脚动作必须同形制：都带 icon —— 缺 icon 的那个不仅少了个视觉锚点，
+              文本基线还会与邻座错开（2026-09 用户反馈「垂直未对齐」）。 */}
+          <Button size='sm' variant='ghost' icon={<IconArchive />}
+            loading={detailAction === 'archive'} disabled={detailAction !== undefined}
             onClick={() => { void archiveToggle(); }}>
             {record.status === 'archived' ? t('restore') : t('archive')}
           </Button>

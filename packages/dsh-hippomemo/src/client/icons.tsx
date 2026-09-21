@@ -7,6 +7,7 @@
  * dsh-ui-kit 中添加，再在此处按需 re-export。
  */
 export {
+  IconArchive,
   IconBranch,
   IconChevronDown,
   IconChevronLeft,
