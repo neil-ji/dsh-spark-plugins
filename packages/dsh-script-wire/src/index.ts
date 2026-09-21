@@ -12,6 +12,10 @@
  * 这三组字面量由闸门 `check:domain-vocabulary` 与 HippoMemo 逐字面比对，
  * 任何一侧单独改动都会红。
  *
+ * 读模型（`ScriptSummary` / `ScriptAudit`）**自带宿主算好的业务口径**（`successRate`、
+ * `acceptance.ratio`、`rateBuckets`）：跨边界只传结论，消费者不重算（Spec INV-7 / D10，
+ * 闸门 `ratemetric` 守着）。
+ *
  * @module dsh-script-wire
  */
 import { z } from 'zod'
@@ -74,6 +78,11 @@ export const scriptViewSchema = z.object({
   invocationCount: z.number().int().nonnegative().default(0),
   successCount: z.number().int().nonnegative().default(0),
   failureCount: z.number().int().nonnegative().default(0),
+  /**
+   * 调用证据：调用过这条脚本的工作区（去重，上限 32）。
+   * 只由 agent 的 `script_invoke` 记录（人面不计量，Spec D9）；降级作用域建议的唯一病据。
+   */
+  invokedWorkspaces: z.array(z.string().min(1).max(512)).max(32).default([]),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
   /** 临时性表达（替代已退役的 `session` 作用域）；null = 不过期。 */
@@ -107,15 +116,102 @@ export const scriptListQuerySchema = z.object({
   limit: z.number().int().min(1).max(500).default(100),
 })
 
-/** 列表/目录用的紧凑视图（不带全文 steps，省 token）。 */
+/**
+ * 列表/目录用的紧凑视图（不带全文 steps，省 token）。
+ *
+ * `successRate` 是**宿主算好下发的结论**（Spec INV-7 / D10）：把口径做进读模型，
+ * 消费者（人面 pane / 目录注入 / 工具）就没有重算的机会，闸门 `ratemetric` 守着这条。
+ */
 export const scriptSummarySchema = scriptViewSchema.omit({ steps: true, searchTerms: true }).extend({
   stepCount: z.number().int().nonnegative(),
+  successRate: z.number().min(0).max(1),
 })
 
 export const scriptInvokeResultSchema = z.object({
   script: scriptViewSchema,
   /** 本次调用后（已计量）的成功率，0..1。 */
   successRate: z.number().min(0).max(1),
+})
+
+/* ────────────────────────────── 治理（治理引擎 / 审计面） ────────────────────────────── */
+
+/** 治理建议种类（Spec §6.2）：退役候选 / 僵尸 / 降级作用域 / 去重合并。 */
+export const SCRIPT_ADVICE_KINDS = ['retire', 'zombie', 'downgrade-scope', 'merge-duplicate'] as const
+export const scriptAdviceKindSchema = z.enum(SCRIPT_ADVICE_KINDS)
+
+/** 建议动作：人面据此渲染按钮，点击后走对应 HTTP 端点（宿主绝不自动执行，INV-14）。 */
+export const SCRIPT_ADVICE_ACTIONS = ['archive', 'set-scope-workspace', 'merge'] as const
+export const scriptAdviceActionSchema = z.enum(SCRIPT_ADVICE_ACTIONS)
+
+/**
+ * 一条待裁决建议（只读结论，不写库）。
+ *
+ * **不下发句子**：宿主只给病据数字，文案由 pane 走 locale 字典渲染 —— 否则中文句子会
+ * 泄漏到 `en` 面（AGENTS §3.4：文案归模块所有，宿主不写死用户可见文本）。
+ */
+export const scriptAdviceSchema = z.object({
+  /** 稳定 id：`<kind>:<scriptId>`（合并带 `-><targetId>`），供 UI 做 key 与去重。 */
+  id: z.string().min(1).max(200),
+  kind: scriptAdviceKindSchema,
+  action: scriptAdviceActionSchema,
+  scriptId: z.string().min(1).max(64),
+  name: z.string().min(1).max(120),
+  /** 合并建议的留存者（其余动作恒 null）。 */
+  targetId: z.string().max(64).nullable().default(null),
+  /** 触发这条建议的病据（纯数字，UI 自己组织措辞）。 */
+  evidence: z.object({
+    invocationCount: z.number().int().nonnegative(),
+    /** 未调用过为 null（与 `ScriptSummary.successRate` 的 0 不同：这里是"没有证据"）。 */
+    successRate: z.number().min(0).max(1).nullable(),
+    idleDays: z.number().nonnegative().nullable(),
+    workspaces: z.number().int().nonnegative(),
+  }),
+})
+
+/** 成功率分档（边界见 Spec §6.5：low < 0.5 ≤ mid < 0.9 ≤ high；untested 单列）。 */
+export const scriptRateBucketsSchema = z.object({
+  untested: z.number().int().nonnegative(),
+  low: z.number().int().nonnegative(),
+  mid: z.number().int().nonnegative(),
+  high: z.number().int().nonnegative(),
+})
+
+export const scriptStatusCountsSchema = z.object({
+  active: z.number().int().nonnegative(),
+  archived: z.number().int().nonnegative(),
+  superseded: z.number().int().nonnegative(),
+  candidate: z.number().int().nonnegative(),
+})
+
+export const scriptScopeCountsSchema = z.object({
+  global: z.number().int().nonnegative(),
+  workspace: z.number().int().nonnegative(),
+  project: z.number().int().nonnegative(),
+})
+
+/** 审计统计（全部由宿主算好，UI 不重算）。 */
+export const scriptAuditStatsSchema = z.object({
+  total: z.number().int().nonnegative(),
+  byStatus: scriptStatusCountsSchema,
+  byScope: scriptScopeCountsSchema,
+  rateBuckets: scriptRateBucketsSchema,
+  /** 有验收步骤（末步为以「验收：」开头的 instruction）的脚本占比，0..1。 */
+  acceptance: z.object({
+    withAcceptanceStep: z.number().int().nonnegative(),
+    total: z.number().int().nonnegative(),
+    ratio: z.number().min(0).max(1),
+  }),
+  /** 僵尸脚本数（口径同 `zombie` 建议，Spec §6.2）。 */
+  zombies: z.number().int().nonnegative(),
+})
+
+/** 审计负载：`POST /scripts/sweep`（含结算）与 `GET /scripts/audit`（只读）同形。 */
+export const scriptAuditSchema = z.object({
+  settledAt: z.number().int().nonnegative(),
+  /** 本次结算自动归档的条数（唯一自动动作；重复结算恒为 0，INV-13）。 */
+  archived: z.number().int().nonnegative(),
+  stats: scriptAuditStatsSchema,
+  advices: z.array(scriptAdviceSchema),
 })
 
 /* ────────────────────────────── 事件与流 ────────────────────────────── */
@@ -147,6 +243,12 @@ export type ScriptSaveInput = z.infer<typeof scriptSaveInputSchema>
 export type ScriptListQuery = z.infer<typeof scriptListQuerySchema>
 export type ScriptSummary = z.infer<typeof scriptSummarySchema>
 export type ScriptInvokeResult = z.infer<typeof scriptInvokeResultSchema>
+export type ScriptAdviceKind = z.infer<typeof scriptAdviceKindSchema>
+export type ScriptAdviceAction = z.infer<typeof scriptAdviceActionSchema>
+export type ScriptAdvice = z.infer<typeof scriptAdviceSchema>
+export type ScriptRateBuckets = z.infer<typeof scriptRateBucketsSchema>
+export type ScriptAuditStats = z.infer<typeof scriptAuditStatsSchema>
+export type ScriptAudit = z.infer<typeof scriptAuditSchema>
 export type ScriptsChangedEvent = z.infer<typeof scriptsChangedEventSchema>
 export type ScriptStreamFrame = z.infer<typeof scriptStreamFrameSchema>
 /** 变更帧的 kind（= 事件主题），供订阅侧路由。 */
@@ -190,6 +292,9 @@ export const SCRIPT_HOST_CONTRIBUTION: TypertContribution = {
     { name: 'ScriptView', schema: scriptViewSchema },
     { name: 'ScriptSummary', schema: scriptSummarySchema },
     { name: 'ScriptInvokeResult', schema: scriptInvokeResultSchema },
+    { name: 'ScriptAdvice', schema: scriptAdviceSchema },
+    { name: 'ScriptAuditStats', schema: scriptAuditStatsSchema },
+    { name: 'ScriptAudit', schema: scriptAuditSchema },
     { name: 'ScriptsChangedEvent', schema: scriptsChangedEventSchema },
     { name: 'ScriptStreamFrame', schema: scriptStreamFrameSchema },
   ],

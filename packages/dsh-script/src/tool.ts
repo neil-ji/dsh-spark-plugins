@@ -130,8 +130,9 @@ export function registerScriptTools(ctx: Context): RegisteredScriptTools {
       id: { type: 'string', required: true, description: 'The script id from script_list or the catalog.' },
     },
     output: TEXT_OUTPUT,
-    async execute(args) {
-      const result = await ctx.script.invoke(args.id)
+    async execute(args, exec) {
+      // 带上 session cwd 作为调用证据（`invokedWorkspaces`）：降级作用域建议的唯一病据（Spec §6.2）。
+      const result = await ctx.script.invoke(args.id, Date.now(), exec.agent?.session.header.cwd ?? null)
       return JSON.stringify({
         scriptId: result.script.id,
         name: result.script.name,

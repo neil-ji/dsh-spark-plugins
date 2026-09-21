@@ -1,21 +1,29 @@
 /**
  * ScriptService（`ctx.script`）—— 脚本沉淀库的宿主服务。
  *
- * 只做四件事：**写（含质量校验与判重）/ 读 / 计量 / 状态**。目录注入、HTTP、工具、
- * 事件流都是它的消费者，口径（成功率、可见性）只在服务里算一次（Spec INV-7）。
+ * 只做五件事：**写（含质量校验与判重）/ 读（含读模型）/ 计量 / 状态 / 治理**。目录注入、
+ * HTTP、工具、事件流都是它的消费者，口径（成功率、可见性、审计统计）只在叶子模块里算
+ * 一次（Spec INV-7），服务负责把结论发出去。
+ *
+ * 分层（避免循环依赖）：`dedupe.ts` / `metrics.ts`（纯叶子）← `governance.ts`（纯）← 本服务
+ * ← `http.ts` / `tool.ts` / `injection.ts`。
  *
  * 规范源：`docs/SCRIPT-LIBRARY-SPEC.md`。
  */
-import { createHash, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import { Context, Service } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import {
+  scriptAuditSchema,
   scriptSaveInputSchema,
-  scriptSummarySchema,
   scriptViewSchema,
+  type ScriptAdvice,
+  type ScriptAudit,
+  type ScriptAuditStats,
   type ScriptAuthor,
   type ScriptListQuery,
   type ScriptSaveInput,
+  type ScriptScope,
   type ScriptStatus,
   type ScriptStep,
   type ScriptSummary,
@@ -26,6 +34,14 @@ import { ensureJsonlPath } from './jsonl-path.ts'
 import { isVisible } from './scope.ts'
 import { registerScriptHttpRoutes } from './http.ts'
 import { seedDefaultScripts } from './seed-scripts.ts'
+import { findDuplicate } from './dedupe.ts'
+import { successRate, toSummary } from './metrics.ts'
+import { auditStats, expiredIds, governanceAdvices, invokedWorkspacesPatch } from './governance.ts'
+
+/** 判重原语从 `dedupe.ts` 再导出：调用方（含测试）的 import 面保持稳定。 */
+export { findDuplicate, jaccard, normalizeName, stepsFingerprint } from './dedupe.ts'
+/** 计量口径从 `metrics.ts` 再导出（单源在那里，服务只是公开别名）。 */
+export { successRate } from './metrics.ts'
 
 export interface ScriptConfig {
   /** 存储文件；默认 `$DSH_HOME/storages/script/scripts.jsonl`。 */
@@ -63,41 +79,6 @@ export function validateSteps(steps: readonly ScriptStep[]): string[] {
     if (/\s{2,}/.test(payload)) problems.push(`step ${String(index + 1)}: payload 含连续空白`)
   })
   return problems
-}
-
-/** 名称归一化（判重用）。 */
-export function normalizeName(name: string): string {
-  return name.toLowerCase().replaceAll(/\s+/g, ' ').trim()
-}
-
-/** 步骤归一化文本的指纹（判重用）。 */
-export function stepsFingerprint(steps: readonly ScriptStep[]): string {
-  const canonical = steps.map(step => `${step.kind}:${step.payload.trim()}`).join('\n')
-  return createHash('sha256').update(canonical).digest('hex')
-}
-
-/** 触发词集合的 Jaccard 相似度（判重用）。 */
-export function jaccard(a: readonly string[], b: readonly string[]): number {
-  const left = new Set(a.map(value => value.toLowerCase()))
-  const right = new Set(b.map(value => value.toLowerCase()))
-  if (left.size === 0 && right.size === 0) return 1
-  let shared = 0
-  for (const value of left) if (right.has(value)) shared += 1
-  const union = left.size + right.size - shared
-  return union === 0 ? 0 : shared / union
-}
-
-/**
- * 判重（Spec §3.2 第 2 条）：同名，或（triggers Jaccard ≥ 0.8 且步骤指纹相同）。
- * @returns 命中的既有条目，未命中为 undefined。
- */
-export function findDuplicate(candidate: Pick<ScriptSaveInput, 'name' | 'steps' | 'triggers'>, existing: readonly ScriptView[]): ScriptView | undefined {
-  const name = normalizeName(candidate.name)
-  const fingerprint = stepsFingerprint(candidate.steps)
-  return existing.find(record =>
-    record.status !== 'archived'
-    && (normalizeName(record.name) === name
-      || (stepsFingerprint(record.steps) === fingerprint && jaccard(record.triggers, candidate.triggers ?? []) >= 0.8)))
 }
 
 /* ─────────────────── 治理规则（纯函数，Spec INV-11 / §6.2） ─────────────────── */
@@ -156,8 +137,8 @@ export class ScriptService extends Service {
     // 都以 `await whenReady()` 开头。若把种子放进 init()，就是 init 等种子、种子等 init
     // 的自锁 —— ready 永不 resolve，于是 init 里排在种子**之后**的 HTTP 注册永远不执行
     // （表现为 /scripts 404、服务在宿主里"看不见"，且没有任何报错）。
-    void this.ready.then(() => this.seed(ctx)).catch(error => {
-      ctx.logger?.warn?.('script: seed skipped: ' + String(error))
+    void this.ready.then(() => this.bootstrap(ctx)).catch(error => {
+      ctx.logger?.warn?.('script: bootstrap skipped: ' + String(error))
     })
   }
 
@@ -187,11 +168,17 @@ export class ScriptService extends Service {
     }
   }
 
-  /** 空库则写入种子（只在 ready 之后跑，见构造函数的自锁说明）。 */
-  private async seed(ctx: Context): Promise<void> {
-    if (!this.seedEnabled) return
-    const created = await seedDefaultScripts(this)
-    if (created > 0) ctx.logger?.info?.('script: seeded ' + String(created) + ' default script(s)')
+  /**
+   * ready 之后的一次性工作：种子 + 过期结算（Spec D7：结算是**惰性扫描**，不引定时器）。
+   * 两次都走公开方法，所以只能在 ready 之后跑（见构造函数的自锁说明）。
+   */
+  private async bootstrap(ctx: Context): Promise<void> {
+    if (this.seedEnabled) {
+      const created = await seedDefaultScripts(this)
+      if (created > 0) ctx.logger?.info?.('script: seeded ' + String(created) + ' default script(s)')
+    }
+    const archived = await this.sweepExpired()
+    if (archived > 0) ctx.logger?.info?.('script: expired ' + String(archived) + ' script(s)')
   }
 
   private ensureRegistered(ctx: Context): void {
@@ -261,6 +248,16 @@ export class ScriptService extends Service {
     return updated
   }
 
+  /**
+   * 改作用域（治理面「降为工作区」建议的落点，Spec §6.2）。
+   * 只动 `scope`：`workspacePath` 保持写入时的值，降级后自然就按它精确匹配。
+   */
+  async setScope(id: string, scope: ScriptScope, now: number = Date.now()): Promise<ScriptView | null> {
+    const updated = await this.storage.patch(id, { scope }, now)
+    if (updated !== null) this.ctx.emit('scripts/changed', { at: now, operation: 'status', id })
+    return updated
+  }
+
   /** 物理删除：只允许已归档条目（Spec INV-11）。 */
   async remove(id: string, now: number = Date.now()): Promise<boolean> {
     const current = await this.storage.get(id)
@@ -270,14 +267,75 @@ export class ScriptService extends Service {
     return removed
   }
 
+  /* ─────────────────────────── 治理 ─────────────────────────── */
+
+  /**
+   * 过期结算：把 `expiresAt` 已到的 `active` 条目归档（Spec §6.2 的**唯一自动动作**）。
+   *
+   * D7：这是**惰性扫描**（bootstrap 一次 + 人面 `POST /scripts/sweep`），不是定时器 ——
+   * 过期条目本来就被 `isVisible` 挡在可见面外，扫描只是让 `status` 与审计面诚实。
+   * INV-13：只挑 `active`，所以重复调用第二次返回 0、不产生任何写入。
+   * @returns 本次归档的条数。
+   */
+  async sweepExpired(now: number = Date.now()): Promise<number> {
+    await this.whenReady()
+    const ids = expiredIds(await this.storage.readAll(), now)
+    for (const id of ids) {
+      const updated = await this.storage.patch(id, statusPatch('archived', null), now)
+      if (updated !== null) this.ctx.emit('scripts/changed', { at: now, operation: 'expire', id })
+    }
+    return ids.length
+  }
+
+  /**
+   * 审计负载（Spec §6.5）。`settle: true` 会先结算过期 —— 人面打开治理面时用它，
+   * 于是"打开即结算"而不是"后台跑定时器"（D7）。
+   */
+  async audit(now: number = Date.now(), options: { settle?: boolean } = {}): Promise<ScriptAudit> {
+    await this.whenReady()
+    const archived = options.settle === true ? await this.sweepExpired(now) : 0
+    const all = await this.storage.readAll()
+    return scriptAuditSchema.parse({
+      settledAt: now,
+      archived,
+      stats: auditStats(all, now),
+      advices: governanceAdvices(all, now),
+    })
+  }
+
+  /** 只读审计（不结算）—— 供测试与只读消费者用。 */
+  async readAudit(now: number = Date.now()): Promise<ScriptAudit> {
+    return this.audit(now, { settle: false })
+  }
+
+  /** 待裁决建议（只读纯函数的结果，不写库，INV-14）。 */
+  async advices(now: number = Date.now()): Promise<ScriptAdvice[]> {
+    await this.whenReady()
+    return governanceAdvices(await this.storage.readAll(), now)
+  }
+
+  /** 审计统计（只读纯函数的结果，不写库）。 */
+  async stats(now: number = Date.now()): Promise<ScriptAuditStats> {
+    await this.whenReady()
+    return auditStats(await this.storage.readAll(), now)
+  }
+
   /* ─────────────────────────── 读 ─────────────────────────── */
 
-  /** 全量列表（治理面用；不按工作区过滤，只看显式过滤条件）。 */
+  /** 全量列表（工具面用：带全文 steps 与 searchTerms）。 */
   async list(query: unknown = {}): Promise<ScriptView[]> {
     await this.whenReady()
     const parsed = this.parseListQuery(query)
     const all = await this.storage.readAll()
     return this.applyQuery(all, parsed)
+  }
+
+  /**
+   * 紧凑读模型列表（HTTP `/scripts` 与目录注入用）：**不含 steps**，且带宿主算好的
+   * `successRate`（Spec §6.5 / D10）—— 人面拿不到原文，也就没有重算口径的机会。
+   */
+  async listSummaries(query: unknown = {}): Promise<ScriptSummary[]> {
+    return (await this.list(query)).map(record => toSummary(record))
   }
 
   private parseListQuery(query: unknown): ScriptListQuery {
@@ -312,13 +370,10 @@ export class ScriptService extends Service {
     return filtered.slice(0, query.limit)
   }
 
-  /** 当前工作区可见的紧凑视图（目录注入 / 主动建议用，Spec §5.4）。 */
+  /** 当前工作区可见的紧凑视图（目录注入用，Spec §5.4）。 */
   async listVisible(cwd: string | undefined, now: number = Date.now()): Promise<ScriptSummary[]> {
-    const all = await this.list({ limit: 500 })
-    return all
-      .filter(record => isVisible(record, cwd, now))
-      // zod 默认剥离未知键：steps/searchTerms 不会进摘要视图。
-      .map(record => scriptSummarySchema.parse({ ...record, stepCount: record.steps.length }))
+    const all = await this.listSummaries({ limit: 500 })
+    return all.filter(record => isVisible(record, cwd, now))
   }
 
   /** 当前工作区可见的完整记录（主动建议需要 triggers 与全文展示）。 */
@@ -334,17 +389,25 @@ export class ScriptService extends Service {
 
   /* ─────────────────────────── 计量 ─────────────────────────── */
 
-  /** 成功率口径单源（Spec INV-7）：未调用过记 0。 */
+  /** 成功率口径的公开别名（Spec INV-7）：定义在 `metrics.ts`，全仓仅此一处。 */
   static successRate(record: Pick<ScriptView, 'successCount' | 'invocationCount'>): number {
-    return record.invocationCount === 0 ? 0 : record.successCount / record.invocationCount
+    return successRate(record)
   }
 
-  /** 调用：返回步骤 + 调用前的成功率，并记一次调用（Spec INV-8）。 */
-  async invoke(id: string, now: number = Date.now()): Promise<{ script: ScriptView; successRate: number }> {
+  /**
+   * 调用：返回步骤 + 调用前的成功率，并记一次调用（Spec INV-8）。
+   * @param workspacePath - 调用方工作区（agent 的 session cwd）；给了就记进
+   *   `invokedWorkspaces` 作为降级作用域的病据（D9：只有 agent 侧调用才有工作区信息）。
+   */
+  async invoke(id: string, now: number = Date.now(), workspacePath?: string | null): Promise<{ script: ScriptView; successRate: number }> {
     await this.whenReady()
     const current = await this.storage.get(id)
     if (current === null) throw new Error('script not found: ' + id)
-    const updated = await this.storage.patch(id, invokePatch(current, now), now)
+    const evidence = invokedWorkspacesPatch(current.invokedWorkspaces, workspacePath)
+    const updated = await this.storage.patch(id, {
+      ...invokePatch(current, now),
+      ...(evidence === undefined ? {} : { invokedWorkspaces: evidence }),
+    }, now)
     if (updated === null) throw new Error('script disappeared mid-invoke: ' + id)
     this.ctx.emit('scripts/changed', { at: now, operation: 'invoke', id })
     return { script: updated, successRate: ScriptService.successRate(updated) }

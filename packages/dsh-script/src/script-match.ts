@@ -10,6 +10,7 @@
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import type { ScriptView } from 'dsh-script-wire'
+import { successRate } from './metrics.ts'
 
 export interface RecentToolCall {
   name: string
@@ -81,8 +82,8 @@ export function matchScripts(calls: readonly RecentToolCall[], scripts: readonly
     const candidate: ScriptMatch = { script, score, hits }
     if (best === undefined) { best = candidate; continue }
     if (score !== best.score) { if (score > best.score) best = candidate; continue }
-    const rate = (s: ScriptView): number => (s.invocationCount > 0 ? s.successCount / s.invocationCount : 0)
-    if (rate(script) !== rate(best.script)) { if (rate(script) > rate(best.script)) best = candidate; continue }
+    // 成功率口径单源（Spec INV-7）：从 metrics 取，不在匹配器里再算一遍。
+    if (successRate(script) !== successRate(best.script)) { if (successRate(script) > successRate(best.script)) best = candidate; continue }
     const specificity = (s: ScriptView): number => s.triggers.join('').length
     if (specificity(script) > specificity(best.script)) best = candidate
   }

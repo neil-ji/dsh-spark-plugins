@@ -672,10 +672,45 @@ export function findCrossPluginRefs(root) {
   return { violations, files }
 }
 
+/**
+ * 成功率口径单源（Spec INV-7 / D10）。
+ *
+ * 「成功率」这类**业务口径**一旦被多处重算，就会出现「宿主按一套算、UI 按另一套算」的
+ * 静默偏差（F1 验收时 `ScriptsPane` 就自己除了一遍）。所以规则不是「别算错」而是
+ * **「只有定义文件能出现那条除法」**：跨边界一律传结论（读模型自带 `successRate`）。
+ *
+ * 定义文件是 `packages/dsh-script/src/metrics.ts` —— 改口径先改 Spec §6.5 再改它。
+ *
+ * @param {string} root
+ */
+export const RATE_DIVISION_DEFINITION = 'packages/dsh-script/src/metrics.ts'
+const RATE_DIVISION = /\/\s*[A-Za-z_$][\w$.]*(?:\[[^\]]*\])?\s*\.?\s*invocationCount\b/
+
+export function findRateDivisionSites(root) {
+  const packages = readWorkspacePackages(root)
+  const violations = []
+  let files = 0
+  for (const [name, record] of packages) {
+    for (const file of walkSource(join(record.dir, 'src'))) {
+      files += 1
+      const rel = posix(relative(root, file))
+      if (rel === RATE_DIVISION_DEFINITION) continue
+      if (RATE_DIVISION.test(stripComments(readFileSync(file, 'utf8'))) === false) continue
+      violations.push({
+        pkg: name,
+        file: rel,
+        code: 'rate-division',
+        detail: `${rel} 重算了成功率口径 —— 定义只在 ${RATE_DIVISION_DEFINITION}（Spec INV-7 / D10：跨边界只传结论，UI 不得除法）`,
+      })
+    }
+  }
+  return { violations, files, definition: RATE_DIVISION_DEFINITION }
+}
+
 /* ──────────────────────────── CLI ──────────────────────────── */
 
 function parseArgs(argv) {
-  const options = { only: ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus', 'esmrequire', 'domainvocab', 'crossplugin'], json: false, strictLocations: false }
+  const options = { only: ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus', 'esmrequire', 'domainvocab', 'crossplugin', 'ratemetric'], json: false, strictLocations: false }
   for (const arg of argv) {
     if (arg === '--json') options.json = true
     else if (arg === '--strict-locations') options.strictLocations = true
@@ -685,8 +720,8 @@ function parseArgs(argv) {
 }
 
 export function runChecks(root, options = {}) {
-  const only = options.only ?? ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus', 'esmrequire', 'domainvocab', 'crossplugin']
-  const report = { orphans: null, boundaries: null, contracts: null, injects: null, products: null, windowbus: null, esmrequire: null, domainvocab: null, crossplugin: null, failures: 0, warnings: 0 }
+  const only = options.only ?? ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus', 'esmrequire', 'domainvocab', 'crossplugin', 'ratemetric']
+  const report = { orphans: null, boundaries: null, contracts: null, injects: null, products: null, windowbus: null, esmrequire: null, domainvocab: null, crossplugin: null, ratemetric: null, failures: 0, warnings: 0 }
   if (only.includes('orphans')) {
     const result = findOrphanPackages(root)
     report.orphans = result
@@ -737,6 +772,11 @@ export function runChecks(root, options = {}) {
     report.crossplugin = result
     report.failures += result.violations.length
   }
+  if (only.includes('ratemetric')) {
+    const result = findRateDivisionSites(root)
+    report.ratemetric = result
+    report.failures += result.violations.length
+  }
   return report
 }
 
@@ -748,7 +788,7 @@ function main(argv) {
     process.exitCode = report.failures > 0 ? 1 : 0
     return
   }
-  console.log('══ 架构闸门（孤包 / 边界 / 契约 / 注入面 / 单产物 / 页内总线 / ESM 裸 require / 域词汇 / 跨插件） ══')
+  console.log('══ 架构闸门（孤包 / 边界 / 契约 / 注入面 / 单产物 / 页内总线 / ESM 裸 require / 域词汇 / 跨插件 / 口径单源） ══')
   if (report.orphans !== null) {
     const { orphans, total, closureSize } = report.orphans
     if (orphans.length === 0) console.log(`  ok    workspace 孤包        0 个（${total} 个包全在 registry 闭包内，闭包 ${closureSize} 个）`)
@@ -797,6 +837,11 @@ function main(argv) {
   if (report.crossplugin !== null) {
     const { violations, files } = report.crossplugin
     if (violations.length === 0) console.log(`  ok    跨插件零引用        0 处（扫描 ${files} 个源文件：脚本/火花/记忆互不引用）`)
+    for (const violation of violations) console.log(`  FAIL  ${violation.code.padEnd(20)} ${violation.detail}`)
+  }
+  if (report.ratemetric !== null) {
+    const { violations, files, definition } = report.ratemetric
+    if (violations.length === 0) console.log(`  ok    成功率口径单源    0 处重算（扫描 ${files} 个源文件，定义只在 ${definition}）`)
     for (const violation of violations) console.log(`  FAIL  ${violation.code.padEnd(20)} ${violation.detail}`)
   }
   const verdict = report.failures > 0 ? 'FAIL' : 'PASS'

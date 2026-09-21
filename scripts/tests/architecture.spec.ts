@@ -9,13 +9,16 @@
  * 因为闸门本身写错会静默放过违规。
  */
 import { describe, expect, it } from 'vitest'
-import { existsSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   ALLOWED_EDGES,
   extractStringLiterals,
   findCrossPluginRefs,
+  findRateDivisionSites,
+  RATE_DIVISION_DEFINITION,
   findDomainVocabularyDrift,
   CONTRACTS,
   checkFileBoundaries,
@@ -343,6 +346,44 @@ describe('跨插件零引用（Spec INV-1）', () => {
     const { violations, files } = findCrossPluginRefs(ROOT)
     expect(violations).toEqual([])
     expect(files).toBeGreaterThan(30)
+  })
+})
+
+describe('成功率口径单源（Spec INV-7 / D10）', () => {
+  it('真实仓库：只有 metrics.ts 出现成功率除法', () => {
+    const { violations, files, definition } = findRateDivisionSites(ROOT)
+    expect(violations).toEqual([])
+    expect(definition).toBe(RATE_DIVISION_DEFINITION)
+    expect(files).toBeGreaterThan(50)
+  })
+
+  it('闸门会红：把除法搬进 client 包（含宿主侧重复定义）', () => {
+    // 临时造一个 workspace：定义文件 + 一个违规文件。
+    const dir = mkdtempSync(join(tmpdir(), 'dsh-rate-gate-'))
+    try {
+      const write = (rel: string, body: string): void => {
+        const full = join(dir, rel)
+        mkdirSync(dirname(full), { recursive: true })
+        writeFileSync(full, body)
+      }
+      write('package.json', JSON.stringify({ name: 'root', private: true }))
+      write('packages/dsh-script/package.json', JSON.stringify({ name: 'dsh-script' }))
+      write('packages/dsh-script/src/metrics.ts', 'export const r = (a: number, b: number): number => a / b\n')
+      write('packages/dsh-x-client/package.json', JSON.stringify({ name: 'dsh-x-client' }))
+      write('packages/dsh-x-client/src/pane.tsx', 'const rate = record.successCount / record.invocationCount\n')
+      write('packages/dsh-y/package.json', JSON.stringify({ name: 'dsh-y' }))
+      write('packages/dsh-y/src/dup.ts', 'export const r = (r: R): number => r.successCount / r.invocationCount\n')
+      const { violations } = findRateDivisionSites(dir)
+      expect(violations.map((v) => v.file).sort()).toEqual([
+        'packages/dsh-x-client/src/pane.tsx',
+        'packages/dsh-y/src/dup.ts',
+      ])
+      // 注释里提到这条除法不算违规（定义文件的说明文字就是这种）
+      write('packages/dsh-y/src/dup.ts', '// successCount / invocationCount 是定义文件的事\n')
+      expect(findRateDivisionSites(dir).violations.map((v) => v.file)).toEqual(['packages/dsh-x-client/src/pane.tsx'])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
 
