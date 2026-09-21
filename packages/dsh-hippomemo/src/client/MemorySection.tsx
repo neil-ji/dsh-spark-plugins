@@ -250,18 +250,25 @@ function TodoQuadrantImpl({ t, items, now, onResolve }: {
             <li className={'hippomemo-todo-item hippomemo-todo-item-' + kindClass} key={item.id}>
               <StateDot status={kindClass === 'danger' ? 'error' : 'idle'} size={14} className={'hippomemo-todo-icon hippomemo-todo-icon-' + kindClass} />
               <div className='hippomemo-todo-body'>
-                <div className='hippomemo-todo-title'>{item.title}</div>
+                {/* hover 看全文：标题列表里截断，全文只能靠悬浮（2026-09 用户反馈）。 */}
+                <div className='hippomemo-todo-title' title={item.title}>{item.title}</div>
                 <div className='hippomemo-todo-desc'>
                   <Pill className={'hippomemo-tag hippomemo-kind-' + item.memoryKind}>{t(kindKeyMap[item.kind])}</Pill>
-                  <span className='hippomemo-todo-reason'>{formatTodoReason(item.reason, t)}</span>
-                  <span className='hippomemo-todo-meta' title={formatDate(item.memoryUpdatedAt)}>{formatRelative(item.memoryUpdatedAt, now, t)}</span>
+                  {/* 观察项的文案客户端自渲染：宿主 reason 是带「观察中/剩 n 天」的
+                      机器串，与 kind pill 重复且不可本地化；结构化字段只有
+                      expiresAt —— 用户关心的是「几天后归档」，不是创建于几天前，
+                      所以「n 天前」meta 一并移除（2026-09 用户裁决）。 */}
+                  <span className='hippomemo-todo-reason'>
+                    {item.kind === 'observation'
+                      ? t('todoObservationArchive').replaceAll('{n}', String(Math.max(1, Math.ceil(((item.expiresAt ?? 0) - now) / 86_400_000))))
+                      : formatTodoReason(item.reason, t)}
+                  </span>
                 </div>
               </div>
-              {item.kind === 'observation' ? (
-                // On-observation records are engine-owned: auto-archive at the deadline,
-                // auto-cancel on citation. Read-only status row, nothing to resolve.
-                <Pill className='hippomemo-tag hippomemo-tag-success'>自动</Pill>
-              ) : (
+              {item.kind === 'observation' ? null : (
+                // 引擎自动处理的项（观察期）不再挂「自动」徽标 —— 列表名就是自动处理队列，
+                // 整列都是自动的，逐行再标一次是重复（2026-09 用户裁决）。
+                // 需要人工决策的项才出操作按钮。
                 <Button size='sm' variant='secondary' className='hippomemo-todo-act'
                   onClick={() => { onResolve(item) }}>
                   {t(actionKeyMap[item.suggestedAction])}

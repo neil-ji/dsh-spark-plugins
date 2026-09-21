@@ -196,13 +196,14 @@ export const zh = {
   brainEmptyNarration: '前额叶还没激活；开始一次会话即可。',
 
   // ---- v3 UI: 需要我处理 ----
-  todoTitle: '需要我处理',
+  todoTitle: '自动处理队列',
   todoEmpty: '没有待处理项',
   todoKindExpired: '过期',
   todoKindNearDuplicate: '疑似重复',
   todoReasonNearDupCited: '与已引用记忆疑似重复（标题重合 {pct}%），需人工复核',
   todoReasonNearDupUnused: '与「{title}」疑似重复（标题重合 {pct}%），未被使用',
   todoKindObservation: '观察中',
+  todoObservationArchive: '{n} 天后自动归档',
   todoKindPreferenceReview: '偏好待审',
   todoActArchive: '归档',
   todoActMerge: '合并',
@@ -450,13 +451,14 @@ export const en: Record<keyof typeof zh, string> = {
   brainEmptyNarration: 'Prefrontal has not fired yet. Start a session to see it pulse.',
 
   // ---- v3 UI: needs my attention ----
-  todoTitle: 'Needs my attention',
+  todoTitle: 'Auto queue',
   todoEmpty: 'Nothing to act on',
   todoKindExpired: 'Expired',
   todoKindNearDuplicate: 'Near-duplicate',
   todoReasonNearDupCited: 'Near-duplicate of cited memory (title overlap {pct}%), human review',
   todoReasonNearDupUnused: 'Near-duplicate of "{title}" (title overlap {pct}%), unused',
   todoKindObservation: 'On observation',
+  todoObservationArchive: 'Auto-archives in {n}d',
   todoKindPreferenceReview: 'Preference review',
   todoActArchive: 'Archive',
   todoActMerge: 'Merge',
