@@ -9,7 +9,7 @@
  *  - **文案全部走 locale 字典**（此前是硬编码中文，违反 AGENTS.md §3.4）。
  */
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
-import { Card, Modal, SegmentedControl } from 'dsh-ui-kit'
+import { Button, Card, Disclosure, Input, Modal, SegmentedControl, Textarea } from 'dsh-ui-kit'
 import { useFrames } from 'dsh-spark-plugin-kit/client'
 import type { SparkView, SparkInboxState, SparkStats, ProposalView, ScriptView } from 'dsh-spark-wire'
 import { createDockSparksApi, type DockSparksApi } from './sparkApi.ts'
@@ -230,43 +230,51 @@ export function SparksPane({ channel, t }: SparkPaneDeps): JSX.Element {
             : <SparkList sparks={sparks} reload={refresh} t={t} confirmDrop={setConfirmDrop} />}
       </Card>
 
-      <form className="dock-capture" onSubmit={submit}>
-        <label className="dock-lab" htmlFor="spark-draft">{t('captureLabel')}</label>
-        <textarea id="spark-draft" className="dock-field" rows={3}
-          aria-label={t('captureLabel')}
-          placeholder={t('capturePlaceholder')}
-          value={draft} onChange={(e) => setDraft(e.target.value)} />
-        <details className="dock-details">
-          <summary>{t('detailsSummary')}</summary>
-          <div className="dock-details-body">
-            <input className="dock-field" aria-label={t('tagsLabel')} placeholder={t('tagsLabel')} value={tags}
+      {/* 捕获表单升级为 ui-kit Card 形制（2026-09 用户裁决「与其他页面观感一致」）：
+          Card title 做表头；可选字段收 Disclosure（仓库规范：折叠统一 Disclosure，
+          details/summary 已退役）；scope 只有两档用 SegmentedControl；底部
+          操作行 = 原因提示在左 + 主按钮在右（同进化页页头行结构）。 */}
+      <Card title={t('captureLabel')}>
+        <form className="dock-capture" onSubmit={submit}>
+          <Textarea rows={3} aria-label={t('captureLabel')}
+            placeholder={t('capturePlaceholder')}
+            value={draft} onChange={(e) => setDraft(e.target.value)} />
+          <Disclosure name={t('detailsSummary')}>
+            <Input aria-label={t('tagsLabel')} placeholder={t('tagsLabel')} value={tags}
               onChange={(e) => setTags(e.target.value)} />
-            <select className="dock-field" aria-label={t('scopeLabel')} value={scope} onChange={(e) => setScope(e.target.value as 'project' | 'global')}>
-              <option value="project">{t('scopeProject')}</option>
-              <option value="global">{t('scopeGlobal')}</option>
-            </select>
+            <SegmentedControl
+              aria-label={t('scopeLabel')}
+              value={scope}
+              onChange={(value) => setScope(value as 'project' | 'global')}
+              options={[
+                { value: 'project', label: t('scopeProject') },
+                { value: 'global', label: t('scopeGlobal') },
+              ]}
+            />
+          </Disclosure>
+          <div className="dock-capture-bar">
+            {/* PCQA-014：按钮禁用时必须说清原因（UI-UX-SPEC §3.1 Don't：disabled 提交不解释）。
+                输入为空时这一行给的就是「为什么点不了」；非空时退回字数计数。 */}
+            <span className="dock-hint" id="spark-capture-hint" aria-live="polite">
+              {busy ? t('capturing')
+                : captured ? t('captured')
+                  : draft.trim().length === 0 ? t('captureNeedText')
+                    : `${draft.length} ${t('charsUnit')}`}
+            </span>
+            <span className="grow-spacer" />
+            <Button type="submit" variant="primary" disabled={busy || draft.trim().length === 0} aria-busy={busy}
+              aria-describedby="spark-capture-hint"
+              icon={(
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M12 2.6c.7 5.2 4.2 8.7 9.4 9.4-5.2.7-8.7 4.2-9.4 9.4-.7-5.2-4.2-8.7-9.4-9.4 5.2-.7 8.7-4.2 9.4-9.4z" />
+                </svg>
+              )}>
+              {busy ? t('capturing') : t('capture')}
+            </Button>
           </div>
-        </details>
-        <div className="dock-capture-bar">
-          {/* PCQA-014：按钮禁用时必须说清原因（UI-UX-SPEC §3.1 Don't：disabled 提交不解释）。
-              输入为空时这一行给的就是「为什么点不了」；非空时退回字数计数。 */}
-          <span className="dock-hint" id="spark-capture-hint" aria-live="polite">
-            {busy ? t('capturing')
-              : captured ? t('captured')
-                : draft.trim().length === 0 ? t('captureNeedText')
-                  : `${draft.length} ${t('charsUnit')}`}
-          </span>
-          <span className="grow-spacer" />
-          <button className="dock-btn" type="submit" disabled={busy || draft.trim().length === 0} aria-busy={busy}
-            aria-describedby="spark-capture-hint">
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="btn-ico">
-              <path d="M12 2.6c.7 5.2 4.2 8.7 9.4 9.4-5.2.7-8.7 4.2-9.4 9.4-.7-5.2-4.2-8.7-9.4-9.4 5.2-.7 8.7-4.2 9.4-9.4z" />
-            </svg>
-            {busy ? t('capturing') : t('capture')}
-          </button>
-        </div>
-        <ErrorNote error={formError} />
-      </form>
+          <ErrorNote error={formError} />
+        </form>
+      </Card>
 
       <Modal
         open={confirmDrop !== null}

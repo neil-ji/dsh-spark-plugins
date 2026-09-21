@@ -199,8 +199,8 @@ export const DOCK_CSS = [
 
   /* ── 深度重做：spark 模块 ── */
   /* 捕获卡：一条输入流 + 渐进披露 */
-  '[data-plugin="dsh-spark-dock"] .dock-capture { display: flex; flex-direction: column; }',
-  '[data-plugin="dsh-spark-dock"] .dock-capture .dock-field { margin-bottom: 0; }',
+  '[data-plugin="dsh-spark-dock"] .dock-capture { display: flex; flex-direction: column; gap: var(--spk-gap-card, 8px); }',
+
   '[data-plugin="dsh-spark-dock"] .dock-capture-bar { display: flex; align-items: center; gap: var(--spk-gap-card, 8px); margin-top: var(--spk-gap-card, 8px); }',
   '[data-plugin="dsh-spark-dock"] .dock-details { margin-top: var(--spk-gap-card, 8px); }',
   '[data-plugin="dsh-spark-dock"] .dock-details summary { cursor: pointer; font-size: var(--spk-text-sm); color: var(--spk-label-3); user-select: none; width: fit-content; padding: 4px 0; list-style: none; }',
