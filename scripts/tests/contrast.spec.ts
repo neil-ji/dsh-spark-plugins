@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { auditDesignDocs, auditPreviewParity, auditTokenCoverage, buildTokenTables, contrast, evalSpec, parseColor, runPairs } from '../audit-contrast.mjs'
+import { auditBareMoney, auditCardSurfaces, auditDesignDocs, auditPlaceholderLeaks, auditPreviewParity, auditTokenCoverage, buildTokenTables, contrast, evalSpec, parseColor, runPairs } from '../audit-contrast.mjs'
 
 const tables = buildTokenTables()
 
@@ -113,5 +113,51 @@ describe('设计系统文档', () => {
       drift,
       drift.map((d) => `[${d.theme}] ${d.name}: ${d.issue}`).join('\n'),
     ).toEqual([])
+  })
+
+  it('卡片描边：外层强于 inset，且卡片族 color/width/radius 一致', () => {
+    // 2026-09-21 用户裁决两条：①「border 外浅内深不合理」②「card border 必须统一
+    // color、width、radius」。这类缺陷**对比度全部达标**（border 不在 AA 配对里），
+    // 所以只能靠这条结构闸门守。闸门自身的负向验证已手工做过：
+    // 把外层改回 --spk-border 会报 card-border-inverted，把 SettingsCard 圆角
+    // 改回 14px 会报 card-family-drift。
+    const findings = auditCardSurfaces(tables)
+    expect(findings, findings.map((f) => `[${f.kind}] ${f.message}`).join('\n')).toEqual([])
+  })
+
+  it('回归：外层卡描边在暗色下不是"看不见"（旧值 1.14:1）', () => {
+    const map = tables.dark
+    const outer = evalSpec(map, '--spk-border-2')
+    const card = evalSpec(map, '--spk-surface-card')
+    expect(outer).not.toBeNull()
+    expect(contrast(outer!, card!)).toBeGreaterThanOrEqual(1.2)
+  })
+
+  it('文案占位符不泄漏（含 {x} 的 key 必须传参数）', () => {
+    // 实测缺陷（图片6）：财务详情弹窗的标签渲染成字面量「折扣 {pct}」——
+    // 调用处写了 t('planDiscount')，而字典值是 "折扣 {pct}"。
+    // 判定**按包作用域**：跨包按 key 名匹配会误报（spark-dock 的 timeSeconds 值
+    // 是无占位符的 '秒前'，与 finance 的同名 key 不同形）。
+    const leaks = auditPlaceholderLeaks()
+    expect(leaks, leaks.map((l) => `${l.file}:${l.line} t('${l.key}')`).join('\n')).toEqual([])
+  })
+
+  it('金额不裸数字（金额必须带货币符号）', () => {
+    // 实测缺陷（用户截图）：错峰卡图例渲染成 8.57 / 10.34 / 3.03，而同屏表格金额是 ¥…
+    // 成因：formatMicros 是**裸数字**格式化器，图表 formatValue 与 locale 插值
+    // 拿到的是字符串、套不了 <Money>，于是顺手用了它。
+    // 判据覆盖两种形态：直接调用 formatMicros(x)，以及**裸引用**
+    // formatValue={formatMicros}（后者才是实测缺陷的形态）。
+    const findings = auditBareMoney()
+    expect(findings, findings.map((f) => `${f.file}:${f.line} ${f.fn} [${f.form}]`).join('\n')).toEqual([])
+  })
+
+  it('浮层上的行标签用 label-2（label-3 在暗色仅 4.39:1，不达 AA）', () => {
+    const float = evalSpec(tables.dark, '--spk-surface-float')
+    const label2 = evalSpec(tables.dark, '--spk-label-2')
+    const label3 = evalSpec(tables.dark, '--spk-label-3')
+    expect(contrast(label2!, float!)).toBeGreaterThanOrEqual(4.5)
+    // 反例留档：label-3 确实不达标 —— 这条断言钉住"为什么禁用"，改 token 时会立刻发现。
+    expect(contrast(label3!, float!)).toBeLessThan(4.5)
   })
 })

@@ -263,6 +263,10 @@ export const THEMED_PAIRS = /** @type {Pair[]} */ ([
   { id: 'label-3 on layer-1', source: 'SettingsCard.desc / Input placeholder', min: 4.5, fg: '--spk-label-3', bg: L1 },
   { id: 'label-2 on float', source: 'Menu.item / Modal.close / Toast text', min: 4.5, fg: '--spk-label-2', bg: FLOAT },
   { id: 'label on float', source: 'Modal.title / Toast body', min: 4.5, fg: '--spk-label', bg: FLOAT },
+  // 反例留档：**浮层上禁用 label-3**。暗色实测 4.39:1，差一点不达 AA ——
+  // finance 详情弹窗的行标签曾用它（暗色下整表标签都不达标，用户反馈"不易读"）。
+  // soft 是有意的：钉死"它不达标"这个事实，谁来用时能立刻看到原因。
+  { id: '[反例] label-3 on float', source: '浮层上禁用（暗色仅 4.39:1）；行标签改 label-2', min: 4.5, fg: '--spk-label-3', bg: FLOAT, soft: true },
 
   // ── B. 品牌 ────────────────────────────────────────────────────────
   { id: 'brand-fg on card', source: 'Menu.selected / Modal strong / syncLink:hover', min: 4.5, fg: '--spk-brand-fg', bg: CARD },
@@ -600,6 +604,217 @@ export function auditHostAliasUsage() {
   return [...byKey.values()].sort((a, b) => (a.file + a.name).localeCompare(b.file + b.name))
 }
 
+/* ──────────────────── 金额裸数字（2026-09-21） ──────────────────── */
+
+/**
+ * 金额裸数字闸门（UI-UX-SPEC §3.5 第 6 条：**金额一律带货币符号**，禁裸数字）。
+ *
+ * 实测缺陷（用户截图）：错峰卡的 100% 堆叠条图例渲染成 `8.57` / `10.34` / `3.03`，
+ * 而**同一屏**的表格金额都是 `¥…` —— 一屏两种货币表达。成因是 ui-kit 的
+ * `formatMicros` 是**裸数字**格式化器，图表（`formatValue` / `axisFormatter`）与
+ * locale 插值（`t(key, { amount })`）拿到的是**字符串**、套不了 `<Money>` 组件，
+ * 于是顺手用了 `formatMicros`。
+ *
+ * 判据：**插件源码**里不得直接调用 `formatMicros` / `formatMicrosExact`
+ * （它们是字符串格式化器，只该作为 ui-kit 内部实现细节，或用于非金额场合）。
+ * 要字符串金额 → `formatMoneyMicros(micros, currency)`；要 DOM 节点 → `<Money>`。
+ *
+ * 为什么不能靠"看有没有 ¥"来判：那需要在浏览器里跑遍每个视图的每种空/满数据态，
+ * 而这类缺陷恰恰只在某些视图出现。静态判据在**写的当下**就拦得住。
+ */
+export function auditBareMoney() {
+  const files = walk(path.join(ROOT, 'packages')).filter((f) => /\.(ts|tsx)$/.test(f))
+  const findings = []
+  const seen = new Set()
+  for (const file of files) {
+    // ui-kit 是这两个格式化器的家，只有内部实现允许用。
+    if (file.includes(`dsh-ui-kit${path.sep}src${path.sep}`)) continue
+    // 测试**必须**能引用裸格式化器 —— 上面那条"替代品确实带符号"的断言就是拿
+    // formatMicros 与 formatMoneyMicros 对照的。闸门只守**上屏**的源码。
+    if (/[/\\]tests?[/\\]/.test(file) || /\.(test|spec)\.[jt]sx?$/.test(file)) continue
+    const rel = path.relative(ROOT, file)
+    const text = readFileSync(file, 'utf8')
+    text.split('\n').forEach((line, i) => {
+      if (/^\s*import\b/.test(line)) return
+      // 两种形态都要拦（**第二形态才是实测缺陷的形态**）：
+      //  1. 直接调用：`formatMicros(x)` —— locale 插值 / 文本拼接；
+      //  2. **裸引用**：`formatValue={formatMicros}` —— 把裸数字格式化器当回调传出去。
+      //     第一版闸门只查了 `formatMicros(`（带括号），于是漏掉了真正的缺陷形态：
+      //     负向验证（把 formatValue 改回 formatMicros）仍然 PASS 才暴露出来。
+      const call = /\bformatMicros(Exact)?\s*\(/.exec(line)
+      const bare = /\bformatMicros(Exact)?\b(?!\s*\()/.exec(line)
+      const hit = call ?? bare
+      if (hit === null) return
+      const key = `${rel}:${i + 1}`
+      if (seen.has(key)) return
+      seen.add(key)
+      findings.push({
+        file: rel,
+        line: i + 1,
+        fn: call !== null ? call[0].replace(/\s*\($/, '') : hit[0],
+        form: call !== null ? 'call' : 'reference',
+      })
+    })
+  }
+  return findings
+}
+
+/* ──────────────────── 文案占位符泄漏（2026-09-21） ──────────────────── */
+
+/**
+ * 占位符泄漏闸门。
+ *
+ * 一个 key 的字典值含 `{name}` 时，`t(key)` **必须**传第二参数，否则占位符原样上屏。
+ * 实测缺陷（图片6）：finance 详情弹窗的标签渲染成字面量 `折扣 {pct}` / `回本 {pct}`
+ * —— 调用处写了 `t('planDiscount')`，而值是 `"折扣 {pct}"`。
+ *
+ * **按包作用域判定**：跨包按 key 名匹配会误报 —— spark-dock 的 `timeSeconds` 值是
+ * 无占位符的纯单位 `'秒前'`（数值由调用处前置拼接），而 finance 的同名 key 是
+ * `"{n} 秒前"`。第一版扫描没做作用域，一次报了 6 处、其中 4 处是假的。
+ */
+export function auditPlaceholderLeaks() {
+  const files = walk(path.join(ROOT, 'packages')).filter((f) => /\.(ts|tsx)$/.test(f))
+  /** key → 含占位符的包集合 */
+  const templated = new Map()
+  for (const file of files.filter((f) => /locales?\.ts$/.test(f))) {
+    const rel = path.relative(ROOT, file).split(path.sep)
+    const pkg = rel.slice(0, 2).join('/')
+    const text = readFileSync(file, 'utf8')
+    for (const m of text.matchAll(/"([A-Za-z0-9_]+)"\s*:\s*"([^"]*)"/g)) {
+      if (!/\{\w+\}/.test(m[2])) continue
+      if (!templated.has(m[1])) templated.set(m[1], new Set())
+      templated.get(m[1]).add(pkg)
+    }
+  }
+  const findings = []
+  for (const file of files) {
+    if (/locales?\.ts$/.test(file)) continue
+    const rel = path.relative(ROOT, file).split(path.sep)
+    const pkg = rel.slice(0, 2).join('/')
+    const text = readFileSync(file, 'utf8')
+    for (const m of text.matchAll(/\bt\(\s*'([A-Za-z0-9_]+)'\s*\)/g)) {
+      const owners = templated.get(m[1])
+      if (owners === undefined || !owners.has(pkg)) continue
+      findings.push({
+        file: path.relative(ROOT, file),
+        line: text.slice(0, m.index).split('\n').length,
+        key: m[1],
+      })
+    }
+  }
+  return findings
+}
+
+/* ──────────────────── 卡片描边层级与一致性（2026-09-21） ──────────────────── */
+
+/**
+ * 卡片描边闸门（用户裁决：①「外浅内深」不合理，应当外深内浅；②「card border 必须
+ * 统一 color、width、radius」）。
+ *
+ * 为什么必须是机器判据：这类"层级读起来是反的"缺陷**对比度全部达标**（border 从来
+ * 不在 AA 的正文配对里，闸门原本一条都不查），只能靠两条结构不变量守：
+ *
+ *  1. **外深内浅**：外层卡描边与其卡面的对比度，必须**大于**嵌套 inset 描边与其卡面的
+ *     对比度。实测反例（修前）：亮 1.35(外) vs 1.68(内)、暗 1.14(外) vs 1.35(内)。
+ *     判据写成"比较"而不是"钉死某个 token 名"，这样换 token 值也不会假失败 ——
+ *     真正要守的是**层级关系**，不是具体色号。
+ *  2. **卡片族一致**：所有以 `--spk-surface-card` 为底的容器（ui-kit Card /
+ *     SettingsCard / Stat）必须用**同一个**描边 token、同一个宽度、同一个圆角。
+ */
+export function auditCardSurfaces(tables) {
+  const findings = []
+  const read = (rel) => readFileSync(path.join(ROOT, rel), 'utf8')
+
+  const parseBlock = (css, selector) => {
+    const re = new RegExp(`\\${selector}\\s*\\{([^}]*)\\}`, 's')
+    return re.exec(css)?.[1] ?? ''
+  }
+  const declOf = (block, prop) => {
+    const re = new RegExp(`(?:^|;)\\s*${prop}\\s*:\\s*([^;]+)`, 'm')
+    return (re.exec(block)?.[1] ?? '').trim()
+  }
+  const tokenOf = (value) => /var\(\s*(--spk-[a-z0-9-]+)/.exec(value)?.[1] ?? null
+
+  const cardCss = read('packages/dsh-ui-kit/src/components/Card.module.css')
+  const outer = parseBlock(cardCss, '.card')
+  const inset = parseBlock(cardCss, '.inset')
+
+  const outerBorder = declOf(outer, 'border')
+  const insetBorder = declOf(inset, 'border-color')
+  const outerToken = tokenOf(outerBorder)
+  const insetToken = tokenOf(insetBorder)
+
+  // —— 不变量 1：描边档必须不同，且外层更强 ——
+  if (outerToken === null || insetToken === null) {
+    findings.push({ kind: 'card-border-token', message: `卡片描边必须引 --spk-* token（外层 ${outerToken} / inset ${insetToken}）` })
+  } else if (outerToken === insetToken) {
+    findings.push({ kind: 'card-border-same-token', message: `外层与 inset 用了同一个描边 token（${outerToken}）——嵌套层级将不可辨` })
+  } else {
+    const insetBgToken = tokenOf(declOf(inset, 'background'))
+    for (const theme of ['light', 'dark']) {
+      const map = tables[theme]
+      const outerColor = evalSpec(map, outerToken)
+      const insetColor = evalSpec(map, insetToken)
+      const cardBg = evalSpec(map, '--spk-surface-card')
+      const insetBg = insetBgToken === null ? cardBg : evalSpec(map, insetBgToken)
+      if (!outerColor || !insetColor || !cardBg || !insetBg) continue
+      const outerRatio = contrast(outerColor, cardBg)
+      const insetRatio = contrast(insetColor, insetBg)
+      if (insetRatio >= outerRatio) {
+        findings.push({
+          kind: 'card-border-inverted',
+          message: `[${theme}] 内层描边不比外层弱：外层 ${outerToken} vs 卡面 ${outerRatio.toFixed(2)}，`
+            + `inset ${insetToken} vs 其底面 ${insetRatio.toFixed(2)}（应外深内浅）`,
+        })
+      }
+      // 下限：外层卡描边自己至少要"看得出"有轮廓（否则卡片等于无边）。
+      if (outerRatio < 1.2) {
+        findings.push({
+          kind: 'card-border-faint',
+          message: `[${theme}] 外层卡描边对比度过低（${outerRatio.toFixed(2)} < 1.20）——卡片轮廓看不出`,
+        })
+      }
+    }
+  }
+
+  // —— 不变量 2：卡片族（surface-card 底的容器）描边/宽度/圆角一致 ——
+  const familyFiles = [
+    'packages/dsh-ui-kit/src/components/Card.module.css',
+    'packages/dsh-ui-kit/src/components/SettingsCard.module.css',
+  ]
+  const shapes = []
+  for (const file of familyFiles) {
+    const css = read(file)
+    for (const m of css.matchAll(/([^{}]+)\{([^}]*)\}/gs)) {
+      const block = m[2]
+      if (!/--spk-surface-card/.test(declOf(block, 'background'))) continue
+      const border = declOf(block, 'border')
+      if (border === '') continue
+      shapes.push({
+        file: path.relative(ROOT, file),
+        selector: m[1].trim().replace(/\s+/g, ' '),
+        width: /(\d+(?:\.\d+)?)px/.exec(border)?.[1] ?? null,
+        token: tokenOf(border),
+        radius: declOf(block, 'border-radius').replace(/\s+/g, ''),
+      })
+    }
+  }
+  const first = shapes[0]
+  for (const s of shapes.slice(1)) {
+    for (const key of ['width', 'token', 'radius']) {
+      if (s[key] !== first[key]) {
+        findings.push({
+          kind: 'card-family-drift',
+          message: `卡片族不一致（${key}）：${first.file} ${first.selector} = ${first[key]}，`
+            + `而 ${s.file} ${s.selector} = ${s[key]}`,
+        })
+      }
+    }
+  }
+
+  return findings
+}
+
 /* ──────────────────────────── CLI ──────────────────────────── */
 
 function fmt(n) { return n == null ? '  n/a ' : n.toFixed(2).padStart(5) }
@@ -613,6 +828,9 @@ function main() {
   const docDrift = auditDesignDocs()
   const parity = auditPreviewParity(tables)
   const hostAlias = auditHostAliasUsage()
+  const cardSurfaces = auditCardSurfaces(tables)
+  const placeholderLeaks = auditPlaceholderLeaks()
+  const bareMoney = auditBareMoney()
 
   const pairFails = pairs.filter((p) => !p.ok && !p.soft)
   const pairSoft = pairs.filter((p) => !p.ok && p.soft)
@@ -620,8 +838,8 @@ function main() {
   const covWarns = coverage.filter((c) => c.severity === 'warn')
 
   if (asJson) {
-    console.log(JSON.stringify({ pairFails, pairSoft, pairTotal: pairs.length, covErrors, covWarns, docDrift, parity, hostAlias }, null, 2))
-    process.exit(pairFails.length + covErrors.length + docDrift.length + parity.length + hostAlias.length > 0 ? 1 : 0)
+    console.log(JSON.stringify({ pairFails, pairSoft, pairTotal: pairs.length, covErrors, covWarns, docDrift, parity, hostAlias, cardSurfaces, placeholderLeaks, bareMoney }, null, 2))
+    process.exit(pairFails.length + covErrors.length + docDrift.length + parity.length + hostAlias.length + cardSurfaces.length + placeholderLeaks.length + bareMoney.length > 0 ? 1 : 0)
   }
 
   console.log('\n══ 对比度（WCAG 2.1 AA：正文 4.5 / 大字·非文本 3.0）══')
@@ -655,8 +873,20 @@ function main() {
   if (parity.length === 0) console.log('  ok  docs/spark-dock-preview 的语义值与产品逐值一致')
   for (const f of parity) console.log(`  ✗ [${f.theme}] ${f.name}：${f.issue}`)
 
-  console.log(`\n合计：对比度硬性不达标 ${pairFails.length} 项（共 ${pairs.filter((p) => !p.soft).length} 项，另 ${pairSoft.length} 项参考）· token 硬失效 ${covErrors.length} 处 · token 静态回退 ${covWarns.length} 处 · 文档自造色 ${docDrift.length} 处 · 设计稿漂移 ${parity.length} 处 · 直连宿主 token ${hostAlias.length} 处`)
-  const failed = pairFails.length > 0 || covErrors.length > 0 || docDrift.length > 0 || parity.length > 0 || hostAlias.length > 0
+  console.log('\n══ 文案占位符泄漏（含 {x} 的 key 必须传参数，否则占位符原样上屏）══')
+  if (placeholderLeaks.length === 0) console.log('  ok  无 t(含占位符 key) 单参调用')
+  for (const f of placeholderLeaks) console.log(`  ✗ ${f.file}:${f.line}  t('${f.key}') 未传参数 → 字面量 {…} 会上屏`)
+
+  console.log('\n══ 金额裸数字（金额必须带货币符号）══')
+  if (bareMoney.length === 0) console.log('  ok  插件源码零处裸数字金额格式化（用 formatMoneyMicros / <Money>）')
+  for (const f of bareMoney) console.log(`  ✗ ${f.file}:${f.line}  ${f.fn}() 产出裸数字 → 用 formatMoneyMicros(micros, currency) 或 <Money>`)
+
+  console.log('\n══ 卡片描边层级与一致性（外深内浅 · 卡片族同 color/width/radius）══')
+  if (cardSurfaces.length === 0) console.log('  ok  外层卡描边强于 inset，且卡片族三项一致')
+  for (const f of cardSurfaces) console.log(`  ✗ [${f.kind}] ${f.message}`)
+
+  console.log(`\n合计：对比度硬性不达标 ${pairFails.length} 项（共 ${pairs.filter((p) => !p.soft).length} 项，另 ${pairSoft.length} 项参考）· token 硬失效 ${covErrors.length} 处 · token 静态回退 ${covWarns.length} 处 · 文档自造色 ${docDrift.length} 处 · 设计稿漂移 ${parity.length} 处 · 直连宿主 token ${hostAlias.length} 处 · 卡片描边 ${cardSurfaces.length} 处 · 占位符泄漏 ${placeholderLeaks.length} 处 · 金额裸数字 ${bareMoney.length} 处`)
+  const failed = pairFails.length > 0 || covErrors.length > 0 || docDrift.length > 0 || parity.length > 0 || hostAlias.length > 0 || cardSurfaces.length > 0 || placeholderLeaks.length > 0 || bareMoney.length > 0
   console.log(failed ? '结果：FAIL\n' : '结果：PASS\n')
   process.exit(failed ? 1 : 0)
 }
