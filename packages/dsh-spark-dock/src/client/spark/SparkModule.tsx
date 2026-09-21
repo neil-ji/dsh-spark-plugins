@@ -9,7 +9,7 @@
  *  - **文案全部走 locale 字典**（此前是硬编码中文，违反 AGENTS.md §3.4）。
  */
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
-import { Card, Modal, Pill } from 'dsh-ui-kit'
+import { Card, Modal, SegmentedControl } from 'dsh-ui-kit'
 import { useFrames } from 'dsh-spark-plugin-kit/client'
 import type { SparkView, SparkInboxState, SparkStats, ProposalView, ScriptView } from 'dsh-spark-wire'
 import { createDockSparksApi, type DockSparksApi } from './sparkApi.ts'
@@ -193,20 +193,31 @@ export function SparksPane({ channel, t }: SparkPaneDeps): JSX.Element {
         title={t('inboxTitle')}
         actions={(
           <>
-            {FILTERS.map((entry) => {
-              const count = countOf(stats.data, entry.id)
-              return (
-                <Pill key={entry.id} active={filter === entry.id && !showDeleted} onClick={() => { setShowDeleted(false); setFilter(entry.id) }}
-                  aria-label={t(entry.key) + (count === null ? '' : ': ' + String(count))}>
-                  {t(entry.key) + (count === null ? '' : ' ' + String(count))}
-                </Pill>
-              )
-            })}
-            <Pill active={showDeleted} onClick={() => setShowDeleted((v) => !v)}
-              aria-label={(showDeleted ? t('hideDeleted') : t('showDeleted')) + (stats.data === null ? '' : ': ' + String(stats.data.deleted))}>
-              {showDeleted ? t('hideDeleted') : t('showDeleted')}
-              {stats.data !== null && stats.data.deleted > 0 ? ' ' + String(stats.data.deleted) : ''}
-            </Pill>
+            {/* 过滤器从 pill 组改 SegmentedControl（2026-09 用户裁决「与其他 Card
+                保持一致」——财务的窗口切换就是它）。「已删除」由开关并入第 5 个
+                互斥 tab，单选语义更干净。计数保留在 tab 文案里。 */}
+            <SegmentedControl
+              aria-label={t('inboxTitle')}
+              value={showDeleted ? 'deleted' : filter}
+              onChange={(value) => {
+                if (value === 'deleted') { setShowDeleted(true); return }
+                setShowDeleted(false); setFilter(value as InboxFilter)
+              }}
+              options={[
+                ...FILTERS.map((entry) => {
+                  const count = countOf(stats.data, entry.id)
+                  return {
+                    value: entry.id,
+                    label: t(entry.key) + (count === null ? '' : ' ' + String(count)),
+                  }
+                }),
+                {
+                  value: 'deleted',
+                  label: t('filterDeleted')
+                    + (stats.data !== null && stats.data.deleted > 0 ? ' ' + String(stats.data.deleted) : ''),
+                },
+              ]}
+            />
             {shown !== null && <span className="dock-hint">{String(shown)} {t('unitItems')}</span>}
           </>
         )}
