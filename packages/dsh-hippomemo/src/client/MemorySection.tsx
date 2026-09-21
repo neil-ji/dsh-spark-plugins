@@ -596,8 +596,11 @@ function MemoryListPanel({ t, api, detailId, onDetail, embedded = false }: {
             <HippomemoSelect value={String(pageSize)} placeholder={t('pageSizeLabel')}
               options={PAGE_SIZES.map(size => ({ value: String(size), label: t('pageSizeLabel') + ' ' + String(size) }))}
               onChange={changePageSize} />
+            {/* 前后页收成 icon-only（aria-label 保留语义）：文本「上一页/下一页」
+                是换行的主因，一行放下整条分页（2026-09 用户反馈）。 */}
             <Button variant='ghost' size='sm' disabled={page <= 1}
-              onClick={() => { setPage(page - 1); }} icon={<IconChevronLeft />}>{t('prevPage')}</Button>
+              aria-label={t('prevPage')} title={t('prevPage')}
+              onClick={() => { setPage(page - 1); }} icon={<IconChevronLeft />} />
             {pageItems(page, totalPages).map((item, index) => (
               item === 'gap'
                 ? <span key={'gap-' + String(index)} className='hippomemo-pager-gap'>…</span>
@@ -606,7 +609,8 @@ function MemoryListPanel({ t, api, detailId, onDetail, embedded = false }: {
                     onClick={() => { setPage(item); }}>{item}</Button>
             ))}
             <Button variant='ghost' size='sm' disabled={page >= totalPages}
-              onClick={() => { setPage(page + 1); }} icon={<IconChevronRight />}>{t('nextPage')}</Button>
+              aria-label={t('nextPage')} title={t('nextPage')}
+              onClick={() => { setPage(page + 1); }} icon={<IconChevronRight />} />
           </div>
         </div>
       ) : null}

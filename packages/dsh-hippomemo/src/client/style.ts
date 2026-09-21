@@ -135,9 +135,10 @@ export const HIPPOMEMO_CSS = [
   '@keyframes hippomemo-status-pulse { 0%,100% { opacity: 1; } 50% { opacity: .45; } }',
   '@media (prefers-reduced-motion: reduce) { [data-plugin="dsh-hippomemo"] .hippomemo-status-loading { animation: none; } }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-error { color: var(--spk-error); font-size: var(--spk-text-md); line-height: 20px; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-pager { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; border-top: 1px solid var(--spk-border); padding-top: 12px; margin-top: 12px; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-pager-meta { font-size: var(--spk-text-sm); color: var(--spk-label-2); }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-pager-controls { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }',
+  /* 分页一行放下（2026-09 用户反馈）：不换行，meta 超宽走省略号让位给控件。 */
+  '[data-plugin="dsh-hippomemo"] .hippomemo-pager { display: flex; flex-wrap: nowrap; gap: 8px; align-items: center; justify-content: space-between; border-top: 1px solid var(--spk-border); padding-top: 12px; margin-top: 12px; }',
+  '[data-plugin="dsh-hippomemo"] .hippomemo-pager-meta { font-size: var(--spk-text-sm); color: var(--spk-label-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
+  '[data-plugin="dsh-hippomemo"] .hippomemo-pager-controls { display: flex; flex-wrap: nowrap; gap: 4px; align-items: center; flex-shrink: 0; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-pager-gap { color: var(--spk-label-3); padding: 0 2px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-detail-modal-body { display: flex; flex-direction: column; gap: 12px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-detail-modal-footer { display: flex; justify-content: flex-end; gap: 8px; }',
