@@ -5,7 +5,7 @@ export const zh = {
   // dock 模块 chrome（ADR-003：模块栏名 / 面板标题行 / 副标题归模块自己的字典）。
   dockLabel: '记忆',
   dockName: '记忆 HippoMemo',
-  dockSub: '四脑区总览 · 记忆 CRUD · 我的偏好 · 进化引擎',
+  dockSub: '四脑区总览 · 记忆 CRUD · 待办裁决 · 进化引擎',
   /* 播报气泡文案（announce.ts，用户可见）。 */
   announcePut: '写入了一条记忆',
   announceRemove: '删除了一条记忆',
@@ -127,7 +127,7 @@ export const zh = {
   cardInvalidText: '输入无效',
   tabOverview: '总览',
   tabMemories: '记忆',
-  tabPreferences: '偏好',
+  tabTodo: '待办',
   tabEvolution: '进化',
   kpiTotalLabel: '总记忆',
   kpiTotalHint: '活跃',
@@ -168,7 +168,6 @@ export const zh = {
   overviewBrainHint: '四个脑区的实时状态',
 
   // ---- v3 UI: 进化 tab 子标题 ----
-  evolutionCandidatesTitle: '需要我处理',
   // 这一张卡只放**存量**（多少条 / 活跃 / 归档）；用量是下一张卡，卡头直接用 `usage`。
   // 名字不能叫「使用统计」—— 那会和卡内另一组「用量」抢同一个意思。
   evolutionChartsTitle: '图表',
@@ -188,20 +187,35 @@ export const zh = {
   brainNarrationLabel: '旁白',
   brainEmptyNarration: '前额叶还没激活；开始一次会话即可。',
 
-  // ---- v3 UI: 需要我处理 ----
-  todoTitle: '自动处理队列',
-  todoEmpty: '没有待处理项',
+  // ---- v3 UI: 待办（唯一的人工裁决面）----
+  /* 一句话交代归属：待办的默认心智是「我自己记的」，这里必须点明是系统提的
+     （否则用户会去找「新建待办」，而这里只进系统建议）。 */
+  todoNote: '这些是系统提的：采纳、换做法、忽略，都算处理完。',
+  todoEmpty: '没有要你表态的事。',
+  todoCount: '{n} 项',
+  todoAllPreferences: '全部偏好（{n} 条）→ 记忆',
   todoKindExpired: '过期',
   todoKindNearDuplicate: '疑似重复',
+  /* downgrade-scope 不限 kind：偏好行说「偏好待审」，其余说「范围待审」。 */
+  todoKindScopeReview: '范围待审',
+  todoKindPreferenceReview: '偏好待审',
+  todoKindObservation: '观察中',
+  todoSuggestion: '系统建议：{text}',
+  todoReasonExpiredUncited: '已过期，且从未被引用',
   todoReasonNearDupCited: '与已引用记忆疑似重复（标题重合 {pct}%），需人工复核',
   todoReasonNearDupUnused: '与「{title}」疑似重复（标题重合 {pct}%），未被使用',
-  todoKindObservation: '观察中',
+  todoReasonDowngradeUnproven: '声称通用，但只在来源工作区出现过',
   todoObservationArchive: '{n} 天后自动归档',
-  todoKindPreferenceReview: '偏好待审',
   todoActArchive: '归档',
   todoActMerge: '合并',
   todoActKeep: '保留',
   todoActConfirm: '确认',
+  /* 诚实标签：这个动作是**降级**。以前它叫「确认」，点下去却是把全局偏好打回工作区，
+     与偏好页那颗「确认」（提为全局）字面同义、方向相反 —— 同一个词两个相反的后果。 */
+  todoActDowngrade: '降为工作区',
+  /* 进化页：引擎自己会处理的那一列（观察期，只读）。名字随语义搬家。 */
+  autoQueueTitle: '自动处理队列',
+  autoQueueEmpty: '引擎当前没有观察中的记忆。',
 
   // ---- v3 UI: AI 最近在用 ----
   recallTitle: 'AI 最近在用',
@@ -213,10 +227,7 @@ export const zh = {
   recallCited: '引用 {n} 条',
   recallCitedHint: 'agent 提到记忆',
 
-  // ---- v3 UI: 我的偏好 ----
-  prefTitle: '我的偏好',
-  prefEmpty: '还没有偏好。先让 AI 自动挖，或手动加一条。',
-  prefActive: '{n} 条 · 命中率 {rate}%',
+  // ---- v3 UI: 偏好（只做待办行的证据字段；完整清单回「记忆」页按 kind 筛选）----
   prefSourceAuto: '杏仁核 · 自动',
   prefSourceManual: '手敲',
   prefHitCount: '命中 {n}×',
@@ -233,9 +244,6 @@ export const zh = {
   prefNotDecaying: '未衰减',
   prefProven: '已证明',
   prefConfirm: '确认',
-  prefRevise: '修订',
-  prefForget: '遗忘',
-  prefDecayFilter: '只看衰减中',
 
   // ---- v3 UI: 全部记忆 ----
   memoryEmpty: '暂无记忆',
@@ -256,7 +264,7 @@ export const en: Record<keyof typeof zh, string> = {
   title: 'HippoMemo',
   dockLabel: 'Memory',
   dockName: 'HippoMemo',
-  dockSub: 'Four brain regions · memory CRUD · preferences · evolution engine',
+  dockSub: 'Four brain regions · memory CRUD · human decisions · evolution engine',
   announcePut: 'A memory was written',
   announceRemove: 'A memory was removed',
   announceCrystallize: 'A crystallized memory was stored',
@@ -376,7 +384,7 @@ export const en: Record<keyof typeof zh, string> = {
   cardInvalidText: 'Invalid input',
   tabOverview: 'Overview',
   tabMemories: 'Memories',
-  tabPreferences: 'Preferences',
+  tabTodo: 'To-do',
   tabEvolution: 'Evolution',
   kpiTotalLabel: 'Total memories',
   kpiTotalHint: 'active',
@@ -417,7 +425,6 @@ export const en: Record<keyof typeof zh, string> = {
   overviewBrainHint: 'Real-time status of the four regions',
 
   // ---- v3 UI: Evolution tab subsections ----
-  evolutionCandidatesTitle: 'Needs my attention',
   evolutionChartsTitle: 'Charts',
 
   // ---- v3 UI: brain strip ----
@@ -434,20 +441,29 @@ export const en: Record<keyof typeof zh, string> = {
   brainNarrationLabel: 'Narration',
   brainEmptyNarration: 'Prefrontal has not fired yet. Start a session to see it pulse.',
 
-  // ---- v3 UI: needs my attention ----
-  todoTitle: 'Auto queue',
-  todoEmpty: 'Nothing to act on',
+  // ---- v3 UI: to-do (the single human-decision surface) ----
+  todoNote: 'The system raised these: accept, rework, or dismiss — all three close the item.',
+  todoEmpty: 'Nothing needs your call.',
+  todoCount: '{n} items',
+  todoAllPreferences: 'All preferences ({n}) → Memories',
   todoKindExpired: 'Expired',
   todoKindNearDuplicate: 'Near-duplicate',
+  todoKindScopeReview: 'Scope review',
+  todoKindPreferenceReview: 'Preference review',
+  todoKindObservation: 'On observation',
+  todoSuggestion: 'System suggests: {text}',
+  todoReasonExpiredUncited: 'Expired without ever being cited',
   todoReasonNearDupCited: 'Near-duplicate of cited memory (title overlap {pct}%), human review',
   todoReasonNearDupUnused: 'Near-duplicate of "{title}" (title overlap {pct}%), unused',
-  todoKindObservation: 'On observation',
+  todoReasonDowngradeUnproven: 'Declared global but only ever surfaced in its source workspace',
   todoObservationArchive: 'Auto-archives in {n}d',
-  todoKindPreferenceReview: 'Preference review',
   todoActArchive: 'Archive',
   todoActMerge: 'Merge',
   todoActKeep: 'Keep',
   todoActConfirm: 'Confirm',
+  todoActDowngrade: 'Make workspace-only',
+  autoQueueTitle: 'Auto queue',
+  autoQueueEmpty: 'The engine is not observing any memory right now.',
 
   // ---- v3 UI: AI recent use ----
   recallTitle: 'AI recent use',
@@ -459,10 +475,7 @@ export const en: Record<keyof typeof zh, string> = {
   recallCited: 'cited {n}',
   recallCitedHint: 'agent referenced memory',
 
-  // ---- v3 UI: my preferences ----
-  prefTitle: 'My preferences',
-  prefEmpty: 'No preferences yet. Let the agent auto-mine them, or add one yourself.',
-  prefActive: '{n} active · hit rate {rate}%',
+  // ---- v3 UI: preferences (evidence fields for to-do rows only) ----
   prefSourceAuto: 'Amygdala · auto',
   prefSourceManual: 'Manual',
   prefHitCount: 'hit {n}×',
@@ -477,9 +490,6 @@ export const en: Record<keyof typeof zh, string> = {
   prefNotDecaying: 'not decaying',
   prefProven: 'proven',
   prefConfirm: 'Confirm',
-  prefRevise: 'Revise',
-  prefForget: 'Forget',
-  prefDecayFilter: 'Decaying only',
 
   // ---- v3 UI: all memories ----
   memoryEmpty: 'No memories yet',

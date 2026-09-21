@@ -1,15 +1,18 @@
 /**
- * dsh-hippomemo · v3 UI: 4-quadrant settings section.
+ * dsh-hippomemo · v3 UI：四个一级页签，按**动词**切
+ * （IA 真源见 docs/hippomemo-brain-ui-design.md §2）。
  *
  *   ┌────────────────────────────────────────────────────────┐
- *   │  记忆库（脑区状态条：默认细条，可展开看四脑区）           │
- *   ├──────────────────────┬─────────────────────────────────┤
- *   │  需要我处理（行动）    │  AI 最近在用（验证）            │
- *   ├──────────────────────┴─────────────────────────────────┤
- *   │  我的偏好（一等公民 · 专区分 · 自动挖 vs 手敲）         │
- *   ├────────────────────────────────────────────────────────┤
- *   │  全部记忆（搜索 / 筛选 / 分页 / 详情 modal + lineage）   │
+ *   │  总览  脑区状态条（默认细条，可展开）+ AI 最近在用        │  看
+ *   │  记忆  全量清单 / 搜索筛选分页 / 详情 modal + CRUD        │  查（所有 kind 一视同仁）
+ *   │  待办  唯一的人工裁决面（见 buildTodoRows）               │  办
+ *   │  进化  引擎身份 + 自动处理队列（观察中，只读）+ 指标图表    │  管机器
  *   └────────────────────────────────────────────────────────┘
+ *
+ * 「偏好」不再是独立页签：偏好就是 kind=preference 的记忆（同一个数据集），
+ * 独立成页只会得到「库 vs 一份更弱的库」。它现在只剩两种出现方式：
+ *   ① 记忆页里一条普通记录（完整清单 + 修订/删除都在那儿）；
+ *   ② 待办里的一行「偏好待审」（只装要你表态的那些，证据 = 来源/命中/衰减）。
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
@@ -24,6 +27,7 @@ import {
 } from './icons.tsx'
 import type { HippomemoApi, MemoryTagCount } from './api.ts'
 import { IMPORTANCE_TIERS, importanceTier, tierValue, type ImportanceTier } from '../importance.ts'
+import { preferenceNeedsReview } from '../preference.ts'
 import type { HippomemoLocaleKey } from './locales.ts'
 import type {
   CitationRecord, EvolveReport, MemoryKind, MemoryListQuery, MemoryPatchInput,
@@ -43,6 +47,12 @@ function formatTodoReason(reason: string, t: Translate): string {
   if (cited) return t('todoReasonNearDupCited').replaceAll('{pct}', cited[1])
   const unused = reason.match(/^near-duplicate of (.+) \(title overlap (\d+)%\), unused$/)
   if (unused) return t('todoReasonNearDupUnused').replaceAll('{title}', unused[1]).replaceAll('{pct}', unused[2])
+  // 过期归档：宿主 reason 是英文机器串（真宿主 2026-09-21 实测：待办行证据区原样冒英文）。
+  if (/^expired without citation$/.test(reason)) return t('todoReasonExpiredUncited')
+  // 降级建议（downgrade-scope）：同上，以前原样透出。
+  if (/^declared global but surfaced only in its source workspace; no cross-workspace evidence$/.test(reason)) {
+    return t('todoReasonDowngradeUnproven')
+  }
   return reason
 }
 export interface MemorySectionProps {
@@ -216,71 +226,230 @@ function BrainStrip({ t, stats, usage, preferences, narrative, reloadKey }: {
   )
 }
 
-// ========== Todo Quadrant ==========
-function TodoQuadrantImpl({ t, items, now, onResolve }: {
-  t: Translate; items: PendingCandidate[]; now: number;
-  onResolve: (action: PendingCandidate) => void;
-}): ReactNode {
-  if (items.length === 0) {
-    return (
-      <Card title={t('todoTitle')} actions={<span className='hippomemo-panel-count'>0 项</span>}>
-        <p className='hippomemo-quadrant-empty'>
-          <IconWarning size={12} /> {t('todoEmpty')}
-        </p>
-      </Card>
-    );
+// ========== 待办队列（唯一的人工裁决面）==========
+/**
+ * 待办 = 一张卡、一个列表、两条进件来源：
+ *   ① 宿主候选（`/hippomemo/candidates` 去掉观察期行）：过期 / 疑似重复 / 降级建议；
+ *   ② 衰减压到地板的未确认偏好（规则见 `../preference.ts` —— 与宿主算 decay 的同一份数学，
+ *      所以「面板说衰减 N%」与「什么时候该进件」不会各说各话）。
+ *
+ * **同一记录只出一行**：一条未证明的全局偏好若同时被引擎建议降级，那一行会同时给出
+ * 「降为工作区」和「确认」——两个方向摆在同一处，各自标签诚实。以前它们分居偏好页与
+ * 进化页，按钮字面同义（都叫「确认」）而后果相反。
+ */
+type TodoRow =
+  | { source: 'candidate'; item: PendingCandidate }
+  | { source: 'preference'; item: PreferenceRecord; suggestion: PendingCandidate | null }
+
+function rowUpdatedAt(row: TodoRow): number {
+  return row.source === 'preference' ? row.item.updatedAt : row.item.memoryUpdatedAt;
+}
+
+function buildTodoRows(candidates: readonly PendingCandidate[], preferences: readonly PreferenceRecord[]): TodoRow[] {
+  const judged = new Map<string, PendingCandidate>();
+  for (const candidate of candidates) {
+    if (candidate.kind !== 'observation') judged.set(candidate.id, candidate);
   }
+  const byId = new Map(preferences.map(item => [item.id, item]));
+  const placed = new Set<string>();
+  const preferenceRows: TodoRow[] = [];
+  const placePreference = (item: PreferenceRecord, suggestion: PendingCandidate | null): void => {
+    placed.add(item.id);
+    preferenceRows.push({ source: 'preference', item, suggestion });
+  };
+  for (const item of preferences) {
+    if (preferenceNeedsReview(item)) placePreference(item, judged.get(item.id) ?? null);
+  }
+  // 引擎建议降级、但衰减还没压到地板的偏好同样是「等你表态」——不能因为衰减不够就漏掉它。
+  for (const candidate of judged.values()) {
+    if (placed.has(candidate.id)) continue;
+    if (candidate.memoryKind !== 'preference' || candidate.suggestedAction !== 'downgrade-scope') continue;
+    const item = byId.get(candidate.id);
+    if (item !== undefined) placePreference(item, candidate);
+  }
+  const candidateRows: Array<Extract<TodoRow, { source: 'candidate' }>> = [];
+  for (const candidate of judged.values()) {
+    if (placed.has(candidate.id)) continue;
+    placed.add(candidate.id);
+    candidateRows.push({ source: 'candidate', item: candidate });
+  }
+  // 两类件没有共同的重要度标尺（PreferenceRecord 不带 importance），所以不假装统一排序：
+  // 要你表态的偏好先摆（最近变动的在前），候选按重要度、再按记忆自身的最近变动时间。
+  preferenceRows.sort((a, b) => rowUpdatedAt(b) - rowUpdatedAt(a));
+  candidateRows.sort((a, b) => (b.item.importance - a.item.importance) || (rowUpdatedAt(b) - rowUpdatedAt(a)));
+  return [...preferenceRows, ...candidateRows];
+}
+
+const CANDIDATE_ACTION: Record<PendingCandidate['suggestedAction'], HippomemoLocaleKey> = {
+  'archive': 'todoActArchive',
+  'probation': 'todoActKeep',
+  'cancel-probation': 'todoActKeep',
+  'supersede': 'todoActMerge',
+  'link': 'todoActMerge',
+  'downgrade-scope': 'todoActDowngrade',
+};
+
+function candidateTone(kind: PendingCandidate['kind']): 'danger' | 'warn' | 'info' {
+  if (kind === 'expired') return 'danger';
+  if (kind === 'near-duplicate') return 'warn';
+  return 'info';
+}
+
+/**
+ * 候选分类的 pill 文案。`preference-review` 对应的是**降级建议**（不限 kind），
+ * 所以按 memoryKind 分岔：偏好行说「偏好待审」，其余说「范围待审」。
+ */
+function candidateKindLabel(item: PendingCandidate, t: Translate): string {
+  if (item.kind === 'expired') return t('todoKindExpired');
+  if (item.kind === 'near-duplicate') return t('todoKindNearDuplicate');
+  if (item.kind === 'observation') return t('todoKindObservation');
+  return item.memoryKind === 'preference' ? t('todoKindPreferenceReview') : t('todoKindScopeReview');
+}
+
+/** 偏好行的证据：来源 / 命中 / 上次浮现 / 衰减，外加引擎建议（若有）。 */
+function preferenceEvidence(item: PreferenceRecord, suggestion: PendingCandidate | null, now: number, t: Translate): string {
+  const parts = [
+    t(item.source === 'auto' ? 'prefSourceAuto' : 'prefSourceManual'),
+    t('prefHitCount', { n: item.hitCount }),
+    item.lastSurfacedAt !== null
+      ? t('prefLastSurfaced', { when: formatRelative(item.lastSurfacedAt, now, t) })
+      : t('prefProven'),
+    item.decayPercent !== null ? t('prefDecaying', { n: item.decayPercent }) : t('prefNotDecaying'),
+  ];
+  if (suggestion !== null) parts.push(t('todoSuggestion', { text: formatTodoReason(suggestion.reason, t) }));
+  return parts.join(' · ');
+}
+
+/** 一张卡里所有队列行共用的形制（点 + 标题 + pill + 证据 + 操作）。 */
+function QueueItem({ title, memoryKind, kindLabel, evidence, tone, onTitle, actions }: {
+  title: string; memoryKind: MemoryKind; kindLabel: string; evidence: string;
+  tone: 'danger' | 'warn' | 'info'; onTitle: () => void; actions: ReactNode;
+}): ReactNode {
   return (
-    <Card title={t('todoTitle')} actions={<span className='hippomemo-panel-count'>{items.length} 项</span>}>
-      <ul className='hippomemo-todo-list'>
-        {items.map(item => {
-          const kindClass = item.kind === 'expired' ? 'danger' : item.kind === 'near-duplicate' ? 'warn' : 'info';
-          const kindKeyMap: Record<typeof item.kind, HippomemoLocaleKey> = {
-            'expired': 'todoKindExpired',
-            'near-duplicate': 'todoKindNearDuplicate',
-            'observation': 'todoKindObservation',
-            'preference-review': 'todoKindPreferenceReview',
-          };
-          const actionKeyMap: Record<typeof item.suggestedAction, HippomemoLocaleKey> = {
-            'archive': 'todoActArchive',
-            'probation': 'todoActKeep',
-            'cancel-probation': 'todoActKeep',
-            'supersede': 'todoActMerge',
-            'link': 'todoActMerge',
-            'downgrade-scope': 'todoActConfirm',
-          };
-          return (
-            <li className={'hippomemo-todo-item hippomemo-todo-item-' + kindClass} key={item.id}>
-              <StateDot status={kindClass === 'danger' ? 'error' : 'idle'} size={14} className={'hippomemo-todo-icon hippomemo-todo-icon-' + kindClass} />
-              <div className='hippomemo-todo-body'>
-                {/* hover 看全文：标题列表里截断，全文只能靠悬浮（2026-09 用户反馈）。 */}
-                <div className='hippomemo-todo-title' title={item.title}>{item.title}</div>
-                <div className='hippomemo-todo-desc'>
-                  <Pill className={'hippomemo-tag hippomemo-kind-' + item.memoryKind}>{t(kindKeyMap[item.kind])}</Pill>
-                  {/* 观察项的文案客户端自渲染：宿主 reason 是带「观察中/剩 n 天」的
-                      机器串，与 kind pill 重复且不可本地化；结构化字段只有
-                      expiresAt —— 用户关心的是「几天后归档」，不是创建于几天前，
-                      所以「n 天前」meta 一并移除（2026-09 用户裁决）。 */}
-                  <span className='hippomemo-todo-reason'>
-                    {item.kind === 'observation'
-                      ? t('todoObservationArchive').replaceAll('{n}', String(Math.max(1, Math.ceil(((item.expiresAt ?? 0) - now) / 86_400_000))))
-                      : formatTodoReason(item.reason, t)}
-                  </span>
-                </div>
-              </div>
-              {item.kind === 'observation' ? null : (
-                // 引擎自动处理的项（观察期）不再挂「自动」徽标 —— 列表名就是自动处理队列，
-                // 整列都是自动的，逐行再标一次是重复（2026-09 用户裁决）。
-                // 需要人工决策的项才出操作按钮。
-                <Button size='sm' variant='secondary' className='hippomemo-todo-act'
-                  onClick={() => { onResolve(item) }}>
-                  {t(actionKeyMap[item.suggestedAction])}
-                </Button>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+    <li className={'hippomemo-todo-item hippomemo-todo-item-' + tone}>
+      <StateDot status={tone === 'danger' ? 'error' : 'idle'} size={14} className={'hippomemo-todo-icon hippomemo-todo-icon-' + tone} />
+      <div className='hippomemo-todo-body'>
+        {/* 标题即入口：整条候选/偏好的正文与 lineage 在详情弹窗里（修订/删除也在那儿）。 */}
+        <button type='button' className='hippomemo-todo-title' title={title}
+          onClick={onTitle}>{title}</button>
+        <div className='hippomemo-todo-desc'>
+          <Pill className={'hippomemo-tag hippomemo-kind-' + memoryKind}>{kindLabel}</Pill>
+          <span className='hippomemo-todo-reason'>{evidence}</span>
+        </div>
+      </div>
+      <div className='hippomemo-todo-ops'>{actions}</div>
+    </li>
+  );
+}
+
+function TodoTab({ t, candidates, preferences, now, embedded, onResolve, onPrefAction, onDetail, onShowAllPreferences }: {
+  t: Translate; candidates: PendingCandidateListResult | null; preferences: PreferenceListResult | null;
+  now: number; embedded: boolean;
+  onResolve: (item: PendingCandidate) => void;
+  /** 偏好专属动作：确认（信任为通用）+ 归档（不再适用）。降级走候选建议那条路。 */
+  onPrefAction: (action: 'confirm' | 'archive', id: string) => void;
+  onDetail: (id: string) => void;
+  onShowAllPreferences: () => void;
+}): ReactNode {
+  const rows = buildTodoRows(candidates?.items ?? [], preferences?.items ?? []);
+  const preferencesTotal = preferences?.total ?? 0;
+  return (
+    <div className='hippomemo-tab'>
+      <Card title={embedded ? undefined : t('tabTodo')}
+        actions={<span className='hippomemo-panel-count'>{t('todoCount', { n: rows.length })}</span>}>
+        {/* 归属说明：「待办」的默认心智是用户自己记的，这里必须点明来源是系统建议。 */}
+        <p className='hippomemo-todo-note'>{t('todoNote')}</p>
+        {rows.length === 0 ? (
+          <p className='hippomemo-quadrant-empty'>
+            <IconWarning size={12} /> {t('todoEmpty')}
+          </p>
+        ) : (
+          <ul className='hippomemo-todo-list'>
+            {rows.map(row => {
+              if (row.source === 'preference') {
+                const suggestion = row.suggestion;
+                // 主按钮 = 系统建议：有建议就采纳它（归档 / 合并 / 降为工作区，由候选解析统一执行），
+                // 没建议（纯衰减进件）就是「这条不再适用」→ 归档。
+                const primaryKey: HippomemoLocaleKey = suggestion === null
+                  ? 'todoActArchive'
+                  : CANDIDATE_ACTION[suggestion.suggestedAction];
+                return (
+                  <QueueItem key={row.item.id} title={row.item.title} memoryKind='preference'
+                    kindLabel={t('todoKindPreferenceReview')}
+                    evidence={preferenceEvidence(row.item, suggestion, now, t)}
+                    tone='warn'
+                    onTitle={() => { onDetail(row.item.id); }}
+                    actions={(
+                      <>
+                        {/* 两个方向并列在同一行：采纳建议，或确认它就该是通用偏好。
+                            以前这两个方向分居偏好页与进化页，按钮都叫「确认」而后果相反。 */}
+                        <Button size='sm' variant='secondary' className='hippomemo-todo-act'
+                          onClick={() => {
+                            if (suggestion === null) onPrefAction('archive', row.item.id);
+                            else onResolve(suggestion);
+                          }}>{t(primaryKey)}</Button>
+                        <Button size='sm' variant='ghost' className='hippomemo-todo-act'
+                          onClick={() => { onPrefAction('confirm', row.item.id); }}>{t('prefConfirm')}</Button>
+                      </>
+                    )} />
+                );
+              }
+              return (
+                <QueueItem key={row.item.id} title={row.item.title} memoryKind={row.item.memoryKind}
+                  kindLabel={candidateKindLabel(row.item, t)}
+                  evidence={formatTodoReason(row.item.reason, t)}
+                  tone={candidateTone(row.item.kind)}
+                  onTitle={() => { onDetail(row.item.id); }}
+                  actions={(
+                    <Button size='sm' variant='secondary' className='hippomemo-todo-act'
+                      onClick={() => { onResolve(row.item); }}>{t(CANDIDATE_ACTION[row.item.suggestedAction])}</Button>
+                  )} />
+              );
+            })}
+          </ul>
+        )}
+        {preferencesTotal > 0 ? (
+          // 完整偏好清单归「记忆」页（按 kind=偏好 筛选）：待办只装要你表态的那些。
+          <div className='hippomemo-todo-foot'>
+            <Button variant='ghost' size='sm' onClick={onShowAllPreferences}>
+              {t('todoAllPreferences', { n: preferencesTotal })}
+            </Button>
+          </div>
+        ) : null}
+      </Card>
+    </div>
+  );
+}
+
+/**
+ * 进化页的**自动处理队列**：引擎自己会处理的那一列（观察期，到期自动归档 / 被引用自动取消）。
+ * 它是只读状态行 —— 没有「操作按钮」，因为这里没有需要人拍板的事。名字随语义搬家：
+ * 「自动处理队列」以前挂在待办卡上，而那张卡真正装的是「等你表态」。
+ */
+function ObservationQueue({ t, items, now }: {
+  t: Translate; items: PendingCandidate[]; now: number;
+}): ReactNode {
+  const observing = items.filter(item => item.kind === 'observation');
+  return (
+    <Card title={t('autoQueueTitle')}
+      actions={<span className='hippomemo-panel-count'>{t('todoCount', { n: observing.length })}</span>}>
+      {observing.length === 0 ? (
+        <p className='hippomemo-quadrant-empty'>{t('autoQueueEmpty')}</p>
+      ) : (
+        <ul className='hippomemo-todo-list'>
+          {observing.map(item => (
+            <QueueItem key={item.id} title={item.title} memoryKind={item.memoryKind}
+              kindLabel={t('todoKindObservation')}
+              /* 观察项的文案客户端自渲染：宿主 reason 是带「观察中/剩 n 天」的机器串，
+                 与 pill 重复且不可本地化；结构化字段只有 expiresAt，而用户关心的是
+                 「几天后归档」，不是创建于几天前（2026-09 用户裁决）。 */
+              evidence={t('todoObservationArchive').replaceAll('{n}', String(Math.max(1, Math.ceil(((item.expiresAt ?? 0) - now) / 86_400_000))))}
+              tone='info'
+              onTitle={() => undefined}
+              actions={null} />
+          ))}
+        </ul>
+      )}
     </Card>
   );
 }
@@ -330,77 +499,18 @@ function ActivityFeed({ t, citations, narrative, now }: {
   );
 }
 
-// ========== Preference Quadrant ==========
-function PreferenceQuadrant({ t, items, totalRecall, onAction }: {
-  t: Translate; items: PreferenceRecord[]; totalRecall: number;
-  onAction: (action: 'confirm' | 'revise' | 'forget', id: string) => void;
-}): ReactNode {
-  if (items.length === 0) {
-    return (
-      <Card title={t('prefTitle')}>
-        <p className='hippomemo-quadrant-empty'>{t('prefEmpty')}</p>
-      </Card>
-    );
-  }
-  const totalHit = items.reduce((acc, item) => acc + item.hitCount, 0);
-  const rate = totalRecall > 0 ? Math.round((totalHit / totalRecall) * 100) : 0;
-  return (
-    <Card title={t('prefTitle')} actions={(
-      <span className='hippomemo-panel-count'>
-        {t('prefActive', { n: items.length, rate: String(Math.min(100, rate)) })}
-      </span>
-    )}>
-      <div className='hippomemo-pref-strip'>
-        <ul className='hippomemo-pref-list'>
-          {items.map(item => {
-            const isAuto = item.source === 'auto';
-            return (
-              <li className={'hippomemo-pref-row' + (item.confirmed ? ' hippomemo-pref-row-confirmed' : '')} key={item.id}>
-                <Pill className={'hippomemo-tag ' + (isAuto ? 'hippomemo-tag-error' : 'hippomemo-tag-brand')}>
-                  {isAuto ? t('prefSourceAuto') : t('prefSourceManual')}
-                </Pill>
-                <div className='hippomemo-pref-body'>
-                  <div className='hippomemo-pref-text'>{item.title}</div>
-                  <div className='hippomemo-pref-stats'>
-                    <span className='hippomemo-pref-hit'>{t('prefHitCount', { n: item.hitCount })}</span>
-                    <span> · </span>
-                    <span>{item.lastSurfacedAt !== null
-                      ? t('prefLastSurfaced', { when: formatRelative(item.lastSurfacedAt, Date.now(), t) })
-                      : t('prefProven')}</span>
-                    {item.decayPercent !== null
-                      ? <span className='hippomemo-pref-decay'> · {t('prefDecaying', { n: item.decayPercent })}</span>
-                      : <span> · {t('prefNotDecaying')}</span>}
-                  </div>
-                </div>
-                <div className='hippomemo-pref-ops'>
-                  {!item.confirmed ? (
-                    <Button size='sm' variant='ghost' className='hippomemo-pref-op hippomemo-pref-op-confirm'
-                      onClick={() => { onAction('confirm', item.id) }}>{t('prefConfirm')}</Button>
-                  ) : null}
-                  <Button size='sm' variant='ghost' className='hippomemo-pref-op'
-                    onClick={() => { onAction('revise', item.id) }}>{t('prefRevise')}</Button>
-                  <Button size='sm' variant='ghost' className='hippomemo-pref-op hippomemo-pref-op-forget'
-                    onClick={() => { onAction('forget', item.id) }}>{t('prefForget')}</Button>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-    </Card>
-  );
-}
-
 // ========== Memory List Panel ==========
-function MemoryListPanel({ t, api, detailId, onDetail, embedded = false }: {
+function MemoryListPanel({ t, api, detailId, onDetail, embedded = false, kindPreset = '' }: {
   t: Translate; api: HippomemoApi; detailId: string | null;
   onDetail: (id: string) => void;
   /** 嵌在宿主（dock）里：不写面板自己的大标题（宿主模块头已写），只留计数。 */
   embedded?: boolean;
+  /** 从待办跳进来的 kind 预筛（'' = 不筛）。只做**初值**：用户改筛选后不被它拽回。 */
+  kindPreset?: string;
 }): ReactNode {
   const [q, setQ] = useState('');
   const [debouncedQ, setDebouncedQ] = useState('');
-  const [kind, setKind] = useState('');
+  const [kind, setKind] = useState(kindPreset);
   const [scope, setScope] = useState('');
   const [status, setStatus] = useState('');
   const [tag, setTag] = useState('');
@@ -1173,7 +1283,7 @@ function EvolveResults({ t, evolve }: { t: Translate; evolve: ReturnType<typeof 
 }
 
 // ========== Main Entry ==========
-type SectionTab = 'overview' | 'memories' | 'preferences' | 'evolution';
+type SectionTab = 'overview' | 'memories' | 'todo' | 'evolution';
 
 function OverviewTab({ t, stats, usage, preferences, narrative, citations, now }: {
   t: Translate; stats: MemoryStats | null; usage: MemoryUsageStats | null;
@@ -1202,23 +1312,9 @@ function OverviewTab({ t, stats, usage, preferences, narrative, citations, now }
   )
 }
 
-function PreferencesTab({ t, preferences, usage, onAction }: {
-  t: Translate; preferences: PreferenceListResult | null;
-  usage: MemoryUsageStats | null;
-  onAction: (action: 'confirm' | 'revise' | 'forget', id: string) => void;
-}): ReactNode {
-  return (
-    <div className='hippomemo-tab'>
-      <PreferenceQuadrant t={t} items={preferences?.items ?? []}
-        totalRecall={usage?.recalled ?? 0} onAction={onAction} />
-    </div>
-  )
-}
-
-function EvolutionTab({ t, stats, usage, candidates, now, onResolve, api, reloadKey }: {
+function EvolutionTab({ t, stats, usage, candidates, now, api, reloadKey }: {
   t: Translate; stats: MemoryStats | null; usage: MemoryUsageStats | null;
   candidates: PendingCandidateListResult | null; now: number;
-  onResolve: (item: PendingCandidate) => void;
   api: HippomemoApi; reloadKey: number;
 }): ReactNode {
   const evolve = useEvolve(api);
@@ -1226,7 +1322,8 @@ function EvolutionTab({ t, stats, usage, candidates, now, onResolve, api, reload
     <div className='hippomemo-tab'>
       {/* 页顶操作行（财务形制）：进化引擎的运行身份与动作按钮在所有内容卡之上。 */}
       <EvolveHeader t={t} evolve={evolve} />
-      <TodoQuadrantImpl t={t} items={candidates?.items ?? []} now={now} onResolve={onResolve} />
+      {/* 人工裁决面整个搬去「待办」tab：进化页只留引擎自己会处理的那一列（观察中，只读）。 */}
+      <ObservationQueue t={t} items={candidates?.items ?? []} now={now} />
       {/* 存量 + 用量合并成一张数字指标卡（2026-09 用户裁决）：两组数同属
           「记忆层健康度」，一个 StatGrid 全量摆出，不再按叙事拆成两张卡。 */}
       <Card title={t('usage')}>
@@ -1272,6 +1369,9 @@ export function MemorySection({ api, t, embedded = false }: MemorySectionProps):
   const [reloadKey, setReloadKey] = useState(0);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [editorTarget, setEditorTarget] = useState<string | 'new' | null>(null);
+  /* 待办页「全部偏好 →」的落点：记忆页按 kind=偏好 预筛。面板每次切进来重新挂载，
+     所以用 useState 的初值接住即可（不需要在记忆页里再同步一遍）。 */
+  const [memoryKindPreset, setMemoryKindPreset] = useState('');
   const reload = (): void => { setReloadKey(prev => prev + 1); };
   useEffect(() => {
     let current = true;
@@ -1300,11 +1400,16 @@ export function MemorySection({ api, t, embedded = false }: MemorySectionProps):
       reload();
     } catch { /* independent */ }
   };
-  const prefAction = async (action: 'confirm' | 'revise' | 'forget', id: string): Promise<void> => {
+  /**
+   * 待办里的偏好专属裁决：确认（信任为通用偏好）/ 归档（不再适用）。
+   * 「降为工作区」这类**采纳引擎建议**的动作归 `resolveCandidate` —— 与其它候选同一条执行路径，
+   * 不给偏好开第二条写库的路。
+   * 删除（遗忘）不在队列里出现：破坏性动作留在详情弹窗（那里的二次确认是唯一入口）。
+   */
+  const prefAction = async (action: 'confirm' | 'archive', id: string): Promise<void> => {
     try {
-      if (action === 'forget') await api.remove(id);
-      else if (action === 'confirm') await api.update(id, { globalProven: true, scope: 'global' });
-      else setDetailId(id);
+      if (action === 'confirm') await api.update(id, { globalProven: true, scope: 'global' });
+      else await api.update(id, { status: 'archived' });
       reload();
     } catch { /* ignore */ }
   };
@@ -1325,7 +1430,7 @@ export function MemorySection({ api, t, embedded = false }: MemorySectionProps):
         options={[
           { value: 'overview', label: t('tabOverview') },
           { value: 'memories', label: t('tabMemories') },
-          { value: 'preferences', label: t('tabPreferences') },
+          { value: 'todo', label: t('tabTodo') },
           { value: 'evolution', label: t('tabEvolution') },
         ]}
       />
@@ -1336,15 +1441,18 @@ export function MemorySection({ api, t, embedded = false }: MemorySectionProps):
       ) : tab === 'memories' ? (
         <div className='hippomemo-tab'>
           <MemoryListPanel t={t} api={api} detailId={detailId} embedded={embedded}
+            kindPreset={memoryKindPreset}
             onDetail={(id) => { if (id === 'new') setEditorTarget('new'); else setDetailId(id); }} />
         </div>
-      ) : tab === 'preferences' ? (
-        <PreferencesTab t={t} preferences={preferences} usage={usage}
-          onAction={(action, id) => { void prefAction(action, id); }} />
+      ) : tab === 'todo' ? (
+        <TodoTab t={t} candidates={candidates} preferences={preferences} now={now} embedded={embedded}
+          onResolve={(item) => { void resolveCandidate(item); }}
+          onPrefAction={(action, id) => { void prefAction(action, id); }}
+          onDetail={(id) => { setDetailId(id); }}
+          onShowAllPreferences={() => { setMemoryKindPreset('preference'); setTab('memories'); }} />
       ) : (
         <EvolutionTab t={t} stats={stats} usage={usage} candidates={candidates}
-          now={now} api={api} reloadKey={reloadKey}
-          onResolve={(item) => { void resolveCandidate(item); }} />
+          now={now} api={api} reloadKey={reloadKey} />
       )}
       {detailId !== null ? (
         <MemoryDetailModal api={api} t={t} id={detailId} refreshKey={reloadKey}

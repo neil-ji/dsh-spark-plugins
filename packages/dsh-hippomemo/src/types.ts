@@ -320,6 +320,14 @@ export interface PreferenceListResult {
  * No writes happen on read; resolution still goes through PATCH on the
  * underlying record.
  */
+/**
+ * 待办件（原「需要我处理」象限）的分类。
+ *
+ * `preference-review` 对应 `planEvolution` 的 `downgrade-scope` 建议（声称通用、但只在
+ * 来源工作区出现过）——**该建议不限 kind**，非偏好记忆也会命中。所以 UI 的 pill 文案按
+ * `memoryKind` 分岔：偏好行说「偏好待审」，其余说「范围待审」（2026-09 待办改造）。
+ * 枚举名保留 `preference-review` 是为了不破坏既有协议字段。
+ */
 export type CandidateKind = 'expired' | 'near-duplicate' | 'observation' | 'preference-review'
 
 export interface PendingCandidate {

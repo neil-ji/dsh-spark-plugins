@@ -113,7 +113,9 @@ const CITATIONS = [
 ]
 
 const PREFERENCES = [
-  { id: 'mem-token-first', title: 'npm 连接器：粘贴 token → 测试 → 保存，之后全权交给 agent', content: 'token 存进 credential seam，UI 只做凭据与只读状态。', tags: ['npm', 'credential'], source: 'manual', hitCount: 4, lastSurfacedAt: now - 20 * HOUR, decayPercent: 92, confirmed: true, status: 'active', updatedAt: now - 20 * HOUR },
+  /* 已确认 = 不再衰减：宿主 computePreferenceDecay 对 global+proven 直接返回 null，
+     fixture 也必须是 null（以前这里给 confirmed 项配了 92% 衰减，是宿主产不出来的样本）。 */
+  { id: 'mem-token-first', title: 'npm 连接器：粘贴 token → 测试 → 保存，之后全权交给 agent', content: 'token 存进 credential seam，UI 只做凭据与只读状态。', tags: ['npm', 'credential'], source: 'manual', hitCount: 4, lastSurfacedAt: now - 20 * HOUR, decayPercent: null, confirmed: true, status: 'active', updatedAt: now - 20 * HOUR },
   { id: 'mem-terse-replies', title: '回答尽量短，先给结论再给依据', content: '用户偏好中文、先结论后细节、不要客套。', tags: ['style'], source: 'auto', hitCount: 17, lastSurfacedAt: now - 30 * 60_000, decayPercent: 71, confirmed: false, status: 'active', updatedAt: now - 30 * 60_000 },
   { id: 'mem-no-sudo', title: '不要擅自 sudo / 提权', content: '需要提权时先说明原因并等待确认。', tags: ['safety'], source: 'auto', hitCount: 2, lastSurfacedAt: now - 4 * DAY, decayPercent: 38, confirmed: false, status: 'active', updatedAt: now - 4 * DAY },
 ]

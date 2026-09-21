@@ -39,7 +39,7 @@ const MODULES = (arg('module', '火花,记忆,财务,GitHub,npm')).split(',').ma
  * 这类关键页，而「进化页是标准模板」恰恰要靠它来量。用前缀匹配（`进化` 命中「进化」）。
  */
 const moduleTabs = (() => {
-  const raw = arg('tabs', '火花:火花流,涌现提议,脚本目录;记忆:总览,记忆,偏好,进化;财务:总览,连接,供应商,高级')
+  const raw = arg('tabs', '火花:火花流,涌现提议,脚本目录;记忆:总览,记忆,待办,进化;财务:总览,连接,供应商,高级')
   const map = {}
   for (const entry of raw.split(';')) {
     const [name, list] = entry.split(':')

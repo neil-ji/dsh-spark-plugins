@@ -17,6 +17,7 @@ import type {
   PreferenceRecord, RecallNarrative,
 } from './types.ts'
 import { derivePendingCandidates } from './memory-evolve.ts'
+import { computePreferenceDecay, detectPreferenceSource } from './preference.ts'
 import { recencyDecay } from './relevance.ts'
 import { registerHippomemoHttpRoutes } from './http.ts'
 // Type-only: pulls the `ctx.typert` host augmentation (register/withdraw).
@@ -436,45 +437,10 @@ export class MemoryService extends Service {
   }
 }
 
-// ---- preference-zone helpers (pure) ----
-
-const PREFERENCE_HALF_LIFE_DAYS = 30
-const PREFERENCE_DECAY_FLOOR = 40
-
-/**
- * Heuristic for "is this preference user-declared or auto-mined": if the
- * record carries an explicit `updatedBy: 'human'` author tag it is always
- * manual; otherwise we treat an agent-written record that survived at least
- * one recall as 'auto' (spark's valence miner is the producer). Defaults to
- * 'manual' when uncertain so the UI never over-claims an automatic origin.
- */
-function detectPreferenceSource(record: MemoryRecord): PreferenceRecord['source'] {
-  if (record.updatedBy === 'human') return 'manual'
-  if (record.updatedBy === 'agent') return 'auto'
-  // 'system' defaults: sourceSparkId present → auto crystallised from a spark
-  return record.sourceSparkId !== undefined && record.sourceSparkId !== null && record.sourceSparkId.length > 0
-    ? 'auto'
-    : 'manual'
-}
-
-/**
- * Compute a 0..100 decay percent for the preference zone. Mirrors the
- * existing recencyDecay curve but maps to a percentage and returns null when
- * the preference is either freshly written or global-confirmed (no decay).
- */
-function computePreferenceDecay(record: MemoryRecord, now: number): number | null {
-  if (record.scope === 'global' && record.globalProven === true) return null
-  const anchor = record.lastRecalledAt ?? record.updatedAt
-  const ageDays = Math.max(0, (now - anchor) / 86_400_000)
-  if (ageDays <= 0) return null
-  const raw = Math.pow(0.5, ageDays / PREFERENCE_HALF_LIFE_DAYS)
-  // recencyDecay is clamped to [floor, 1] — express the *lost* fraction so
-  // the UI can label "衰减中 60%" when raw dropped 0.40 below 1.0.
-  const decay = Math.max(PREFERENCE_DECAY_FLOOR / 100, raw)
-  const lost = Math.max(0, Math.min(100, Math.round((1 - decay) * 100)))
-  return lost === 0 ? null : lost
-}
-
-export { detectPreferenceSource, computePreferenceDecay }
+// ---- preference-zone helpers ----
+//
+// 曲线与「待办进件阈值」都住在 src/preference.ts —— 客户端待办队列要消费同一条规则，
+// 放这里会让两边各写一份阈值。此处只做 re-export，保持本模块原有的导出面。
+export { detectPreferenceSource, computePreferenceDecay } from './preference.ts'
 
 export default MemoryService

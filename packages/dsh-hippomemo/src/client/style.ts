@@ -44,7 +44,7 @@ export const HIPPOMEMO_CSS = [
   /* Surface 基规则 —— 卡面 chrome 已统一由 ui-kit Card 提供（2026-09 结构统一，
      卡面容器迁 Card/variant=inset），这里只剩**非卡面**的内容面：列表行与详情正文。
      不得再给任何新类手写 border/radius/background 三件套 —— 那是在重造 Card。 */
-  '[data-plugin="dsh-hippomemo"] :is(.hippomemo-todo-item, .hippomemo-pref-strip, .hippomemo-detail-content) { border: 1px solid var(--spk-border); border-radius: var(--spk-radius-md); background: var(--spk-surface-card); }',
+  '[data-plugin="dsh-hippomemo"] :is(.hippomemo-todo-item, .hippomemo-detail-content) { border: 1px solid var(--spk-border); border-radius: var(--spk-radius-md); background: var(--spk-surface-card); }',
   /* 卡片题由 ui-kit Card.title 提供（--spk-text-title 14px/600）；
      panel-count 保留：它现在是 Card actions 槽里的计数徽标。 */
   '[data-plugin="dsh-hippomemo"] .hippomemo-panel-count { margin-left: auto; font-size: var(--spk-text-xs); line-height: 16px; color: var(--spk-label-3, var(--spk-label-2)); font-variant-numeric: tabular-nums; }',
@@ -75,11 +75,18 @@ export const HIPPOMEMO_CSS = [
   '[data-plugin="dsh-hippomemo"] .hippomemo-todo-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: transparent; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-todo-icon { width: 22px; height: 22px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; flex: none; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-todo-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-todo-title { font-size: var(--spk-text-md); line-height: 20px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
+  /* 标题是 <button>（点开详情弹窗）：重置按钮外观，只留文字形制 —— 它就是标题本身。 */
+  '[data-plugin="dsh-hippomemo"] .hippomemo-todo-title { display: block; width: 100%; padding: 0; border: none; background: none; color: inherit; text-align: left; font: inherit; font-size: var(--spk-text-md); line-height: 20px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }',
+  '[data-plugin="dsh-hippomemo"] .hippomemo-todo-title:hover { color: var(--spk-brand-fg, #2f46c8); }',
+  '[data-plugin="dsh-hippomemo"] .hippomemo-todo-title:focus-visible { outline: 2px solid var(--spk-brand-fg, #2f46c8); outline-offset: 2px; border-radius: 4px; }',
+  '[data-plugin="dsh-hippomemo"] .hippomemo-todo-note { margin: 0 0 8px; color: var(--spk-label-3); font-size: var(--spk-text-xs); line-height: 16px; }',
+  '[data-plugin="dsh-hippomemo"] .hippomemo-todo-foot { margin-top: 8px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-todo-desc { display: flex; flex-wrap: wrap; gap: 8px 8px; align-items: center; font-size: var(--spk-text-xs); line-height: 16px; color: var(--spk-label-3, var(--spk-label-2)); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-todo-reason { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 360px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-todo-meta { color: var(--spk-label-3); font-variant-numeric: tabular-nums; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-todo-act { flex: none; }',
+  /* 一行最多两颗动作（采纳建议 + 确认）：允许换行，窄面板下不挤成一坨。 */
+  '[data-plugin="dsh-hippomemo"] .hippomemo-todo-ops { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; flex: none; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-recall-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-recall-item { display: flex; flex-direction: column; gap: 2px; padding: 8px 8px; border-radius: 6px; border-left: 3px solid var(--spk-border-2, transparent); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-recall-item-injected { border-left-color: var(--spk-brand, #2563EB); }',
@@ -89,19 +96,6 @@ export const HIPPOMEMO_CSS = [
   '[data-plugin="dsh-hippomemo"] .hippomemo-recall-what { font-size: var(--spk-text-md); line-height: 20px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-recall-m { font-weight: 500; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-recall-sub { color: var(--spk-label-2, var(--spk-label)); font-size: var(--spk-text-sm); }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-pref-strip { overflow: hidden; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-pref-list { list-style: none; padding: 0; margin: 0; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-pref-row { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--spk-border); }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-pref-row:last-child { border-bottom: none; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-pref-row-confirmed { background: color-mix(in srgb, var(--spk-success, #16A34A) 4%, transparent); }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-pref-body { flex: 1; min-width: 0; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-pref-text { font-size: var(--spk-text-md); line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-pref-stats { display: flex; flex-wrap: wrap; gap: 0 8px; align-items: center; font-size: var(--spk-text-xs); line-height: 16px; color: var(--spk-label-3); margin-top: 2px; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-pref-hit { color: var(--spk-success, #16A34A); font-weight: 500; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-pref-decay { color: var(--spk-warn, #D97706); }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-pref-ops { display: flex; gap: 4px; flex: none; }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-pref-op-confirm:hover { background: color-mix(in srgb, var(--spk-success, #16A34A) 12%, transparent); color: var(--spk-success, #16A34A); }',
-  '[data-plugin="dsh-hippomemo"] .hippomemo-pref-op-forget:hover { background: color-mix(in srgb, var(--spk-error, #DC2626) 12%, transparent); color: var(--spk-error, #DC2626); }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-search { flex: 1; min-width: 160px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-search-grow { flex: 1 1 220px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-select { display: inline-flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 112px; height: var(--spk-control-h, 32px); padding: 0 8px 0 var(--spk-space-3); border: 1px solid var(--spk-border); border-radius: 8px; background: var(--spk-layer-2); color: var(--spk-label-2); font: inherit; font-size: var(--spk-text-sm); line-height: 1.4; cursor: pointer; }',
@@ -204,7 +198,9 @@ export const HIPPOMEMO_CSS = [
   '[data-plugin="dsh-hippomemo"] .hippomemo-chart-title { font-size: var(--spk-text-md); line-height: 20px; font-weight: 600; }',
   /* 2026-09 重构：`.hippomemo-evolve-report` / `.hippomemo-evolve-block-title` /
      `.hippomemo-pref-head*` 已随「卡内套卡」的形制一起废弃 —— 复核结论与动作各是一张
-     `section-card`，组名走卡头；偏好清单直接由卡头带出。CSS 一并删掉，免得留下第二套卡。 */
+     `section-card`，组名走卡头；偏好清单直接由卡头带出，CSS 一并删掉，免得留下第二套卡。
+     2026-09 待办改造：偏好专区整个并入「待办」队列，`.hippomemo-pref-*` 全族随之退役 ——
+     一条偏好现在就是一行队列行（`.hippomemo-todo-item`），不再有第二套行形制。 */
   '[data-plugin="dsh-hippomemo"] .hippomemo-evolve-review, [data-plugin="dsh-hippomemo"] .hippomemo-evolve-actions { display: flex; flex-direction: column; gap: 8px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-evolve-verdict, [data-plugin="dsh-hippomemo"] .hippomemo-evolve-action { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--spk-text-md); line-height: 20px; }',
   '[data-plugin="dsh-hippomemo"] .hippomemo-evolve-verdict-id, [data-plugin="dsh-hippomemo"] .hippomemo-evolve-action-id { flex: none; font-family: var(--spk-font-mono, ui-monospace, monospace); font-size: var(--spk-text-sm); color: var(--spk-label-3); }',
