@@ -1,6 +1,6 @@
 {
   "name": "dsh-script",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "DSH 脚本沉淀库 host：程序性记录（结构化步骤）+ JSONL 持久化 + agent 工具 + 目录注入",
   "type": "module",
   "main": "lib/index.js",

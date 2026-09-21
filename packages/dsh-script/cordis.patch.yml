@@ -1,6 +1,12 @@
 # dsh-script bundle patch.
 # 插入宿主行：注册 ctx.script 服务 + 四个 agent 工具 + /scripts HTTP API + script/events 流。
+# 外加 client 行：`dsh-script-client` 是纯 UI 插件（dsh.client 声明 web 半边），
+# 必须有 loader 行才会被 dsh-client-modules 扫进客户端模块表 —— 缺了这一行，UI 不报错、
+# 只是永远不出现（dock 里没有「脚本」模块），与 npm-ui / github-ui 同形。
 - insert:
+    - id: script-client
+      name: 'dsh-script-client'
+
     - id: script
       name: 'dsh-script'
       config:

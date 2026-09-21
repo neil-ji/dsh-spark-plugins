@@ -16,6 +16,7 @@
     "dsh-spark-dock": "packages/dsh-spark-dock",
     "dsh-spark-wire": "packages/dsh-spark-wire",
     "dsh-script": "packages/dsh-script",
-    "dsh-script-wire": "packages/dsh-script-wire"
+    "dsh-script-wire": "packages/dsh-script-wire",
+    "dsh-script-client": "packages/dsh-script-client"
   }
 }

@@ -29,6 +29,8 @@ const ALIASES = {
   'dsh-ui-kit': 'packages/dsh-ui-kit/dist/index.js',
   'dsh-spark-plugin-kit/client': 'packages/dsh-plugin-kit/lib/client/index.js',
   'dsh-spark-wire': 'packages/dsh-spark-wire/src/index.ts',
+  'dsh-script-wire': 'packages/dsh-script-wire/src/index.ts',
+  'dsh-script-client/client': 'packages/dsh-script-client/src/client/index.ts',
   'dsh-spark-dock/DockOverlay': 'packages/dsh-spark-dock/src/client/DockOverlay.tsx',
   'dsh-spark-dock/style': 'packages/dsh-spark-dock/src/client/style.ts',
   // W4：Node 冒烟也跑真 client 入口的 apply（配 inject 门），这样

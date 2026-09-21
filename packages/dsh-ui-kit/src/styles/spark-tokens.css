@@ -188,6 +188,8 @@ body[data-theme="dark"] {
   --spk-acc-finance: #4ade80;
   --spk-acc-github: #a78bfa;
   --spk-acc-npm: #f87171;
+  /* 脚本沉淀库（2026-09-21 独立插件 dsh-script）：青绿档，与 spark 的琥珀明确区分 */
+  --spk-acc-script: #2dd4bf;
   /* 图表补充色（第 6-8 个系列）：暗底亮档 */
   --spk-chart-alt-1: #5eead4;
   --spk-chart-alt-2: #f0abfc;
@@ -198,6 +200,7 @@ body[data-theme="dark"] {
   --spk-acc-finance-fg: #6ee7a0;
   --spk-acc-github-fg: #bda6fb;
   --spk-acc-npm-fg: #f8a1a1;
+  --spk-acc-script-fg: #5eead4;
   /* 实底 accent / 品牌 / 危险色上的文字：统一取「饱和实底上的标签色」
      （亮色实底 → 白字，暗色亮实底 → 深字），避免三处各写一个近黑值。 */
   --spk-on-accent: var(--spk-contrast-fill-label);

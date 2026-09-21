@@ -1,6 +1,9 @@
 /**
- * Spark module panes: 灵感收件箱（捕获 + 收件箱视图）/ 涌现提议 / 脚本目录。Graph 子页
- * 留占位（后端暂无 graph 查询 API）。
+ * Spark module panes: 灵感收件箱（捕获 + 收件箱视图）/ 涌现提议。Graph 子页留占位
+ * （后端暂无 graph 查询 API）。
+ *
+ * 2026-09-21：脚本目录 pane 随脚本沉淀库迁到独立插件 `dsh-script-client`
+ * （ADR-003 自注册模块），本文件不再持有任何脚本 UI。
  *
  * 2026-09-14 收件箱化（设计 docs/spark-inbox-design-2026-09-14.md §4.1/§8）：
  *  - 列表从「活跃 / 已归档」两态改为四级收件箱 + 墓碑视图，计数来自 `/sparks/stats`；
@@ -12,9 +15,6 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Button, Card, Disclosure, Input, Modal, SegmentedControl, Textarea } from 'dsh-ui-kit'
 import { useFrames } from 'dsh-spark-plugin-kit/client'
 import type { SparkView, SparkInboxState, SparkStats, ProposalView } from 'dsh-spark-wire'
-// 脚本记录类型随脚本沉淀库迁出（docs/SCRIPT-LIBRARY-SPEC.md）；本 pane 在下一轮
-// 随 client 包自注册搬迁，暂从新 wire 取类型。
-import type { ScriptView } from 'dsh-script-wire'
 import { api } from './sparkApi.ts'
 import { useApiResource } from './useApiResource.ts'
 import { SPARK_EVENTS_STREAM, type SparkEventChannel } from './remote.ts'
@@ -437,77 +437,6 @@ export function ProposalsPane({ channel, t }: SparkPaneDeps): JSX.Element {
       >
         <p>{t('reflectConfirmBody')}</p>
       </Modal>
-    </div>
-  )
-}
-
-/* ─────────── 脚本目录：计量可视化 ─────────── */
-
-export function ScriptsPane({ channel, t }: SparkPaneDeps): JSX.Element {
-  const { data: scripts, error, reload } = useApiResource<ScriptView[]>(() => api.listScripts(), [])
-  const [message, setMessage] = useState<string | null>(null)
-  const [failed, setFailed] = useState(false)
-  const [busyId, setBusyId] = useState<string | null>(null)
-  const messageTimer = useRef(0)
-  // 脚本变更不再走 spark 流（独立插件有 script/events）；本 pane 迁移前只在挂载与调用后刷新。
-  void channel
-  useEffect(() => () => window.clearTimeout(messageTimer.current), [])
-
-  const invoke = async (sc: ScriptView) => {
-    if (busyId !== null) return
-    setBusyId(sc.id)
-    try {
-      await api.invokeScript(sc.id)
-      setFailed(false)
-      setMessage(`${t('invokedScript')} "${sc.name}"`)
-    } catch (e) {
-      setFailed(true)
-      setMessage(`${t('invokeFailed')}: ${e instanceof Error ? e.message : String(e)}`)
-    } finally {
-      setBusyId(null)
-      reload()
-      window.clearTimeout(messageTimer.current)
-      messageTimer.current = window.setTimeout(() => setMessage(null), 4000)
-    }
-  }
-
-  return (
-    <div className="dock-stack">
-      <ErrorNote error={error} />
-      {message !== null && <div className={failed ? 'dock-error' : 'dock-ok'} role="status">{message}</div>}
-      <Card
-        title={t('scriptsTitle')}
-        actions={scripts !== null ? <span className="dock-hint">{String(scripts.length)} {t('unitScripts')}</span> : null}
-      >
-        {scripts === null
-          ? <Empty text={t('loading')} loading />
-          : scripts.length === 0
-            ? <Empty text={t('scriptsEmpty')} hint={t('scriptsEmptyHint')} />
-            : (
-              <div className="dock-list">
-                {scripts.map((sc) => {
-                  const rate = sc.invocationCount > 0 ? sc.successCount / sc.invocationCount : null
-                  return (
-                    <div key={sc.id} className="dock-row">
-                      <div className="grow">
-                        <div className="ttl">{sc.name}</div>
-                        <div className="meta">
-                          {String(sc.steps.length)} {t('stepUnit')} · {t('invokeCountUnit')} {String(sc.invocationCount)} {t('invokeCountSuffix')}
-                        </div>
-                        {rate !== null && (
-                          <div className="dock-row-meter">
-                            <Meter pct={rate} tone={rate >= 0.9 ? 'good' : rate >= 0.6 ? 'warn' : undefined} />
-                            <span className="dock-hint">{t('successRate')} {String(Math.round(rate * 100))}%</span>
-                          </div>
-                        )}
-                      </div>
-                      <RowAction label={t('invoke')} busyLabel={t('invoking')} busy={busyId === sc.id} onRun={() => invoke(sc)} />
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-      </Card>
     </div>
   )
 }

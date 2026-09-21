@@ -17,7 +17,7 @@ import {
   type DockModuleOwnerProps,
 } from 'dsh-spark-plugin-kit/client'
 import type { SparkChangedEvent, SparkStreamFrame } from 'dsh-spark-wire'
-import { ProposalsPane, ScriptsPane, SparksPane } from './SparkModule.tsx'
+import { ProposalsPane, SparksPane } from './SparkModule.tsx'
 import { GraphPane } from './GraphPane.tsx'
 import { SPARK_EVENTS_STREAM, type SparkEventChannel } from './remote.ts'
 import type { SparkDockLocaleKey, SparkT } from './locales.ts'
@@ -33,7 +33,6 @@ export interface SparkModuleInject {
 const PANES = [
   { id: 'sparks', key: 'paneSparks' },
   { id: 'proposals', key: 'paneProposals' },
-  { id: 'scripts', key: 'paneScripts' },
   { id: 'graph', key: 'paneGraph' },
 ] as const
 
@@ -51,8 +50,7 @@ export function SparkDockModule(props: SparkModuleInject & DockModuleOwnerProps)
     }),
     paneId === 'sparks' ? createElement(SparksPane, { channel, t })
       : paneId === 'proposals' ? createElement(ProposalsPane, { channel, t })
-        : paneId === 'scripts' ? createElement(ScriptsPane, { channel, t })
-          : createElement(GraphPane, { t })
+        : createElement(GraphPane, { t })
   )
 }
 

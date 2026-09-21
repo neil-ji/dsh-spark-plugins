@@ -52,6 +52,7 @@ const DOCK_MODULES = {
   'dsh-spark-dock/style': 'packages/dsh-spark-dock/src/client/style.ts',
   // 事件契约（帧 schema + typert 描述符）：dock 与 mock 都要它，源码口径直接吃 src。
   'dsh-spark-wire': 'packages/dsh-spark-wire/src/index.ts',
+  'dsh-script-wire': 'packages/dsh-script-wire/src/index.ts',
   // 财务 remote 契约（P5 单源）：host 注册与 client $mount 共用同一份描述符 +
   // Zod 边界 schema，两种口径都吃源码（wire 是主源码，无构建期生成物）。
   'dsh-spark-finance-wire': 'packages/dsh-finance-wire/src/index.ts',
@@ -70,13 +71,14 @@ const BUNDLE_ALIASES = {
   ...DOCK_MODULES,
   'dsh-spark-plugin-kit/client': 'packages/dsh-plugin-kit/lib/client/index.js',
   'dsh-ui-kit': 'packages/dsh-ui-kit/dist/index.js',
-  // ADR-003：dock 与五个模块都由各自的 client 入口注册 —— 真产物口径吃
+  // ADR-003：dock 与六个模块都由各自的 client 入口注册 —— 真产物口径吃
   // lib/client.js（带 ModuleLoader 壳，由 clientBundleShim 在预览里剥壳）。
   'dsh-spark-dock/client': 'packages/dsh-spark-dock/lib/client.js',
   'dsh-connector-github-ui/client': 'packages/dsh-github-ui/lib/client.js',
   'dsh-connector-npm-ui/client': 'packages/dsh-npm-ui/lib/client.js',
   'dsh-spark-finance-client/client': 'packages/dsh-finance-client/lib/client.js',
   'dsh-hippomemo/client': 'packages/dsh-hippomemo/lib/client.js',
+  'dsh-script-client/client': 'packages/dsh-script-client/lib/client.js',
   // 组件级画布（非 Dock 画布）吃的 `…/embed`：P4 之后它只是**源码 barrel**
   // （产品里不存在 embed 产物），两种口径都指向同一个 src 文件。
   ...EMBED_BARRELS,
@@ -94,6 +96,7 @@ const SOURCE_ALIASES = {
   'dsh-connector-github-ui/client': 'packages/dsh-github-ui/src/client/index.ts',
   'dsh-spark-finance-client/client': 'packages/dsh-finance-client/src/client/index.ts',
   'dsh-hippomemo/client': 'packages/dsh-hippomemo/src/client/index.ts',
+  'dsh-script-client/client': 'packages/dsh-script-client/src/client/index.ts',
   ...EMBED_BARRELS,
 }
 
@@ -110,6 +113,7 @@ const PACKAGE_NAME = 'preview'
  */
 const MODULE_LOADER_ENTRIES = new Set([
   'dsh-spark-dock/client',
+  'dsh-script-client/client',
   'dsh-connector-github-ui/client',
   'dsh-connector-npm-ui/client',
   'dsh-spark-finance-client/client',

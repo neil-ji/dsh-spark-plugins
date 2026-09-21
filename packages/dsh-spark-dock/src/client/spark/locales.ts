@@ -12,14 +12,13 @@ export const SPARK_DOCK_NS = 'spark.dock'
 export const zh = {
   moduleLabel: '火花',
   moduleName: '火花 Spark',
-  moduleSub: '灵感收件箱 · 结晶 · 涌现提议 · 脚本目录',
+  moduleSub: '灵感收件箱 · 结晶 · 涌现提议',
   // 2026-09-16：模块栏副标题动态拼接——>0 条时挂上 "· N 项待处理"，
   // 让面板标题行也传达有几条等你处理。0 条时 dock 仍按 moduleSub 渲染（不带数字）。
   pendingLabel: '项待处理',
   /** 模块栏 tab 徽章的可访问名（{label} = 模块名，{n} = 待处理计数；连标点一起定）。 */
   paneSparks: '火花流',
   paneProposals: '涌现提议',
-  paneScripts: '脚本目录',
   paneGraph: 'Graph',
 
   inboxTitle: '灵感收件箱',
@@ -96,17 +95,12 @@ export const zh = {
   accept: '接受',
   dismiss: '驳回',
 
-  scriptsTitle: '脚本目录',
-  unitScripts: '个',
-  scriptsEmpty: '还没有脚本',
-  scriptsEmptyHint: '常见多步操作会被自动沉淀为可复用脚本。',
   stepUnit: '步',
   invokeCountUnit: '调用',
   invokeCountSuffix: '次',
   successRate: '成功率',
   invoke: '调用',
   invoking: '调用中…',
-  invokedScript: '已调用',
   invokeFailed: '调用失败',
 
   graphTitle: '关联图谱',
@@ -139,11 +133,10 @@ export type SparkT = (key: SparkDockLocaleKey) => string
 export const en: Record<SparkDockLocaleKey, string> = {
   moduleLabel: 'Spark',
   moduleName: 'Spark',
-  moduleSub: 'Inspiration inbox · crystallize · emergence · scripts',
+  moduleSub: 'Inspiration inbox · crystallize · emergence',
   pendingLabel: 'pending',
   paneSparks: 'Sparks',
   paneProposals: 'Proposals',
-  paneScripts: 'Scripts',
   paneGraph: 'Graph',
 
   inboxTitle: 'Inspiration inbox',
@@ -219,17 +212,12 @@ export const en: Record<SparkDockLocaleKey, string> = {
   accept: 'Accept',
   dismiss: 'Dismiss',
 
-  scriptsTitle: 'Script catalog',
-  unitScripts: 'scripts',
-  scriptsEmpty: 'No scripts yet',
-  scriptsEmptyHint: 'Frequent multi-step procedures get captured as reusable scripts.',
   stepUnit: 'steps',
   invokeCountUnit: 'invoked',
   invokeCountSuffix: 'times',
   successRate: 'success rate',
   invoke: 'Invoke',
   invoking: 'Invoking…',
-  invokedScript: 'Invoked',
   invokeFailed: 'Invoke failed',
 
   graphTitle: 'Association graph',

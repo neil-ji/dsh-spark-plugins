@@ -189,6 +189,7 @@ export async function run(): Promise<{ checks: Check[] }> {
       { id: 'finance', label: '财务' },
       { id: 'github', label: 'GitHub' },
       { id: 'npm', label: 'npm' },
+      { id: 'script', label: '脚本' },
     ]
     const fakeSlot = (_key: string, owner: { variant: string, activeId: string }, opts?: { only?: string }) => {
       seen.push(owner.variant)
@@ -204,7 +205,7 @@ export async function run(): Promise<{ checks: Check[] }> {
     }
     const slotHtml = renderToString(<DockOverlay renderSlot={fakeSlot} /> as ReactElement)
     const missing = MODULES.filter((m) => !slotHtml.includes('aria-label="' + m.label + '"')).map((m) => m.label)
-    check('dock: 子槽的五个模块都出现在模块栏', missing.length === 0, missing.length === 0 ? '' : '缺少 ' + missing.join('、'))
+    check('dock: 子槽的六个模块都出现在模块栏', missing.length === 0, missing.length === 0 ? '' : '缺少 ' + missing.join('、'))
     check('dock: 默认激活 spark（子槽 header/pane 位）', slotHtml.includes('fake header spark') && slotHtml.includes('fake pane spark'), '')
     check('dock: 三个渲染位都被调用', seen.includes('rail') && seen.includes('header') && seen.includes('pane'), 'variants=' + seen.join(','))
 
@@ -463,34 +464,35 @@ export async function run(): Promise<{ checks: Check[] }> {
     check('生命周期: teardown 清空槽位 ledger', before === 1 && after === 0, 'before=' + before + ' after=' + after)
   }
 
-  /* ── W4 保真：五个插件的真 apply + inject 门（无浏览器也能抓到注册回归）── */
+  /* ── W4 保真：六个插件的真 apply + inject 门（无浏览器也能抓到注册回归）── */
   {
     shimBrowserGlobals()
     const ctx = createMockCtx({ lang: () => lang, scenario: () => scenario })
     buildGithubInjected(ctx, scenario)
     buildNpmInjected(ctx, scenario)
     buildFinanceInjected(ctx, scenario)
-    const [dock, github, npm, finance, hippomemo] = await Promise.all([
+    const [dock, github, npm, finance, hippomemo, script] = await Promise.all([
       import('dsh-spark-dock/client'),
       import('dsh-connector-github-ui/client'),
       import('dsh-connector-npm-ui/client'),
       import('dsh-spark-finance-client/client'),
       import('dsh-hippomemo/client'),
+      import('dsh-script-client/client'),
     ])
     let applyError = ''
     try {
-      for (const mod of [dock, github, npm, finance, hippomemo]) {
+      for (const mod of [dock, github, npm, finance, hippomemo, script]) {
         await mod.apply(withInjectGate(ctx, (mod.inject ?? []) as readonly string[]) as never)
       }
     } catch (error) {
       applyError = String(error)
     }
-    check('dock: 五个插件真 apply 全部通过 inject 门', applyError === '', applyError)
+    check('dock: 六个插件真 apply 全部通过 inject 门', applyError === '', applyError)
     const entries = ctx.slots.snapshot('spark.dock.module')
     const ids = entries.map((entry) => entry.id)
     check(
-      'dock: 五个模块自注册且按 order 排序',
-      ids.join(',') === 'spark,hippomemo,finance,github,npm',
+      'dock: 六个模块自注册且按 order 排序',
+      ids.join(',') === 'spark,hippomemo,finance,github,npm,script',
       JSON.stringify(ids),
     )
     ctx.__preview.teardown()
@@ -524,6 +526,7 @@ export async function run(): Promise<{ checks: Check[] }> {
         import('dsh-connector-npm-ui/client'),
         import('dsh-spark-finance-client/client'),
         import('dsh-hippomemo/client'),
+        import('dsh-script-client/client'),
       ])
       let applyError = ''
       try {
@@ -533,7 +536,7 @@ export async function run(): Promise<{ checks: Check[] }> {
       } catch (error) {
         applyError = String(error)
       }
-      check('en: 五个插件真 apply（en 字典）通过', applyError === '', applyError)
+      check('en: 六个插件真 apply（en 字典）通过', applyError === '', applyError)
 
       // 真槽位渲染：与平台把 renderSlot 交给 DockOverlay 的形态一致（ledger 驱动）。
       const renderSlot: DockRenderSlot = (_key, owner, opts) => {
@@ -581,8 +584,8 @@ export async function run(): Promise<{ checks: Check[] }> {
 
       const entries = ctx.slots.snapshot('spark.dock.module')
       check(
-        'en: 五个模块都注册进子槽（en 渲染的前置条件）',
-        entries.map((entry) => entry.id).join(',') === 'spark,hippomemo,finance,github,npm',
+        'en: 六个模块都注册进子槽（en 渲染的前置条件）',
+        entries.map((entry) => entry.id).join(',') === 'spark,hippomemo,finance,github,npm,script',
         JSON.stringify(entries.map((entry) => entry.id)),
       )
       for (const entry of entries) {

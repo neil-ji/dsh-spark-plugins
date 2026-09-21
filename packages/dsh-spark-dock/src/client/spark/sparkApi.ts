@@ -1,12 +1,11 @@
 /**
  * Minimal sparks API subset for the dock (fetch wrapper over the spark host's
- * `/sparks` `/proposals` `/scripts` routes).
+ * `/sparks` `/proposals` routes；脚本 API 随脚本沉淀库迁到 `dsh-script-client`）。
  *
  * 2026-09-14：收件箱化 —— 列表按 `inboxState` 过滤（取代旧的 status=active|archived），
  * 新增 `/sparks/stats`（计数）与 `/sparks/:id/restore`（从墓碑恢复）。
  */
 import type { SparkView, SparkCapture, SparkInboxState, SparkStats, SparkGraph, ProposalView, ProposalStatus } from 'dsh-spark-wire'
-import type { ScriptView } from 'dsh-script-wire'
 
 interface Envelope { ok: boolean; value?: unknown; error?: { code: string; message: string } }
 
@@ -48,8 +47,6 @@ export interface DockSparksApi {
   listProposals(query?: { status?: ProposalStatus; limit?: number }): Promise<ProposalView[]>
   resolveProposal(id: string, status: 'accepted' | 'dismissed'): Promise<ProposalView>
   reflect(): Promise<unknown>
-  listScripts(limit?: number): Promise<ScriptView[]>
-  invokeScript(id: string): Promise<unknown>
 }
 
 /** `inboxState: 'crystallized'` 只能通过 crystallize 端点到达（它带 hippo 链接），API 层不再暴露。 */
@@ -115,12 +112,6 @@ export function createDockSparksApi(): DockSparksApi {
     },
     async reflect() {
       return request('/proposals/reflect', { method: 'POST', body: '{}' })
-    },
-    async listScripts(limit = 50) {
-      return request<ScriptView[]>('/scripts?limit=' + String(limit))
-    },
-    async invokeScript(id) {
-      return request('/scripts/' + enc(id) + '/invoke', { method: 'POST', body: '{}' })
     },
   }
 }
