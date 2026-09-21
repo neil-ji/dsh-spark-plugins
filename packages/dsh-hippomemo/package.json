@@ -1,6 +1,6 @@
 {
   "name": "dsh-hippomemo",
-  "version": "0.3.20",
+  "version": "0.3.21",
   "description": "DSH 跨会话/跨工作区共享记忆插件：自动召回、显式沉淀、LLM 复核的记忆进化",
   "type": "module",
   "main": "lib/index.js",
@@ -59,7 +59,7 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "test": "node --test --test-reporter=spec test/memory-core.test.ts test/memory-extract.test.ts test/memory-terms.test.ts test/memory-spec-heal.test.ts test/memory-evolve.test.ts test/relevance.test.ts",
+    "test": "node --test --test-reporter=spec test/memory-core.test.ts test/memory-importance.test.ts test/memory-extract.test.ts test/memory-terms.test.ts test/memory-spec-heal.test.ts test/memory-evolve.test.ts test/relevance.test.ts",
     "test:coverage": "node --test --experimental-test-coverage test/memory-core.test.ts test/memory-extract.test.ts test/memory-terms.test.ts test/memory-spec-heal.test.ts",
     "build": "node build.mjs"
   },

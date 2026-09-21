@@ -23,6 +23,7 @@ import {
   IconEdit, IconPlus, IconThink, IconTrash, IconWarning,
 } from './icons.tsx'
 import type { HippomemoApi, MemoryTagCount } from './api.ts'
+import { IMPORTANCE_TIERS, importanceTier, tierValue, type ImportanceTier } from '../importance.ts'
 import type { HippomemoLocaleKey } from './locales.ts'
 import type {
   CitationRecord, EvolveReport, MemoryKind, MemoryListQuery, MemoryPatchInput,
@@ -108,6 +109,18 @@ function HippomemoSelect({ value, placeholder, options, onChange, className }: {
       onSelect={(id) => { onChange(id); setOpen(false) }}
       onClose={() => { setOpen(false) }} />
   )
+}
+
+const IMPORTANCE_KEYS: Record<ImportanceTier, HippomemoLocaleKey> = {
+  critical: 'importanceCritical',
+  high: 'importanceHigh',
+  normal: 'importanceNormal',
+  low: 'importanceLow',
+}
+
+/** 重要度的展示文案：裸数字对用户无意义，一律走档位词（2026-09 用户裁决）。 */
+function importanceText(t: Translate, importance: number): string {
+  return t(IMPORTANCE_KEYS[importanceTier(importance)])
 }
 
 function formatDate(value: number): string { return new Date(value).toLocaleString() }
@@ -536,7 +549,7 @@ function MemoryListPanel({ t, api, detailId, onDetail, embedded = false }: {
                       : <Pill className='hippomemo-tag hippomemo-tag-warn'>
                           {t('unproven')}{(record.seenWorkspaces?.length ?? 0) > 0 ? '·' + String(record.seenWorkspaces?.length) : ''}
                         </Pill>) : null}
-                    <span className='hippomemo-row-meta-text'>{t('importanceLabel')} {record.importance.toFixed(2)}</span>
+                    <span className='hippomemo-row-meta-text'>{t('importanceLabel')} {importanceText(t, record.importance)}</span>
                     <span className='hippomemo-row-meta-text' title={formatDate(record.updatedAt)}>
                       {formatRelative(record.updatedAt, Date.now(), t)}
                     </span>
@@ -723,7 +736,7 @@ function MemoryDetailModal({ api, t, id, refreshKey, onBack, onEdit, onDeleted }
         </div>
       ) : null}
       <dl className='hippomemo-facts'>
-        <div className='hippomemo-fact'><dt>{t('importanceLabel')}</dt><dd>{record.importance.toFixed(2)}</dd></div>
+        <div className='hippomemo-fact'><dt>{t('importanceLabel')}</dt><dd>{importanceText(t, record.importance)}</dd></div>
         <div className='hippomemo-fact'><dt>{t('revisionLabel')}</dt><dd>{record.revision}</dd></div>
         <div className='hippomemo-fact'><dt>{t('sourceSession')}</dt><dd>{record.sourceSessionId}</dd></div>
         {hasSpark ? (
@@ -751,7 +764,7 @@ function MemoryDetailModal({ api, t, id, refreshKey, onBack, onEdit, onDeleted }
             </Pill>
             <span className='hippomemo-lineage-arrow'>──结晶──▶</span>
             <Pill className='hippomemo-lineage-node hippomemo-lineage-crystal'>
-              {t('modalLineageCrystallize', { kind: record.kind, importance: record.importance.toFixed(2) })}
+              {t('modalLineageCrystallize', { kind: record.kind, importance: importanceText(t, record.importance) })}
             </Pill>
             <span className='hippomemo-lineage-arrow'>──▶</span>
             <Pill className='hippomemo-lineage-node hippomemo-lineage-hippo'>
@@ -800,7 +813,9 @@ function MemoryEditorModal({ api, t, initial, onCancel, onSaved }: {
   const [modelIds, setModelIds] = useState(initial?.modelIds?.join(', ') ?? '');
   const [kind, setKind] = useState<MemoryKind>(initial?.kind ?? 'insight');
   const [scope, setScope] = useState<MemoryScope>(initial?.scope ?? 'global');
-  const [importance, setImportance] = useState(String(initial?.importance ?? 0.5));
+  // 存的是**原始数值**而不是档位：用户没动档位时不得回写（0.62 显示为「重要」，
+  // 保存后仍是 0.62）。只有主动选择档位时才写入该档代表值。
+  const [importance, setImportance] = useState<number>(initial?.importance ?? tierValue('normal'));
   const [saving, setSaving] = useState(false);
   const submit = async (): Promise<void> => {
     setSaving(true);
@@ -809,7 +824,7 @@ function MemoryEditorModal({ api, t, initial, onCancel, onSaved }: {
         title, content,
         tags: tags.split(',').map(item => item.trim()).filter(item => item.length > 0),
         modelIds: modelIds.split(',').map(item => item.trim()).filter(item => item.length > 0),
-        kind, scope, importance: Number(importance) || 0.5,
+        kind, scope, importance,
       };
       if (initial === undefined) await api.create(patch as MemoryPutInput);
       else await api.update(initial.id, patch);
@@ -845,8 +860,13 @@ function MemoryEditorModal({ api, t, initial, onCancel, onSaved }: {
           onChange={(value) => { setScope(value as MemoryScope); }} />
       </label>
       <label className='hippomemo-form-label'>{t('importanceLabel')}
-        <Input type='number' min='0' max='1' step='0.1' value={importance}
-          onChange={event => { setImportance(event.currentTarget.value); }} />
+        {/* 四档段控取代 0~1 的数字输入：数字对用户没有判断标准（2026-09 用户裁决）。 */}
+        <SegmentedControl
+          aria-label={t('importanceLabel')}
+          value={importanceTier(importance)}
+          onChange={(value) => { setImportance(tierValue(value as ImportanceTier)) }}
+          options={IMPORTANCE_TIERS.map(tier => ({ value: tier, label: t(IMPORTANCE_KEYS[tier]) }))}
+        />
       </label>
       <label className='hippomemo-form-label'>{t('contentLabel')}
         <Textarea value={content} onChange={event => { setContent(event.currentTarget.value); }} />
