@@ -75,9 +75,19 @@ const PORT = Number(process.env.CDP_PORT ?? 9225)
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
 const argv = process.argv.slice(2)
 const urlArgIndex = argv.indexOf('--url')
+/** 状态文件只在沙箱宿主存活期间存在（dev-up 退出时会清掉死 token）。 */
+const readStateUrl = () => {
+  try {
+    return JSON.parse(readFileSync(ROOT + '.dev/state.json', 'utf8')).url
+  } catch {
+    console.error('读不到 .dev/state.json —— 请先启动沙箱宿主：pnpm sandbox:up（前台，放后台跑）')
+    console.error('或用 --url 直接给出带 token 的 URL（宿主启动时会打印）。')
+    process.exit(1)
+  }
+}
 const URL_TARGET = urlArgIndex >= 0
   ? argv[urlArgIndex + 1]
-  : JSON.parse(readFileSync(ROOT + '.dev/state.json', 'utf8')).url
+  : readStateUrl()
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -167,16 +177,24 @@ try {
   await send('Emulation.setFocusEmulationEnabled', { enabled: true })
   await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false })
   await send('Page.navigate', { url: URL_TARGET })
-  await sleep(6000)
+  await sleep(4000)
 
-  const ready = await evalJs(`(() => ({
+  // 就绪等待：宿主**冷启动**时 client 模块图是异步装配的（首帧 body 已有内容、
+  // 悬浮球还没挂上）。固定 sleep 会把它读成「bundle 没加载」而整段假失败 ——
+  // 实测冷启动首跑 ball=0、立刻重跑就 69/69（2026-09 连续踩到两次）。所以这里
+  // 轮询到球出现为止（上限 20s），判据仍落在同一个节点上，不放松断言。
+  const readReady = async () => evalJs(`(() => ({
     title: document.title,
     ball: document.querySelectorAll('.dock-ball').length,
     panel: document.querySelectorAll('.dock-panel').length,
     body: document.body.textContent.length,
   }))()`)
+  let ready = await readReady()
+  for (let attempt = 0; attempt < 8 && ready.ball !== 1; attempt += 1) {
+    await sleep(2500)
+    ready = await readReady()
+  }
   check('真宿主首屏渲染', ready.body > 0, JSON.stringify(ready))
-  check('dock 悬浮球挂载（client bundle 由 profile 加载）', ready.ball === 1, 'ball=' + ready.ball)
 
   // 0) 先过掉宿主的**首启引导模态**（dsh 0.1.5-rc.x 新增：内测声明 → 添加一个 API Key → …）。
   //
@@ -211,6 +229,14 @@ try {
     rootInertAfter === false,
     JSON.stringify({ steps: onboarding.steps.map((s) => s?.clicked ?? s?.done), rootInertAfter }),
   )
+
+  // 球的断言放在引导模态之后：冷启动时引导层先出现，client bundle 的装配要等它散掉
+  // 才继续（实测首跑 ball=0、立刻重跑就是 1；两次踩坑后固化成"等待 + 只在就绪后断言"）。
+  for (let attempt = 0; attempt < 6 && ready.ball !== 1; attempt += 1) {
+    await sleep(2000)
+    ready = await readReady()
+  }
+  check('dock 悬浮球挂载（client bundle 由 profile 加载）', ready.ball === 1, 'ball=' + ready.ball)
 
   if (ready.ball === 1) {
     // 1) 事件通道：捕获一条 → 只有 mux stream 还在（产品已无 SSE 端点）才能弹气泡

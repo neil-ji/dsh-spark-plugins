@@ -11,7 +11,7 @@
  *
  * 常驻服务 3080 / dogfood 3999 / 逃生 3998 一律不动。
  */
-import { closeSync, openSync, readFileSync } from 'node:fs'
+import { closeSync, openSync, readFileSync, rmSync, writeSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   HOME_PATCH,
@@ -140,11 +140,43 @@ async function main() {
     return
   }
 
-  log.step(`启动 dsh --profile ${profile} --port ${port} --no-open`)
+  log.step(`启动 dsh --profile ${profile} --port ${port} --no-open（日志 ${logFile}）`)
   log.info(`DSH_HOME = ${SANDBOX_HOME}`)
   log.info(`cwd      = ${cwd}`)
-  const child = spawnDsh({ profile, port, cwd, stdio: 'inherit' })
+  // 前台模式**同样要写 state.json**：以前只有 detach 分支写，于是前台启动后
+  // .dev/state.json 里躺的还是上一轮的 url/token —— 验收脚本按它导航会落到
+  // 「dsh web authentication required」页，表现为「悬浮球没挂载」整段假失败
+  // （2026-09 连续踩到两次，每次都要靠"再跑一遍"绕过）。现在：把子进程输出同时
+  // 写日志文件与终端，解析出带 token 的 URL 后立刻落盘。
+  const fd = openSync(logFile, 'w')
+  const child = spawnDsh({ profile, port, cwd, stdio: ['ignore', 'pipe', 'pipe'] })
+  let captured = ''
+  const mirror = (stream, out) => {
+    stream.on('data', (chunk) => {
+      writeSync(fd, chunk)
+      out.write(chunk)
+      captured += chunk.toString()
+    })
+  }
+  mirror(child.stdout, process.stdout)
+  mirror(child.stderr, process.stderr)
+
+  let url
+  const stateTimer = setInterval(() => {
+    if (url !== undefined) return
+    const match = /(http:\/\/127\.0\.0\.1:\d+\/\?token=[\w-]+)/.exec(captured)
+    if (match === null) return
+    url = match[1]
+    writeJson(STATE_FILE, { pid: child.pid, port, profile, home: SANDBOX_HOME, url, logFile, startedAt: Date.now() })
+    log.ok(`状态已写入 ${STATE_FILE}`)
+    log.info(`浏览器 URL：${url}`)
+  }, 400)
+
   const code = await new Promise((resolve) => child.on('exit', resolve))
+  clearInterval(stateTimer)
+  closeSync(fd)
+  // 进程退出后把状态文件清掉：留着的是"死 token"，正是上面那类假失败的源头。
+  try { rmSync(STATE_FILE, { force: true }) } catch { /* best-effort */ }
   process.exit(code ?? 0)
 }
 
