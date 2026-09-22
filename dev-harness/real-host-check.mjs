@@ -17,6 +17,29 @@ import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 /**
+ * 图谱边的类型集合 —— **从 wire 契约源码读**，不手抄第二份（AGENTS.md 铁律 5）。
+ *
+ * 曾经的写法是硬编码 `['tag', 'proposal']`，F2 给 `graph.ts` 加了 `derived` 边之后
+ * 它就一直是错的；只要沙箱库里有衍生火花且落进图谱窗口，断言必红（2026-09-23 实测）。
+ *
+ * 解析失败**抛错**而不是回退成宽松集合：一个「永远为真」的断言等于没有断言。
+ */
+let graphEdgeKindsCache = null
+function graphEdgeKinds() {
+  if (graphEdgeKindsCache !== null) return graphEdgeKindsCache
+  const file = fileURLToPath(new URL('../packages/dsh-spark-wire/src/index.ts', import.meta.url))
+  const src = readFileSync(file, 'utf8')
+  const match = /sparkGraphEdgeKindSchema\s*=\s*z\.enum\(\[([^\]]*)\]\)/.exec(src)
+  if (match === null) {
+    throw new Error('无法从 wire 契约解析 sparkGraphEdgeKindSchema：' + file)
+  }
+  const kinds = [...match[1].matchAll(/'([^']+)'/g)].map(m => m[1])
+  if (kinds.length === 0) throw new Error('sparkGraphEdgeKindSchema 解析出空枚举：' + file)
+  graphEdgeKindsCache = new Set(kinds)
+  return graphEdgeKindsCache
+}
+
+/**
  * 浏览器发现（跨平台）。
  *
  * 为什么不能写死：原先只认 Windows Edge 的绝对路径，任何非 Windows 机器上脚本
@@ -343,6 +366,13 @@ try {
     // 3b-2) 关联图谱（2026-09 补齐 Graph 子页）：契约与图算法不变量。
     //     这里断言的是**结构不变量**而不是数据巧合：边两端必须都在节点表里、
     //     id 带类型前缀、度数与边数自洽 —— 沙箱数据是可变的，节点数不能断言。
+    //
+    // 2026-09-23 修复一处**陈旧断言**：这里原先硬写 `['tag', 'proposal']`，而契约
+    // (`sparkGraphEdgeKindSchema`) 是三类边 `tag / proposal / derived`。`derived`
+    // 边是 F2（provenance，commit 694385d）加进 `graph.ts` 的，断言却从 F1 起没再动
+    // ——只要沙箱库涨到让 60 节点窗口纳入一条 derived 边，这条断言就必红。
+    // 按 AGENTS.md 铁律 5（契约不允许手抄两份），改为**从契约源码读枚举**，
+    // 且解析不出来就 fail-loud —— 宁可红，也不要一个「永远为真」的断言。
     const graphProbe = await evalJs(`fetch('/sparks/graph?limit=60').then(async (r) => ({ ok: r.ok, status: r.status, value: await r.json() }))`)
     const graphValue = graphProbe?.value?.value
     const graphNodes = Array.isArray(graphValue?.nodes) ? graphValue.nodes : []
@@ -350,7 +380,7 @@ try {
     const nodeIds = new Set(graphNodes.map((n) => n.id))
     const endpointsOk = graphEdges.every((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
     const idsOk = graphNodes.every((n) => n.id.startsWith('spark:'))
-    const kindsOk = graphEdges.every((e) => ['tag', 'proposal'].includes(e.kind))
+    const kindsOk = graphEdges.every((e) => graphEdgeKinds().has(e.kind))
     const degreeOk = graphNodes.every((n) => {
       const deg = graphEdges.filter((e) => e.source === n.id || e.target === n.id).length
       return n.degree === deg
