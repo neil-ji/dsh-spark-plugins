@@ -93,6 +93,45 @@ test('cluster: 2 sparks (even with shared tags) do NOT produce cluster', () => {
   assert.equal(out.filter(c => c.type === 'cluster').length, 0)
 })
 
+test('cluster: 链式两两重叠但全体无共同标签 → 不成 cluster（2026-09-23 真机夹具）', () => {
+  const now = 1_700_000_000_000
+  // 这六组 tags 取自真机的六条火花：每对相邻火花都够 clusterMinSharedTags(2)，
+  // 但六个集合的**交集是空集**。旧实现用 union-find 按两两重叠并组，而 union 传递、
+  // pairwise 重叠不传递，于是并出了一个「两两相连、全体无共同标签」的伪 cluster，
+  // 产出 explanation「6 条火花共同标签：」（冒号后空白）+ confidence 0 + leverage 'high'
+  // （真机提案 f0d45007）。cluster 的声称是「共同标签」，说不到就不该说。
+  const sparks = [
+    makeSpark({ id: 'a', tags: ['exfat', 'fskit', '卷检查', '决策树', '实测时长', '更正'] }),
+    makeSpark({ id: 'b', tags: ['macos', 'exfat', 'fskit', '故障观测', '决策树'] }),
+    makeSpark({ id: 'c', tags: ['商业判断', '竞品分析', 'SAM', '平台风险', '方法论', '免费替代'] }),
+    makeSpark({ id: 'd', tags: ['macos', 'recovery', '商业判断', '证伪', 'SAM', '定价天花板'] }),
+    makeSpark({ id: 'e', tags: ['macos', '信任设计', '认证', '产品化', '安全叙事'] }),
+    makeSpark({ id: 'f', tags: ['macos', 'recovery', '产品化', 'moat', 'knowledge-asset', '决策树'] }),
+  ]
+  const out = generateProposals(sparks, DEFAULT_OPTS, now)
+  assert.equal(out.filter(p => p.type === 'cluster').length, 0)
+})
+
+test('cluster: 理由与置信度必须自洽，杠杆随真实度量（不再硬编码 high）', () => {
+  const now = 1_700_000_000_000
+  // 松：6 条只共享 2 个标签 → confidence 2/6 → medium。理由必须真的写得出标签（不能悬空冒号）。
+  const loose = ['a', 'b', 'c', 'd', 'e', 'f'].map(id => makeSpark({ id, tags: ['design', 'memory'] }))
+  const cl = generateProposals(loose, DEFAULT_OPTS, now).filter(p => p.type === 'cluster')
+  assert.equal(cl.length, 1)
+  assert.equal(cl[0]!.confidence, 2 / 6)
+  assert.equal(cl[0]!.leverage, 'medium')
+  assert.match(cl[0]!.explanation, /共同标签：design, memory$/)
+  assert.ok(cl[0]!.confidence > 0, 'cluster 的 confidence 不允许为 0')
+
+  // 紧：3 条共享 3 个标签 → confidence 1 → high
+  const tight = ['a', 'b', 'c'].map(id => makeSpark({ id, tags: ['design', 'memory', 'cognition'] }))
+  const cl2 = generateProposals(tight, DEFAULT_OPTS, now).filter(p => p.type === 'cluster')
+  assert.equal(cl2.length, 1)
+  assert.equal(cl2[0]!.confidence, 1)
+  assert.equal(cl2[0]!.leverage, 'high')
+  assert.ok(!/：$/.test(cl2[0]!.explanation), '理由不允许以悬空冒号结尾')
+})
+
 test('prune: stale active spark (untouched > 14 days) produces prune proposal', () => {
   const now = 1_700_000_000_000
   const longAgo = now - 30 * 86_400_000 // 30 days old

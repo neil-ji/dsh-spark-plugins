@@ -32,6 +32,16 @@ function pairs<T>(arr: readonly T[]): Array<[T, T]> {
   return out
 }
 
+/**
+ * cluster 的 high 杠杆门槛（口径 = confidence = 共同标签数 / 组规模）。
+ *
+ * 为什么不是硬编码 'high'：2026-09-23 真机出现过一条 **confidence=0 却挂 leverage='high'**
+ * 的伪 cluster（6 条火花无任何共同标签），面板于是请人裁决一条「高杠杆 · 置信度 0 ·
+ * 理由空白」的提案 —— 杠杆是给用户排优先级的，它必须来自真实度量，否则就是在骗人。
+ * 0.5 的含义：共同标签核心至少要有组规模一半那么"厚"，才算紧。
+ */
+const CLUSTER_HIGH_LEVERAGE_CONFIDENCE = 0.5
+
 /** Group sparks by tag-set intersection (set of tags shared by all members). */
 function clusterBySharedTags(
   sparks: readonly SparkView[],
@@ -80,6 +90,14 @@ function clusterBySharedTags(
     }
     const allShared: string[] = []
     for (const [t, c] of tagCounts) if (c === ids.length) allShared.push(t)
+    // 组的定义是「有共同标签核心」，不是「两两连得上」—— union 是传递的，pairwise 重叠不是。
+    // 2026-09-23 真机实测：6 条火花靠 5 对两两重叠串成一条链（exfat/fskit/决策树 →
+    // macos/决策树 → macos/recovery → macos/产品化 → 商业判断/SAM），**全体交集为空**，
+    // 却仍被当成一个 cluster，产出 explanation「6 条火花共同标签：」（冒号后空白）
+    // 与 confidence 0。所以全体交集不足 minSharedTags 就不成组。
+    // 这与函数类型注释及 generateProposals 里「cluster: 3+ sparks sharing minSharedTags tags」
+    // 的声称一致 —— 原先的实现只是被 union-find 的传递性带偏了。
+    if (allShared.length < minSharedTags) continue
     out.push({ sparkIds: ids, tags: allShared })
   }
   return out
@@ -126,12 +144,16 @@ export function generateProposals(
   // cluster: 3+ sparks sharing minSharedTags tags
   for (const cluster of clusterBySharedTags(candidates, opts.clusterMinSharedTags)) {
     if (cluster.sparkIds.length >= 3) {
+      const confidence = Math.min(1, cluster.tags.length / Math.max(1, cluster.sparkIds.length))
       out.push({
         type: 'cluster' as ProposalType,
         sparkIds: cluster.sparkIds,
+        // 到这里 cluster.tags 必然 >= minSharedTags（clusterBySharedTags 已挡住空核心），
+        // 所以 explanation 不会出现「共同标签：」后面空白这种空声称。
         explanation: cluster.sparkIds.length + ' 条火花共同标签：' + cluster.tags.join(', '),
-        confidence: Math.min(1, cluster.tags.length / Math.max(1, cluster.sparkIds.length)),
-        leverage: 'high' as ProposalLeverage,
+        confidence,
+        // 杠杆跟真实度量走（见 CLUSTER_HIGH_LEVERAGE_CONFIDENCE）：紧的算 high，松的降 medium。
+        leverage: (confidence >= CLUSTER_HIGH_LEVERAGE_CONFIDENCE ? 'high' : 'medium') as ProposalLeverage,
       })
     }
   }

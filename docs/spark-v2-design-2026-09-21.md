@@ -123,6 +123,18 @@ proposalViewSchema = { id, type, sparkIds, explanation, confidence, leverage, st
 //                      ↑ 没有 title / content —— 提议在结构上装不下一个新想法
 ```
 
+**三类提议的判据必须就是它自称的那个判据**（2026-09-23 修正 `cluster`）。`cluster` 的实现原先用
+union-find 按「两两共享 ≥ `clusterMinSharedTags`」并组，但 **union 传递、pairwise 重叠不传递**：
+真机上 6 条火花靠 5 对相邻重叠串成一条链
+（`exfat/fskit/决策树 → macos/决策树 → macos/recovery → macos/产品化 → 商业判断/SAM`），
+**全体交集为空**，却并出了一个 cluster —— explanation 是「6 条火花共同标签：」（冒号后空白）、
+`confidence 0`、而 `leverage` 是硬编码的 `'high'`，于是面板请人裁决一条
+**「高杠杆 · 置信度 0 · 理由空白」**的提案（真机提案 `f0d45007`；已用插件自己的纯函数在真实
+tags 上逐字节复现）。修正两条：① **全体交集 < `clusterMinSharedTags` 就不成组** —— 这与函数类型
+注释、以及 `// cluster: 3+ sparks sharing minSharedTags tags` 的声称一致，原先只是被传递性带偏；
+② **`leverage` 跟着真实度量走**（`confidence ≥ 0.5` 才算 high，否则 medium）——杠杆是给用户排
+优先级的，不能是装饰。回归夹具就是那六组真实 tags（`test/proposals.test.ts`）。
+
 ### 2.4 提示词把火花写成"记忆草稿"
 
 `src/tool.ts:24` 的 GUIDANCE 原文（模型侧唯一行为指引）：
