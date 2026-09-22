@@ -15,45 +15,8 @@
  */
 import { randomUUID } from 'node:crypto'
 import type { ProposalView, ProposalType, ProposalLeverage, ReflectRequest, SparkView } from 'dsh-spark-wire'
-
-/** Jaccard over title tokens (latin words + CJK bigrams), reused from relevance. */
-function tokenize(s: string): string[] {
-  const out: string[] = []
-  let buf = ''
-  const flushWord = (): void => {
-    const w = buf.toLowerCase().trim()
-    buf = ''
-    if (w.length > 0) out.push(w)
-  }
-  for (const ch of s) {
-    if (/[a-zA-Z0-9]/.test(ch)) {
-      buf += ch
-    } else {
-      flushWord()
-      // CJK bigram: emit the previous hanzi and the current as one token.
-      const last = out[out.length - 1]
-      if (last !== undefined && /[\u4e00-\u9fa5]/.test(last[last.length - 1] ?? '') && /[\u4e00-\u9fa5]/.test(ch)) {
-        const prev = last + ch
-        out[out.length - 1] = prev
-      } else if (/[\u4e00-\u9fa5]/.test(ch)) {
-        // Isolated hanzi still indexed (single-character fallback).
-        out.push(ch)
-      }
-    }
-  }
-  flushWord()
-  return out
-}
-
-function jaccard(a: string[], b: string[]): number {
-  const A = new Set(a)
-  const B = new Set(b)
-  if (A.size === 0 || B.size === 0) return 0
-  let inter = 0
-  for (const t of A) if (B.has(t)) inter += 1
-  const union = A.size + B.size - inter
-  return union === 0 ? 0 : inter / union
-}
+// 相似度口径单源（v2 §4.4）：召回与涌共用同一份 tokenize / jaccard。
+import { jaccard, tokenize } from './relevance.ts'
 
 /** Find all unordered pairs (i, j) with i < j. */
 function pairs<T>(arr: readonly T[]): Array<[T, T]> {

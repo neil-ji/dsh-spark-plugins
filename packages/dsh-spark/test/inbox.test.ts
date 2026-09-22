@@ -6,7 +6,8 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { renderInboxReminder } from '../src/inbox.ts'
+import { lastUserText, renderInboxReminder, renderRelatedReminder } from '../src/inbox.ts'
+import { selectRelevant } from '../src/relevance.ts'
 import type { SparkStats, SparkView } from 'dsh-spark-wire'
 
 const NOW = 1_700_000_000_000
@@ -19,9 +20,10 @@ function stats(overrides: Partial<SparkStats> = {}): SparkStats {
   }
 }
 
-function spark(id: string, title: string): SparkView {
+function spark(id: string, title: string, content: string = 'c'): SparkView {
   return {
-    id, title, content: 'c', scope: 'project', workspacePath: null, status: 'active', tags: [],
+    id, title, content, scope: 'project', workspacePath: null, status: 'active', tags: [],
+    origin: 'human', derivedFrom: [], generation: 0,
     sourceSessionId: 's', sourceAgentId: null, sourceTurn: null,
     createdAt: NOW, updatedAt: NOW, stateChangedAt: NOW, deletedAt: null,
   }
@@ -76,4 +78,44 @@ test('budget: drops entries that do not fit instead of overflowing', () => {
 
 test('returns undefined when even the header cannot fit', () => {
   assert.equal(renderInboxReminder(stats({ active: 1 }), [spark('a', 'x')], 10), undefined)
+})
+
+/* ─────────── 第②段：相关火花（v2 §4.4 P13） ─────────── */
+
+test('related: 注入全文（标题 + 内容）并带 score', () => {
+  const relevant = selectRelevant([spark('r1', 'preview mock channel', 'zero-dsh component preview')], 'preview mock channel', { limit: 3 })
+  const message = renderRelatedReminder(relevant, 800)!
+  const text = textOf(message)
+  assert.match(text, /^<system-reminder>\nRelated sparks from the idea pool \(dsh-spark\):/)
+  assert.match(text, /<spark id="r1" score="[\d.]+">preview mock channel — zero-dsh component preview<\/spark>/)
+  assert.deepEqual(message.source, { kind: 'plugin', plugin: 'spark-inbox', form: 'notice', summary: '1 related spark' })
+})
+
+test('AC-6：三类注入首行前缀互不相同（记忆召回 / 状态通报 / 相关火花）', () => {
+  const memoryFirstLine = 'The following durable memories were retrieved from other sessions or workspaces by HippoMemo.'
+  const status = textOf(renderInboxReminder(stats({ active: 1 }), [spark('a', 'x')], 800)!).split('\n')[1]!
+  const related = textOf(renderRelatedReminder(selectRelevant([spark('r', 'x', 'x')], 'x', { limit: 1 }), 800)!).split('\n')[1]!
+  const heads = [memoryFirstLine, status, related]
+  assert.equal(new Set(heads).size, 3, '三者必须可区分：' + JSON.stringify(heads))
+})
+
+test('related: 无候选返回 undefined（宁可不注入）', () => {
+  assert.equal(renderRelatedReminder([], 800), undefined)
+})
+
+test('related: 预算放不下任何一条时返回 undefined，放得下就截断', () => {
+  const long = 'y'.repeat(700)
+  assert.equal(renderRelatedReminder(selectRelevant([spark('r', long, long)], long, { limit: 3 }), 120), undefined)
+  const two = renderRelatedReminder([
+    { spark: spark('a', 't', 'c'), score: 0.5 },
+    { spark: spark('b', long, long), score: 0.4 },
+  ], 800)!
+  const text = textOf(two)
+  assert.ok(!text.includes(long), '放不下的条目被丢掉')
+  assert.match(text, /<spark id="a"/)
+})
+
+test('lastUserText: 拼接文本块并 trim（与 hippomemo 同形取数）', () => {
+  assert.equal(lastUserText([{ content: [{ type: 'text', text: ' a ' }, { type: 'image' }] }]), 'a')
+  assert.equal(lastUserText([]), '')
 })

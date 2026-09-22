@@ -435,6 +435,26 @@ try {
       JSON.stringify(legacyFilter),
     )
 
+    // 3c) 语义检索（v2 P13）：只读端点必须与注入面同源，且无匹配不兜底全量。
+    const sparkSearchProbe = await evalJs(`fetch('/sparks/search?q=' + encodeURIComponent('真宿主验收') + '&limit=5').then(async (r) => ({ ok: r.ok, value: await r.json() }))`)
+    const searchValue = sparkSearchProbe?.value?.value
+    check(
+      'GET /sparks/search 返回相关火花（只读，非全量兜底）',
+      sparkSearchProbe?.ok === true && Array.isArray(searchValue) && searchValue.length > 0
+        && searchValue.every((s) => s.status === 'active' && s.deletedAt === null),
+      JSON.stringify(sparkSearchProbe).slice(0, 220),
+    )
+    const sparkSearchMissProbe = await evalJs(`fetch('/sparks/search?q=zzzznomatchzzz&limit=5').then(async (r) => ({ ok: r.ok, value: await r.json() }))`)
+    check(
+      'GET /sparks/search 无匹配返回空数组',
+      sparkSearchMissProbe?.ok === true && Array.isArray(sparkSearchMissProbe?.value?.value) && sparkSearchMissProbe.value.value.length === 0,
+      JSON.stringify(sparkSearchMissProbe).slice(0, 160),
+    )
+    const sparkSearchById = await evalJs(`fetch('/sparks/search').then(async (r) => ({ status: r.status, value: await r.json() }))`)
+    check('GET /sparks/search 不会被当成按 id 取（空 q → 空数组而非 404）',
+      sparkSearchById?.status === 200 && Array.isArray(sparkSearchById?.value?.value) && sparkSearchById.value.value.length === 0,
+      JSON.stringify(sparkSearchById).slice(0, 160))
+
     // 4) 记忆模块：hippomemo 事件通道（同一条 mux 载波、另一条 stream 方法）
     const memoryTitle = '真宿主记忆验收 ' + Date.now().toString(36)
     const tabs = await evalJs(`Array.from(document.querySelectorAll('.dock-tab')).map((b) => b.getAttribute('aria-label'))`)

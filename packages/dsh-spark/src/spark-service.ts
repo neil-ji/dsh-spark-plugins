@@ -32,6 +32,7 @@ import {
 } from 'dsh-spark-wire'
 import { sparkGraphQuerySchema } from 'dsh-spark-wire'
 import { buildSparkGraph } from './graph.ts'
+import { selectRelevant } from './relevance.ts'
 import { JsonlSparkStorage } from './storage.ts'
 import { SparkMetaStore, defaultMetaPath, type SparkMeta } from './meta-store.ts'
 import { ensureJsonlPath } from './jsonl-path.ts'
@@ -174,6 +175,19 @@ export class SparkService extends Service {
     if (query.scope !== undefined) filtered = filtered.filter(r => r.scope === query.scope)
     filtered.sort((a, b) => b.createdAt - a.createdAt)
     return filtered.slice(0, query.limit)
+  }
+
+  /**
+   * 语义检索（v2 §4.4，P13）：按 token Jaccard 召回相关火花。
+   *
+   * 只搜 active（archived 是用户主动收起、墓碑是判过死刑的）——「主动性要求可查询」，
+   * 而查询的默认面应当与注入面一致。排序口径在 `relevance.ts`（纯函数，唯一计算者）。
+   */
+  async search(query: string, limit: number = 5): Promise<SparkView[]> {
+    await this.whenReady()
+    const all = await this.storage.readAll()
+    const pool = all.filter(r => r.deletedAt === null && r.status === 'active')
+    return selectRelevant(pool, query, { limit, minScore: 0 }).map(entry => entry.spark)
   }
 
   async get(id: SparkId): Promise<SparkView | null> {

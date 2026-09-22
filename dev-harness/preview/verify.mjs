@@ -226,6 +226,10 @@ async function runServerChecks() {
     const sparks = await (await fetch('http://127.0.0.1:' + PORT + '/sparks?status=active&limit=50')).json()
     check('spark: /sparks 返回 ok 信封', sparks.ok === true && Array.isArray(sparks.value), JSON.stringify(sparks).slice(0, 160))
     check('spark: 有活跃火花', (sparks.value?.length ?? 0) >= 2, 'items=' + (sparks.value?.length ?? 0))
+    const search = await (await fetch('http://127.0.0.1:' + PORT + '/sparks/search?q=' + encodeURIComponent('预览数据源') + '&limit=5')).json()
+    check('spark: /sparks/search 返回相关火花（真引擎 selectRelevant）', search.ok === true && Array.isArray(search.value), JSON.stringify(search).slice(0, 160))
+    const searchMiss = await (await fetch('http://127.0.0.1:' + PORT + '/sparks/search?q=zzzznomatchzzz')).json()
+    check('spark: /sparks/search 无匹配返回空数组（不是全量兜底）', searchMiss.ok === true && Array.isArray(searchMiss.value) && searchMiss.value.length === 0, JSON.stringify(searchMiss).slice(0, 160))
     const proposals = await (await fetch('http://127.0.0.1:' + PORT + '/proposals?status=pending')).json()
     check('spark: /proposals 形状完整', proposals.ok === true && Array.isArray(proposals.value) && typeof proposals.value[0]?.confidence === 'number', JSON.stringify(proposals).slice(0, 160))
     /* 脚本沉淀库：读模型（不含 steps）+ 治理面（真引擎算的建议）—— Spec §6.5 / A8 */

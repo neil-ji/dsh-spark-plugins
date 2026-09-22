@@ -21,6 +21,9 @@ import { toSummary } from '../../../packages/dsh-script/src/metrics.ts'
 // 检索口径也吃真源：预览的 `q` 过滤/排序必须与宿主 `applyQuery` 完全同源，
 // 否则"预览里搜得到、真宿主搜不到"这种漂移只有用户能发现。
 import { matchScore, normalizeNeedle } from '../../../packages/dsh-script/src/retrieval.ts'
+// 语义召回口径同样吃真源（v2 P13）：预览的 /sparks/search 与真宿主注入面、
+// `spark_search` 工具走同一个 selectRelevant —— 否则"预览搜得到、真宿主搜不到"。
+import { selectRelevant } from '../../../packages/dsh-spark/src/relevance.ts'
 
 const WORKSPACE = 'F:\\AgentStudio\\dsh-spark-plugins'
 const HOUR = 3600_000
@@ -266,6 +269,15 @@ export function createSparkStore() {
           pendingProposals: scenario === 'empty' ? 0 : pendingProposals,
         },
       }
+    },
+
+    /** `GET /sparks/search?q=&limit=`（只读，v2 P13）。 */
+    search(params) {
+      if (fail()) return { ok: false, error }
+      const q = params.get('q') ?? ''
+      const limit = Number(params.get('limit') ?? 5)
+      const pool = (scenario === 'empty' ? [] : sparks).filter((item) => item.deletedAt === null && item.status === 'active')
+      return { ok: true, value: selectRelevant(pool, q, { limit: Number.isFinite(limit) ? limit : 5, minScore: 0 }).map((entry) => entry.spark) }
     },
 
     capture(input) {

@@ -92,6 +92,30 @@ test('A: active sparks produce exactly one notice, and only once per agent', asy
   assert.equal(second.messages.length, baseDecision.messages.length, 'per-agent once (WeakSet guard)')
 })
 
+test('P13: 查询命中时注入第二段（相关火花全文），两段首行不同', async () => {
+  const { ctx, handlers } = makeCtx({
+    stats: { active: 1 },
+    active: [makeSpark('hit', 'preview mock channel')],
+  })
+  apply(ctx as never, { reflect: { enabled: false } })
+  const incoming = [{ role: 'user', content: [{ type: 'text', text: 'how does preview mock channel work?' }] }]
+  const out = await handlers[0]!({ agent, messages: incoming, step: 1 }, async () => ({ ...baseDecision }))
+  assert.equal(out.messages.length, baseDecision.messages.length + 2, '状态通报 + 相关火花两段都注入')
+  const first = JSON.stringify(out.messages[out.messages.length - 2])
+  const second = JSON.stringify(out.messages[out.messages.length - 1])
+  assert.match(first, /Sparks \(dsh-spark\): 1 active spark/)
+  assert.match(second, /Related sparks from the idea pool \(dsh-spark\)/)
+  assert.match(second, /preview mock channel/)
+})
+
+test('P13: 查询与火花无关时不注入第二段（宁可不注入）', async () => {
+  const { ctx, handlers } = makeCtx({ stats: { active: 1 }, active: [makeSpark('x', 'finance ledger')] })
+  apply(ctx as never, { reflect: { enabled: false } })
+  const incoming = [{ role: 'user', content: [{ type: 'text', text: 'unrelated quantum chromodynamics' }] }]
+  const out = await handlers[0]!({ agent, messages: incoming, step: 1 }, async () => ({ ...baseDecision }))
+  assert.equal(out.messages.length, baseDecision.messages.length + 1, '只有状态通报')
+})
+
 test('B: the dirty marker triggers a background reflect once, then records lastReflectAt', async () => {
   // countChangedSince 返回 5（≥ threshold 3），minIntervalMs = 0 → 应当触发。
   const { ctx, handlers, calls } = makeCtx()

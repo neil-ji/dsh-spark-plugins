@@ -27,7 +27,7 @@ const TEXT_OUTPUT = {
 const GUIDANCE = [
   'Sparks are ideas — not drafts of anything else. The spark store is where an idea stays alive until it is useful. Treat proposing ideas as a first-class contribution.',
   'spark_capture: propose an idea. Do this when the user asks for ideas, and when you notice the current conversation could branch somewhere it has not gone yet. This is not a logging duty.',
-  'Ideas beget ideas: look for related sparks before capturing, then capture the combination. Association, analogy and recombination across distant sparks are explicitly wanted.',
+  'Ideas beget ideas: use spark_search to find related sparks, then capture the combination. Association, analogy and recombination across distant sparks are explicitly wanted.',
   'Prefer association over summary. A spark that merely restates an existing spark is noise.',
   'Do NOT capture concrete actionable work — that goes through the regular task tool.',
   'Keep titles short (<= 60 chars). Content can be longer (full sentence or two). Tags are optional keywords.',
@@ -82,6 +82,28 @@ export function registerSparkTools(ctx: Context): void {
 
   // Phase 4: spark_reflect — DMN-style trigger of rule-based emergence.
   // Phase 4.5 will layer LLM-backed proposals on top.
+  ctx.tools.register(defineTool({
+    name: 'spark_search',
+    description: 'Search the idea pool for sparks related to a query (token Jaccard over title/content/tags; active sparks only). Use it before proposing an idea that may already exist, and to find distant sparks worth recombining.',
+    parameters: {
+      query: { type: 'string', required: true, description: 'What to look for (a phrase, not a boolean query).' },
+      limit: { type: 'number', description: 'Max results. Defaults to 5.' },
+    },
+    output: TEXT_OUTPUT,
+    async execute(args) {
+      const query = typeof args.query === 'string' ? args.query.trim() : ''
+      if (query.length === 0) {
+        throw new HarnessError('spark_search requires a query', 'SPARK_QUERY_REQUIRED')
+      }
+      const limit = typeof args.limit === 'number' ? Math.max(1, Math.min(50, Math.floor(args.limit))) : 5
+      const found = await ctx.spark.search(query, limit)
+      return JSON.stringify(found)
+    },
+    presentCall(args) {
+      return { card: 'generic', title: 'Search sparks', kind: 'other', rawInput: args.query }
+    },
+  }))
+
   ctx.tools.register(defineTool({
     name: 'spark_reflect',
     description: 'Run the emergence engine over the active spark set. Returns new proposals persisted to the proposals inbox. Use this when you (the agent) or the user want to surface cross-spark associations, themes, or stale items to clean up. Phase 4 MVP is rule-based (title-token Jaccard for links, shared-tag clustering, staleness for prune); Phase 4.5 will add LLM-backed semantic and contradict proposals.',

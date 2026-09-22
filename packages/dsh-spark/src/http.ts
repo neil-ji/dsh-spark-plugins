@@ -77,6 +77,14 @@ async function handleSparks(
       send(res, 200, okEnvelope(await service.graph(await listProposals(ctx), query)))
       return
     }
+    // 只读检索（v2 P13）：必须排在「按 id 取」之前，否则 /search 会被当成一个 id。
+    if (req.method === 'GET' && sub === '/search') {
+      const q = url.searchParams.get('q') ?? ''
+      const limitStr = url.searchParams.get('limit')
+      const limit = limitStr === null ? 5 : Math.max(1, Math.min(50, Number(limitStr) || 5))
+      send(res, 200, okEnvelope(await service.search(q, limit)))
+      return
+    }
     if (req.method === 'GET' && sub.startsWith('/')) {
       const id = decodeURIComponent(sub.slice(1))
       const record = await service.get(id as Parameters<typeof service.get>[0])

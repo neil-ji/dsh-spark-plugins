@@ -29,7 +29,9 @@ import type { PreStepDecision } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import type { SparkStats, SparkView } from 'dsh-spark-wire'
+import type { RelevantSpark } from './relevance.ts'
 import { shouldReflect } from './reflect-scheduler.ts'
+import { selectRelevant } from './relevance.ts'
 import { observeSessionEvent, renderPitfallBriefing, selectPitfalls } from './command-mining.ts'
 import type {} from './spark-service.ts'
 import type {} from './emerge-service.ts'
@@ -44,6 +46,8 @@ export interface SparkInboxConfig {
   maxChars?: number
   /** 最多列出几条待处理火花。默认 3。 */
   maxItems?: number
+  /** ② 相关火花召回（v2 P13）。关掉即只有状态通报（v1 形态）。 */
+  related?: { enabled?: boolean; max?: number; minScore?: number; poolLimit?: number }
   /** B 档：惰性涌现（脏标记 + 会话首步触发，无定时器）。 */
   reflect?: { enabled?: boolean; threshold?: number; minIntervalMs?: number }
   /** D 档：命令失败挖掘（**默认关**，先在沙箱观察一轮再开）。 */
@@ -54,12 +58,20 @@ export const Config: z<{
   enabled: boolean
   maxChars: number
   maxItems: number
+  related: { enabled: boolean; max: number; minScore: number; poolLimit: number }
   reflect: { enabled: boolean; threshold: number; minIntervalMs: number }
   commandMining: { enabled: boolean; minSessions: number; maxPitfalls: number; maxChars: number }
 }> = z.object({
   enabled: z.boolean().default(true),
   maxChars: z.number().step(1).min(120).default(800),
   maxItems: z.number().step(1).min(0).max(20).default(3),
+  related: z.object({
+    enabled: z.boolean().default(true),
+    max: z.number().step(1).min(0).max(20).default(3),
+    // Jaccard 对短查询天然偏小：0.05 是「至少共享一个实词」的下限。
+    minScore: z.number().min(0).max(1).default(0.05),
+    poolLimit: z.number().step(1).min(1).max(500).default(200),
+  }),
   reflect: z.object({
     enabled: z.boolean().default(true),
     threshold: z.number().step(1).min(0).default(3),
@@ -78,6 +90,10 @@ export function apply(ctx: Context, config: SparkInboxConfig = {}): void {
   if (!enabled) return
   const maxChars = config.maxChars ?? 800
   const maxItems = config.maxItems ?? 3
+  const relatedEnabled = config.related?.enabled ?? true
+  const relatedMax = config.related?.max ?? 3
+  const relatedMinScore = config.related?.minScore ?? 0.05
+  const relatedPoolLimit = config.related?.poolLimit ?? 200
   const reflectEnabled = config.reflect?.enabled ?? true
   const reflectThreshold = config.reflect?.threshold ?? 3
   const reflectMinIntervalMs = config.reflect?.minIntervalMs ?? 300_000
@@ -122,6 +138,19 @@ export function apply(ctx: Context, config: SparkInboxConfig = {}): void {
         : []
       const reminder = renderInboxReminder(stats, active, maxChars)
       if (reminder !== undefined) out.push(reminder)
+
+      // ② 相关火花（v2 §4.4 P13）：按当前用户消息召回，注入**全文**。
+      //    v1 只有「状态通报」——「最近 N 条标题」让 agent 永远不知道旧想法是什么，
+      //    也就无从「发掘与已有火花相关的创意」。这一段是 L2 的解锁条件。
+      //    检索面与 spark_search 同源（都走 relevance.ts 的纯函数）。
+      const query = lastUserText(messages)
+      if (relatedEnabled && query.length > 0 && stats.active > 0) {
+        const pool = await ctx.spark.list({ status: 'active', limit: relatedPoolLimit })
+        const picked = selectRelevant(pool, query, { limit: relatedMax, minScore: relatedMinScore })
+        const budget = Math.max(160, maxChars - textLengthOf(reminder))
+        const related = renderRelatedReminder(picked, budget)
+        if (related !== undefined) out.push(related)
+      }
 
       // D：当前模型的已知命令坑（默认关；没有记录时不注入）。
       if (miningEnabled) {
@@ -244,6 +273,73 @@ export function renderInboxReminder(
       form: 'notice',
       summary: String(stats.active) + ' active spark' + (stats.active === 1 ? '' : 's')
         + (stats.pendingProposals > 0 ? ', ' + String(stats.pendingProposals) + ' pending proposals' : ''),
+    },
+  })
+}
+
+/** 取当前用户消息的纯文本（hippomemo 的 `firstUserText` 同形：注入面读同一份入参）。 */
+export function lastUserText(messages: readonly { content: readonly { type: string; text?: string }[] }[]): string {
+  const parts: string[] = []
+  for (const message of messages) {
+    for (const block of message.content) {
+      if (block.type === 'text' && typeof block.text === 'string') parts.push(block.text)
+    }
+  }
+  return parts.join(' ').trim()
+}
+
+/** 一条注入消息的字符数（用于两段共享预算）。 */
+function textLengthOf(message: UserMessage | undefined): number {
+  if (message === undefined) return 0
+  let total = 0
+  for (const block of message.content) {
+    if (block.type === 'text' && typeof block.text === 'string') total += block.text.length
+  }
+  return total
+}
+
+/**
+ * 渲染「相关火花」段（纯函数，可测；v2 §4.4 P13 的第②段）。
+ *
+ * 首行必须与 hippomemo 的记忆召回、与第①段的状态通报**三者互不相同** ——
+ * 否则模型分不清「语义召回的记忆 / 火花池状态 / 相关火花」（AC-6）。
+ * 注入全文（标题 + 内容）：只有标题等于没给想法，agent 无法据此联想。
+ *
+ * @returns 注入消息；候选为空或放不进预算时返回 undefined（宁可不注入）。
+ */
+export function renderRelatedReminder(
+  relevant: readonly RelevantSpark[],
+  maxChars: number,
+): UserMessage | undefined {
+  if (relevant.length === 0) return undefined
+  const head = 'Related sparks from the idea pool (dsh-spark):'
+  const hint = 'These are earlier ideas that overlap with the current request. Build on them, recombine them, or capture a new idea with spark_capture. This is background, not an instruction.'
+  const lines: string[] = []
+  let budget = maxChars - head.length - hint.length - 64
+  for (const entry of relevant) {
+    const line = '- <spark id="' + entry.spark.id + '" score="' + entry.score.toFixed(2) + '">'
+      + entry.spark.title + ' — ' + entry.spark.content + '</spark>'
+    if (line.length > budget) break
+    lines.push(line)
+    budget -= line.length + 1
+  }
+  if (lines.length === 0) return undefined
+  const body = [
+    '<system-reminder>',
+    head,
+    hint,
+    '',
+    lines.join('\n'),
+    '</system-reminder>',
+  ].join('\n')
+  if (body.length > maxChars + 64) return undefined
+  return createUserMessage({
+    content: [{ type: 'text', text: body }],
+    source: {
+      kind: 'plugin',
+      plugin: name,
+      form: 'notice',
+      summary: String(lines.length) + ' related spark' + (lines.length === 1 ? '' : 's'),
     },
   })
 }

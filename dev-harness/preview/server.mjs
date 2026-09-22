@@ -462,6 +462,8 @@ async function handleSpark(req, res, url) {
   if (path === '/sparks' && method === 'GET') return json(res, 200, spark.list(url.searchParams))
   // 必须排在 /sparks/:id 之前：否则 /stats 会被当成一个火花 id（与真宿主 http.ts 同序）。
   if (path === '/sparks/stats' && method === 'GET') return json(res, 200, spark.stats())
+  // 只读检索（v2 P13）：同样必须排在 /sparks/:id 之前。
+  if (path === '/sparks/search' && method === 'GET') return json(res, 200, spark.search(url.searchParams))
   if (path === '/sparks' && method === 'POST') {
     const result = spark.capture(body)
     if (result.ok === true) broadcastSpark('/sparks/events', { operation: 'capture', id: result.value.id, record: result.value, at: Date.now() })
