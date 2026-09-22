@@ -237,6 +237,17 @@ mock remote 是普通对象，于是「预览全绿、真宿主事件流整条�
   范本见 `dsh-finance` 的 `listedSnapshotInheritedCut`；闸门 `check:architecture`
   的 `readorder` 段逐函数拦截，确需「先读再判」时写
   `// arch-gate-allow: persistence-read-order <理由>`。
+- **从 agent 的 bash 工具里启动「延迟重启宿主」脚本，必须让它脱离宿主的进程树**：
+  这类脚本要杀的正是它自己的祖先进程，而 `nohup` / `disown` 挡不住按进程组清场 ——
+  结果是「停旧」做完、「起新」没跑：trace 停在 `stopping pid=…`，pre-flight 冒烟只写了
+  半行，用户面前没有 GUI（2026-09-23 实测：脚本跑满 90s 睡眠、杀掉 3080 宿主，随即随
+  宿主进程树一起消失）。做法：node
+  `spawn(cmd, args, { detached: true, stdio: 'ignore' }).unref()`（内部即 `setsid`；
+  macOS 没有 `setsid` 命令）或 `launchctl submit`。范本：
+  `~/.dsh/logs/upgrade-dsh-web.sh` 的「0) 先把自己挪进独立会话」段（`DSH_UPGRADE_DETACHED=1`
+  守卫，父调用立刻返回，真正干活的是独立会话里的子进程）。
+  附带坑：`set -u` 下写 `port=$PORT（中文…` 会被 bash 把 >0x7F 字节算进变量名，直接
+  `unbound variable` 中止脚本 —— 中文紧邻变量时写成 `${PORT}`。
 
 ---
 
