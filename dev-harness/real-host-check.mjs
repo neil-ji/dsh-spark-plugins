@@ -435,6 +435,27 @@ try {
       JSON.stringify(legacyFilter),
     )
 
+    // 3b-2b) provenance 语义（2026-09-21 修正）：来源与提出者正交 ——
+    //        Agent 自述 derivedFrom 后 origin 仍是 agent，且不自动过期。
+    const provenanceProbe = await evalJs(`(async () => {
+      const seed = await fetch('/sparks', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
+        title: 'provenance seed ' + Date.now().toString(36), content: 'seed', scope: 'project', tags: [], sourceSessionId: 'real-host-check', sourceAgentId: null, sourceTurn: null,
+      }) }).then((r) => r.json())
+      const seedId = seed?.value?.id
+      const distilled = await fetch('/sparks', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
+        title: 'provenance distilled ' + Date.now().toString(36), content: 'higher level', scope: 'project', tags: [],
+        sourceSessionId: 'real-host-check', sourceAgentId: 'agent-real-host', sourceTurn: null, derivedFrom: [seedId],
+      }) }).then((r) => r.json())
+      return { origin: distilled?.value?.origin, generation: distilled?.value?.generation, derivedFrom: distilled?.value?.derivedFrom, expiresAt: distilled?.value?.expiresAt }
+    })()`)
+    check(
+      'POST /sparks 带 derivedFrom + agent 来源 → origin=agent（来源≠机器生成）、generation=1、不设 TTL',
+      provenanceProbe?.origin === 'agent' && provenanceProbe?.generation === 1
+        && Array.isArray(provenanceProbe?.derivedFrom) && provenanceProbe.derivedFrom.length === 1
+        && provenanceProbe?.expiresAt === null,
+      JSON.stringify(provenanceProbe),
+    )
+
     // 3b-3) 重新激活 + 召回计数（v2 P14）：capture → archive → reactivate
     //      断言「状态回 active」且「召回计数 +1」（两个副作用都要落地）。
     const reactivateProbe = await evalJs(`(async () => {

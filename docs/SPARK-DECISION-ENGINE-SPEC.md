@@ -39,11 +39,13 @@
 | S1 | `dsh-hippomemo/src/memory-evolve.ts` `titleTokenJaccard` + `dupTitleThreshold` | 标题 token Jaccard 阈值 → supersede/link | Jaccard 初筛候选对 → 逐对 Noul 判重定夺 | Noul |
 | S2 | `dsh-hippomemo/src/relevance.ts` | token 重叠打分 | 召回相关性精排 + 校准置信度 | Score |
 | S3 | `dsh-spark/src/valence.ts` | 手工加权（caps/bangs/问号等封顶求和） | spark 价值/紧急度判断 | Choice/Score |
-| S4 | `dsh-spark/src/emerge-service.ts` 反射引擎 | title Jaccard link、共享 tag 聚类（Phase 4 rule-based） | link/cluster/contradict 提案精判 | Noul/Choice |
+| S4 | `dsh-spark/src/emerge-service.ts` **整理**引擎（原误名"涌现"） | title Jaccard link、共享 tag 聚类（Phase 4 rule-based） | link/cluster/contradict 整理提议精判 | Noul/Choice |
 | S5 | `memory-evolve.ts` 生命周期 pass | TTL/probation 规则 | 「该记忆是否仍值得保留」review | Choice |
 
 **明确不接**：finance 价格解析（结构化抽取非判断）、各闸门脚本（确定性必须保留）、
-wire 包（协议纯净，禁外部调用）、任何需要给出自然语言理由的场景（Jev 只给数字）。
+wire 包（协议纯净，禁外部调用）、任何需要给出自然语言理由的场景（Jev 只给数字）、
+**涌现（量变→质变）**——它不是确定性可判的事，也不该由规则引擎或精判接缝承载：
+判断归 Agent，插件只提供视野 / 病据 / 写入面（见 `docs/spark-v2-design-2026-09-21.md` §5.5）。
 
 竖切顺序：**S1 先行**（数据真实、规则误报痛点明确、已有实验基线），其余接缝按
 S5 → S4 → S3/S2 推进，每个接缝独立可回退。

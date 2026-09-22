@@ -38,7 +38,7 @@ import { SparkMetaStore, defaultMetaPath, type SparkMeta } from './meta-store.ts
 import { ensureJsonlPath } from './jsonl-path.ts'
 import { registerSparkHttpRoutes } from './http.ts'
 import type { SparkChangedEvent, SparkRecordId, SparkStorage } from './types.ts'
-import { applyRecall, deriveTitle, isExpiredDerived, orderForPanel, resolveProvenance } from './types.ts'
+import { applyRecall, isExpiredDerived, newSparkView, orderForPanel } from './types.ts'
 import { DEFAULT_DERIVE_TTL_DAYS } from './derive-service.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -128,41 +128,15 @@ export class SparkService extends Service {
   async capture(input: unknown, now: number = Date.now()): Promise<SparkView> {
     await this.whenReady()
     const parsed: SparkCapture = sparkCaptureSchema.parse(input)
-    const record: SparkView = sparkViewSchema.parse({
-      id: makeId(),
-      title: deriveTitle(parsed.title),
-      content: parsed.content,
-      scope: parsed.scope,
-      workspacePath: parsed.workspacePath,
-      status: 'active',
-      tags: parsed.tags,
-      ...this.derivedExpiry(resolveProvenance(
-        parsed,
-        parsed.derivedFrom?.length
-          ? (await this.storage.readAll()).filter(r => (parsed.derivedFrom ?? []).includes(r.id))
-          : [],
-      ), now),
-      sourceSessionId: parsed.sourceSessionId,
-      sourceAgentId: parsed.sourceAgentId,
-      sourceTurn: parsed.sourceTurn,
-      createdAt: now,
-      updatedAt: now,
-      stateChangedAt: now,
-      deletedAt: null,
-    })
+    // 父火花查库在这里（IO），记录组装在 `newSparkView`（纯函数、可单测）。
+    const parents = parsed.derivedFrom === undefined || parsed.derivedFrom.length === 0
+      ? []
+      : (await this.storage.readAll()).filter(r => (parsed.derivedFrom ?? []).includes(r.id))
+    const record = newSparkView({ id: makeId(), parsed, parents, now, ttlMs: this.deriveTtlDays * DAY_MS })
     await this.storage.append(record)
     await this.enforceLimit()
     this.ctx.emit('sparks/changed', { operation: 'capture', id: record.id, record, at: now })
     return record
-  }
-
-  /**
-   * 衍生火花的过期时间（v2 §5.2）：**只有 derived 非空**，其余一律 null。
-   * 「用过期代替审批」——噪声由"会过期"兜底，而不是由"要人点"兜底。
-   */
-  private derivedExpiry(provenance: ReturnType<typeof resolveProvenance>, now: number): { expiresAt: number | null } {
-    if (provenance.origin !== 'derived') return { expiresAt: null }
-    return { expiresAt: now + this.deriveTtlDays * 86_400_000 }
   }
 
   /**

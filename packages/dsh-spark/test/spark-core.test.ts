@@ -12,7 +12,7 @@ import { join } from 'node:path'
 import { JsonlSparkStorage } from '../src/storage.ts'
 import { JsonlProposalStorage } from '../src/proposal-storage.ts'
 import { ensureJsonlPath } from '../src/jsonl-path.ts'
-import { applyRecall, deriveTitle, isExpiredDerived, orderForPanel, resolveProvenance, SparkProvenanceError, SPARK_MAX_GENERATION } from '../src/types.ts'
+import { applyRecall, deriveTitle, isExpiredDerived, newSparkView, orderForPanel, resolveProvenance, SparkProvenanceError, SPARK_MAX_GENERATION } from '../src/types.ts'
 import type { SparkView } from 'dsh-spark-wire'
 
 function makeRecord(overrides: Partial<SparkView> = {}): SparkView {
@@ -141,8 +141,8 @@ test('resolveProvenance: 无 agentId → human；有 → agent', () => {
   assert.equal(resolveProvenance({ sourceAgentId: null, origin: 'agent' }, []).origin, 'agent', '显式声明优先')
 })
 
-test('resolveProvenance: derived 取 max(父代)+1，不变式成立', () => {
-  const out = resolveProvenance({ sourceAgentId: null, derivedFrom: ['a', 'b'] }, [
+test('resolveProvenance: 机器自动生成（origin=derived）取 max(父代)+1', () => {
+  const out = resolveProvenance({ origin: 'derived', sourceAgentId: null, derivedFrom: ['a', 'b'] }, [
     { origin: 'human', generation: 0 },
     { origin: 'agent', generation: 1 },
   ])
@@ -151,16 +151,38 @@ test('resolveProvenance: derived 取 max(父代)+1，不变式成立', () => {
   assert.deepEqual(out.derivedFrom, ['a', 'b'])
 })
 
-test('resolveProvenance: 未知父 / derived 父 / 超上限都被拒（AC-4）', () => {
-  assert.throws(() => resolveProvenance({ sourceAgentId: null, derivedFrom: ['x'] }, []), SparkProvenanceError)
-  assert.throws(() => resolveProvenance({ sourceAgentId: null, derivedFrom: ['d'] }, [
+test('resolveProvenance: 反自噬闸只作用于 origin=derived（AC-4）', () => {
+  assert.throws(() => resolveProvenance({ origin: 'derived', sourceAgentId: null, derivedFrom: ['x'] }, []), SparkProvenanceError)
+  assert.throws(() => resolveProvenance({ origin: 'derived', sourceAgentId: null, derivedFrom: ['d'] }, [
     { origin: 'derived', generation: 1 },
   ]), /derived spark cannot be a parent/)
-  assert.throws(() => resolveProvenance({ sourceAgentId: null, derivedFrom: ['a', 'b'] }, [
+  assert.throws(() => resolveProvenance({ origin: 'derived', sourceAgentId: null, derivedFrom: ['a', 'b'] }, [
     { origin: 'human', generation: 2 },
     { origin: 'human', generation: 2 },
   ]), /generation cap exceeded/)
   assert.equal(SPARK_MAX_GENERATION, 2)
+})
+
+test('resolveProvenance: 来源与提出者正交 —— Agent 判断的产物记 agent，且可拿早期衍生物当父本', () => {
+  // 带 derivedFrom 但没显式声明 origin：默认 agent（自述来源是 Agent 的行为）
+  const implied = resolveProvenance({ sourceAgentId: null, derivedFrom: ['a', 'b'] }, [
+    { origin: 'human', generation: 0 },
+    { origin: 'human', generation: 1 },
+  ])
+  assert.equal(implied.origin, 'agent', '来源自述不把产物变成机器生成物')
+  assert.equal(implied.generation, 2)
+  // Agent 跨早期衍生物综合：允许（判断不该被防滚雪的规则挡住），generation 夹到 schema 上限
+  const across = resolveProvenance({ origin: 'agent', sourceAgentId: 'ag-1', derivedFrom: ['d'] }, [
+    { origin: 'derived', generation: 2 },
+  ])
+  assert.equal(across.origin, 'agent')
+  assert.equal(across.generation, 2, 'generation 记的是"机器滚了几代"，夹到上限而不是报错')
+  // 人写下的沉淀物同理
+  const human = resolveProvenance({ origin: 'human', sourceAgentId: null, derivedFrom: ['a'] }, [
+    { origin: 'human', generation: 1 },
+  ])
+  assert.equal(human.origin, 'human')
+  assert.equal(human.generation, 2)
 })
 
 // ----- applyRecall / orderForPanel (v2 P14 pure logic) -----
@@ -198,6 +220,54 @@ test('isExpiredDerived: 只有「derived + 到期 + 零召回 + 活跃」才该�
   assert.equal(isExpiredDerived(makeRecord({ ...base, status: 'archived' }), now), false)
   assert.equal(isExpiredDerived(makeRecord({ ...base, deletedAt: now }), now), false, '已是墓碑')
   assert.equal(isExpiredDerived(makeRecord({ ...base, expiresAt: null }), now), false)
+})
+
+// ----- newSparkView（记录组装的唯一入口，回归：provenance 与 TTL 都必须落盘） -----
+
+const CAPTURE_BASE = {
+  title: 'a title', content: 'a body', scope: 'project' as const, tags: [],
+  workspacePath: null, sourceSessionId: 'sess', sourceAgentId: 'ag-1', sourceTurn: null,
+}
+
+test('newSparkView: Agent 自述来源 → origin=agent、generation=1、无 TTL（回归：字段不得被丢掉）', () => {
+  const view = newSparkView({
+    id: 'new-1' as never,
+    parsed: { ...CAPTURE_BASE, origin: 'agent', derivedFrom: ['p1'] },
+    parents: [{ origin: 'human', generation: 0 }],
+    now: 1000,
+    ttlMs: 999,
+  })
+  assert.equal(view.origin, 'agent')
+  assert.deepEqual(view.derivedFrom, ['p1'])
+  assert.equal(view.generation, 1)
+  assert.equal(view.expiresAt, null, 'TTL 只给机器生成物')
+  assert.equal(view.status, 'active')
+  assert.equal(view.recalledCount, 0)
+})
+
+test('newSparkView: 机器生成（origin=derived）→ 带 TTL；无来源 → human/0/null', () => {
+  const derived = newSparkView({
+    id: 'new-2' as never,
+    parsed: { ...CAPTURE_BASE, origin: 'derived', derivedFrom: ['p1', 'p2'] },
+    parents: [{ origin: 'human', generation: 0 }, { origin: 'agent', generation: 1 }],
+    now: 1000,
+    ttlMs: 5000,
+  })
+  assert.equal(derived.origin, 'derived')
+  assert.equal(derived.generation, 2)
+  assert.equal(derived.expiresAt, 6000)
+
+  const plain = newSparkView({
+    id: 'new-3' as never,
+    parsed: { ...CAPTURE_BASE, sourceAgentId: null },
+    parents: [],
+    now: 1000,
+    ttlMs: 5000,
+  })
+  assert.equal(plain.origin, 'human')
+  assert.deepEqual(plain.derivedFrom, [])
+  assert.equal(plain.generation, 0)
+  assert.equal(plain.expiresAt, null)
 })
 
 // ----- deriveTitle sanity -----

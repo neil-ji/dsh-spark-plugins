@@ -433,6 +433,11 @@ export async function run(): Promise<{ checks: Check[] }> {
     const archivedForRecall = store.patch(valid.value.id, { status: 'archived' })
     const backFromArchive = store.reactivate(valid.value.id)
     check('spark: reactivate 拉回 active 并记一次召回（P14）', archivedForRecall.ok === true && backFromArchive.ok === true && backFromArchive.value?.status === 'active' && backFromArchive.value?.recalledCount === 1, JSON.stringify(backFromArchive).slice(0, 200))
+    const seeded = store.capture({ title: 'seed idea', content: 'a seed', sourceSessionId: 'sess-preview' })
+    const distilled = store.capture({ title: 'distilled idea', content: 'higher level', sourceSessionId: 'sess-preview', sourceAgentId: 'agent-x', derivedFrom: [seeded.value.id] })
+    check('spark: Agent 自述来源后仍是 origin=agent（来源与提出者正交）',
+      distilled.ok === true && distilled.value?.origin === 'agent' && distilled.value?.generation === 1 && distilled.value?.expiresAt === null,
+      JSON.stringify(distilled).slice(0, 220))
     const stats = store.stats()
     check('spark: /sparks/stats 形状与真宿主同源（v2）', stats.ok === true && typeof stats.value?.active === 'number' && typeof stats.value?.pendingProposals === 'number' && stats.value?.crystallized === undefined, JSON.stringify(stats).slice(0, 220))
   }

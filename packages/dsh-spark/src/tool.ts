@@ -27,7 +27,8 @@ const TEXT_OUTPUT = {
 const GUIDANCE = [
   'Sparks are ideas — not drafts of anything else. The spark store is where an idea stays alive until it is useful. Treat proposing ideas as a first-class contribution.',
   'spark_capture: propose an idea. Do this when the user asks for ideas, and when you notice the current conversation could branch somewhere it has not gone yet. This is not a logging duty.',
-  'Ideas beget ideas: use spark_search to find related sparks, then capture the combination; spark_derive runs a whole round of recombination when you want new ideas from the pool at once. Association, analogy and recombination across distant sparks are explicitly wanted.',
+  'Ideas beget ideas: use spark_search to find related sparks, then capture the combination; spark_derive runs a whole round of mechanical recombination when you want many candidates at once. Association, analogy and recombination across distant sparks are explicitly wanted.',
+  'Emergence is YOUR judgement, not the plugin\'s: when a pile of small sparks has quietly added up to something qualitatively new (a pattern, a principle, a concept that none of them states), write it down yourself and name its sources with derivedFrom. Do not wait for a threshold, and do not treat a summary of the pile as the new thing.',
   'Prefer association over summary. A spark that merely restates an existing spark is noise.',
   'Do NOT capture concrete actionable work — that goes through the regular task tool.',
   'Keep titles short (<= 60 chars). Content can be longer (full sentence or two). Tags are optional keywords.',
@@ -49,6 +50,7 @@ export function registerSparkTools(ctx: Context): void {
       content: { type: 'string', required: true, description: 'The full thought. Can be a sentence or two.' },
       tags: { type: 'string', description: 'Comma-separated tags for later filtering.' },
       scope: { type: 'string', enum: ['session', 'project', 'global'], description: 'Defaults to project.' },
+      derivedFrom: { type: 'string', description: 'Comma-separated spark ids this idea was distilled from (optional). Your own account of what it came from — it does NOT make the idea machine-generated.' },
     },
     output: TEXT_OUTPUT,
     async execute(args, exec) {
@@ -63,6 +65,9 @@ export function registerSparkTools(ctx: Context): void {
       const tags = typeof args.tags === 'string' && args.tags.length > 0
         ? args.tags.split(',').map(t => t.trim()).filter(t => t.length > 0)
         : []
+      const derivedFrom = typeof args.derivedFrom === 'string' && args.derivedFrom.trim().length > 0
+        ? args.derivedFrom.split(',').map(id => id.trim()).filter(id => id.length > 0).slice(0, 8)
+        : []
       const record = await ctx.spark.capture({
         title: args.title,
         content: args.content,
@@ -72,6 +77,7 @@ export function registerSparkTools(ctx: Context): void {
         sourceSessionId: sessionId,
         sourceAgentId: agent.id ?? null,
         sourceTurn: null,
+        ...(derivedFrom.length > 0 ? { origin: 'agent', derivedFrom } : {}),
       })
       return JSON.stringify(record)
     },

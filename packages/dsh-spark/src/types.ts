@@ -7,6 +7,7 @@
  * 声明 —— 之前的版本在这里写着 "never cross the wire"，而它实际就是
  * SSE 的载荷格式，客户端只能手抄一遍且没有校验。
  */
+import { sparkViewSchema } from 'dsh-spark-wire'
 import type { SparkScope, SparkStatus, SparkOrigin, SparkView, SparkCapture, SparkPatch, SparkId, SparkStats } from 'dsh-spark-wire'
 
 export type { SparkScope, SparkStatus, SparkOrigin, SparkView, SparkCapture, SparkPatch, SparkId, SparkStats }
@@ -86,6 +87,47 @@ export function orderForPanel(sparks: readonly SparkView[]): SparkView[] {
   })
 }
 
+export interface NewSparkInput {
+  id: SparkId
+  parsed: SparkCapture
+  /** 已解析出的父火花（`derivedFrom` 为空时传 `[]`）。 */
+  parents: readonly ProvenanceParent[]
+  now: number
+  /** 衍生火花存活时长（仅 origin='derived' 用）。 */
+  ttlMs: number
+}
+
+/**
+ * 组装一条新火花记录（纯函数，schema 校验在内）—— **记录组装的唯一入口**。
+ *
+ * 为什么单独成函数：早先这段是 `capture()` 里的对象字面量，写成
+ * `...derivedExpiry(resolveProvenance(...))` 只铺出了 `expiresAt`，
+ * origin/derivedFrom/generation 被**静默丢掉**；它逃过了单测（未知父仍会抛错），
+ * 最终由真宿主的 provenance 断言抓出来。组装逻辑可单测，就不再靠"看着对"。
+ */
+export function newSparkView(input: NewSparkInput): SparkView {
+  const parsed = input.parsed
+  const provenance = resolveProvenance(parsed, input.parents)
+  return sparkViewSchema.parse({
+    id: input.id,
+    title: deriveTitle(parsed.title),
+    content: parsed.content,
+    scope: parsed.scope,
+    workspacePath: parsed.workspacePath,
+    status: 'active',
+    tags: parsed.tags,
+    ...provenance,
+    expiresAt: provenance.origin === 'derived' ? input.now + input.ttlMs : null,
+    sourceSessionId: parsed.sourceSessionId,
+    sourceAgentId: parsed.sourceAgentId,
+    sourceTurn: parsed.sourceTurn,
+    createdAt: input.now,
+    updatedAt: input.now,
+    stateChangedAt: input.now,
+    deletedAt: null,
+  })
+}
+
 /** `resolveProvenance` 的父火花最小面（只需 origin + generation）。 */
 export interface ProvenanceParent {
   origin: SparkOrigin
@@ -113,6 +155,25 @@ export const SPARK_MAX_GENERATION = 2
  *
  * @throws SparkProvenanceError 未知父 / 父是 derived / 超过 generation 上限。
  */
+/**
+ * 计算 provenance 三元组（纯函数，v2 P12 + 2026-09-21 语义修正）。
+ *
+ * **两个维度正交**（这是修正后的口径）：
+ *  - `origin` 回答"**谁判断的**"：`human`（人写的）/ `agent`（Agent 判断后写的）/
+ *    `derived`（**机器自动生成**：derive 引擎产出的重组物）；
+ *  - `derivedFrom` 回答"**据什么来的**"：任何提出者都可以自述来源，它不改变 origin。
+ *
+ * **反自噬闸只作用于 `origin='derived'`**（机器自动生成那条会滚雪球的路径）：
+ *  - `derived` 记录必须带 `derivedFrom`，且 `generation ≤ 2`、父辈不得是 `derived`；
+ *  - **人 / Agent 的判断产物不受这些限制**：判断不该被防滚雪的规则挡住，也可以拿
+ *    早期衍生物当父本。它们的 `generation` 按父辈计算但**夹到 schema 上限**（那个
+ *    字段的语义是"机器滚了几代"，不是"判断的深度"）。
+ *
+ * 缺省 origin：无 `derivedFrom` 时按 `sourceAgentId` 判（有 → agent，无 → human）；
+ * 带 `derivedFrom` 而调用方没显式声明时默认 `agent`（自述来源是 Agent 的行为）。
+ *
+ * @throws SparkProvenanceError 未知父 / （仅 derived）父是 derived / 超过 generation 上限。
+ */
 export function resolveProvenance(
   input: { origin?: SparkOrigin | undefined; sourceAgentId: string | null; derivedFrom?: readonly SparkId[] | undefined },
   parents: readonly ProvenanceParent[],
@@ -128,13 +189,21 @@ export function resolveProvenance(
   if (parents.length !== derivedFrom.length) {
     throw new SparkProvenanceError('derivedFrom contains unknown spark ids')
   }
-  const derivedParent = parents.find(p => p.origin === 'derived')
-  if (derivedParent !== undefined) {
+  const origin = input.origin ?? 'agent'
+  const rawGeneration = Math.max(0, ...parents.map(p => p.generation)) + 1
+  if (origin !== 'derived') {
+    // 人 / Agent 的判断产物：来源是自述，不做反自噬硬闸（D3）。
+    return {
+      origin,
+      derivedFrom: [...derivedFrom],
+      generation: Math.min(SPARK_MAX_GENERATION, rawGeneration),
+    }
+  }
+  if (parents.some(p => p.origin === 'derived')) {
     throw new SparkProvenanceError('a derived spark cannot be a parent (anti-autophagy)')
   }
-  const generation = Math.max(0, ...parents.map(p => p.generation)) + 1
-  if (generation > SPARK_MAX_GENERATION) {
+  if (rawGeneration > SPARK_MAX_GENERATION) {
     throw new SparkProvenanceError('generation cap exceeded (' + SPARK_MAX_GENERATION + ')')
   }
-  return { origin: 'derived', derivedFrom: [...derivedFrom], generation }
+  return { origin: 'derived', derivedFrom: [...derivedFrom], generation: rawGeneration }
 }

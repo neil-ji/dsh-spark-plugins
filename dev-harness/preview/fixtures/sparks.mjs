@@ -28,6 +28,9 @@ import { selectRelevant } from '../../../packages/dsh-spark/src/relevance.ts'
 // 但没有 LLM 面 —— 真宿主在缺 LLM/缺路由时也返回 skipped 'llm service unavailable'，
 // 所以预览与真宿主在这里是**同一语义**，不是被 mock 掉的假象。
 import { selectDerivationPairs } from '../../../packages/dsh-spark/src/derive.ts'
+// provenance 口径也吃真源：预览的 capture 与真宿主 SparkService.capture 走同一个
+// resolveProvenance（来源与提出者正交、反自噬只作用于机器生成物）。手抄一份必然漂移。
+import { resolveProvenance } from '../../../packages/dsh-spark/src/types.ts'
 
 const WORKSPACE = 'F:\\AgentStudio\\dsh-spark-plugins'
 const HOUR = 3600_000
@@ -314,12 +317,18 @@ export function createSparkStore() {
         scope: value.scope,
         workspacePath: value.workspacePath,
         status: 'active',
-        origin: value.origin ?? (value.sourceAgentId !== null ? 'agent' : 'human'),
-        derivedFrom: value.derivedFrom ?? [],
-        generation: 0,
+        ...(() => {
+          const provenance = resolveProvenance(
+            { origin: value.origin, sourceAgentId: value.sourceAgentId, derivedFrom: value.derivedFrom },
+            sparks.filter((item) => (value.derivedFrom ?? []).includes(item.id)),
+          )
+          return {
+            ...provenance,
+            expiresAt: provenance.origin === 'derived' ? Date.now() + 14 * 24 * HOUR : null,
+          }
+        })(),
         recalledCount: 0,
         lastRecalledAt: null,
-        expiresAt: value.origin === 'derived' ? Date.now() + 14 * 24 * HOUR : null,
         tags: [...value.tags],
         sourceSessionId: value.sourceSessionId,
         sourceAgentId: value.sourceAgentId,

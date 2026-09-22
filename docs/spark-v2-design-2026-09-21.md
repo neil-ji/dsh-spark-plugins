@@ -113,9 +113,9 @@ hippomemo.json : 242 条记忆 → sourceSparkId 非空 0 条
 | 语义 | 召回 | **状态通报**（代码注释自陈："不是召回，是状态通报"） |
 | 频率 | 每 agent 一次 | 每 agent 一次（`step === 1`） |
 
-### 2.3 `emerge` 只会整理，不会生成
+### 2.3 `emerge` 只会整理，不会生成（**并因此被错名为「涌现」**）
 
-`src/proposals.ts` 只产三种提议，全是**熵减**：`link`（标题 token 重叠，去重）/ `cluster`（共享标签，归类）/
+`src/proposals.ts` 只产三种提议，全是**确定性整理**：`link`（标题 token 重叠，去重）/ `cluster`（共享标签，归类）/
 `prune`（太久没动，清理）。"从已有火花生成新火花"是**熵增**，且契约上不可能：
 
 ```ts
@@ -380,7 +380,36 @@ expiresAt: now + 14d     // 仅 origin='derived' 的记录非空
 （预算、超预算退回、`dataIncludeGlobal=false` 时 global 内容不外发）。
 **若未来纳入，应作为新接缝 S6 单独登记，不要塞进 S4。**
 
-### 5.5 实现轮廓（不锁死）
+### 5.5 涌现的定义与归属（2026-09-21 修正，**术语三分**）
+
+初稿把 `link/cluster/prune` 叫「涌现提议」、把生成叫「衍生」，两者都不对。修正后的口径：
+
+| 术语 | 是什么 | 谁做 | 判据 |
+|---|---|---|---|
+| **整理** | `link / cluster / prune`：去重、归类、清理陈旧条目 | **静态规则**（确定性、零成本，规则化在这里是对的） | token Jaccard 阈值、共享标签数、陈旧天数 |
+| **衍生** | 两两重组出候选（association / analogy / recombination） | 规则**只做初筛**候选对；**判断与生成交给模型** | 规则初筛 + 模型生成 + 复述去重 |
+| **涌现** | **量变 → 质变**：一堆小火花悄悄攒成了一个新层级的东西（模式 / 原则 / 概念） | **Agent 的判断**（插件不实现、不打标、不设阈值） | **没有可规则化的判据** |
+
+**三条硬口径（D1–D4）**：
+
+- **D1**：插件里**不存在**涌现引擎，也**不新增** `emergent` 之类的标记。涌现若发生，产物就是
+  Agent 自己写下的一条普通火花（`origin='agent'`）。
+- **D2**：`origin` 与 `derivedFrom` **正交**——`origin` 只回答"**谁判断的**"
+  （`human` / `agent` / `derived`＝机器自动生成），`derivedFrom` 只回答"**据什么来的**"
+  （任何提出者都可以自述，它不改变 origin）。
+- **D3**：反自噬闸（`generation ≤ 2`、`derived` 不作父本）**只作用于 `origin='derived'`**
+  这条会滚雪球的机器路径。**人 / Agent 的判断产物不受限**——判断不该被防滚雪的规则挡住，
+  也可以拿早期衍生物当父本；其 `generation` 按父辈计算但夹到 schema 上限。
+- **D4**：`expiresAt`（TTL）**只作用于 `derived`**：机器批量生成的噪声由过期兜底，
+  Agent 判断的产物不自动消失。
+
+**量变为什么不能交给规则**：量变本身就是一个**判断**（这批碎片是否已经攒到该长出新东西），
+它不满足"确定性可判"（`SPARK-DECISION-ENGINE-SPEC` §1 对静态规则的限定），因此既不该写成
+阈值，也不该登记进决策分级链的静态侧。插件的职责退回到**提供条件**：视野（注入 + `spark_search`）、
+病据（计数 / 时间 / 来源这些原始数字，`AGENTS.md` §3.8：宿主下发病据、不下发结论）、写入面
+（`spark_capture`，含可选的 `derivedFrom` 自述来源）。
+
+### 5.6 实现轮廓（不锁死）
 
 ```
 候选对选择（确定性，免费）:
@@ -442,6 +471,7 @@ LLM 重组（可选注入 ctx.inject(['llm'])；缺失 → 本轮不生成，不
 | **F2** | provenance（P12）+ Graph 第四类边 + 门控色调（`origin` 徽标） | F1 | ✅ 2026-09-21（commit 694385d；wire 0.3.1 / spark 0.5.1 / dock 0.4.1；`resolveProvenance` 是三条不变式的唯一计算者，存储 v3→v4 回填存量 origin） |
 | **F3** | 语义召回（P13）+ `spark_search` 工具 + 端点 | F1 | ✅ 2026-09-21（commit 见 git log；spark 0.6.0；抽 `src/relevance.ts` 为召回/涌现共用的单一真源，**顺带修正 v1 的 CJK 切词 bug**：旧实现把连续汉字累积成一个 token，中文召回实际上从未工作） |
 | **F4** | 重新激活 + 召回计数（P14） | F1 | ✅ 2026-09-21（spark 0.7.0；`reactivate()` + 注入命中记 `recalledCount`/`lastRecalledAt`，**不动 updatedAt**；面板按 `lastRecalledAt` 倒序，空值退化 `createdAt`；存储 v4→v5 回填） |
+| **F6** | **术语与语义修正**：整理/衍生/涌现三分 + origin⊥derivedFrom + 反自噬只作用于机器生成 + TTL 只作用于机器生成（D1–D4） | F1–F5 | ✅ 2026-09-21（UI 正名「整理」；`spark_capture` 增 `derivedFrom` 自述来源；preview capture 改吃真源 `resolveProvenance`） |
 | **F5** | 衍生引擎（P15 + P17） | F2/F3 | ✅ 2026-09-21（spark 0.8.0；纯逻辑在 `src/derive.ts`、IO 在 `derive-service.ts`；LLM 面用 try/catch 结构读、缺失即 `skipped`；`POST /sparks/derive` 带 `dryRun` 作为零成本断言面；过期清理复用 `spark-inbox` 首步那一趟，**无定时器**；存储 v5→v6 回填 `expiresAt=null`） |
 
 **排序依据**：**先拆桥并改对窗户上的字（F1）→ 再让 agent 看得见旧想法（F3）→ 最后才让它生想法（F5）。**
@@ -503,6 +533,8 @@ node dev-harness/real-host-check.mjs                 # 退出码 0
 - 衍生自噬（`generation > 2`）与 `derived` 作父本。
 - 跨 scope 衍生（v1 限同 scope；global 内容不外发，沿用 `dataIncludeGlobal=false` 纪律）。
 - **话题切换时重注入**（v1 只做首步一次 + 工具按需）。
+- **涌现引擎**（§5.5 D1）：插件不判定"是否已经量变"、不设临界阈值、不新增 emergent 标记；
+  也不把它登记进决策分级链——那是个判断，归 Agent（`SPARK-DECISION-ENGINE-SPEC` 已列入"明确不接"）。
 - 悬浮球角标（v1 P4 未做，结论不变）。
 - 力导向图的交互升级（只加第四类边）。
 
