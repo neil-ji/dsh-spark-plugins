@@ -12,7 +12,7 @@ import { join } from 'node:path'
 import { JsonlSparkStorage } from '../src/storage.ts'
 import { JsonlProposalStorage } from '../src/proposal-storage.ts'
 import { ensureJsonlPath } from '../src/jsonl-path.ts'
-import { deriveTitle } from '../src/types.ts'
+import { deriveTitle, resolveProvenance, SparkProvenanceError, SPARK_MAX_GENERATION } from '../src/types.ts'
 import type { SparkView } from 'dsh-spark-wire'
 
 function makeRecord(overrides: Partial<SparkView> = {}): SparkView {
@@ -128,6 +128,36 @@ test('a NON-empty directory at the JSONL path is refused, never destroyed', asyn
   // The read path goes through the same guard, so the UI gets the actionable
   // message instead of Node's bare `EISDIR: illegal operation on a directory`.
   await assert.rejects(() => new JsonlSparkStorage(file).readAll(), assertRefused)
+})
+
+// ----- resolveProvenance (v2 P12 pure logic) -----
+
+test('resolveProvenance: 无 agentId → human；有 → agent', () => {
+  assert.equal(resolveProvenance({ sourceAgentId: null }, []).origin, 'human')
+  assert.equal(resolveProvenance({ sourceAgentId: 'ag-1' }, []).origin, 'agent')
+  assert.equal(resolveProvenance({ sourceAgentId: null, origin: 'agent' }, []).origin, 'agent', '显式声明优先')
+})
+
+test('resolveProvenance: derived 取 max(父代)+1，不变式成立', () => {
+  const out = resolveProvenance({ sourceAgentId: null, derivedFrom: ['a', 'b'] }, [
+    { origin: 'human', generation: 0 },
+    { origin: 'agent', generation: 1 },
+  ])
+  assert.equal(out.origin, 'derived')
+  assert.equal(out.generation, 2)
+  assert.deepEqual(out.derivedFrom, ['a', 'b'])
+})
+
+test('resolveProvenance: 未知父 / derived 父 / 超上限都被拒（AC-4）', () => {
+  assert.throws(() => resolveProvenance({ sourceAgentId: null, derivedFrom: ['x'] }, []), SparkProvenanceError)
+  assert.throws(() => resolveProvenance({ sourceAgentId: null, derivedFrom: ['d'] }, [
+    { origin: 'derived', generation: 1 },
+  ]), /derived spark cannot be a parent/)
+  assert.throws(() => resolveProvenance({ sourceAgentId: null, derivedFrom: ['a', 'b'] }, [
+    { origin: 'human', generation: 2 },
+    { origin: 'human', generation: 2 },
+  ]), /generation cap exceeded/)
+  assert.equal(SPARK_MAX_GENERATION, 2)
 })
 
 // ----- deriveTitle sanity -----

@@ -23,7 +23,7 @@ import type { SparkRecordId, SparkStorage } from './types.ts'
 import { describeStorageError, ensureJsonlPath } from './jsonl-path.ts'
 
 /** 当前存储格式版本。老文件（无版本头）视为 1。 */
-export const SPARK_STORE_VERSION = 3
+export const SPARK_STORE_VERSION = 4
 
 const VERSION_KEY = '__sparkStore'
 
@@ -46,7 +46,7 @@ function sameFingerprint(a: Fingerprint | null, b: Fingerprint | null): boolean 
 }
 
 /**
- * 把一条 v1/v2 记录迁移成 v3（v2 设计 §4.2，P11）。
+ * 把一条 ≤v3 记录迁移成 v4（v2 §4.2 P11 + §4.3 P12）。
  *
  * v1（status/resolvedAt）与 v2（inboxState 四值 + crystallized）都收敛到
  * `status: 'active' | 'archived'` + 墓碑。幂等（已是 v3 的记录原样返回）。
@@ -83,6 +83,12 @@ export function migrateSparkRecord(raw: unknown, now: number = Date.now()): Spar
   delete record.resolvedAt
 
   record.status = legacyState === 'archived' || legacyState === 'crystallized' ? 'archived' : 'active'
+
+  // P12 provenance 回填：存量按 sourceAgentId 判 origin（agent 写的记 agent，
+  // 否则 human）；derivedFrom/generation 给中性默认。
+  if (record.origin === undefined) record.origin = record.sourceAgentId !== null && record.sourceAgentId !== undefined ? 'agent' : 'human'
+  if (record.derivedFrom === undefined) record.derivedFrom = []
+  if (record.generation === undefined) record.generation = 0
   if (legacyState === 'dropped') {
     // dropped 与墓碑是同一意图的两级摩擦（设计原则 8）：并入墓碑，保留可恢复性。
     if (record.deletedAt === null || record.deletedAt === undefined) record.deletedAt = now

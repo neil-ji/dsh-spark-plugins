@@ -7,9 +7,9 @@
  * 声明 —— 之前的版本在这里写着 "never cross the wire"，而它实际就是
  * SSE 的载荷格式，客户端只能手抄一遍且没有校验。
  */
-import type { SparkScope, SparkStatus, SparkView, SparkCapture, SparkPatch, SparkId, SparkStats } from 'dsh-spark-wire'
+import type { SparkScope, SparkStatus, SparkOrigin, SparkView, SparkCapture, SparkPatch, SparkId, SparkStats } from 'dsh-spark-wire'
 
-export type { SparkScope, SparkStatus, SparkView, SparkCapture, SparkPatch, SparkId, SparkStats }
+export type { SparkScope, SparkStatus, SparkOrigin, SparkView, SparkCapture, SparkPatch, SparkId, SparkStats }
 /** 火花变更事件（= `sparks/changed` 载荷，契约在 wire 包）。 */
 export type { SparkChangedEvent } from 'dsh-spark-wire'
 
@@ -45,4 +45,57 @@ export function deriveTitle(content: string, max: number = 60): string {
   if (trimmed.length === 0) return '(empty)'
   if (trimmed.length <= max) return trimmed
   return trimmed.slice(0, max - 1) + '…'
+}
+
+/** `resolveProvenance` 的父火花最小面（只需 origin + generation）。 */
+export interface ProvenanceParent {
+  origin: SparkOrigin
+  generation: number
+}
+
+/** provenance 不变式被破坏（未知父 / 滚雪球）时抛出；HTTP 侧落 400。 */
+export class SparkProvenanceError extends Error {
+  readonly code = 'SPARK_PROVENANCE_INVALID'
+  constructor(message: string) {
+    super(message)
+  }
+}
+
+/** 衍生代数硬上限（v2 设计 §5.3：generation ≤ 2，防语义塌缩）。 */
+export const SPARK_MAX_GENERATION = 2
+
+/**
+ * 计算 provenance 三元组（纯函数，v2 P12）。不变式由这里集中保证：
+ *
+ *  - `generation > 0 ⟺ origin === 'derived'`；
+ *  - `generation = max(父 generation) + 1`，超过硬上限即拒绝（不滚雪球）；
+ *  - `origin='derived'` 的火花不作父本（防近亲繁殖的第一道闸）；
+ *  - 非 derived 时 origin = 显式声明 ?? (sourceAgentId 非 null → agent，否则 human)。
+ *
+ * @throws SparkProvenanceError 未知父 / 父是 derived / 超过 generation 上限。
+ */
+export function resolveProvenance(
+  input: { origin?: SparkOrigin | undefined; sourceAgentId: string | null; derivedFrom?: readonly SparkId[] | undefined },
+  parents: readonly ProvenanceParent[],
+): Pick<SparkView, 'origin' | 'derivedFrom' | 'generation'> {
+  const derivedFrom = input.derivedFrom ?? []
+  if (derivedFrom.length === 0) {
+    return {
+      origin: input.origin ?? (input.sourceAgentId !== null ? 'agent' : 'human'),
+      derivedFrom: [],
+      generation: 0,
+    }
+  }
+  if (parents.length !== derivedFrom.length) {
+    throw new SparkProvenanceError('derivedFrom contains unknown spark ids')
+  }
+  const derivedParent = parents.find(p => p.origin === 'derived')
+  if (derivedParent !== undefined) {
+    throw new SparkProvenanceError('a derived spark cannot be a parent (anti-autophagy)')
+  }
+  const generation = Math.max(0, ...parents.map(p => p.generation)) + 1
+  if (generation > SPARK_MAX_GENERATION) {
+    throw new SparkProvenanceError('generation cap exceeded (' + SPARK_MAX_GENERATION + ')')
+  }
+  return { origin: 'derived', derivedFrom: [...derivedFrom], generation }
 }

@@ -22,6 +22,9 @@ function spark(overrides: Partial<SparkView> = {}): SparkView {
     scope: overrides.scope ?? 'project',
     workspacePath: overrides.workspacePath ?? '/tmp/proj',
     status: overrides.status ?? 'active',
+    origin: 'human',
+    derivedFrom: overrides.derivedFrom ?? [],
+    generation: overrides.generation ?? 0,
     tags: overrides.tags ?? [],
     sourceSessionId: overrides.sourceSessionId ?? 'sess',
     sourceAgentId: overrides.sourceAgentId ?? null,
@@ -60,6 +63,20 @@ test('selectGraphSparks 排除墓碑，并按状态→更新时间排序截断',
 
   const again = selectGraphSparks(sparks, 3)
   assert.deepEqual(again.picked.map(s => s.id), picked.map(s => s.id), '判据确定（同输入同输出）')
+})
+
+test('衍生谱系：derivedFrom 产 derived 边（权重 1），父不在图内则不连', () => {
+  const graph = buildSparkGraph(
+    [spark({ id: 'child', derivedFrom: ['p1', 'outside'] }), spark({ id: 'p1' })],
+    [],
+    { now: NOW },
+  )
+  const derived = graph.edges.filter(e => e.kind === 'derived')
+  assert.equal(derived.length, 1, '只有图内的父连线')
+  assert.equal(derived[0]!.weight, 1)
+  const byId = new Map(graph.nodes.map(n => [n.id, n]))
+  const child = byId.get(sparkNodeId('child'))!
+  assert.equal(child.degree, 1, '度由宿主算好')
 })
 
 test('纯火花域：图里只有 spark 节点（v2 P10/E5 删除记忆节点与 crystallized 边）', () => {

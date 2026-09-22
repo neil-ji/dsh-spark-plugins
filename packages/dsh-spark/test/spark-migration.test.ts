@@ -29,6 +29,9 @@ function makeRecord(overrides: Partial<SparkView> = {}): SparkView {
     scope: overrides.scope ?? 'project',
     workspacePath: null,
     status: overrides.status ?? 'active',
+    origin: overrides.origin ?? 'human',
+    derivedFrom: overrides.derivedFrom ?? [],
+    generation: overrides.generation ?? 0,
     tags: [],
     sourceSessionId: 'sess',
     sourceAgentId: null,
@@ -58,6 +61,15 @@ test('migrateSparkRecord: v1 active+crystallized -> archived; archived -> archiv
   assert.equal(archived.stateChangedAt, 42, 'resolvedAt wins as the state-change timestamp')
 })
 
+test('migrateSparkRecord: v3 回填 provenance（sourceAgentId→agent，否则 human）', () => {
+  const agent = migrateSparkRecord({ id: 'g', inboxState: 'pending', sourceAgentId: 'ag-1', updatedAt: 1 })!
+  assert.equal(agent.origin, 'agent')
+  assert.deepEqual(agent.derivedFrom, [])
+  assert.equal(agent.generation, 0)
+  const human = migrateSparkRecord({ id: 'h', status: 'active', sourceAgentId: null, updatedAt: 1 })!
+  assert.equal(human.origin, 'human')
+})
+
 test('migrateSparkRecord: v2 pending -> active; dropped -> tombstone; crystallized -> archived', () => {
   const pending = migrateSparkRecord({ id: 'd', inboxState: 'pending', updatedAt: 1 })!
   assert.equal(pending.status, 'active')
@@ -70,7 +82,7 @@ test('migrateSparkRecord: v2 pending -> active; dropped -> tombstone; crystalliz
   assert.equal('crystallized' in crystal, false)
 })
 
-test('migrateSparkRecord: idempotent on an already-v3 record, null on junk', () => {
+test('migrateSparkRecord: idempotent on an already-v4 record, null on junk', () => {
   const v3 = makeRecord({ stateChangedAt: 3 })
   assert.deepEqual(migrateSparkRecord(v3), v3)
   assert.equal(migrateSparkRecord(null), null)
@@ -87,7 +99,7 @@ test('ensureVersion: upgrades a legacy file exactly once (idempotent)', async (t
   const storage = new JsonlSparkStorage(file)
   assert.equal(await storage.ensureVersion(), SPARK_STORE_VERSION)
   const afterFirst = await readFile(file, 'utf8')
-  assert.match(afterFirst, /^\{"__sparkStore":3\}/)
+  assert.match(afterFirst, /^\{"__sparkStore":4\}/)
   const migrated = (await storage.readAll())[0]!
   assert.equal(migrated.status, 'archived')
   assert.equal(migrated.stateChangedAt, NOW + 1)

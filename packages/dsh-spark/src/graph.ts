@@ -5,11 +5,11 @@
  * 是领域结论，客户端重算就会出现第二份逻辑 —— 与窗口归因、统计口径同一原则。
  * 客户端只负责把 nodes/edges 画出来。
  *
- * 两类边（全部来自既有数据，不引入新存储）—— 纯火花域（v2 P10/E5：
- * 记忆节点与 crystallized 边已删）：
+ * 三类边（全部来自既有数据，不引入新存储）—— 纯火花域：
  *  1. `tag`：两条火花共享标签数 ≥ tagMinShared（默认 2），权重=共享数；
  *  2. `proposal`：涌现提议里被判为关联的火花对（`proposal.sparkIds`），
- *     权重=同现的提议条数 —— 这是「引擎认为它们相关」的证据，与标签相似度正交。
+ *     权重=同现的提议条数 —— 这是「引擎认为它们相关」的证据，与标签相似度正交；
+ *  3. `derived`：火花 → 它的父火花（`spark.derivedFrom`，v2 P12/F2），权重=1。
  *
  * 裁剪策略：只取最近活跃的 `limit` 条火花（archived 排在最后），避免图被历史
  * 库存淹没；`truncated` 告知前端「图不是全量」。墓碑（deletedAt）不参与。
@@ -120,7 +120,16 @@ export function buildSparkGraph(
     pushEdge(sparkNodeId(a), sparkNodeId(b), 'tag', count)
   }
 
-  // 2) 涌现提议：引擎判定的关联（只取两边都在图里的提议）。
+  // 2) 衍生谱系：火花 → 父火花（只在父也在图内时连，避免悬空边）。
+  const pickedIds = new Set(picked.map((spark) => spark.id))
+  for (const spark of picked) {
+    for (const parentId of spark.derivedFrom ?? []) {
+      if (!pickedIds.has(parentId)) continue
+      pushEdge(sparkNodeId(spark.id), sparkNodeId(parentId), 'derived', 1)
+    }
+  }
+
+  // 3) 涌现提议：引擎判定的关联（只取两边都在图里的提议）。
   const proposalPairs = new Map<string, { a: string; b: string; count: number }>()
   for (const proposal of proposals) {
     const ids = proposal.sparkIds.filter((id) => included.has(id))
@@ -139,7 +148,7 @@ export function buildSparkGraph(
     pushEdge(sparkNodeId(a), sparkNodeId(b), 'proposal', count)
   }
 
-  // 3) 度：客户端据此定尺寸（不在 UI 里重算）。
+  // 4) 度：客户端据此定尺寸（不在 UI 里重算）。
   const degree = new Map<string, number>()
   for (const edge of edges) {
     degree.set(edge.source, (degree.get(edge.source) ?? 0) + 1)

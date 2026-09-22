@@ -307,6 +307,11 @@ function SparkList({ sparks, reload, t, confirmDelete }: {
               <div className="ttl">{s.title}</div>
               <div className="meta">
                 {deleted ? t('stateDeleted') : t(STATE_KEYS[s.status])} · {s.scope} · {timeAgo(s.updatedAt, t)}
+                {s.origin !== undefined && s.origin !== 'human' && (
+                  <span className="origin-badge" title={s.generation >= 2 ? t('derivedTwiceHint') : undefined}>
+                    {' · '}{t(s.origin === 'agent' ? 'originAgent' : 'originDerived')}{s.generation >= 2 ? '²' : ''}
+                  </span>
+                )}
               </div>
             </div>
             {deleted

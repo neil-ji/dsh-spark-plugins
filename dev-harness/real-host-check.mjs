@@ -288,8 +288,11 @@ try {
         sourceAgentId: null,
         sourceTurn: null,
       }),
-    }).then(async (r) => ({ ok: r.ok, status: r.status, body: (await r.text()).slice(0, 200) }))`)
+    }).then(async (r) => ({ ok: r.ok, status: r.status, value: await r.json().then((j) => j.value).catch(() => null) }))`)
     check('POST /sparks 被真宿主接受', fired.ok === true, JSON.stringify(fired))
+    check('POST /sparks 带回 provenance（v2 P12：无 agentId → origin=human，generation=0）',
+      fired.value?.origin === 'human' && Array.isArray(fired.value?.derivedFrom) && fired.value?.generation === 0,
+      JSON.stringify(fired).slice(0, 220))
 
     await sleep(1500)
     const bubble = await evalJs(`(() => {

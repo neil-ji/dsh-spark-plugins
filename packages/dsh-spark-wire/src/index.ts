@@ -23,6 +23,15 @@ export const sparkScopeSchema = z.enum(['session', 'project', 'global'])
 export const sparkStatusSchema = z.enum(['active', 'archived'])
 export const sparkIdSchema = z.string().min(1).max(64)
 
+/**
+ * provenance（v2 设计 §4.3，P12）：谁写的这条火花。
+ *
+ * 现状 `sourceAgentId` 恒等于 `sourceSessionId` 派生位，机器提的和人提的在数据上
+ * 分不开 —— L2（Agent 是平等的提出者）要成立，机器想法必须可辨识、可度量
+ * （KPI「人机产出比」），所以 origin 是**显式枚举**，不在 UI / 查询处推导。
+ */
+export const sparkOriginSchema = z.enum(['human', 'agent', 'derived'])
+
 export const sparkViewSchema = z.object({
   id: sparkIdSchema,
   title: z.string().min(1).max(200),
@@ -31,6 +40,12 @@ export const sparkViewSchema = z.object({
   workspacePath: z.string().nullable(),
   status: sparkStatusSchema,
   tags: z.array(z.string().min(1).max(50)).max(32),
+  /** 谁写的：human 用户 / agent 提出 / derived 由其他火花衍生。 */
+  origin: sparkOriginSchema.default('human'),
+  /** 衍生自哪些火花（空 = 原创）。谱系记在火花自己身上，Graph 据此画 derived 边。 */
+  derivedFrom: z.array(sparkIdSchema).max(8).default([]),
+  /** 衍生代数；硬上限 2（service 保证 `generation > 0 ⟺ origin === 'derived'`）。 */
+  generation: z.number().int().min(0).max(2).default(0),
   sourceSessionId: z.string(),
   sourceAgentId: z.string().nullable(),
   sourceTurn: z.number().int().nonnegative().nullable(),
@@ -51,6 +66,10 @@ export const sparkCaptureSchema = z.object({
   sourceSessionId: z.string().min(1),
   sourceAgentId: z.string().nullable().default(null),
   sourceTurn: z.number().int().nonnegative().nullable().default(null),
+  /** 显式声明产出者；缺省由 service 按 sourceAgentId 判定（agent→agent，否则 human）。 */
+  origin: sparkOriginSchema.optional(),
+  /** 衍生入参：给出即按 derived 处理，generation 由 service 按父代计算（入参不信任）。 */
+  derivedFrom: z.array(sparkIdSchema).max(8).optional(),
 })
 
 export const sparkListQuerySchema = z.object({
@@ -126,8 +145,8 @@ export const proposalListQuerySchema = z.object({
  */
 export const sparkGraphNodeKindSchema = z.enum(['spark'])
 
-/** 边的语义：tag=共享标签；proposal=涌现提议判定的关联。 */
-export const sparkGraphEdgeKindSchema = z.enum(['tag', 'proposal'])
+/** 边的语义：tag=共享标签；proposal=涌现提议判定的关联；derived=衍生谱系（火花→父火花）。 */
+export const sparkGraphEdgeKindSchema = z.enum(['tag', 'proposal', 'derived'])
 
 export const sparkGraphNodeSchema = z.object({
   /** `spark:<sparkId>`。 */
@@ -146,7 +165,7 @@ export const sparkGraphEdgeSchema = z.object({
   source: z.string().min(1).max(120),
   target: z.string().min(1).max(120),
   kind: sparkGraphEdgeKindSchema,
-  /** 强度：tag=共享标签数；proposal=同现提议条数。 */
+  /** 强度：tag=共享标签数；proposal=同现提议条数；derived=1。 */
   weight: z.number().int().positive().default(1),
 })
 
@@ -173,6 +192,7 @@ export type SparkGraphQuery = z.infer<typeof sparkGraphQuerySchema>
 
 export type SparkScope = z.infer<typeof sparkScopeSchema>
 export type SparkStatus = z.infer<typeof sparkStatusSchema>
+export type SparkOrigin = z.infer<typeof sparkOriginSchema>
 export type SparkId = z.infer<typeof sparkIdSchema>
 export type SparkView = z.infer<typeof sparkViewSchema>
 export type SparkCapture = z.infer<typeof sparkCaptureSchema>

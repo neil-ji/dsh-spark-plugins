@@ -34,7 +34,7 @@ export {
 export { JsonlProposalStorage } from './proposal-storage.ts'
 export { ensureJsonlPath, describeStorageError } from './jsonl-path.ts'
 export type { SparkStorage, SparkRecordId } from './types.ts'
-export { deriveTitle } from './types.ts'
+export { deriveTitle, resolveProvenance, SparkProvenanceError, SPARK_MAX_GENERATION } from './types.ts'
 export { registerSparkHttpRoutes } from './http.ts'
 export { registerSparkTools } from './tool.ts'
 export { SparkEventsService } from './events-service.ts'
@@ -42,7 +42,7 @@ export { sparkStreamFrames } from './events.ts'
 export type { SparkEventSource } from './events.ts'
 export { generateProposals, dedupKey, newProposalId } from './proposals.ts'
 
-export type { SparkView, SparkCapture, SparkPatch, SparkId, SparkScope, SparkStatus, SparkStats } from 'dsh-spark-wire'
+export type { SparkView, SparkCapture, SparkPatch, SparkId, SparkScope, SparkStatus, SparkOrigin, SparkStats } from 'dsh-spark-wire'
 export type { ProposalView, ProposalType, ProposalLeverage, ProposalStatus, ReflectRequest } from 'dsh-spark-wire'
 export type { SparkChangedEvent, SparkStreamFrame, SparkTopic } from 'dsh-spark-wire'
 

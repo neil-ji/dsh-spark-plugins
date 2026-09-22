@@ -37,7 +37,7 @@ import { SparkMetaStore, defaultMetaPath, type SparkMeta } from './meta-store.ts
 import { ensureJsonlPath } from './jsonl-path.ts'
 import { registerSparkHttpRoutes } from './http.ts'
 import type { SparkChangedEvent, SparkRecordId, SparkStorage } from './types.ts'
-import { deriveTitle } from './types.ts'
+import { deriveTitle, resolveProvenance } from './types.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -130,6 +130,12 @@ export class SparkService extends Service {
       workspacePath: parsed.workspacePath,
       status: 'active',
       tags: parsed.tags,
+      ...resolveProvenance(
+        parsed,
+        parsed.derivedFrom?.length
+          ? (await this.storage.readAll()).filter(r => (parsed.derivedFrom ?? []).includes(r.id))
+          : [],
+      ),
       sourceSessionId: parsed.sourceSessionId,
       sourceAgentId: parsed.sourceAgentId,
       sourceTurn: parsed.sourceTurn,

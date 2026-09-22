@@ -428,6 +428,8 @@ export async function run(): Promise<{ checks: Check[] }> {
     check('spark: 旧 inboxState 字段被剥离而不是静默归档', legacyPatch.ok === true && legacyPatch.value?.status === 'active', JSON.stringify(legacyPatch).slice(0, 200))
     const archived = store.patch(valid.value.id, { status: 'archived' })
     check('spark: status 变更被接受并打点 stateChangedAt', archived.ok === true && archived.value?.status === 'archived' && typeof archived.value?.stateChangedAt === 'number', JSON.stringify(archived).slice(0, 200))
+    const agentCapture = store.capture({ title: 'agent idea', content: 'from agent', sourceSessionId: 'sess-preview', sourceAgentId: 'agent-x' })
+    check('spark: agent 来源自动记 origin=agent（P12）', agentCapture.ok === true && agentCapture.value?.origin === 'agent' && agentCapture.value?.generation === 0, JSON.stringify(agentCapture).slice(0, 200))
     const stats = store.stats()
     check('spark: /sparks/stats 形状与真宿主同源（v2）', stats.ok === true && typeof stats.value?.active === 'number' && typeof stats.value?.pendingProposals === 'number' && stats.value?.crystallized === undefined, JSON.stringify(stats).slice(0, 220))
   }

@@ -115,6 +115,7 @@ function layout(graph: SparkGraph): Placed[] {
 const EDGE_CLASS: Record<SparkGraph['edges'][number]['kind'], string> = {
   tag: 'dock-graph-edge dock-graph-edge-tag',
   proposal: 'dock-graph-edge dock-graph-edge-proposal',
+  derived: 'dock-graph-edge dock-graph-edge-derived',
 }
 
 /** 节点按状态上色。 */
@@ -199,6 +200,7 @@ export function GraphPane({ t }: { t: SparkT }): JSX.Element {
             <li><i className={'dock-graph-dot dock-graph-dot-archived'} />{t('graphLegendArchived')}</li>
             <li><i className={'dock-graph-line dock-graph-line-tag'} />{t('graphLegendTagEdge')}</li>
             <li><i className={'dock-graph-line dock-graph-line-proposal'} />{t('graphLegendProposalEdge')}</li>
+            <li><i className={'dock-graph-line dock-graph-line-derived'} />{t('graphLegendDerivedEdge')}</li>
           </ul>
           {data?.truncated === true ? <p className={'dock-hint dock-graph-empty'}>{t('graphTruncated')}</p> : null}
         </div>
