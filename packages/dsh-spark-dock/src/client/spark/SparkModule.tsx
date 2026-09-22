@@ -52,6 +52,28 @@ function timeAgo(ts: number, t: SparkT): string {
   return `${Math.floor(s / 86400)} ${t('timeDays')}`
 }
 
+function clip(s: string, max: number = 30): string {
+  return s.length <= max ? s : s.slice(0, max - 1) + '…'
+}
+
+/**
+ * 提议理由在这里拼（2026-09-23，v2 §2.3 F9）。
+ *
+ * 宿主从 `explanation: string`（宿主拼好的中文句子）改成下发病据 `facts`（判别联合），
+ * 于是 en 面不再看到中文理由 —— 措辞全部来自 locale 字典，代码只拼数字、标题与分隔符。
+ * 形制同 `timeAgo`：字典给无占位符的纯词元，句子在代码里拼。
+ */
+function proposalText(p: ProposalView, t: SparkT): string {
+  const f = p.facts
+  if (f.kind === 'link') {
+    return `${t('proposalLinkPrefix')} ${Math.round(f.score * 100)}% · ${clip(f.leftTitle)} / ${clip(f.rightTitle)}`
+  }
+  if (f.kind === 'cluster') {
+    return `${f.members} ${t('proposalClusterMembers')} · ${t('proposalClusterTags')} ${f.tags.join(', ')}`
+  }
+  return `${t('proposalPrunePrefix')} ${f.days} ${t('proposalPruneUnit')}`
+}
+
 function ErrorNote({ error }: { error: string | null }) {
   if (error === null) return null
   return <div className="dock-error">{error}</div>
@@ -393,7 +415,7 @@ export function ProposalsPane({ channel, t }: SparkPaneDeps): JSX.Element {
                         <span className="grow-spacer" />
                         <span className="dock-hint">{timeAgo(p.createdAt, t)}</span>
                       </div>
-                      <div className="dock-prop-text">{p.explanation}</div>
+                      <div className="dock-prop-text">{proposalText(p, t)}</div>
                       <div className="dock-prop-meter">
                         <Meter pct={p.confidence} tone={conf >= 70 ? 'good' : conf >= 40 ? 'warn' : undefined} />
                         <span className="dock-hint">{t('confidenceLabel')} {conf}% · {p.leverage} {t('leverageLabel')}</span>

@@ -41,7 +41,7 @@ function proposal(overrides: Partial<ProposalView> = {}): ProposalView {
     id: overrides.id ?? 'p1',
     type: overrides.type ?? 'link',
     sparkIds: overrides.sparkIds ?? [],
-    explanation: overrides.explanation ?? 'why',
+    facts: overrides.facts ?? { kind: 'link', score: 0.8, leftTitle: 'a', rightTitle: 'b' },
     confidence: overrides.confidence ?? 0.8,
     leverage: overrides.leverage ?? 'high',
     status: overrides.status ?? 'pending',

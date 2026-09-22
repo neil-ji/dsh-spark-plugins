@@ -5,20 +5,31 @@
  * and the user can inspect/grep them independently.
  */
 import { promises as fs } from 'node:fs'
+import { proposalViewSchema } from 'dsh-spark-wire'
 import type { ProposalView, ProposalStatus } from 'dsh-spark-wire'
 import type { SparkRecordId } from './types.ts'
 import { describeStorageError, ensureJsonlPath } from './jsonl-path.ts'
 
+/**
+ * 读侧迁移（2026-09-23，v2 §2.3 F9）：契约把 `explanation: string` 换成了
+ * `facts`（判别联合），所以**旧记录（只有 explanation、没有 facts）在这里被丢弃**。
+ *
+ * 为什么丢而不是回退：中文句子无法反推回结构化病据，而契约里装不下旧形状 ——
+ * 留着它就得让 UI 分支渲染一句宿主拼的、没有 locale 键的中文，那正是本次要修的病。
+ * 代价可接受：proposal 文件是**工作队列**（待裁决面），不是审计日志；pending 记录由
+ * `generateProposals` 纯函数确定性重生，dismissed 记录本就不在面板上显示。
+ * 2026-09-23 真机库只有 3 条这种记录（均 dismissed），已另行备份。
+ */
 function parseLines(text: string): ProposalView[] {
   const records: ProposalView[] = []
   for (const raw of text.split('\n')) {
     const line = raw.trim()
     if (line.length === 0) continue
     try {
-      const parsed = JSON.parse(line) as unknown
-      if (parsed !== null && typeof parsed === 'object' && 'id' in parsed) {
-        records.push(parsed as ProposalView)
-      }
+      const parsed: unknown = JSON.parse(line)
+      // 落库形状由契约唯一校验（旧 explanation 记录在这里被判不合法而丢弃，见上方说明）。
+      const validated = proposalViewSchema.safeParse(parsed)
+      if (validated.success) records.push(validated.data)
     } catch {
       // ignore malformed line
     }

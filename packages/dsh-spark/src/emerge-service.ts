@@ -145,7 +145,7 @@ export class EmergeService extends Service {
         id: newProposalId(),
         type: c.type,
         sparkIds: c.sparkIds,
-        explanation: c.explanation,
+        facts: c.facts,
         confidence: c.confidence,
         leverage: c.leverage,
         status: 'pending',

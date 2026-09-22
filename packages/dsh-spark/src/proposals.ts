@@ -10,6 +10,12 @@
  *  - cluster  N sparks sharing M+ tags
  *  - prune    one active spark untouched for K+ days
  *
+ * 2026-09-23（v2 §2.3 F9）：提议只下发病据（`facts` 判别联合），**不再由宿主拼句子**。
+ * 原先三处 explanation 都是宿主写死的中文（'实质面 token 重叠 42%：A / B'、
+ * '6 条火花共同标签：…'、'活跃但 17 天未触碰'），全仓没有对应 locale 键、dock 又原样上屏，
+ * 于是 `en` 面看到中文理由（违反 AGENTS.md §3.8）。措辞归 dock 的 locale 字典，
+ * 数字与标题这类数据才由宿主下发。
+ *
  * Phase 4.5 will layer an LLM-backed engine on top for richer proposals
  * (semantic similarity, contradict detection, auto-cluster naming).
  */
@@ -133,7 +139,8 @@ export function generateProposals(
         out.push({
           type: 'link' as ProposalType,
           sparkIds: [a.id, b.id],
-          explanation: '实质面 token 重叠 ' + Math.round(score * 100) + '%：' + truncate(a.title) + ' / ' + truncate(b.title),
+          // 只下发病据：百分比与两条标题由 UI 走 locale 拼句（标题截断也是 UI 的事）。
+          facts: { kind: 'link', score, leftTitle: a.title, rightTitle: b.title },
           confidence: score,
           leverage: 'medium' as ProposalLeverage,
         })
@@ -149,8 +156,8 @@ export function generateProposals(
         type: 'cluster' as ProposalType,
         sparkIds: cluster.sparkIds,
         // 到这里 cluster.tags 必然 >= minSharedTags（clusterBySharedTags 已挡住空核心），
-        // 所以 explanation 不会出现「共同标签：」后面空白这种空声称。
-        explanation: cluster.sparkIds.length + ' 条火花共同标签：' + cluster.tags.join(', '),
+        // 所以病据不会出现「共同标签：[空]」这种空声称。
+        facts: { kind: 'cluster', members: cluster.sparkIds.length, tags: cluster.tags },
         confidence,
         // 杠杆跟真实度量走（见 CLUSTER_HIGH_LEVERAGE_CONFIDENCE）：紧的算 high，松的降 medium。
         leverage: (confidence >= CLUSTER_HIGH_LEVERAGE_CONFIDENCE ? 'high' : 'medium') as ProposalLeverage,
@@ -168,7 +175,7 @@ export function generateProposals(
       out.push({
         type: 'prune' as ProposalType,
         sparkIds: [s.id],
-        explanation: '活跃但 ' + days + ' 天未触碰',
+        facts: { kind: 'prune', days },
         confidence: Math.min(1, days / (opts.pruneStaleDays * 2)),
         leverage: 'low' as ProposalLeverage,
       })
@@ -176,11 +183,6 @@ export function generateProposals(
   }
 
   return out
-}
-
-function truncate(s: string, max: number = 30): string {
-  if (s.length <= max) return s
-  return s.slice(0, max - 1) + '…'
 }
 
 /**

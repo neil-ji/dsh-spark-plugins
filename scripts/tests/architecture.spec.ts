@@ -19,6 +19,7 @@ import {
   extractStringLiterals,
   findBucketCriterionGaps,
   findCrossPluginRefs,
+  findHostChineseSentences,
   findRateDivisionSites,
   findPackagingGaps,
   RATE_DIVISION_DEFINITION,
@@ -429,6 +430,50 @@ describe('写入面判据双侧存在（dsh-spark v2 §4.9 / P19）', () => {
       // 写入面文件整个消失也必须报（不能静默跳过）
       rmSync(join(dir, 'packages/dsh-spark/src/inbox.ts'))
       expect(failing(dir)).toEqual(['packages/dsh-spark/src/inbox.ts', 'packages/dsh-spark/src/tool.ts'])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('宿主不得为用户可见句子拼中文（AGENTS §3.8 / spark v2 §2.3 F9）', () => {
+  it('真实仓库：宿主源文件没有为 explanation/summary 字段拼中文', () => {
+    const { violations, files } = findHostChineseSentences(ROOT)
+    expect(violations).toEqual([])
+    expect(files).toBeGreaterThan(50)
+  })
+
+  it('闸门会红：宿主拼中文即失败；注释、数据字段、client 与 locale 字典都不算', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dsh-hostwording-'))
+    try {
+      const write = (rel: string, body: string): void => {
+        const full = join(dir, rel)
+        mkdirSync(dirname(full), { recursive: true })
+        writeFileSync(full, body)
+      }
+      write('package.json', JSON.stringify({ name: 'root', private: true }))
+      write('packages/dsh-x/package.json', JSON.stringify({ name: 'dsh-x' }))
+      const failing = (): string[] => findHostChineseSentences(dir).violations.map((v) => v.file)
+
+      // 宿主侧把中文句子写进 explanation → 违规（2026-09-23 真机的原始形态）
+      write('packages/dsh-x/src/proposals.ts', "const p = { explanation: '活跃但 ' + days + ' 天未触碰' }\n")
+      expect(failing()).toEqual(['packages/dsh-x/src/proposals.ts'])
+
+      // 注释不上屏、也不是 locale 键 → 放行
+      write('packages/dsh-x/src/proposals.ts', "// explanation: '中文只出现在注释里'\nconst x = 1\n")
+      expect(failing()).toEqual([])
+
+      // 火花标题里的中文是合法**数据**，不在判据字段里 → 放行（valence.ts 产出「用户偏好：…」）
+      write('packages/dsh-x/src/proposals.ts', "const title = '用户偏好：不要照搬 finance 的写法'\n")
+      expect(failing()).toEqual([])
+
+      // client 与 locale 字典正是中文该在的地方 → 放行
+      write('packages/dsh-x/src/proposals.ts', "const x = 1\n")
+      write('packages/dsh-x/src/client/pane.tsx', "const p = { explanation: '中文' }\n")
+      expect(failing()).toEqual([])
+      rmSync(join(dir, 'packages/dsh-x/src/client'), { recursive: true, force: true })
+      write('packages/dsh-x/src/locales.ts', "export const zh = { explanation: '中文' }\n")
+      expect(failing()).toEqual([])
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

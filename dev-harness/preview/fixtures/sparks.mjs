@@ -54,7 +54,7 @@ const SPARKS = [
   {
     id: 'spk-dock-overlay', title: 'dock 的悬浮球位置与开合状态都落在 localStorage',
     content: 'POS_KEY/OPEN_KEY/ACTIVE_KEY 三个键；拖拽阈值 4px，松手吸附最近角，双击复位。',
-    scope: 'project', workspacePath: WORKSPACE, status: 'active', tags: ['dock', 'ui'],
+    scope: 'project', workspacePath: WORKSPACE, status: 'active', tags: ['preview', 'embed', 'dock', 'ui'],
     origin: 'human', derivedFrom: [], generation: 0, recalledCount: 0, lastRecalledAt: null, expiresAt: null,
     sourceSessionId: 'sess-preview-002', sourceAgentId: null, sourceTurn: 3,
     createdAt: now - 8 * HOUR, updatedAt: now - 8 * HOUR, stateChangedAt: now - 8 * HOUR, deletedAt: null,
@@ -62,7 +62,7 @@ const SPARKS = [
   {
     id: 'spk-fake-transport', title: '预览的假 transport 走页面内对象，只有两处是真 HTTP',
     content: 'hippomemo 与 spark 的 client 本来就是 fetch 封装，所以数据源放在预览服务器上更保真。',
-    scope: 'global', workspacePath: null, status: 'active', tags: ['preview', 'fixture'],
+    scope: 'global', workspacePath: null, status: 'active', tags: ['preview', 'embed', 'fixture'],
     origin: 'agent', derivedFrom: [], generation: 0, recalledCount: 1, lastRecalledAt: now - 2 * HOUR, expiresAt: null,
     sourceSessionId: 'sess-preview-001', sourceAgentId: 'agent-main', sourceTurn: 9,
     createdAt: now - 2 * DAY, updatedAt: now - DAY, stateChangedAt: now - 2 * DAY, deletedAt: null,
@@ -77,20 +77,33 @@ const SPARKS = [
   },
 ]
 
+/**
+ * 提议夹具（2026-09-23，v2 §2.3 F9）：宿主只下发病据 `facts`，措辞由 dock 走 locale 拼。
+ * 夹具必须与生成侧自洽 —— 否则预览会演示出真宿主不可能出现的组合：
+ *  · cluster 至少 3 条成员且共享 >= 2 个标签（那三条 active 火花的 tags 已按此对齐）；
+ *     紧度 2/3 = confidence，>= 0.5 才是 'high'（见 CLUSTER_HIGH_LEVERAGE_CONFIDENCE）。
+ *  · link 的 score 与 confidence 同源。
+ *  · prune 指向已归档火花是**历史**（dismissed 记录），生成侧不会为 archived 出提议。
+ */
 const PROPOSALS = [
   {
-    id: 'prp-cluster-preview', type: 'cluster', sparkIds: ['spk-preview-harness', 'spk-fake-transport'],
-    explanation: '两条都在讲"预览的数据从哪来"，可聚成一条「预览数据源分层」结论。',
-    confidence: 0.72, leverage: 'high', status: 'pending', createdAt: now - 90 * 60_000, resolvedAt: null,
+    id: 'prp-cluster-preview', type: 'cluster',
+    sparkIds: ['spk-preview-harness', 'spk-dock-overlay', 'spk-fake-transport'],
+    facts: { kind: 'cluster', members: 3, tags: ['preview', 'embed'] },
+    confidence: 2 / 3, leverage: 'high', status: 'pending', createdAt: now - 90 * 60_000, resolvedAt: null,
   },
   {
     id: 'prp-link-dock', type: 'link', sparkIds: ['spk-dock-overlay', 'spk-preview-harness'],
-    explanation: 'dock 悬浮球是预览的默认画布，两条互相引用。',
+    facts: {
+      kind: 'link', score: 0.48,
+      leftTitle: 'dock 的悬浮球位置与开合状态都落在 localStorage',
+      rightTitle: '零 dsh 组件预览可以只靠 embed 产物跑起来',
+    },
     confidence: 0.48, leverage: 'medium', status: 'pending', createdAt: now - 5 * HOUR, resolvedAt: null,
   },
   {
     id: 'prp-prune-old', type: 'prune', sparkIds: ['spk-archived-probe'],
-    explanation: '已归档且 4 天未被引用，建议剪枝。',
+    facts: { kind: 'prune', days: 4 },
     confidence: 0.61, leverage: 'low', status: 'dismissed', createdAt: now - 2 * DAY, resolvedAt: now - DAY,
   },
 ]

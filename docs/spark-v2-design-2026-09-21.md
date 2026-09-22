@@ -119,9 +119,34 @@ hippomemo.json : 242 条记忆 → sourceSparkId 非空 0 条
 `prune`（太久没动，清理）。"从已有火花生成新火花"是**熵增**，且契约上不可能：
 
 ```ts
-proposalViewSchema = { id, type, sparkIds, explanation, confidence, leverage, status, ... }
+proposalViewSchema = { id, type, sparkIds, facts, confidence, leverage, status, ... }
 //                      ↑ 没有 title / content —— 提议在结构上装不下一个新想法
+//                        facts = 判别联合：理由只带**病据**，措辞归 UI（见下）
 ```
+
+**提议理由从「宿主拼句子」改成「宿主下发病据」（F9，P20）**。原契约是 `explanation: string`，
+而宿主三处都直接拼中文（`'实质面 token 重叠 42%：A / B'`、`'6 条火花共同标签：…'`、
+`'活跃但 17 天未触碰'`）；全仓**没有任何对应 locale 键**，dock 又原样上屏
+（`SparkModule.tsx` 的 `.dock-prop-text`）—— 于是 `en` 面看到中文理由，违反 AGENTS.md §3.8
+（宿主只下发病据数字，用户可见措辞走 locale 字典）。改为：
+
+```ts
+proposalFactsSchema = discriminatedUnion('kind', [
+  { kind: 'link',    score, leftTitle, rightTitle },
+  { kind: 'cluster', members, tags },
+  { kind: 'prune',   days },
+])
+```
+
+- **宿主**只产出病据与数字，不再拼任何句子；dock 按 `kind` 从 locale 字典拼（形制同 `timeAgo`：
+  字典给无占位符的纯词元，句子在代码里拼 —— 本包 `SparkT` 不收第二参数）。
+- **不给旧记录回退**：中文句子无法反推回结构化病据，而提议文件是**工作队列**（待裁决面）而非
+  审计日志 —— 读侧迁移直接丢弃无法表示的旧记录（真机只有 3 条，均 `dismissed`，已备份）。
+- **闸门 `hostwording`** 守线：宿主源文件不得为 `explanation` / `summary` 这类用户可见句子字段
+  赋中文。判据取**字段名**而不是「宿主禁中文」——火花**标题**里的中文是合法数据
+  （`valence.ts` 产出「用户偏好：…」），一刀切会误伤；client 与 locale 字典不扫。
+- 预览夹具随之对齐生成侧（`cluster` 至少 3 条成员、共享 ≥ 2 标签、紧度 = confidence），
+  否则预览会演示真宿主不可能出现的组合。
 
 **三类提议的判据必须就是它自称的那个判据**（2026-09-23 修正 `cluster`）。`cluster` 的实现原先用
 union-find 按「两两共享 ≥ `clusterMinSharedTags`」并组，但 **union 传递、pairwise 重叠不传递**：
@@ -349,7 +374,7 @@ until it is useful. Treat proposing ideas as a first-class contribution.
 
 ### 4.8 P18 — 挖掘管线的**准入面**：只挖真人说的话（F7）
 
-> 编号说明：本节用本文档自己的期序列（F0–F8）。**F6 = 术语与语义修正**（上文）；
+> 编号说明：本节用本文档自己的期序列（F0–F9）。**F6 = 术语与语义修正**（上文）；
 > `docs/architecture-acceptance-*` 里的 F* 是另一套架构评审编号，互不相干。
 
 **触发**：2026-09-23 实测 3080 实库 —— 54 条火花里 **40 条**来自 valence 挖掘，其中
@@ -612,6 +637,7 @@ LLM 重组（可选注入 ctx.inject(['llm'])；缺失 → 本轮不生成，不
 | **F5** | 衍生引擎（P15 + P17） | F2/F3 | ✅ 2026-09-21（spark 0.8.0；纯逻辑在 `src/derive.ts`、IO 在 `derive-service.ts`；LLM 面用 try/catch 结构读、缺失即 `skipped`；`POST /sparks/derive` 带 `dryRun` 作为零成本断言面；过期清理复用 `spark-inbox` 首步那一趟，**无定时器**；存储 v5→v6 回填 `expiresAt=null`） |
 | **F7** | **挖掘管线准入面（§4.8 P18）**：D1 只认 `source.kind==='user'` + D2 闸门与抽取同一条话语 + D3 provenance 显式 + D4 跨会话实质面去重 + D5 link 剔模板（详见 §4.8） | F1–F6 | ✅ 2026-09-23（commit 98a39b6；spark 0.9.0→**0.10.0**；新纯函数 `minePreferences` / `isRealUserMessage` / `buildDedupPool` / `isDuplicateOfPool` / `substanceTokens` / `boilerplateTokens` / `jaccardWithout`；配置面 `valence{enabled,intensityThreshold,maxUtteranceChars}` **默认开启**；spark 包测试 124→171） |
 | **F8** | **写入面判据双侧在场（§4.9 P19）**：火花侧 + 记忆侧各带「是否已被现实检验」判据与正解指向；补时机纪律；新增闸门 `bucketcriteria` | F1–F7 | ✅ 2026-09-23（spark 0.10.0→**0.11.0** / hippomemo 0.4.0→**0.5.0**；存量 12 条结论型迁 HippoMemo、18 条归档、4 条留 active；`findBucketCriterionGaps` + 2 条闸门回归单测） |
+| **F9** | **提议理由改为病据 + locale 渲染（§2.3 P20）**：`explanation: string`（宿主拼的中文句子）→ `facts` 判别联合；dock 走 locale 字典拼句；新增闸门 `hostwording` | F1–F8 | ✅ 2026-09-23（wire 0.5.0→**0.6.0** / spark 0.12.0→**0.13.0** / dock 0.7.0→**0.8.0**；读侧迁移丢弃无法表示的旧记录；`findHostChineseSentences` + 2 条闸门回归单测） |
 
 **排序依据**：**先拆桥并改对窗户上的字（F1）→ 再让 agent 看得见旧想法（F3）→ 最后才让它生想法（F5）。**
 反过来做的话，F5 会产出一堆没人看得见、也辨不出真假的机器文本。
@@ -651,6 +677,8 @@ node dev-harness/real-host-check.mjs                 # 退出码 0
 | AC-9（F7） | **模板抑制在健康池上是 no-op**：剔除挖掘记录后的池抑制 0 个 token、link 判定逐对零变化；只有被模板淹没的池才收敛 | 单测（双向：模板池 → 0 条 link；健康池 → 真对仍成 link） |
 | AC-10（F7） | **挖掘产物不是人类原创**：`candidateToSparkInput` 必带 `origin: 'agent'` | 单测 |
 | AC-11（F8） | **写入面判据双侧在场**：火花侧（`tool.ts` GUIDANCE+描述、`inbox.ts` 两段 hint）与记忆侧（`memory_remember` 描述+GUIDANCE）都带 `tested against reality` 且各指认对方为解；**判据只写在注释里不算** | **闸门脚本**（`bucketcriteria`）+ 单测（含「任一侧退回单侧否定句」反向用例） |
+| AC-12（F9） | **提议理由只能来自病据**：宿主源文件不得为 `explanation` / `summary` 这类用户可见句子字段赋中文（client 与 locale 字典除外；火花标题这类**数据**字段不在此列） | **闸门脚本**（`hostwording`）+ 单测（含「注释/数据字段/client/locale 都放行」反向用例） |
+| AC-13（F9） | **提议病据自洽**：`cluster` 的 `tags` 非空且 `members ≥ 3`、`link` 的 `score` 与 `confidence` 同源、`prune` 的 `days` 与 `updatedAt` 一致 | 单测（`facts` 形状断言） |
 
 ### 9.3 成功指标（KPI 反转）
 
@@ -683,7 +711,7 @@ node dev-harness/real-host-check.mjs                 # 退出码 0
 
 ---
 
-## 11. 开放问题（P10–P19，需拍板）
+## 11. 开放问题（P10–P20，需拍板）
 
 | 编号 | 问题 | 我的倾向 |
 |---|---|---|
@@ -697,6 +725,7 @@ node dev-harness/real-host-check.mjs                 # 退出码 0
 | **P17** | L3 的 LLM 面是否必需 | ✅ **已拍板并落地（F5）**：可选（`ctx.llm` / `ctx.agentDefaultModel` 结构读，缺失 → `skipped`，不报错）；沿用 hippomemo evolve 先例 |
 | **P18** | valence 挖掘的**准入面**：是否默认开启、以及"只挖真人话语"的判据形态 | ✅ **已拍板并落地（F7，§4.8）**：**默认开启**（它属于 L2「Agent 是平等的提出者」的产品定位，与 `commandMining` 默认关的理由不同）；准入判据取**结构性白名单** `source.kind === 'user'`（merge-extensible 类型，不用枚举注入类型）；去重阈值复用 derive 的 0.85 而不另立 |
 | **P19** | **人工写入面的准入判据**：火花与记忆的判据写在哪、以及如何防止「措辞改了仍然漂移」 | ✅ **已拍板并落地（F8，§4.9）**：判据**双侧在场**（火花侧 + 记忆侧各带 `tested against reality` 与正解指向），不靠单侧否定句；闸门 `bucketcriteria` 断言其存在（注释不算）；存量按「结论迁记忆、想法留池」分流 |
+| **P20** | **提议理由的表示形态**：宿主拼句子，还是下发病据由 UI 拼？ | ✅ **已拍板并落地（F9，§2.3）**：**宿主只下发病据**（`facts` 判别联合），措辞归 dock 的 locale 字典 —— 原形态（`explanation: string`）让 `en` 面看到中文理由。不给旧记录回退（中文句子无法反推回病据，而提议文件是工作队列不是审计日志）；闸门 `hostwording` 守线 |
 
 ---
 

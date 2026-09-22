@@ -778,6 +778,47 @@ export function findBucketCriterionGaps(root) {
 }
 
 /**
+ * 宿主不得为用户可见句子拼中文（AGENTS.md §3.8 / spark v2 §2.3 F9）。
+ *
+ * 规则是「宿主只下发病据数字，用户可见措辞一律走 locale 字典」。2026-09-23 实测：
+ * `proposals.ts` 三处 `explanation` 都是宿主写死的中文句子（`'实质面 token 重叠 42%：A / B'`、
+ * `'6 条火花共同标签：…'`、`'活跃但 17 天未触碰'`），全仓没有对应 locale 键，而 dock 在
+ * `SparkModule.tsx` 里原样上屏 —— 于是 `en` 面看到中文理由。
+ *
+ * 判据取**字段名**（`explanation` / `summary` 这类「用户可见句子」字段）而不是「宿主禁中文」：
+ * 火花**标题**里的中文是合法数据（`valence.ts` 就产出「用户偏好：…」），一刀切会误伤。
+ * 也不扫 client 与 locale 字典 —— 那里正是中文该在的地方。
+ *
+ * @param {string} root
+ */
+export const HOST_SENTENCE_FIELDS = ['explanation', 'summary']
+const SENTENCE_FIELD_ASSIGN = /\b(explanation|summary)\s*:/
+const CJK_CHAR = /[\u4e00-\u9fff]/
+
+export function findHostChineseSentences(root) {
+  const violations = []
+  let files = 0
+  for (const [, record] of readWorkspacePackages(root)) {
+    for (const file of walkSource(join(record.dir, 'src'))) {
+      const rel = posix(relative(root, file))
+      if (rel.includes('/client/') || file.endsWith('locales.ts')) continue
+      files += 1
+      const source = stripComments(readFileSync(file, 'utf8'))
+      for (const line of source.split('\n')) {
+        if (!SENTENCE_FIELD_ASSIGN.test(line)) continue
+        if (!CJK_CHAR.test(line)) continue
+        violations.push({
+          code: 'host-wording',
+          file: rel,
+          detail: `${rel} 用中文给用户可见句子字段赋值 —— 宿主只下发病据数字，措辞走 locale 字典（AGENTS.md §3.8）：${line.trim().slice(0, 90)}`,
+        })
+      }
+    }
+  }
+  return { violations, files }
+}
+
+/**
  * 成功率口径单源（Spec INV-7 / D10）。
  *
  * 「成功率」这类**业务口径**一旦被多处重算，就会出现「宿主按一套算、UI 按另一套算」的
@@ -1026,7 +1067,7 @@ export function blankComments(source) {
 /* ──────────────────────────── CLI ──────────────────────────── */
 
 function parseArgs(argv) {
-  const options = { only: ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus', 'esmrequire', 'domainvocab', 'crossplugin', 'sparkwording', 'bucketcriteria', 'ratemetric', 'packaging', 'readorder'], json: false, strictLocations: false }
+  const options = { only: ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus', 'esmrequire', 'domainvocab', 'crossplugin', 'sparkwording', 'bucketcriteria', 'hostwording', 'ratemetric', 'packaging', 'readorder'], json: false, strictLocations: false }
   for (const arg of argv) {
     if (arg === '--json') options.json = true
     else if (arg === '--strict-locations') options.strictLocations = true
@@ -1036,8 +1077,8 @@ function parseArgs(argv) {
 }
 
 export function runChecks(root, options = {}) {
-  const only = options.only ?? ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus', 'esmrequire', 'domainvocab', 'crossplugin', 'sparkwording', 'bucketcriteria', 'ratemetric', 'packaging', 'readorder']
-  const report = { orphans: null, boundaries: null, contracts: null, injects: null, products: null, windowbus: null, esmrequire: null, domainvocab: null, crossplugin: null, sparkwording: null, bucketcriteria: null, ratemetric: null, packaging: null, readorder: null, failures: 0, warnings: 0 }
+  const only = options.only ?? ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus', 'esmrequire', 'domainvocab', 'crossplugin', 'sparkwording', 'bucketcriteria', 'hostwording', 'ratemetric', 'packaging', 'readorder']
+  const report = { orphans: null, boundaries: null, contracts: null, injects: null, products: null, windowbus: null, esmrequire: null, domainvocab: null, crossplugin: null, sparkwording: null, bucketcriteria: null, hostwording: null, ratemetric: null, packaging: null, readorder: null, failures: 0, warnings: 0 }
   if (only.includes('orphans')) {
     const result = findOrphanPackages(root)
     report.orphans = result
@@ -1098,6 +1139,11 @@ export function runChecks(root, options = {}) {
     report.bucketcriteria = result
     report.failures += result.violations.length
   }
+  if (only.includes('hostwording')) {
+    const result = findHostChineseSentences(root)
+    report.hostwording = result
+    report.failures += result.violations.length
+  }
   if (only.includes('ratemetric')) {
     const result = findRateDivisionSites(root)
     report.ratemetric = result
@@ -1124,7 +1170,7 @@ function main(argv) {
     process.exitCode = report.failures > 0 ? 1 : 0
     return
   }
-  console.log('══ 架构闸门（孤包 / 边界 / 契约 / 注入面 / 单产物 / 页内总线 / ESM 裸 require / 域词汇 / 跨插件 / 火花朴素文案 / 写入面判据双侧 / 口径单源 / 打包入口 / 检查点先于会话读取） ══')
+  console.log('══ 架构闸门（孤包 / 边界 / 契约 / 注入面 / 单产物 / 页内总线 / ESM 裸 require / 域词汇 / 跨插件 / 火花朴素文案 / 写入面判据双侧 / 宿主文案语言 / 口径单源 / 打包入口 / 检查点先于会话读取） ══')
   if (report.orphans !== null) {
     const { orphans, total, closureSize } = report.orphans
     if (orphans.length === 0) console.log(`  ok    workspace 孤包        0 个（${total} 个包全在 registry 闭包内，闭包 ${closureSize} 个）`)
@@ -1183,6 +1229,11 @@ function main(argv) {
   if (report.bucketcriteria !== null) {
     const { violations, files } = report.bucketcriteria
     if (violations.length === 0) console.log(`  ok    写入面判据双侧      ${files} 个写入面都带「是否已被现实检验」判据与正解指向（v2 P19）`)
+    for (const violation of violations) console.log(`  FAIL  ${violation.code.padEnd(20)} ${violation.detail}`)
+  }
+  if (report.hostwording !== null) {
+    const { violations, files } = report.hostwording
+    if (violations.length === 0) console.log(`  ok    宿主文案语言        ${files} 个宿主源文件没有为用户可见句子拼中文（locale 归客户端，AGENTS §3.8）`)
     for (const violation of violations) console.log(`  FAIL  ${violation.code.padEnd(20)} ${violation.detail}`)
   }
   if (report.ratemetric !== null) {

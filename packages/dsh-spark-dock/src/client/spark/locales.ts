@@ -86,6 +86,13 @@ export const zh = {
   proposalsEmptyHint: '点上方按钮跑一次整理，规则引擎会挑出重复、可归类的簇与陈旧条目。',
   confidenceLabel: '置信',
   leverageLabel: '杠杆',
+  // 提议理由的词元（2026-09-23，v2 §2.3 F9）：宿主只下发病据与数字，
+  // 句子由 SparkModule 的 proposalText 拼接 —— 与 timeAgo 同一形制。
+  proposalLinkPrefix: '实质面重叠',
+  proposalClusterMembers: '条火花',
+  proposalClusterTags: '共同标签',
+  proposalPrunePrefix: '活跃但未触碰',
+  proposalPruneUnit: '天',
   accept: '接受',
   dismiss: '驳回',
 
@@ -187,6 +194,11 @@ export const en: Record<SparkDockLocaleKey, string> = {
   proposalsEmptyHint: 'Press the button above to tidy up — the rule engine picks duplicates, clusters and stale items.',
   confidenceLabel: 'confidence',
   leverageLabel: 'leverage',
+  proposalLinkPrefix: 'Substance overlap',
+  proposalClusterMembers: 'ideas',
+  proposalClusterTags: 'shared tags',
+  proposalPrunePrefix: 'Active but untouched for',
+  proposalPruneUnit: 'days',
   accept: 'Accept',
   dismiss: 'Dismiss',
 

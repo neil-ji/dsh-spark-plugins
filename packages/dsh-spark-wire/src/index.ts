@@ -161,11 +161,42 @@ export const proposalTypeSchema = z.enum(['link', 'cluster', 'prune'])
 export const proposalLeverageSchema = z.enum(['high', 'medium', 'low'])
 export const proposalStatusSchema = z.enum(['pending', 'accepted', 'dismissed'])
 
+/**
+ * 提议的**病据**（2026-09-23，v2 §2.3 F9）：宿主只下发病据 + 数字，
+ * 用户可见措辞由 dock 走 locale 字典拼（AGENTS.md §3.8）。
+ *
+ * 为什么从 `explanation: string` 换成判别联合：宿主原先直接拼中文句子
+ * （'实质面 token 重叠 42%：A / B'、'6 条火花共同标签：…'、'活跃但 17 天未触碰'），
+ * 而全仓没有任何 locale 键，dock 又原样上屏 —— `en` 面于是看到中文理由。
+ * 判别联合让每个 type 只带**它自己的**事实，UI 也就无从渲染出宿主没提供的声称。
+ */
+export const proposalFactsSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('link'),
+    /** 实质面 token Jaccard（与 confidence 同源，这里显式带上供 UI 展示百分比）。 */
+    score: z.number().min(0).max(1),
+    leftTitle: z.string().min(1).max(200),
+    rightTitle: z.string().min(1).max(200),
+  }),
+  z.object({
+    kind: z.literal('cluster'),
+    /** 组内火花数（生成侧要求 >= 3；契约放宽到 >= 2 以容纳数据面）。 */
+    members: z.number().int().min(2).max(32),
+    /** 全体成员共同拥有的标签（生成侧保证 >= clusterMinSharedTags）。 */
+    tags: z.array(z.string().min(1).max(64)).min(1).max(32),
+  }),
+  z.object({
+    kind: z.literal('prune'),
+    /** 距最后一次触碰的天数。 */
+    days: z.number().int().min(1).max(3650),
+  }),
+])
+
 export const proposalViewSchema = z.object({
   id: z.string().min(1).max(64),
   type: proposalTypeSchema,
   sparkIds: z.array(sparkIdSchema).min(1).max(32),
-  explanation: z.string().min(1).max(1_000),
+  facts: proposalFactsSchema,
   confidence: z.number().min(0).max(1),
   leverage: proposalLeverageSchema,
   status: proposalStatusSchema,
@@ -254,6 +285,7 @@ export type SparkDeriveResult = z.infer<typeof deriveResultSchema>
 export type ProposalType = z.infer<typeof proposalTypeSchema>
 export type ProposalLeverage = z.infer<typeof proposalLeverageSchema>
 export type ProposalStatus = z.infer<typeof proposalStatusSchema>
+export type ProposalFacts = z.infer<typeof proposalFactsSchema>
 export type ProposalView = z.infer<typeof proposalViewSchema>
 export type ReflectRequest = z.infer<typeof reflectRequestSchema>
 export type ProposalListQuery = z.infer<typeof proposalListQuerySchema>

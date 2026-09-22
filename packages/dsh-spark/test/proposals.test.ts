@@ -80,7 +80,7 @@ test('cluster: 3+ sparks sharing 2+ tags produce a cluster proposal', () => {
   assert.equal(clusters.length, 1)
   assert.deepEqual(clusters[0]!.sparkIds.sort(), ['a', 'b', 'c'])
   assert.equal(clusters[0]!.leverage, 'high')
-  assert.match(clusters[0]!.explanation, /design, memory/)
+  assert.deepEqual(clusters[0]!.facts, { kind: 'cluster', members: 3, tags: ['design', 'memory'] })
 })
 
 test('cluster: 2 sparks (even with shared tags) do NOT produce cluster', () => {
@@ -120,7 +120,7 @@ test('cluster: 理由与置信度必须自洽，杠杆随真实度量（不再�
   assert.equal(cl.length, 1)
   assert.equal(cl[0]!.confidence, 2 / 6)
   assert.equal(cl[0]!.leverage, 'medium')
-  assert.match(cl[0]!.explanation, /共同标签：design, memory$/)
+  assert.deepEqual(cl[0]!.facts, { kind: 'cluster', members: 6, tags: ['design', 'memory'] })
   assert.ok(cl[0]!.confidence > 0, 'cluster 的 confidence 不允许为 0')
 
   // 紧：3 条共享 3 个标签 → confidence 1 → high
@@ -129,7 +129,9 @@ test('cluster: 理由与置信度必须自洽，杠杆随真实度量（不再�
   assert.equal(cl2.length, 1)
   assert.equal(cl2[0]!.confidence, 1)
   assert.equal(cl2[0]!.leverage, 'high')
-  assert.ok(!/：$/.test(cl2[0]!.explanation), '理由不允许以悬空冒号结尾')
+  assert.deepEqual(cl2[0]!.facts, { kind: 'cluster', members: 3, tags: ['design', 'memory', 'cognition'] })
+  // 病据里不允许出现空标签列表 —— UI 会把它渲染成没有内容的句子（F1 的旧症状）
+  assert.ok(cl2[0]!.facts.kind === 'cluster' && cl2[0]!.facts.tags.length > 0)
 })
 
 test('prune: stale active spark (untouched > 14 days) produces prune proposal', () => {
@@ -143,7 +145,7 @@ test('prune: stale active spark (untouched > 14 days) produces prune proposal', 
   assert.equal(prunes.length, 1)
   assert.deepEqual(prunes[0]!.sparkIds, ['a'])
   assert.equal(prunes[0]!.leverage, 'low')
-  assert.match(prunes[0]!.explanation, /天/)
+  assert.deepEqual(prunes[0]!.facts, { kind: 'prune', days: 30 })
 })
 
 test('archived stale spark is NOT pruned', () => {
@@ -214,8 +216,8 @@ test('mixed scenario: link + cluster + prune all fire together', () => {
 })
 
 test('dedupKey: sorted sparkIds produce a stable key', () => {
-  const a = { type: 'link' as const, sparkIds: ['b', 'a'], explanation: '', confidence: 1, leverage: 'medium' as const }
-  const b = { type: 'link' as const, sparkIds: ['a', 'b'], explanation: '', confidence: 1, leverage: 'medium' as const }
+  const a = { type: 'link' as const, sparkIds: ['b', 'a'], facts: { kind: 'link' as const, score: 1, leftTitle: 'a', rightTitle: 'b' }, confidence: 1, leverage: 'medium' as const }
+  const b = { type: 'link' as const, sparkIds: ['a', 'b'], facts: { kind: 'link' as const, score: 1, leftTitle: 'a', rightTitle: 'b' }, confidence: 1, leverage: 'medium' as const }
   assert.equal(dedupKey(a), dedupKey(b))
   assert.equal(dedupKey(a), 'link:a,b')
 })

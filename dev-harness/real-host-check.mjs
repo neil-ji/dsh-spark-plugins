@@ -1020,6 +1020,33 @@ try {
     JSON.stringify({ before: segBefore, after: segAfter, want: segWant }),
   )
 
+  // 6f) F9：提议理由必须由 dock 从**病据 facts** 拼出（2026-09-23，v2 §2.3）。
+  //     走完整链路：跑一次整理（宿主出 facts）→ 切到「整理」子页签 → 读渲染结果。
+  //     断言必须落在三种拼句模板上：空串说明 facts 没读到（或 UI 还在渲染 explanation），
+  //     匹配不上说明渲染的是宿主写死的旧句子 —— 两种都是本次要拦的回归。
+  const reflectRun = await evalJs(`(async () => {
+    const res = await fetch('proposals/reflect', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })
+    const json = await res.json().catch(() => null)
+    const made = json && json.value && Array.isArray(json.value.newProposals) ? json.value.newProposals.length : -1
+    return { ok: res.ok, made }
+  })()`)
+  await evalJs(`(() => {
+    const list = document.querySelector('.dock-embed [role="tablist"]')
+    const tabs = Array.from(list ? list.querySelectorAll('[role="tab"]') : [])
+    const target = tabs.find((tab) => /整理|Tidy/.test(tab.textContent || ''))
+    if (target) target.click()
+    return target ? target.textContent : null
+  })()`)
+  await sleep(700)
+  const propTexts = await evalJs(`[...document.querySelectorAll('.dock-prop-text')].map((el) => el.textContent ?? '')`)
+  const composedOk = Array.isArray(propTexts) && propTexts.length > 0
+    && propTexts.every((text) => /条火花 · 共同标签 |实质面重叠 |活跃但未触碰 /.test(text))
+  check(
+    'F9 提议理由由 dock 从病据拼出（三种模板命中，不是宿主写死的句子）',
+    composedOk,
+    JSON.stringify({ reflectRun, propTexts: Array.isArray(propTexts) ? propTexts.slice(0, 3) : propTexts }),
+  )
+
   // 6g) PCQA-005/006：GitHub「默认可见性」下拉 —— Esc 只关菜单不关面板，且焦点回触发钮
   const githubIndex = await evalJs(`(() => Array.from(document.querySelectorAll('.dock-tab')).findIndex((b) => (b.getAttribute('aria-label') ?? '').startsWith('GitHub')))()`)
   if (githubIndex >= 0) {
