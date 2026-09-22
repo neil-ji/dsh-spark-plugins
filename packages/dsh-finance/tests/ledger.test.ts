@@ -23,6 +23,8 @@ interface Header {
   parentSession?: string
   delegationDepth?: number
   origin?: 'subagent'
+  /** Fork lineage: a seeded Session's inherited cut only its storage handle knows. */
+  isSeeded?: boolean
 }
 
 function usage(uncachedInputTokens: number, outputTokens: number): FinanceUsageProjection {
@@ -102,6 +104,7 @@ function makeCtx(
     } as never,
     coldSnapshot,
     coldSessionIds,
+    inspect,
   }
 }
 
@@ -165,7 +168,7 @@ describe('buildFinanceLedger', () => {
     // cut with the core token-meter totals but no financeUsage row. The ledger
     // must read those totals from the cached cut directly — no event-log
     // replay — and price them at the default rate.
-    const { ctx, coldSnapshot } = makeCtx([
+    const { ctx, coldSnapshot, inspect } = makeCtx([
       { id: 'pre-install', createdAt: 1000 },
     ], {
       'pre-install': { tokenUsage: tokenUsage(100, 50), title: 'Old session' },
@@ -175,6 +178,10 @@ describe('buildFinanceLedger', () => {
     })
     const ledger = await buildFinanceLedger(ctx, config)
     expect(coldSnapshot).not.toHaveBeenCalled()
+    // 2026-09-23 真机事故回归线：命中检查点连**日志都不该打开**。原实现先
+    // `inspectPersistenceSession`（读完整日志）再查缓存 —— 每次账本构建都对全部
+    // 会话全量解码（3080 实库 301 会话 / 1.2G → 每轮 145%~232% CPU、Web UI 卡死）。
+    expect(inspect).not.toHaveBeenCalled()
     expect(ledger.sessionCount).toBe(1)
     expect(ledger.sessions[0].usage.uncachedInputTokens).toBe(100)
     expect(ledger.sessions[0].usage.outputTokens).toBe(50)
@@ -283,9 +290,14 @@ describe('buildFinanceLedger', () => {
       { id: 'sess-also-ok', createdAt: 3000 },
     ], {
       'sess-ok': { financeUsage: usage(100, 50), title: 'OK' },
+      'sess-also-ok': { financeUsage: usage(1, 1), title: 'Also OK' },
+    }, {
+      'sess-ok': { financeUsage: usage(100, 50), title: 'OK' },
+      // 这条会话**没有检查点**（只有冷值）：命中缓存就不读日志，也就压不到
+      // "读失败不毁账本"这条线 —— 所以它的缓存必须为空（2026-09-23）。
       'sess-legacy': { financeUsage: usage(9_000, 9_000), title: 'Legacy' },
       'sess-also-ok': { financeUsage: usage(1, 1), title: 'Also OK' },
-    }, undefined, { unreadable: ['sess-legacy'], logger: { warn } })
+    }, { unreadable: ['sess-legacy'], logger: { warn } })
 
     const ledger = await buildFinanceLedger(ctx, config)
 
@@ -317,8 +329,11 @@ describe('buildFinanceLedger', () => {
       { id: 'b', createdAt: 2000 },
     ], {
       'a': { financeUsage: usage(1, 1), title: 'A' },
+    }, {
+      'a': { financeUsage: usage(1, 1), title: 'A' },
+      // 同上：没有检查点才会真的去读日志，取消才有机会从读取里抛出来。
       'b': { financeUsage: usage(1, 1), title: 'B' },
-    }, undefined, { unreadable: ['b'] })
+    }, { unreadable: ['b'] })
 
     controller.abort()
     await expect(buildFinanceLedger(ctx, config, controller.signal)).rejects.toThrow(UNREADABLE_REASON)
@@ -821,6 +836,39 @@ describe('backfillFinanceHourly', () => {
     expect(sink.scanned).toBe(2)
     expect(sink.rescanned).toBe(1)
     expect(result.rescanned).toBe(1)
+  })
+
+  // 2026-09-23 真机事故回归线：整段首算原先对**每个**会话无条件读完整日志
+  // （open + read）之后才查检查点，于是 24 个会话 / 1.2G 的日志每轮被全量解码
+  // （真机 profile：parseJson 24.9% 单核、宿主 145% CPU 约 30s、Web UI 卡死）。
+  // 命中检查点的会话必须**一次都不打开日志**。
+  it('serves a session whose cached cut carries the unit without reading its log', async () => {
+    const { ctx, inspect, coldSessionIds } = makeCtx([
+      { id: 'cached', createdAt: 1000 },
+      { id: 'stale', createdAt: 2000 },
+    ], {
+      'cached': { financeUsageHourly: hourlyUsage({}), title: 'Cached' },
+      'stale': { financeUsage: usage(10, 10), title: 'Stale' },
+    })
+    const result = await backfillFinanceHourly(ctx)
+    expect(result.sessionCount).toBe(2)
+    expect(result.rescanned).toBe(1)
+    // 只有缺单元的 'stale' 被打开；'cached' 走 header 身份直接命中检查点。
+    expect(inspect.mock.calls.map(call => call[0])).toEqual(['stale'])
+    expect(coldSessionIds()).toEqual(['stale'])
+  })
+
+  it('still reads a seeded fork, whose inherited cut only the handle knows', async () => {
+    const { ctx, inspect, coldSessionIds } = makeCtx([
+      { id: 'fork', createdAt: 1000, isSeeded: true },
+    ], {
+      'fork': { financeUsageHourly: hourlyUsage({}), title: 'Fork' },
+    })
+    const result = await backfillFinanceHourly(ctx)
+    expect(result.rescanned).toBe(0)
+    // 身份算不出来 → 保守回退到读取；读到命中即不冷折。
+    expect(inspect).toHaveBeenCalledOnce()
+    expect(coldSessionIds()).toEqual([])
   })
 })
 

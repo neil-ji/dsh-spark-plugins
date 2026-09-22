@@ -24,14 +24,14 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { SessionHeader } from '@deepseek-ai/dsh-session'
+import type { SessionHeader, SessionLogOffset } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import type { SessionProjectionMap } from '@deepseek-ai/dsh-session-projection'
 import type {} from '@deepseek-ai/dsh-session-projection-cache'
 // Type-only: merges the `title` projection key into SessionProjectionMap.
 import type {} from '@deepseek-ai/dsh-session-title/types'
 import type {} from '@deepseek-ai/dsh-workspace'
-import { inspectPersistenceSession, listPersistenceSnapshots } from './session-source.ts'
+import { inspectPersistenceSession, listPersistenceSnapshots, listedSnapshotInheritedCut } from './session-source.ts'
 
 /**
  * 全流程进度加权（0–100）：回填重放段占 0–70，账本冷聚合段占 70–100。
@@ -190,11 +190,30 @@ function hasRequiredProjections(values: Partial<SessionProjectionMap>): boolean 
   return REQUIRED_PROJECTION_KEYS.every((key) => values[key] !== undefined)
 }
 
-async function readProjection(ctx: Context, header: SessionHeader, signal?: AbortSignal): Promise<SessionProjectionRead> {
-  // 0.1.2: the cache identity needs the session's inherited-event count, which
-  // only persistence metadata carries — inspect once, then cache-first fold.
-  // `inspectPersistenceSession` maps both persistence API generations (0.1.2
-  // `inspect` / 0.1.5 read handle) onto this one shape.
+/**
+ * Read one session's projection inside.
+ *
+ * 2026-09-23 真机 CPU 事故：这里原先是「先 `inspectPersistenceSession`（读完整
+ * 日志）再 `cachedSnapshot`」，于是**每次账本构建**都对全部会话做一次全量解码
+ * （3080 实库 301 个会话 / 1.2G，每轮对话后账本作废重算 → 宿主 145%~232% CPU、
+ * Web UI 卡死）。未 fork 会话的缓存身份只凭 header 就能算出，所以**先查检查点、
+ * 命中直接返回**；seeded fork 的身份只有存储 handle 知道，才回退到读取。
+ *
+ * @param listedCut - 调用方从 `list()` 的 header 推出的 inherited cut；
+ *   `undefined` 表示身份必须靠读取才能确定（seeded fork）。
+ */
+async function readProjection(
+  ctx: Context,
+  header: SessionHeader,
+  listedCut: SessionLogOffset | undefined,
+  signal?: AbortSignal,
+): Promise<SessionProjectionRead> {
+  if (listedCut !== undefined) {
+    const listed = ctx.sessionProjectionCache.cachedSnapshot(header, listedCut)
+    if (listed !== undefined && hasRequiredProjections(listed.values)) {
+      return extractProjection(listed.values, typeof listed.values.title === 'string' ? listed.values.title : null)
+    }
+  }
   const inspection = await inspectPersistenceSession(ctx, String(header.id), signal)
   const cached = ctx.sessionProjectionCache.cachedSnapshot(inspection.meta, inspection.inheritedEventCount)
   if (cached !== undefined && hasRequiredProjections(cached.values)) {
@@ -511,7 +530,7 @@ export async function buildFinanceLedger(
     const header = snapshot.header
     let read: SessionProjectionRead
     try {
-      read = await readProjection(ctx, header, signal)
+      read = await readProjection(ctx, header, listedSnapshotInheritedCut(snapshot), signal)
     } catch (error) {
       // One unreadable log must not blank the dashboard: skip this session,
       // keep every other row, and report it for the warning banner. Spend
@@ -859,10 +878,12 @@ export async function buildFinanceLedger(
  * predate the hourly unit (including ones persisted before the finance plugin
  * existed, which had only tokenUsage totals and no model split at all). After
  * the backfill the ledger build stays O(session count); the replay cost is
- * paid once. The scan is idempotent: sessions already carrying the unit are
- * skipped, so re-running it on later builds replays nothing (and retries any
- * session whose earlier replay failed). Failures are per-session and
- * fail-soft: one broken session never aborts the rest of the backfill.
+ * paid once. The scan is idempotent: a session already carrying the unit is
+ * skipped **without opening its log** — the checkpoint is consulted from the
+ * listed header first (`listedSnapshotInheritedCut`), so re-running it on later
+ * builds neither replays nor reads anything (and retries any session whose
+ * earlier replay failed). Failures are per-session and fail-soft: one broken
+ * session never aborts the rest of the backfill.
  */
 export async function backfillFinanceHourly(
   ctx: Context,
@@ -870,39 +891,57 @@ export async function backfillFinanceHourly(
   progress?: FinanceBackfillSink,
 ): Promise<FinanceRescanResult> {
   const snapshots = await listPersistenceSnapshots(ctx, signal)
+  let scanned = 0
+  let rescanned = 0
+  /** 进度上报的唯一出口（命中缓存与重放两条路径共用，行文案只差 replay/cached）。 */
+  const report = (replayed: boolean, id: string): void => {
+    if (progress === undefined) return
+    progress.scanned = scanned
+    progress.rescanned = rescanned
+    progress.percent = Math.round((BACKFILL_WEIGHT * scanned) / Math.max(1, snapshots.length))
+    progress.line = `backfill ${scanned}/${snapshots.length}${replayed ? ' replay' : ' cached'} ${id}`
+    progress.onProgress?.(progress)
+  }
   if (progress !== undefined) {
     progress.total = snapshots.length
     progress.phase = 'backfill'
     progress.line = `backfill scan ${snapshots.length} sessions`
     progress.onProgress?.(progress)
   }
-  let scanned = 0
-  let rescanned = 0
   for (const snapshot of snapshots) {
     if (signal?.aborted) break
-    const header = snapshot.header
+    const id = String(snapshot.header.id)
     let replayed = false
     try {
-      const inspection = await inspectPersistenceSession(ctx, String(header.id), signal)
-      const cached = ctx.sessionProjectionCache.cachedSnapshot(inspection.meta, inspection.inheritedEventCount)
-      if (cached === undefined || cached.values.financeUsageHourly === undefined) {
-        ctx.sessionProjectionCache.coldSnapshot(inspection.meta, inspection.inheritedEventCount, inspection.events)
-        rescanned += 1
-        replayed = true
+      // 2026-09-23 真机 CPU 事故的修复点：**先查检查点，再决定要不要读日志**。
+      // 原实现无条件 `inspectPersistenceSession`（open + read 完整日志）之后才
+      // 拿 `cachedSnapshot` 判断要不要冷折 —— 检查点形同虚设，于是每次整段首算
+      // （以及每轮对话后的账本作废重算）都把 24 个会话 / 1.2G 的日志全量解码：
+      // profile 里 `parseJson` 占 24.9% 单核、宿主持续 145% CPU 约 30s，事件循环
+      // 被堵、Web UI 卡死。未 fork 的会话 inherited cut 恒为 0，身份只凭 list()
+      // 的 header 就能算出，所以命中检查点根本不需要打开日志。
+      // 显式传 key：目标单元缺失时 `cachedSnapshot` 会返回 undefined（视作未命中），
+      // 于是"检查点不带该单元"仍走下面的读取 + 冷折，语义与旧实现完全一致。
+      const listedCut = listedSnapshotInheritedCut(snapshot)
+      const listedCached = listedCut === undefined
+        ? undefined
+        : ctx.sessionProjectionCache.cachedSnapshot(snapshot.header, listedCut, ['financeUsageHourly'])
+      if (listedCached?.values.financeUsageHourly === undefined) {
+        const inspection = await inspectPersistenceSession(ctx, id, signal)
+        const cached = ctx.sessionProjectionCache.cachedSnapshot(inspection.meta, inspection.inheritedEventCount)
+        if (cached === undefined || cached.values.financeUsageHourly === undefined) {
+          ctx.sessionProjectionCache.coldSnapshot(inspection.meta, inspection.inheritedEventCount, inspection.events)
+          rescanned += 1
+          replayed = true
+        }
       }
     } catch (error) {
-      ctx.logger?.warn?.(`finance rescan: session ${String(header.id)} replay failed`, error)
+      ctx.logger?.warn?.(`finance rescan: session ${id} replay failed`, error)
     }
     // 2026-09 订阅估价修订：scanned 在会话**处理完成后**才 +1 —— 进度条反映真实
     // 完成量，不再「先满后等」（最后一个会话的重放最慢，旧实现让条提前走满）。
     scanned += 1
-    if (progress !== undefined) {
-      progress.scanned = scanned
-      progress.rescanned = rescanned
-      progress.percent = Math.round((BACKFILL_WEIGHT * scanned) / Math.max(1, snapshots.length))
-      progress.line = `backfill ${scanned}/${snapshots.length}${replayed ? ' replay' : ' cached'} ${String(header.id)}`
-      progress.onProgress?.(progress)
-    }
+    report(replayed, id)
   }
   return { sessionCount: snapshots.length, rescanned }
 }

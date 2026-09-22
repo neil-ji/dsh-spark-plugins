@@ -28,6 +28,30 @@ export interface PersistenceSnapshotLike {
   revision?: unknown
 }
 
+/**
+ * The projection-cache identity cut a **listed** snapshot proves on its own.
+ *
+ * The cache identity is `(formatVersion, createdAt, cwd, isSeeded,
+ * inheritedEventCount)`. An unseeded Session has an exact inherited cut of `0`
+ * — the platform's `identityOf` refuses any other value for it — so the whole
+ * identity follows from the listed header with no log read. A seeded fork
+ * carries a cut only its storage handle knows, so the caller must read.
+ *
+ * This lets a caller consult the cache **before** opening a session. Reading a
+ * multi-megabyte log only to discover that the checkpoint already covers the
+ * rotation is the 2026-09-23 real-host CPU incident: 24 sessions / 1.2G
+ * re-decoded per ledger build, `parseJson` at 24.9% of a core, the event loop
+ * stalled and the Web UI froze.
+ *
+ * @param snapshot - one `listSnapshots()` / `list()` entry.
+ * @returns the exact cut, or `undefined` when only a read can supply it.
+ */
+export function listedSnapshotInheritedCut(snapshot: PersistenceSnapshotLike): SessionLogOffset | undefined {
+  // `0` is the very number the platform validates; the brand is compile-time
+  // only, so this stays type-only — no new runtime import, no pin change.
+  return snapshot.header.isSeeded === true ? undefined : (0 as SessionLogOffset)
+}
+
 /** Storage metadata + complete log, the fold input the projection cache wants. */
 export interface PersistenceInspectionLike {
   meta: SessionHeader

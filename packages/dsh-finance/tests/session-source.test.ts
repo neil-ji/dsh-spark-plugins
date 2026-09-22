@@ -145,6 +145,10 @@ describe('sessionPersistence compatibility', () => {
     expect(ledger.sessionCount).toBe(1)
     expect(ledger.sessions[0]!.sessionId).toBe('a')
     expect(coldSnapshot).not.toHaveBeenCalled()
-    expect(close).toHaveBeenCalledOnce()
+    // 2026-09-23：命中检查点的身份只凭 `list()` 的 header 就能算出，所以账本连
+    // 句柄都不用开 —— `close` 为 0 是**修复后的预期**（原先每次构建都对全部会话
+    // 读完整日志）。0.1.5 的 handle 生命周期由上面 `inspectPersistenceSession`
+    // 那条用例单独钉住；本用例钉的是「代际兼容探针 + 命中即不开日志」。
+    expect(close).not.toHaveBeenCalled()
   })
 })
