@@ -34,6 +34,7 @@ function makeRecord(overrides: Partial<SparkView> = {}): SparkView {
     generation: overrides.generation ?? 0,
     recalledCount: overrides.recalledCount ?? 0,
     lastRecalledAt: overrides.lastRecalledAt ?? null,
+    expiresAt: overrides.expiresAt ?? null,
     tags: [],
     sourceSessionId: 'sess',
     sourceAgentId: null,
@@ -63,6 +64,11 @@ test('migrateSparkRecord: v1 active+crystallized -> archived; archived -> archiv
   assert.equal(archived.stateChangedAt, 42, 'resolvedAt wins as the state-change timestamp')
 })
 
+test('migrateSparkRecord: ≤v5 回填 expiresAt=null（不给历史火花补 TTL）', () => {
+  const out = migrateSparkRecord({ id: 'e', status: 'active', updatedAt: 1 })!
+  assert.equal(out.expiresAt, null)
+})
+
 test('migrateSparkRecord: ≤v4 回填召回计数（存量一律视为从未被召回）', () => {
   const out = migrateSparkRecord({ id: 'r', status: 'active', updatedAt: 1 })!
   assert.equal(out.recalledCount, 0)
@@ -90,7 +96,7 @@ test('migrateSparkRecord: v2 pending -> active; dropped -> tombstone; crystalliz
   assert.equal('crystallized' in crystal, false)
 })
 
-test('migrateSparkRecord: idempotent on an already-v5 record, null on junk', () => {
+test('migrateSparkRecord: idempotent on an already-v6 record, null on junk', () => {
   const v3 = makeRecord({ stateChangedAt: 3 })
   assert.deepEqual(migrateSparkRecord(v3), v3)
   assert.equal(migrateSparkRecord(null), null)
@@ -107,7 +113,7 @@ test('ensureVersion: upgrades a legacy file exactly once (idempotent)', async (t
   const storage = new JsonlSparkStorage(file)
   assert.equal(await storage.ensureVersion(), SPARK_STORE_VERSION)
   const afterFirst = await readFile(file, 'utf8')
-  assert.match(afterFirst, /^\{"__sparkStore":5\}/)
+  assert.match(afterFirst, /^\{"__sparkStore":6\}/)
   const migrated = (await storage.readAll())[0]!
   assert.equal(migrated.status, 'archived')
   assert.equal(migrated.stateChangedAt, NOW + 1)

@@ -53,6 +53,14 @@ export const sparkViewSchema = z.object({
   recalledCount: z.number().int().nonnegative().default(0),
   /** 最后一次被召回（或人工重新激活）的时间；null = 从未。 */
   lastRecalledAt: z.number().int().nonnegative().nullable().default(null),
+  /**
+   * 过期时间（v2 §5.2，P15）：仅 `origin='derived'` 的记录非空。
+   *
+   * **用过期代替审批** —— 衍生火花直接落库，到期仍从未被召回/重新激活（且
+   * `recalledCount === 0`）就自动转墓碑（可恢复）。审批会让产量等于人的点击量，
+   * 那正是要消灭的病（原则 5）。
+   */
+  expiresAt: z.number().int().nonnegative().nullable().default(null),
   sourceSessionId: z.string(),
   sourceAgentId: z.string().nullable(),
   sourceTurn: z.number().int().nonnegative().nullable(),
@@ -77,6 +85,40 @@ export const sparkCaptureSchema = z.object({
   origin: sparkOriginSchema.optional(),
   /** 衍生入参：给出即按 derived 处理，generation 由 service 按父代计算（入参不信任）。 */
   derivedFrom: z.array(sparkIdSchema).max(8).optional(),
+})
+
+/* ────────────────────── 衍生引擎（v2 §5，P15/P17） ────────────────────── */
+
+/**
+ * 一轮衍生的请求。输入面**只有火花**（同 scope 的 active、非 derived 作父本）。
+ *
+ * `dryRun` 只做「选候选对 + 算预算」，**不调 LLM** —— 给验收/预览一个确定性、
+ * 零成本的断言面（生成类能力没有它就只能靠"看着像有"来验收）。
+ */
+export const deriveRequestSchema = z.object({
+  /** 只从这条火花出发找组合（UI 的行内动作走它）；缺省则全库挑。 */
+  seedId: sparkIdSchema.optional(),
+  maxPairs: z.number().int().min(1).max(32).default(8),
+  /** 相似度落在中段区间的候选优先：太像=重复，太不像=无关，中段才是组合的甜点。 */
+  minSimilarity: z.number().min(0).max(1).default(0.15),
+  maxSimilarity: z.number().min(0).max(1).default(0.7),
+  maxResults: z.number().int().min(1).max(10).default(3),
+  dryRun: z.boolean().default(false),
+})
+
+export const deriveRejectionSchema = z.object({
+  title: z.string(),
+  /** restatement（与输入/已有火花 Jaccard ≥ 0.85）/ empty / unknown-parent。 */
+  reason: z.string().min(1),
+})
+
+export const deriveResultSchema = z.object({
+  /** 本轮实际送进 LLM 的候选对数（dryRun 时也如实返回）。 */
+  pairsConsidered: z.number().int().nonnegative(),
+  created: z.array(sparkViewSchema),
+  rejected: z.array(deriveRejectionSchema),
+  /** 本轮没有生成的原因（LLM 不可用 / 无候选对 / 调用失败）；生成了则为 null。 */
+  skipped: z.string().nullable().default(null),
 })
 
 export const sparkListQuerySchema = z.object({
@@ -206,6 +248,9 @@ export type SparkCapture = z.infer<typeof sparkCaptureSchema>
 export type SparkListQuery = z.infer<typeof sparkListQuerySchema>
 export type SparkPatch = z.infer<typeof sparkPatchSchema>
 export type SparkStats = z.infer<typeof sparkStatsSchema>
+export type SparkDeriveRequest = z.infer<typeof deriveRequestSchema>
+export type SparkDeriveRejection = z.infer<typeof deriveRejectionSchema>
+export type SparkDeriveResult = z.infer<typeof deriveResultSchema>
 export type ProposalType = z.infer<typeof proposalTypeSchema>
 export type ProposalLeverage = z.infer<typeof proposalLeverageSchema>
 export type ProposalStatus = z.infer<typeof proposalStatusSchema>
@@ -306,6 +351,8 @@ export const SPARK_HOST_CONTRIBUTION: TypertContribution = {
     { name: 'SparkChangedEvent', schema: sparkChangedEventSchema },
     { name: 'ProposalsChangedEvent', schema: proposalsChangedEventSchema },
     { name: 'SparkStreamFrame', schema: sparkStreamFrameSchema },
+    { name: 'SparkDeriveRequest', schema: deriveRequestSchema },
+    { name: 'SparkDeriveResult', schema: deriveResultSchema },
   ],
   model: { services: [], events: [], objects: [] },
   invocations: [...SPARK_INVOCATIONS],

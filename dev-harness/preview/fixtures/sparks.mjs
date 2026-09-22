@@ -24,6 +24,10 @@ import { matchScore, normalizeNeedle } from '../../../packages/dsh-script/src/re
 // 语义召回口径同样吃真源（v2 P13）：预览的 /sparks/search 与真宿主注入面、
 // `spark_search` 工具走同一个 selectRelevant —— 否则"预览搜得到、真宿主搜不到"。
 import { selectRelevant } from '../../../packages/dsh-spark/src/relevance.ts'
+// 衍生引擎的候选对选择同样吃真源（v2 §5）：预览能断言「素材够不够」，
+// 但没有 LLM 面 —— 真宿主在缺 LLM/缺路由时也返回 skipped 'llm service unavailable'，
+// 所以预览与真宿主在这里是**同一语义**，不是被 mock 掉的假象。
+import { selectDerivationPairs } from '../../../packages/dsh-spark/src/derive.ts'
 
 const WORKSPACE = 'F:\\AgentStudio\\dsh-spark-plugins'
 const HOUR = 3600_000
@@ -40,7 +44,7 @@ const SPARKS = [
     id: 'spk-preview-harness', title: '零 dsh 组件预览可以只靠 embed 产物跑起来',
     content: '四个包的 lib/embed.cjs 都是自包含的，唯一外部依赖是 react；宿主那一半用假 ctx 补上就够了。',
     scope: 'project', workspacePath: WORKSPACE, status: 'active', tags: ['preview', 'embed', 'architecture'],
-    origin: 'agent', derivedFrom: [], generation: 0, recalledCount: 2, lastRecalledAt: now - 20 * 60_000,
+    origin: 'agent', derivedFrom: [], generation: 0, recalledCount: 2, lastRecalledAt: now - 20 * 60_000, expiresAt: null,
     sourceSessionId: 'sess-preview-001', sourceAgentId: 'agent-main', sourceTurn: 6,
     createdAt: now - 3 * HOUR, updatedAt: now - 40 * 60_000, stateChangedAt: now - 3 * HOUR, deletedAt: null,
   },
@@ -48,7 +52,7 @@ const SPARKS = [
     id: 'spk-dock-overlay', title: 'dock 的悬浮球位置与开合状态都落在 localStorage',
     content: 'POS_KEY/OPEN_KEY/ACTIVE_KEY 三个键；拖拽阈值 4px，松手吸附最近角，双击复位。',
     scope: 'project', workspacePath: WORKSPACE, status: 'active', tags: ['dock', 'ui'],
-    origin: 'human', derivedFrom: [], generation: 0, recalledCount: 0, lastRecalledAt: null,
+    origin: 'human', derivedFrom: [], generation: 0, recalledCount: 0, lastRecalledAt: null, expiresAt: null,
     sourceSessionId: 'sess-preview-002', sourceAgentId: null, sourceTurn: 3,
     createdAt: now - 8 * HOUR, updatedAt: now - 8 * HOUR, stateChangedAt: now - 8 * HOUR, deletedAt: null,
   },
@@ -56,7 +60,7 @@ const SPARKS = [
     id: 'spk-fake-transport', title: '预览的假 transport 走页面内对象，只有两处是真 HTTP',
     content: 'hippomemo 与 spark 的 client 本来就是 fetch 封装，所以数据源放在预览服务器上更保真。',
     scope: 'global', workspacePath: null, status: 'active', tags: ['preview', 'fixture'],
-    origin: 'agent', derivedFrom: [], generation: 0, recalledCount: 1, lastRecalledAt: now - 2 * HOUR,
+    origin: 'agent', derivedFrom: [], generation: 0, recalledCount: 1, lastRecalledAt: now - 2 * HOUR, expiresAt: null,
     sourceSessionId: 'sess-preview-001', sourceAgentId: 'agent-main', sourceTurn: 9,
     createdAt: now - 2 * DAY, updatedAt: now - DAY, stateChangedAt: now - 2 * DAY, deletedAt: null,
   },
@@ -64,7 +68,7 @@ const SPARKS = [
     id: 'spk-archived-probe', title: '（已归档）用探针插件验证宿主端 HMR',
     content: 'root: ["packages/dsh-spark/lib"] 窄根约 18s ready；整棵仓库要 75s。',
     scope: 'project', workspacePath: WORKSPACE, status: 'archived', tags: ['dev-harness'],
-    origin: 'human', derivedFrom: [], generation: 0, recalledCount: 0, lastRecalledAt: null,
+    origin: 'human', derivedFrom: [], generation: 0, recalledCount: 0, lastRecalledAt: null, expiresAt: null,
     sourceSessionId: 'sess-preview-003', sourceAgentId: null, sourceTurn: 1,
     createdAt: now - 5 * DAY, updatedAt: now - 4 * DAY, stateChangedAt: now - 4 * DAY, deletedAt: null,
   },
@@ -280,6 +284,21 @@ export function createSparkStore() {
       return { ok: true, value: selectRelevant(pool, q, { limit: Number.isFinite(limit) ? limit : 5, minScore: 0 }).map((entry) => entry.spark) }
     },
 
+    /** `POST /sparks/derive`（v2 §5）：预览无 LLM → 只做候选对选择，返回 skipped。 */
+    derive(input) {
+      if (fail()) return { ok: false, error }
+      const request = input ?? {}
+      const pool = (scenario === 'empty' ? [] : sparks).filter((item) => item.deletedAt === null && item.status === 'active')
+      const pairs = selectDerivationPairs(pool, {
+        maxPairs: request.maxPairs ?? 8,
+        minSimilarity: request.minSimilarity ?? 0.15,
+        maxSimilarity: request.maxSimilarity ?? 0.7,
+        ...(request.seedId === undefined ? {} : { seedId: request.seedId }),
+      })
+      if (pairs.length === 0) return { ok: true, value: { pairsConsidered: 0, created: [], rejected: [], skipped: 'no candidate pairs' } }
+      return { ok: true, value: { pairsConsidered: pairs.length, created: [], rejected: [], skipped: 'llm service unavailable' } }
+    },
+
     capture(input) {
       if (fail()) return { ok: false, error }
       // 真宿主 SparkService.capture() 的第一件事就是 `sparkCaptureSchema.parse(input)`
@@ -300,6 +319,7 @@ export function createSparkStore() {
         generation: 0,
         recalledCount: 0,
         lastRecalledAt: null,
+        expiresAt: value.origin === 'derived' ? Date.now() + 14 * 24 * HOUR : null,
         tags: [...value.tags],
         sourceSessionId: value.sourceSessionId,
         sourceAgentId: value.sourceAgentId,

@@ -91,6 +91,12 @@ async function handleSparks(
       send(res, record === null ? 404 : 200, okEnvelope(record))
       return
     }
+    // 衍生（v2 §5）：写在库里的动作，走 POST。必须排在 /:id 之前。
+    if (req.method === 'POST' && sub === '/derive') {
+      const body = await readJsonBody(req).catch(() => ({}))
+      send(res, 200, okEnvelope(await ctx.derive.run(body)))
+      return
+    }
     if (req.method === 'POST' && sub === '') {
       const body = await readJsonBody(req)
       const record = await service.capture(body)

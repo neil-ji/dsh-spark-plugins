@@ -230,6 +230,9 @@ async function runServerChecks() {
     check('spark: /sparks/search 返回相关火花（真引擎 selectRelevant）', search.ok === true && Array.isArray(search.value), JSON.stringify(search).slice(0, 160))
     const searchMiss = await (await fetch('http://127.0.0.1:' + PORT + '/sparks/search?q=zzzznomatchzzz')).json()
     check('spark: /sparks/search 无匹配返回空数组（不是全量兜底）', searchMiss.ok === true && Array.isArray(searchMiss.value) && searchMiss.value.length === 0, JSON.stringify(searchMiss).slice(0, 160))
+    const derive = await (await fetch('http://127.0.0.1:' + PORT + '/sparks/derive', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ dryRun: true }) })).json()
+    check('spark: /sparks/derive 无 LLM 时优雅降级（返回 skipped 而不是报错）', derive.ok === true && typeof derive.value?.pairsConsidered === 'number' && typeof derive.value?.skipped === 'string', JSON.stringify(derive).slice(0, 200))
+    check('spark: /sparks/derive 带回 rejected/created 两个数组（契约完整）', Array.isArray(derive.value?.created) && Array.isArray(derive.value?.rejected), JSON.stringify(derive).slice(0, 200))
     const proposals = await (await fetch('http://127.0.0.1:' + PORT + '/proposals?status=pending')).json()
     check('spark: /proposals 形状完整', proposals.ok === true && Array.isArray(proposals.value) && typeof proposals.value[0]?.confidence === 'number', JSON.stringify(proposals).slice(0, 160))
     /* 脚本沉淀库：读模型（不含 steps）+ 治理面（真引擎算的建议）—— Spec §6.5 / A8 */

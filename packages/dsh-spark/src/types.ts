@@ -58,6 +58,20 @@ export function applyRecall(record: SparkView, now: number): SparkView {
 }
 
 /**
+ * 是否该被过期清理（纯函数，v2 §5.2）：仅 **derived + 到期 + 零召回 + 仍活跃** 的
+ * 记录转墓碑（可恢复）。被重新激活或召回过的衍生火花不再过期 —— 那说明它有用。
+ */
+export function isExpiredDerived(record: SparkView, now: number): boolean {
+  return record.origin === 'derived'
+    && record.expiresAt !== null
+    && record.expiresAt <= now
+    && record.recalledCount === 0
+    && record.lastRecalledAt === null
+    && record.deletedAt === null
+    && record.status === 'active'
+}
+
+/**
  * 面板排序（纯函数，v2 §6）：`lastRecalledAt` 倒序，空值退化到 `createdAt`。
  *
  * 刻意**不引入"火旺程度 / tier"**——排序需要的是时间戳，不是等级（原则 2 + 8）。

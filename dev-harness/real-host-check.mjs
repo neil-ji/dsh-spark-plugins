@@ -455,6 +455,17 @@ try {
       JSON.stringify(reactivateProbe),
     )
 
+    // 3b-4) 衍生引擎（v2 §5 P15/P17）：dryRun 只选候选对、不调 LLM，
+    //       给生成类能力一个确定性、零成本的注册面断言。
+    const deriveProbe = await evalJs(`fetch('/sparks/derive', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ dryRun: true }) }).then(async (r) => ({ ok: r.ok, status: r.status, value: await r.json() }))`)
+    check(
+      'POST /sparks/derive 已注册且 dryRun 只选候选对（不调 LLM）',
+      deriveProbe?.ok === true && typeof deriveProbe?.value?.value?.pairsConsidered === 'number'
+        && Array.isArray(deriveProbe?.value?.value?.created) && Array.isArray(deriveProbe?.value?.value?.rejected)
+        && deriveProbe.value.value.skipped === 'dry run',
+      JSON.stringify(deriveProbe).slice(0, 220),
+    )
+
     // 3c) 语义检索（v2 P13）：只读端点必须与注入面同源，且无匹配不兜底全量。
     const sparkSearchProbe = await evalJs(`fetch('/sparks/search?q=' + encodeURIComponent('真宿主验收') + '&limit=5').then(async (r) => ({ ok: r.ok, value: await r.json() }))`)
     const searchValue = sparkSearchProbe?.value?.value

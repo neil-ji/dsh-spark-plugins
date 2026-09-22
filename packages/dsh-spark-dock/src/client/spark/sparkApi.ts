@@ -5,7 +5,7 @@
  * 2026-09-21（v2 P11）：状态回退为 `status: 'active' | 'archived'`；
  * 列表按 `status` 过滤，新增 `/sparks/stats`（计数）与 `/sparks/:id/restore`（从墓碑恢复）。
  */
-import type { SparkView, SparkCapture, SparkStatus, SparkStats, SparkGraph, ProposalView, ProposalStatus } from 'dsh-spark-wire'
+import type { SparkView, SparkCapture, SparkStatus, SparkStats, SparkGraph, SparkDeriveResult, ProposalView, ProposalStatus } from 'dsh-spark-wire'
 
 interface Envelope { ok: boolean; value?: unknown; error?: { code: string; message: string } }
 
@@ -45,6 +45,8 @@ export interface DockSparksApi {
   restore(id: string): Promise<SparkView>
   /** 重新激活：拉回 active 并记一次召回（v2 P14）。 */
   reactivate(id: string): Promise<SparkView>
+  /** 跑一轮衍生（v2 P15/F5）：以这条火花为种子重组出新想法。 */
+  derive(seedId: string): Promise<SparkDeriveResult>
   listProposals(query?: { status?: ProposalStatus; limit?: number }): Promise<ProposalView[]>
   resolveProposal(id: string, status: 'accepted' | 'dismissed'): Promise<ProposalView>
   reflect(): Promise<unknown>
@@ -94,6 +96,11 @@ export function createDockSparksApi(): DockSparksApi {
     },
     async reactivate(id) {
       return request<SparkView>('/sparks/' + enc(id) + '/reactivate', { method: 'POST', body: '{}' })
+    },
+    async derive(seedId) {
+      return request<SparkDeriveResult>('/sparks/derive', {
+        method: 'POST', body: JSON.stringify({ seedId, maxResults: 2 }),
+      })
     },
     async restore(id) {
       return request<SparkView>('/sparks/' + enc(id) + '/restore', { method: 'POST', body: '{}' })

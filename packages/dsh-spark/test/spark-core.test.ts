@@ -12,7 +12,7 @@ import { join } from 'node:path'
 import { JsonlSparkStorage } from '../src/storage.ts'
 import { JsonlProposalStorage } from '../src/proposal-storage.ts'
 import { ensureJsonlPath } from '../src/jsonl-path.ts'
-import { applyRecall, deriveTitle, orderForPanel, resolveProvenance, SparkProvenanceError, SPARK_MAX_GENERATION } from '../src/types.ts'
+import { applyRecall, deriveTitle, isExpiredDerived, orderForPanel, resolveProvenance, SparkProvenanceError, SPARK_MAX_GENERATION } from '../src/types.ts'
 import type { SparkView } from 'dsh-spark-wire'
 
 function makeRecord(overrides: Partial<SparkView> = {}): SparkView {
@@ -24,8 +24,9 @@ function makeRecord(overrides: Partial<SparkView> = {}): SparkView {
     scope: overrides.scope ?? 'project',
     workspacePath: overrides.workspacePath ?? '/tmp/proj',
     status: overrides.status ?? 'active',
-    origin: 'human', derivedFrom: [], generation: 0,
+    origin: overrides.origin ?? 'human', derivedFrom: overrides.derivedFrom ?? [], generation: overrides.generation ?? 0,
     recalledCount: overrides.recalledCount ?? 0, lastRecalledAt: overrides.lastRecalledAt ?? null,
+    expiresAt: overrides.expiresAt ?? null,
     tags: overrides.tags ?? ['design', 'idea'],
     sourceSessionId: overrides.sourceSessionId ?? 'sess-1',
     sourceAgentId: overrides.sourceAgentId ?? 'agent-1',
@@ -182,6 +183,21 @@ test('orderForPanel: 空 lastRecalledAt 退化 createdAt；同分按 id 定序�
   const ordered = orderForPanel(sparks).map(r => r.id)
   assert.deepEqual(ordered, ['recalled-once', 'never-new', 'never-old'])
   assert.deepEqual(orderForPanel(sparks).map(r => r.id), ordered, '同输入同输出')
+})
+
+// ----- isExpiredDerived (v2 §5.2 惰性过期) -----
+
+test('isExpiredDerived: 只有「derived + 到期 + 零召回 + 活跃」才该清', () => {
+  const now = 1_700_000_000_000
+  const base = { origin: 'derived' as const, expiresAt: now - 1, generation: 1 }
+  assert.equal(isExpiredDerived(makeRecord({ ...base }), now), true)
+  assert.equal(isExpiredDerived(makeRecord({ ...base, recalledCount: 1 }), now), false, '被想起过 = 有用，不清')
+  assert.equal(isExpiredDerived(makeRecord({ ...base, lastRecalledAt: now - 5 }), now), false)
+  assert.equal(isExpiredDerived(makeRecord({ ...base, origin: 'human' }), now), false, '只有衍生会过期')
+  assert.equal(isExpiredDerived(makeRecord({ ...base, expiresAt: now + 1000 }), now), false)
+  assert.equal(isExpiredDerived(makeRecord({ ...base, status: 'archived' }), now), false)
+  assert.equal(isExpiredDerived(makeRecord({ ...base, deletedAt: now }), now), false, '已是墓碑')
+  assert.equal(isExpiredDerived(makeRecord({ ...base, expiresAt: null }), now), false)
 })
 
 // ----- deriveTitle sanity -----

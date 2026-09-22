@@ -164,6 +164,10 @@ export function apply(ctx: Context, config: SparkInboxConfig = {}): void {
         if (briefing !== undefined) out.push(briefing)
       }
 
+      // 过期清理（v2 §5.2）：复用首步这一趟，**不用定时器**。不阻塞本步。
+      void ctx.spark.sweepExpiredDerived()
+        .catch(error => { ctx.logger?.warn?.('spark-inbox: sweep expired failed: ' + String(error)) })
+
       // B：惰性涌现（脏标记）。**不阻塞本步** —— 触发后立即返回，失败只记日志。
       if (reflectEnabled) {
         void triggerReflectIfDirty(ctx, reflectThreshold, reflectMinIntervalMs, () => reflecting, (value) => { reflecting = value })

@@ -442,7 +442,7 @@ LLM 重组（可选注入 ctx.inject(['llm'])；缺失 → 本轮不生成，不
 | **F2** | provenance（P12）+ Graph 第四类边 + 门控色调（`origin` 徽标） | F1 | ✅ 2026-09-21（commit 694385d；wire 0.3.1 / spark 0.5.1 / dock 0.4.1；`resolveProvenance` 是三条不变式的唯一计算者，存储 v3→v4 回填存量 origin） |
 | **F3** | 语义召回（P13）+ `spark_search` 工具 + 端点 | F1 | ✅ 2026-09-21（commit 见 git log；spark 0.6.0；抽 `src/relevance.ts` 为召回/涌现共用的单一真源，**顺带修正 v1 的 CJK 切词 bug**：旧实现把连续汉字累积成一个 token，中文召回实际上从未工作） |
 | **F4** | 重新激活 + 召回计数（P14） | F1 | ✅ 2026-09-21（spark 0.7.0；`reactivate()` + 注入命中记 `recalledCount`/`lastRecalledAt`，**不动 updatedAt**；面板按 `lastRecalledAt` 倒序，空值退化 `createdAt`；存储 v4→v5 回填） |
-| **F5** | 衍生引擎（P15 + P17） | F2/F3 | 最大一期；LLM 面可选注入 |
+| **F5** | 衍生引擎（P15 + P17） | F2/F3 | ✅ 2026-09-21（spark 0.8.0；纯逻辑在 `src/derive.ts`、IO 在 `derive-service.ts`；LLM 面用 try/catch 结构读、缺失即 `skipped`；`POST /sparks/derive` 带 `dryRun` 作为零成本断言面；过期清理复用 `spark-inbox` 首步那一趟，**无定时器**；存储 v5→v6 回填 `expiresAt=null`） |
 
 **排序依据**：**先拆桥并改对窗户上的字（F1）→ 再让 agent 看得见旧想法（F3）→ 最后才让它生想法（F5）。**
 反过来做的话，F5 会产出一堆没人看得见、也辨不出真假的机器文本。
@@ -517,9 +517,9 @@ node dev-harness/real-host-check.mjs                 # 退出码 0
 | **P12** | `origin` 是否三值 | ✅ **已拍板并落地（F2）**：三值 `human/agent/derived`；`resolveProvenance` 保证 `generation > 0 ⟺ derived` 与上限 2 |
 | **P13** | 语义召回的频率 | ✅ **已拍板并落地（F3）**：首步一次 + `spark_search` 工具；重注入列为 Non-goal |
 | **P14** | 是否引入"热度/等级"概念 | ✅ **已拍板并落地（F4）**：不引入。排序用 `lastRecalledAt`（空值退化 `createdAt`）+ `recalledCount` 倒序即可 |
-| **P15** | 衍生结果走"直接落库 + 过期"还是"提议 + 审批" | **直接落库**。审批会让产量=人的点击量，且多一处裁决面 |
+| **P15** | 衍生结果走"直接落库 + 过期"还是"提议 + 审批" | ✅ **已拍板并落地（F5）**：直接落库 + `expiresAt`（14 天，仅 derived）；到期且零召回 → 墓碑 |
 | **P16** | 命名回退的范围 | ✅ **已拍板并落地（F1）**：提示词 + 工具描述 + 注入 hint + 面板 locale 同批交付；AC-2 `sparkwording` 闸门守线 |
-| **P17** | L3 的 LLM 面是否必需 | 可选注入（缺失 → 本轮不生成，不报错）；沿用 hippomemo evolve 的可选 `llm` 先例 |
+| **P17** | L3 的 LLM 面是否必需 | ✅ **已拍板并落地（F5）**：可选（`ctx.llm` / `ctx.agentDefaultModel` 结构读，缺失 → `skipped`，不报错）；沿用 hippomemo evolve 先例 |
 
 ---
 

@@ -47,6 +47,7 @@ function makeCtx(options: FakeOptions = {}): { ctx: unknown; handlers: PreStepHa
       stats: async () => stats,
       list: async () => options.active ?? [],
       markRecalled: async (ids: readonly string[]) => { calls.recalled.push(...ids) },
+      sweepExpiredDerived: async () => 0,
       countChangedSince: async () => 0,
       readMeta: async () => meta,
       updateMeta: async (mutate: (m: SparkMeta) => SparkMeta | null) => {

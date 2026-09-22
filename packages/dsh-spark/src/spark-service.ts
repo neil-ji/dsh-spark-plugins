@@ -38,7 +38,8 @@ import { SparkMetaStore, defaultMetaPath, type SparkMeta } from './meta-store.ts
 import { ensureJsonlPath } from './jsonl-path.ts'
 import { registerSparkHttpRoutes } from './http.ts'
 import type { SparkChangedEvent, SparkRecordId, SparkStorage } from './types.ts'
-import { applyRecall, deriveTitle, orderForPanel, resolveProvenance } from './types.ts'
+import { applyRecall, deriveTitle, isExpiredDerived, orderForPanel, resolveProvenance } from './types.ts'
+import { DEFAULT_DERIVE_TTL_DAYS } from './derive-service.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -54,6 +55,8 @@ export interface SparkConfig {
   maxRecords?: number
   /** 墓碑保留天数；超过后由压实物理清除。默认 30 天。 */
   tombstoneRetentionDays?: number
+  /** 衍生火花存活天数（v2 §5.2）。默认 14 天。 */
+  deriveTtlDays?: number
   /** 调度元数据 sidecar 路径（B/D 档的落点）；默认与 sparks.jsonl 同目录。 */
   metaPath?: string
 }
@@ -77,6 +80,7 @@ export class SparkService extends Service {
   private readonly filePath: string
   private readonly maxRecords: number
   private readonly tombstoneRetentionMs: number
+  private readonly deriveTtlDays: number
   private readonly metaStore: SparkMetaStore
   private storage: SparkStorage
   private httpRegistered = false
@@ -88,6 +92,7 @@ export class SparkService extends Service {
     this.filePath = config.filePath ?? defaultFilePath()
     this.maxRecords = config.maxRecords ?? DEFAULT_MAX_RECORDS
     this.tombstoneRetentionMs = (config.tombstoneRetentionDays ?? DEFAULT_TOMBSTONE_RETENTION_DAYS) * DAY_MS
+    this.deriveTtlDays = config.deriveTtlDays ?? DEFAULT_DERIVE_TTL_DAYS
     this.storage = new JsonlSparkStorage(this.filePath)
     this.metaStore = new SparkMetaStore(config.metaPath ?? defaultMetaPath(this.filePath))
     this.ready = this.init(ctx)
@@ -131,12 +136,12 @@ export class SparkService extends Service {
       workspacePath: parsed.workspacePath,
       status: 'active',
       tags: parsed.tags,
-      ...resolveProvenance(
+      ...this.derivedExpiry(resolveProvenance(
         parsed,
         parsed.derivedFrom?.length
           ? (await this.storage.readAll()).filter(r => (parsed.derivedFrom ?? []).includes(r.id))
           : [],
-      ),
+      ), now),
       sourceSessionId: parsed.sourceSessionId,
       sourceAgentId: parsed.sourceAgentId,
       sourceTurn: parsed.sourceTurn,
@@ -152,7 +157,33 @@ export class SparkService extends Service {
   }
 
   /**
-   * 关联图谱：火花间的标签亲和 + 涌现提议关联 + 火花→记忆的结晶谱系。
+   * 衍生火花的过期时间（v2 §5.2）：**只有 derived 非空**，其余一律 null。
+   * 「用过期代替审批」——噪声由"会过期"兜底，而不是由"要人点"兜底。
+   */
+  private derivedExpiry(provenance: ReturnType<typeof resolveProvenance>, now: number): { expiresAt: number | null } {
+    if (provenance.origin !== 'derived') return { expiresAt: null }
+    return { expiresAt: now + this.deriveTtlDays * 86_400_000 }
+  }
+
+  /**
+   * 惰性清理过期衍生火花（v2 §5.2）：到期、**零召回**、仍 active 的 derived 记录
+   * 转墓碑（可恢复）。在 `spark-inbox` 的首步那一趟顺手调用 —— **不用定时器**。
+   * @returns 清理条数。
+   */
+  async sweepExpiredDerived(now: number = Date.now()): Promise<number> {
+    await this.whenReady()
+    const all = await this.storage.readAll()
+    const stale = all.filter(r => isExpiredDerived(r, now))
+    for (const record of stale) {
+      const next = await this.storage.update(record.id, current => ({ ...current, deletedAt: now }))
+      if (next !== null) this.ctx.emit('sparks/changed', { operation: 'delete', id: next.id, record: next, at: now })
+    }
+    if (stale.length > 0) this.ctx.logger?.info?.('spark: expired ' + String(stale.length) + ' derived spark(s)')
+    return stale.length
+  }
+
+  /**
+   * 关联图谱：火花间的标签亲和 + 涌现提议关联。
    *
    * 计算全在 `graph.ts` 的纯函数里（口径单源，可以脱离 cordis 单测）；
    * 本方法只负责取数据：火花读自己的存储，提议由调用方从 emerge 服务取

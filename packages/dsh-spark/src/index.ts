@@ -14,12 +14,20 @@ import { EmergeService } from './emerge-service.ts'
 import { ValenceService } from './valence-service.ts'
 import type { SparkConfig } from './spark-service.ts'
 import { SparkEventsService } from './events-service.ts'
+import { DeriveService } from './derive-service.ts'
 import { registerSparkTools } from './tool.ts'
 
 export { SparkService, SparkNotFoundError } from './spark-service.ts'
 export type { SparkConfig } from './spark-service.ts'
 export { EmergeService } from './emerge-service.ts'
 export type { EmergeConfig, EmergeRunResult } from './emerge-service.ts'
+export { DeriveService, runDerivationRound, DEFAULT_DERIVE_TTL_DAYS } from './derive-service.ts'
+export type { DeriveDeps } from './derive-service.ts'
+export type { DeriveConfig } from './derive-service.ts'
+export {
+  selectDerivationPairs, checkRestatement, buildDerivePrompt, parseDerivedCandidates, partitionCandidates, RESTATEMENT_THRESHOLD,
+} from './derive.ts'
+export type { DerivationPair, DerivedCandidate } from './derive.ts'
 export { ValenceService } from './valence-service.ts'
 export type { ValenceConfig, ValenceRunStats } from './valence-service.ts'
 export { JsonlSparkStorage, SparkStoreConflictError, migrateSparkRecord, SPARK_STORE_VERSION } from './storage.ts'
@@ -36,7 +44,7 @@ export {
 export { JsonlProposalStorage } from './proposal-storage.ts'
 export { ensureJsonlPath, describeStorageError } from './jsonl-path.ts'
 export type { SparkStorage, SparkRecordId } from './types.ts'
-export { deriveTitle, resolveProvenance, SparkProvenanceError, SPARK_MAX_GENERATION, applyRecall, orderForPanel } from './types.ts'
+export { deriveTitle, resolveProvenance, SparkProvenanceError, SPARK_MAX_GENERATION, applyRecall, isExpiredDerived, orderForPanel } from './types.ts'
 export { registerSparkHttpRoutes } from './http.ts'
 export { registerSparkTools } from './tool.ts'
 export { SparkEventsService } from './events-service.ts'
@@ -48,6 +56,12 @@ export type { SparkView, SparkCapture, SparkPatch, SparkId, SparkScope, SparkSta
 export type { ProposalView, ProposalType, ProposalLeverage, ProposalStatus, ReflectRequest } from 'dsh-spark-wire'
 export type { SparkChangedEvent, SparkStreamFrame, SparkTopic } from 'dsh-spark-wire'
 
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    derive: DeriveService
+  }
+}
+
 export const name = 'dsh-spark'
 export const inject = ['webServer', 'tools', 'systemPrompt', 'typert'] as const
 
@@ -57,6 +71,8 @@ export function apply(ctx: Context, config: SparkConfig = {}): void {
   const _emerge = new EmergeService(ctx)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const _valence = new ValenceService(ctx)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _derive = new DeriveService(ctx)
   // 统一事件通道（ADR-001）：cordis 事件 → spark.events() stream 方法。
   ctx.typert.register(SPARK_HOST_CONTRIBUTION)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -65,5 +81,6 @@ export function apply(ctx: Context, config: SparkConfig = {}): void {
   void _spark
   void _emerge
   void _valence
+  void _derive
   void _events
 }

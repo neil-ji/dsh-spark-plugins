@@ -325,7 +325,9 @@ function SparkList({ sparks, reload, t, confirmDelete }: {
               : s.status === 'active'
                 ? (
                   <>
-                    {/* 动作（v2 §6）：归档（可恢复）/ 删除（物理删，走二次确认）。 */}
+                    {/* 动作（v2 §6）：衍生（生成新想法）/ 归档（可恢复）/ 删除（物理删，二次确认）。 */}
+                    <RowAction label={t('actionDerive')} busyLabel={t('deriving')} busy={busyId === s.id}
+                      onRun={() => run(s.id, async () => { await api.derive(s.id) })} />
                     <RowAction label={t('actionArchive')} busyLabel={t('archiving')} busy={busyId === s.id}
                       onRun={() => run(s.id, async () => { await api.archive(s.id) })} />
                     <RowAction danger label={t('actionDelete')} busyLabel={t('deleting')} busy={busyId === s.id}

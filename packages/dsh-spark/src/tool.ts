@@ -27,7 +27,7 @@ const TEXT_OUTPUT = {
 const GUIDANCE = [
   'Sparks are ideas — not drafts of anything else. The spark store is where an idea stays alive until it is useful. Treat proposing ideas as a first-class contribution.',
   'spark_capture: propose an idea. Do this when the user asks for ideas, and when you notice the current conversation could branch somewhere it has not gone yet. This is not a logging duty.',
-  'Ideas beget ideas: use spark_search to find related sparks, then capture the combination. Association, analogy and recombination across distant sparks are explicitly wanted.',
+  'Ideas beget ideas: use spark_search to find related sparks, then capture the combination; spark_derive runs a whole round of recombination when you want new ideas from the pool at once. Association, analogy and recombination across distant sparks are explicitly wanted.',
   'Prefer association over summary. A spark that merely restates an existing spark is noise.',
   'Do NOT capture concrete actionable work — that goes through the regular task tool.',
   'Keep titles short (<= 60 chars). Content can be longer (full sentence or two). Tags are optional keywords.',
@@ -101,6 +101,29 @@ export function registerSparkTools(ctx: Context): void {
     },
     presentCall(args) {
       return { card: 'generic', title: 'Search sparks', kind: 'other', rawInput: args.query }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'spark_derive',
+    description: 'Run one round of idea derivation: recombine existing sparks into NEW ideas (association, analogy, recombination) and store them as derived sparks. Requires a model route; if none is available the round is skipped instead of failing. Restatements of existing ideas are rejected.',
+    parameters: {
+      seedId: { type: 'string', description: 'Only derive from this spark (its mid-range partners). Omit to pick pairs across the whole pool.' },
+      maxPairs: { type: 'number', description: 'Cap on candidate pairs sent to the model. Defaults to 8.' },
+      maxResults: { type: 'number', description: 'Max new ideas this round. Defaults to 3.' },
+      dryRun: { type: 'boolean', description: 'Only pick candidate pairs (no model call). Useful to check that a round would have material.' },
+    },
+    output: TEXT_OUTPUT,
+    async execute(args) {
+      const opts: Record<string, unknown> = {}
+      if (typeof args.seedId === 'string' && args.seedId.trim().length > 0) opts.seedId = args.seedId.trim()
+      if (typeof args.maxPairs === 'number') opts.maxPairs = Math.floor(args.maxPairs)
+      if (typeof args.maxResults === 'number') opts.maxResults = Math.floor(args.maxResults)
+      if (args.dryRun === true) opts.dryRun = true
+      return JSON.stringify(await ctx.derive.run(opts))
+    },
+    presentCall() {
+      return { card: 'generic', title: 'Derive sparks', kind: 'other', rawInput: 'derivation' }
     },
   }))
 
