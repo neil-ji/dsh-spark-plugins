@@ -5,7 +5,7 @@
  * 能发现）；② selectRelevant 的排序判据确定（同输入同输出）；③ 阈值语义 ——
  * 不相关的候选必须被挡掉，否则注入面会被噪声淹没（召回 ≠ 多注入）。
  *
- * 2026-09-23（F6）增补：`substanceTokens` / `boilerplateTokens` / `jaccardWithout`
+ * 2026-09-23（F7）增补：`substanceTokens` / `boilerplateTokens` / `jaccardWithout`
  * 的性质锁 —— 模板 token 抑制必须**在健康池上是 no-op**、只在被模板淹没时生效。
  */
 import test from 'node:test'
@@ -126,7 +126,7 @@ test('selectRelevant: 墓碑由调用方过滤（本函数不做生命周期判�
   assert.equal(selectRelevant(pool, 'dock overlay', {}).length, 1, '纯函数只管相似度，生命周期归 service')
 })
 
-// ---- 2026-09-23（F6）：实质面 + 池级模板抑制 ----
+// ---- 2026-09-23（F7）：实质面 + 池级模板抑制 ----
 
 /** 实库挖掘集合的真实形状：同一模板前缀、目标词互不相同。 */
 const MINED_TARGETS = [

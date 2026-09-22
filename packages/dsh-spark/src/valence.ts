@@ -12,7 +12,7 @@
  * Pure heuristics — no LLM — keep the cost at zero per message. The
  * LLM-backed version (semantic preference extraction) is Phase 6.5.
  *
- * 2026-09-23（F6 挖掘管线修复）：本模块同时承载三处**判定**的纯实现——
+ * 2026-09-23（F7 挖掘管线修复）：本模块同时承载三处**判定**的纯实现——
  * `isRealUserMessage`（谁算真人说话）、`minePreferences`（一道话语值不值得挖）、
  * `isDuplicateOfPool`（是不是已经挖过了）。判定放这里而不是 service 里，理由同
  * `command-mining.ts`：真宿主上只有日志能看见的分支，必须能被单测钉住。

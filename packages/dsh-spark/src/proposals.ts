@@ -16,7 +16,7 @@
 import { randomUUID } from 'node:crypto'
 import type { ProposalView, ProposalType, ProposalLeverage, ReflectRequest, SparkView } from 'dsh-spark-wire'
 // 相似度口径单源（v2 §4.4）：召回与涌现共用同一份 tokenize / jaccard。
-// 2026-09-23（F6 挖掘管线修复）：link 改判**实质面**（标题+正文，不含 tags）并
+// 2026-09-23（F7 挖掘管线修复）：link 改判**实质面**（标题+正文，不含 tags）并
 // 剔除**池级模板 token** —— 原先只比标题，于是「用户偏好：Don't X」这类模板标题
 // 让任意两条都互相「像」（实测 148 条 link 提议中 146 条剥掉前缀后真实相似度 0.00）。
 import { boilerplateTokens, jaccardWithout, substanceTokens } from './relevance.ts'

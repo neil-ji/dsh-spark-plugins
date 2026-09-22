@@ -10,7 +10,7 @@
  * Phase 6.5+: LLM-backed preference extraction, explicit decay config,
  * and feedback into the prefrontal filter (Phase 3 cognitive filter).
  *
- * 2026-09-23 修复（F6 挖掘管线，四道防线）——此前本条管线是唯一**始终开启**的
+ * 2026-09-23 修复（F7 挖掘管线，四道防线）——此前本条管线是唯一**始终开启**的
  * 自动写入线，也是唯一在产垃圾的（实测 40/54 条火花是它的产物，22 条逐字节重复，
  * 内容全是 AI 自己的指令文本被贴上「用户偏好」标签）：
  *

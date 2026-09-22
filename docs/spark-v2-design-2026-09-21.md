@@ -335,6 +335,77 @@ until it is useful. Treat proposing ideas as a first-class contribution.
 **可机械断言**（进闸门，见 §9.2）：源码与 locale 中不得再出现
 `waiting for triage` / `promote it with` / `crystallize` / `已转为记忆` / 火花语境下的`待处理`。
 
+### 4.8 P18 — 挖掘管线的**准入面**：只挖真人说的话（F7）
+
+> 编号说明：本节用本文档自己的期序列（F0–F7）。**F6 = 术语与语义修正**（上文）；
+> `docs/architecture-acceptance-*` 里的 F* 是另一套架构评审编号，互不相干。
+
+**触发**：2026-09-23 实测 3080 实库 —— 54 条火花里 **40 条**来自 valence 挖掘，其中
+22 条逐字节重复；154 条 pending 提议里 **148 条**是纯伪影。这批条目的内容是 **AI 自己的
+指令文本**被贴上「用户偏好」标签存回来（AGENTS.md 10079 字符 / HippoMemo 免责声明 /
+技能目录），且 `origin` 全被标成 `human`。
+
+这是 `docs/spark-inbox-design-2026-09-14.md` §9「待确认为 valence 补 provenance 标记」
+的延迟爆发：P10/E2 改道（产出火花而非写记忆）解决了「写去哪」，没有解决「准入面」。
+
+**根因链（用真实会话日志逐条复现，非推测）**
+
+| # | 缺陷 | 实证 |
+|---|---|---|
+| **D1** | `session/event` 的 `user/message` **同时承载注入脚手架**，管线把它当成人说的话 | 真会话 7 条 `user/message` 里 5 条是注入；三个会话重放 23 条候选**全部**来自注入块，真人话语贡献 **0** |
+| **D2** | 闸门（`detectIntensity`）与抽取（`extractPreferences`）粒度错位：整条 blob 一个分、整条 blob 跑正则 | AGENTS.md 那段 10079 字符得 **0.60** 分，一次产出 6 条「用户偏好」 |
+| **D3** | provenance 错标：`candidateToSparkInput` 不设 `origin`，靠 wire schema 的 `default('human')` 兜底 | 40/40 条机器产物在库里与人手写的无法区分（除 `sourceSessionId` 魔法字符串） |
+| **D4** | 跨会话零去重：每个新会话重新注入同一份脚手架 → 重复挖出同一批短语 | 3 个会话 23 个候选只有 9 个唯一（冗余 **61%**）；实库 40 条里 22 条逐字节重复 |
+| **D5** | link 提议被标题模板前缀放大 | 148 条 link 全部是两条挖掘条目互指，**146 条**剥掉模板前缀后真实相似度 = **0.00** |
+
+**设计决定（四道防线 + 一条判据）**
+
+1. **D1 只认真人话语**：判据是**结构性白名单** `data.source.kind === 'user'`，不是启发式。
+   权威定义见 `@deepseek-ai/dsh-llm` 的 `MessageSourceMap`（merge-extensible，明言
+   「switch on `kind` and fall through unknowns」）—— **因此写白名单而不是枚举已知注入类型**，
+   对将来新增的 kind 天然免疫。**这条不变量不得回退成黑名单。**
+2. **D2 闸门与抽取作用于同一条话语**：`minePreferences(text, config)` 收口长度闸
+   （`maxUtteranceChars`，默认 2000，**纵深防御**：真人粘一整篇文档同样不该被当成偏好来源）
+   + 强度闸 + 抽取，并返回短路理由（可断言）。
+3. **D3 provenance 显式**：`candidateToSparkInput` 声明 `origin: 'agent'`。
+   —— 这**不是设计变更，而是实现违反了 §4.1 表格里早已写明的 `origin: 'agent'`**。
+4. **D4 捕获前与池比实质面相似度**，阈值复用 `derive.ts` 的 `RESTATEMENT_THRESHOLD`（0.85）：
+   仓库里只能有一份「多像算同一条」的定义。**不能照抄 `checkRestatement`**（它只比标题）
+   —— 本管线标题是模板化的，模板前缀贡献 6 个 token 里的 5 个，比标题必然永远判重。
+5. **D5 link 判据 = 实质面 + 池级模板抑制**
+   - `substanceTokens` = 标题 + 正文，**刻意不含 tags**。tags 是显式共享标签，那是 `cluster`
+     提议的职责；两边都算等于同一份证据计两次（实测把 link 从 2 条放大到 72 条）。
+     **它因此与召回用的 `documentTokens`（标题×2 + 正文 + tags）不同，这是刻意的，不要"统一"。**
+   - `boilerplateTokens` = 在池里**过半**文档都出现的 token（`ratio 0.5` 是实测量值：
+     0.4→3 条 / 0.5→**1** 条 / 0.6→9 条 / 0.7→62 条，基准为清理前实库的 30 条候选）。
+   - 关键性质：**在健康池上是 no-op**（实测剔除挖掘记录后的池抑制 **0 个 token**、判定逐对零变化）；
+     池小于 `MIN_DOCS_FOR_BOILERPLATE`(5) 时不启用（否则 N=2 的池永远不比中 ——
+     而「只有两条火花」正是 link 的主要用途）。
+   - **不引入 IDF 权重或向量检索**（§10 Non-goals）；DF 只是池统计量。
+
+**判定必须可脱离宿主单测**：D1/D2 的判定收进 `valence.ts` 的纯函数
+（`isRealUserMessage` / `minePreferences` / `isDuplicateOfPool`），service 只做装配。
+理由同 `command-mining.ts`：真宿主上只有日志能看见的分支，必须被单测钉住 ——
+新增 7 条**装配**测试（真 cordis Context 驱动 `session/event`），因为「判定对 ≠ 接线对」。
+
+**验证方法（可复用）**：解压 `~/.dsh/sessions/**/session.v3.jsonl.zstd`（`zstd -dc`），
+把 `user/message` 事件重放新旧两版逻辑，与真实库逐条对账。最硬的一次：污染源会话
+`session-df9672ce` 的真实载荷用旧逻辑产出**恰好就是库里那 10 条**（逐条对上，含重复项），
+新逻辑 **0 条**。
+
+**同类缺陷的第二处（已排查，结论是不需要改）**：`inbox.ts` 的 `lastUserText(messages)`
+曾疑似同样把注入当用户话语。查 `dsh-agent-loop` 的 `preStep` 后确认 `payload.messages`
+只是 `inbox.claim()` 的真人输入（注入进的是 `decision.messages` 累加器，插件代码用
+`[...decision.messages]` 追加是对的），**故不动它**。
+
+**配套修复（同批，独立提交）**
+
+- `dev-harness/real-host-check.mjs` 的图谱边断言原为硬写 `['tag','proposal']`，而契约是
+  三类边（`derived` 是 F2 加的）。按 AGENTS.md 铁律 5 改为**从契约源码读枚举**，解析失败即抛错。
+- 4 个**从未被任何闸门执行**的测试文件接进 `test` 脚本（`relevance` / `derive` /
+  `derive-service` / `graph`）—— 它们是 `test/*.test.ts` 而根 `vitest.config.ts` 只收
+  `packages/*/tests/**/*.spec.ts`，**F5 的编排测试一直在裸奔**。spark 包测试 124 → 171。
+
 ---
 
 ## 5. L3：衍生引擎（P17）
@@ -473,6 +544,7 @@ LLM 重组（可选注入 ctx.inject(['llm'])；缺失 → 本轮不生成，不
 | **F4** | 重新激活 + 召回计数（P14） | F1 | ✅ 2026-09-21（spark 0.7.0；`reactivate()` + 注入命中记 `recalledCount`/`lastRecalledAt`，**不动 updatedAt**；面板按 `lastRecalledAt` 倒序，空值退化 `createdAt`；存储 v4→v5 回填） |
 | **F6** | **术语与语义修正**：整理/衍生/涌现三分 + origin⊥derivedFrom + 反自噬只作用于机器生成 + TTL 只作用于机器生成（D1–D4） | F1–F5 | ✅ 2026-09-21（UI 正名「整理」；`spark_capture` 增 `derivedFrom` 自述来源；preview capture 改吃真源 `resolveProvenance`） |
 | **F5** | 衍生引擎（P15 + P17） | F2/F3 | ✅ 2026-09-21（spark 0.8.0；纯逻辑在 `src/derive.ts`、IO 在 `derive-service.ts`；LLM 面用 try/catch 结构读、缺失即 `skipped`；`POST /sparks/derive` 带 `dryRun` 作为零成本断言面；过期清理复用 `spark-inbox` 首步那一趟，**无定时器**；存储 v5→v6 回填 `expiresAt=null`） |
+| **F7** | **挖掘管线准入面（§4.8 P18）**：D1 只认 `source.kind==='user'` + D2 闸门与抽取同一条话语 + D3 provenance 显式 + D4 跨会话实质面去重 + D5 link 剔模板（详见 §4.8） | F1–F6 | ✅ 2026-09-23（commit 98a39b6；spark 0.9.0→**0.10.0**；新纯函数 `minePreferences` / `isRealUserMessage` / `buildDedupPool` / `isDuplicateOfPool` / `substanceTokens` / `boilerplateTokens` / `jaccardWithout`；配置面 `valence{enabled,intensityThreshold,maxUtteranceChars}` **默认开启**；spark 包测试 124→171） |
 
 **排序依据**：**先拆桥并改对窗户上的字（F1）→ 再让 agent 看得见旧想法（F3）→ 最后才让它生想法（F5）。**
 反过来做的话，F5 会产出一堆没人看得见、也辨不出真假的机器文本。
@@ -508,6 +580,9 @@ node dev-harness/real-host-check.mjs                 # 退出码 0
 | AC-5 | **过期真的会清**：`expiresAt` 到期 + 零召回 → `deletedAt` 非空（可恢复） | 纯函数单测 + 惰性触发断言 |
 | AC-6 | **注入三方互不混淆**：记忆召回 / 火花状态 / 相关火花 三者首行前缀互不相同 | 单测 |
 | AC-7 | **客户端无状态推导**：状态只有一个枚举真源，客户端不自行推导（v1 P1 教训） | 架构闸门 |
+| AC-8（F7） | **挖掘只吃真人话语**：`source.kind !== 'user'` 的 `user/message` 一条都不落库（白名单，非黑名单） | 纯函数单测 + **装配**单测（真 cordis Context 驱动 `session/event`） |
+| AC-9（F7） | **模板抑制在健康池上是 no-op**：剔除挖掘记录后的池抑制 0 个 token、link 判定逐对零变化；只有被模板淹没的池才收敛 | 单测（双向：模板池 → 0 条 link；健康池 → 真对仍成 link） |
+| AC-10（F7） | **挖掘产物不是人类原创**：`candidateToSparkInput` 必带 `origin: 'agent'` | 单测 |
 
 ### 9.3 成功指标（KPI 反转）
 
@@ -540,7 +615,7 @@ node dev-harness/real-host-check.mjs                 # 退出码 0
 
 ---
 
-## 11. 开放问题（P10–P17，需拍板）
+## 11. 开放问题（P10–P18，需拍板）
 
 | 编号 | 问题 | 我的倾向 |
 |---|---|---|
@@ -552,6 +627,7 @@ node dev-harness/real-host-check.mjs                 # 退出码 0
 | **P15** | 衍生结果走"直接落库 + 过期"还是"提议 + 审批" | ✅ **已拍板并落地（F5）**：直接落库 + `expiresAt`（14 天，仅 derived）；到期且零召回 → 墓碑 |
 | **P16** | 命名回退的范围 | ✅ **已拍板并落地（F1）**：提示词 + 工具描述 + 注入 hint + 面板 locale 同批交付；AC-2 `sparkwording` 闸门守线 |
 | **P17** | L3 的 LLM 面是否必需 | ✅ **已拍板并落地（F5）**：可选（`ctx.llm` / `ctx.agentDefaultModel` 结构读，缺失 → `skipped`，不报错）；沿用 hippomemo evolve 先例 |
+| **P18** | valence 挖掘的**准入面**：是否默认开启、以及"只挖真人话语"的判据形态 | ✅ **已拍板并落地（F7，§4.8）**：**默认开启**（它属于 L2「Agent 是平等的提出者」的产品定位，与 `commandMining` 默认关的理由不同）；准入判据取**结构性白名单** `source.kind === 'user'`（merge-extensible 类型，不用枚举注入类型）；去重阈值复用 derive 的 0.85 而不另立 |
 
 ---
 

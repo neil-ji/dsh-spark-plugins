@@ -9,7 +9,7 @@
  * 口径：token Jaccard（latin 词 + CJK bigram）。**不引入向量检索**
  * （v2 §10 Non-goals），因此本模块零依赖、纯函数、可脱离 cordis 单测。
  *
- * 2026-09-23 增补（F6 挖掘管线修复）：`substanceTokens` / `boilerplateTokens` /
+ * 2026-09-23 增补（F7 挖掘管线修复）：`substanceTokens` / `boilerplateTokens` /
  * `jaccardWithout` —— 「两条火花像不像」这件事必须剔除**池级模板 token**，
  * 否则模板化产出的标题会让任意两条都互相「像」（实测 146/148 条 link 提议是纯伪影）。
  * 这三个函数同时服务 `proposals.ts` 的 link 判定与 valence 捕获前的跨会话去重。

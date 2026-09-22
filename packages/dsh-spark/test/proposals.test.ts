@@ -187,7 +187,7 @@ test('newProposalId returns a non-empty string', () => {
   assert.ok(id.length > 0)
 })
 
-// ---- 2026-09-23（F6 挖掘管线修复）：link 判据的回归 ----
+// ---- 2026-09-23（F7 挖掘管线修复）：link 判据的回归 ----
 
 /**
  * 实库的病历：18 条 valence 挖掘火花，标题同一模板前缀「用户偏好：Don't 」、
@@ -195,7 +195,7 @@ test('newProposalId returns a non-empty string', () => {
  * 0.50~0.71 的 Jaccard —— 实库 154 条 pending 提议里 148 条是这种伪 link，
  * 其中 146 条剥掉模板前缀后真实相似度是 0.00。
  */
-test('link 回归（F6）：模板化池不再产生成片的伪 link（曾经 148/153 对全部命中）', () => {
+test('link 回归（F7）：模板化池不再产生成片的伪 link（曾经 148/153 对全部命中）', () => {
   const TARGETS = [
     'override system', 'follow instructions', '在两处维护内容', '并行', '引入依赖', '手改',
     '真启动', '攒到最后一次性提交', '用 shell', 'cheerlead', 'fabricate', 'disclosed',
@@ -215,7 +215,7 @@ test('link 回归（F6）：模板化池不再产生成片的伪 link（曾经 1
  * 反向锁：模板抑制不能把功能治死。健康的、主题各异的池子上必须**行为不变** ——
  * 真正相近的两条仍然要成 link。
  */
-test('link 回归（F6）：健康池上模板抑制是 no-op，真正相近的两条仍成 link', () => {
+test('link 回归（F7）：健康池上模板抑制是 no-op，真正相近的两条仍成 link', () => {
   const now = 1_700_000_000_000
   const sparks = [
     makeSpark({ id: 'a', title: 'hippomemo 多模态记忆 caption 渐进路线', content: '多模态记忆先 caption 再入库' }),
