@@ -40,7 +40,7 @@ const SPARKS = [
     id: 'spk-preview-harness', title: '零 dsh 组件预览可以只靠 embed 产物跑起来',
     content: '四个包的 lib/embed.cjs 都是自包含的，唯一外部依赖是 react；宿主那一半用假 ctx 补上就够了。',
     scope: 'project', workspacePath: WORKSPACE, status: 'active', tags: ['preview', 'embed', 'architecture'],
-    origin: 'agent', derivedFrom: [], generation: 0,
+    origin: 'agent', derivedFrom: [], generation: 0, recalledCount: 2, lastRecalledAt: now - 20 * 60_000,
     sourceSessionId: 'sess-preview-001', sourceAgentId: 'agent-main', sourceTurn: 6,
     createdAt: now - 3 * HOUR, updatedAt: now - 40 * 60_000, stateChangedAt: now - 3 * HOUR, deletedAt: null,
   },
@@ -48,7 +48,7 @@ const SPARKS = [
     id: 'spk-dock-overlay', title: 'dock 的悬浮球位置与开合状态都落在 localStorage',
     content: 'POS_KEY/OPEN_KEY/ACTIVE_KEY 三个键；拖拽阈值 4px，松手吸附最近角，双击复位。',
     scope: 'project', workspacePath: WORKSPACE, status: 'active', tags: ['dock', 'ui'],
-    origin: 'human', derivedFrom: [], generation: 0,
+    origin: 'human', derivedFrom: [], generation: 0, recalledCount: 0, lastRecalledAt: null,
     sourceSessionId: 'sess-preview-002', sourceAgentId: null, sourceTurn: 3,
     createdAt: now - 8 * HOUR, updatedAt: now - 8 * HOUR, stateChangedAt: now - 8 * HOUR, deletedAt: null,
   },
@@ -56,7 +56,7 @@ const SPARKS = [
     id: 'spk-fake-transport', title: '预览的假 transport 走页面内对象，只有两处是真 HTTP',
     content: 'hippomemo 与 spark 的 client 本来就是 fetch 封装，所以数据源放在预览服务器上更保真。',
     scope: 'global', workspacePath: null, status: 'active', tags: ['preview', 'fixture'],
-    origin: 'agent', derivedFrom: [], generation: 0,
+    origin: 'agent', derivedFrom: [], generation: 0, recalledCount: 1, lastRecalledAt: now - 2 * HOUR,
     sourceSessionId: 'sess-preview-001', sourceAgentId: 'agent-main', sourceTurn: 9,
     createdAt: now - 2 * DAY, updatedAt: now - DAY, stateChangedAt: now - 2 * DAY, deletedAt: null,
   },
@@ -64,7 +64,7 @@ const SPARKS = [
     id: 'spk-archived-probe', title: '（已归档）用探针插件验证宿主端 HMR',
     content: 'root: ["packages/dsh-spark/lib"] 窄根约 18s ready；整棵仓库要 75s。',
     scope: 'project', workspacePath: WORKSPACE, status: 'archived', tags: ['dev-harness'],
-    origin: 'human', derivedFrom: [], generation: 0,
+    origin: 'human', derivedFrom: [], generation: 0, recalledCount: 0, lastRecalledAt: null,
     sourceSessionId: 'sess-preview-003', sourceAgentId: null, sourceTurn: 1,
     createdAt: now - 5 * DAY, updatedAt: now - 4 * DAY, stateChangedAt: now - 4 * DAY, deletedAt: null,
   },
@@ -298,6 +298,8 @@ export function createSparkStore() {
         origin: value.origin ?? (value.sourceAgentId !== null ? 'agent' : 'human'),
         derivedFrom: value.derivedFrom ?? [],
         generation: 0,
+        recalledCount: 0,
+        lastRecalledAt: null,
         tags: [...value.tags],
         sourceSessionId: value.sourceSessionId,
         sourceAgentId: value.sourceAgentId,
@@ -323,6 +325,18 @@ export function createSparkStore() {
           ...(stateChanged ? { stateChangedAt: Date.now() } : {}),
           updatedAt: Date.now(),
         }
+        return updated
+      })
+      return updated === null ? { ok: false, error: { code: 'not-found', message: id } } : { ok: true, value: updated }
+    },
+
+    /** `POST /sparks/:id/reactivate`：拉回 active 并记一次召回（v2 P14）。 */
+    reactivate(id) {
+      if (fail()) return { ok: false, error }
+      let updated = null
+      sparks = sparks.map((item) => {
+        if (item.id !== id) return item
+        updated = { ...item, status: 'active', recalledCount: (item.recalledCount ?? 0) + 1, lastRecalledAt: Date.now(), updatedAt: item.updatedAt }
         return updated
       })
       return updated === null ? { ok: false, error: { code: 'not-found', message: id } } : { ok: true, value: updated }

@@ -97,6 +97,12 @@ async function handleSparks(
       send(res, 200, okEnvelope(record))
       return
     }
+    if (req.method === 'POST' && /\/reactivate$/.test(sub)) {
+      const id = decodeURIComponent(sub.slice(1, -'/reactivate'.length))
+      const record = await service.reactivate(id as Parameters<typeof service.reactivate>[0])
+      send(res, record === null ? 404 : 200, okEnvelope(record))
+      return
+    }
     if (req.method === 'POST' && /\/restore$/.test(sub)) {
       const id = decodeURIComponent(sub.slice(1, -'/restore'.length))
       const record = await service.restore(id as Parameters<typeof service.restore>[0])

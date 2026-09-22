@@ -26,14 +26,15 @@ function makeSpark(id: string, title: string): SparkView {
   return {
     id, title, content: 'c', scope: 'project', workspacePath: null, status: 'active', tags: [],
     sourceSessionId: 's', sourceAgentId: null, sourceTurn: null,
+    origin: 'human', derivedFrom: [], generation: 0, recalledCount: 0, lastRecalledAt: null,
     createdAt: NOW, updatedAt: NOW, stateChangedAt: NOW, deletedAt: null,
   }
 }
 
 /** 假 ctx：只实现本模块用到的面（on / spark / emerge / script / logger）。 */
-function makeCtx(options: FakeOptions = {}): { ctx: unknown; handlers: PreStepHandler[]; calls: { reflect: number; updateMeta: number } } {
+function makeCtx(options: FakeOptions = {}): { ctx: unknown; handlers: PreStepHandler[]; calls: { reflect: number; updateMeta: number; recalled: string[] } } {
   const handlers: PreStepHandler[] = []
-  const calls = { reflect: 0, updateMeta: 0 }
+  const calls = { reflect: 0, updateMeta: 0, recalled: [] as string[] }
   let meta: SparkMeta = emptyMeta()
   const stats: SparkStats = {
     total: 0, active: 0, archived: 0, deleted: 0, oldestActiveAt: null, pendingProposals: 0,
@@ -45,6 +46,7 @@ function makeCtx(options: FakeOptions = {}): { ctx: unknown; handlers: PreStepHa
     spark: {
       stats: async () => stats,
       list: async () => options.active ?? [],
+      markRecalled: async (ids: readonly string[]) => { calls.recalled.push(...ids) },
       countChangedSince: async () => 0,
       readMeta: async () => meta,
       updateMeta: async (mutate: (m: SparkMeta) => SparkMeta | null) => {
@@ -93,7 +95,7 @@ test('A: active sparks produce exactly one notice, and only once per agent', asy
 })
 
 test('P13: 查询命中时注入第二段（相关火花全文），两段首行不同', async () => {
-  const { ctx, handlers } = makeCtx({
+  const { ctx, handlers, calls } = makeCtx({
     stats: { active: 1 },
     active: [makeSpark('hit', 'preview mock channel')],
   })
@@ -106,6 +108,7 @@ test('P13: 查询命中时注入第二段（相关火花全文），两段首行
   assert.match(first, /Sparks \(dsh-spark\): 1 active spark/)
   assert.match(second, /Related sparks from the idea pool \(dsh-spark\)/)
   assert.match(second, /preview mock channel/)
+  assert.deepEqual(calls.recalled, ['hit'], '被注入即记一次召回（P14）')
 })
 
 test('P13: 查询与火花无关时不注入第二段（宁可不注入）', async () => {

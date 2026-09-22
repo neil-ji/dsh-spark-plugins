@@ -46,6 +46,13 @@ export const sparkViewSchema = z.object({
   derivedFrom: z.array(sparkIdSchema).max(8).default([]),
   /** 衍生代数；硬上限 2（service 保证 `generation > 0 ⟺ origin === 'derived'`）。 */
   generation: z.number().int().min(0).max(2).default(0),
+  /**
+   * 被召回次数（v2 §4.5，P14）。记的是「**被召回**」，不是「被引用」——
+   * 召回 ≠ 采纳，UI 文案用直白说法「被想起 N 次」，不自欺。
+   */
+  recalledCount: z.number().int().nonnegative().default(0),
+  /** 最后一次被召回（或人工重新激活）的时间；null = 从未。 */
+  lastRecalledAt: z.number().int().nonnegative().nullable().default(null),
   sourceSessionId: z.string(),
   sourceAgentId: z.string().nullable(),
   sourceTurn: z.number().int().nonnegative().nullable(),

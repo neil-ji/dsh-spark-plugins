@@ -36,7 +36,7 @@ export {
 export { JsonlProposalStorage } from './proposal-storage.ts'
 export { ensureJsonlPath, describeStorageError } from './jsonl-path.ts'
 export type { SparkStorage, SparkRecordId } from './types.ts'
-export { deriveTitle, resolveProvenance, SparkProvenanceError, SPARK_MAX_GENERATION } from './types.ts'
+export { deriveTitle, resolveProvenance, SparkProvenanceError, SPARK_MAX_GENERATION, applyRecall, orderForPanel } from './types.ts'
 export { registerSparkHttpRoutes } from './http.ts'
 export { registerSparkTools } from './tool.ts'
 export { SparkEventsService } from './events-service.ts'

@@ -307,6 +307,9 @@ function SparkList({ sparks, reload, t, confirmDelete }: {
               <div className="ttl">{s.title}</div>
               <div className="meta">
                 {deleted ? t('stateDeleted') : t(STATE_KEYS[s.status])} · {s.scope} · {timeAgo(s.updatedAt, t)}
+                {(s.recalledCount ?? 0) > 0 && (
+                  <span className="recall-note"> · {t('recalledPrefix')} {s.recalledCount} {t('recalledSuffix')}</span>
+                )}
                 {s.origin !== undefined && s.origin !== 'human' && (
                   <span className="origin-badge" title={s.generation >= 2 ? t('derivedTwiceHint') : undefined}>
                     {' · '}{t(s.origin === 'agent' ? 'originAgent' : 'originDerived')}{s.generation >= 2 ? '²' : ''}
@@ -331,7 +334,7 @@ function SparkList({ sparks, reload, t, confirmDelete }: {
                 )
                 : (
                   <RowAction label={t('actionReactivate')} busyLabel={t('reactivating')} busy={busyId === s.id}
-                    onRun={() => run(s.id, async () => { await api.setStatus(s.id, 'active') })} />
+                    onRun={() => run(s.id, async () => { await api.reactivate(s.id) })} />
                 )}
           </div>
         )

@@ -12,7 +12,7 @@ import { join } from 'node:path'
 import { JsonlSparkStorage } from '../src/storage.ts'
 import { JsonlProposalStorage } from '../src/proposal-storage.ts'
 import { ensureJsonlPath } from '../src/jsonl-path.ts'
-import { deriveTitle, resolveProvenance, SparkProvenanceError, SPARK_MAX_GENERATION } from '../src/types.ts'
+import { applyRecall, deriveTitle, orderForPanel, resolveProvenance, SparkProvenanceError, SPARK_MAX_GENERATION } from '../src/types.ts'
 import type { SparkView } from 'dsh-spark-wire'
 
 function makeRecord(overrides: Partial<SparkView> = {}): SparkView {
@@ -24,6 +24,8 @@ function makeRecord(overrides: Partial<SparkView> = {}): SparkView {
     scope: overrides.scope ?? 'project',
     workspacePath: overrides.workspacePath ?? '/tmp/proj',
     status: overrides.status ?? 'active',
+    origin: 'human', derivedFrom: [], generation: 0,
+    recalledCount: overrides.recalledCount ?? 0, lastRecalledAt: overrides.lastRecalledAt ?? null,
     tags: overrides.tags ?? ['design', 'idea'],
     sourceSessionId: overrides.sourceSessionId ?? 'sess-1',
     sourceAgentId: overrides.sourceAgentId ?? 'agent-1',
@@ -158,6 +160,28 @@ test('resolveProvenance: 未知父 / derived 父 / 超上限都被拒（AC-4）'
     { origin: 'human', generation: 2 },
   ]), /generation cap exceeded/)
   assert.equal(SPARK_MAX_GENERATION, 2)
+})
+
+// ----- applyRecall / orderForPanel (v2 P14 pure logic) -----
+
+test('applyRecall: 计数 +1 且打点 lastRecalledAt，但**不动 updatedAt**（召回不是编辑）', () => {
+  const before = makeRecord({ id: 'a', recalledCount: 2, updatedAt: 111 })
+  const after = applyRecall(before, 999)
+  assert.equal(after.recalledCount, 3)
+  assert.equal(after.lastRecalledAt, 999)
+  assert.equal(after.updatedAt, 111, 'bump updatedAt 会让 prune / 脏标记把召回误当成改动')
+})
+
+test('orderForPanel: 空 lastRecalledAt 退化 createdAt；同分按 id 定序（判据确定）', () => {
+  const now = 1_700_000_000_000
+  const sparks = [
+    makeRecord({ id: 'never-old', createdAt: now - 1000, recalledCount: 0, lastRecalledAt: null }),
+    makeRecord({ id: 'never-new', createdAt: now, recalledCount: 0, lastRecalledAt: null }),
+    makeRecord({ id: 'recalled-once', createdAt: now - 5000, recalledCount: 1, lastRecalledAt: now - 10 }),
+  ]
+  const ordered = orderForPanel(sparks).map(r => r.id)
+  assert.deepEqual(ordered, ['recalled-once', 'never-new', 'never-old'])
+  assert.deepEqual(orderForPanel(sparks).map(r => r.id), ordered, '同输入同输出')
 })
 
 // ----- deriveTitle sanity -----

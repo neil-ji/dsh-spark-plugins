@@ -149,7 +149,12 @@ export function apply(ctx: Context, config: SparkInboxConfig = {}): void {
         const picked = selectRelevant(pool, query, { limit: relatedMax, minScore: relatedMinScore })
         const budget = Math.max(160, maxChars - textLengthOf(reminder))
         const related = renderRelatedReminder(picked, budget)
-        if (related !== undefined) out.push(related)
+        if (related !== undefined) {
+          out.push(related)
+          // 被注入即算一次召回（v2 §4.5 P14）：只记「被想起」，不改 updatedAt。
+          // 记在**渲染成功之后** —— 渲染时被预算挤掉的条目并没有真的出现在上下文里。
+          await ctx.spark.markRecalled(picked.slice(0, countRenderedItems(related)).map(entry => entry.spark.id))
+        }
       }
 
       // D：当前模型的已知命令坑（默认关；没有记录时不注入）。
@@ -286,6 +291,17 @@ export function lastUserText(messages: readonly { content: readonly { type: stri
     }
   }
   return parts.join(' ').trim()
+}
+
+/** 注入消息里真正渲染出的条目数（预算可能砍掉尾部）。 */
+function countRenderedItems(message: UserMessage): number {
+  let count = 0
+  for (const block of message.content) {
+    if (block.type === 'text' && typeof block.text === 'string') {
+      count += (block.text.match(/<spark id=/g) ?? []).length
+    }
+  }
+  return count
 }
 
 /** 一条注入消息的字符数（用于两段共享预算）。 */

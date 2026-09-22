@@ -435,6 +435,26 @@ try {
       JSON.stringify(legacyFilter),
     )
 
+    // 3b-3) 重新激活 + 召回计数（v2 P14）：capture → archive → reactivate
+    //      断言「状态回 active」且「召回计数 +1」（两个副作用都要落地）。
+    const reactivateProbe = await evalJs(`(async () => {
+      const cs = await fetch('/sparks', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
+        title: 'P14 重新激活验收 ' + Date.now().toString(36), content: 'reactivate probe', scope: 'project',
+        tags: ['probe'], sourceSessionId: 'real-host-check', sourceAgentId: null, sourceTurn: null,
+      }) }).then((r) => r.json())
+      const id = cs?.value?.id
+      if (id === undefined) return { step: 'capture-failed', cs }
+      const archived = await fetch('/sparks/' + id, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ status: 'archived' }) }).then((r) => r.json())
+      const back = await fetch('/sparks/' + id + '/reactivate', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }).then((r) => r.json())
+      return { id, archived: archived?.value?.status, status: back?.value?.status, recalledCount: back?.value?.recalledCount, lastRecalledAt: back?.value?.lastRecalledAt }
+    })()`)
+    check(
+      'POST /sparks/:id/reactivate 拉回 active 并记一次召回（v2 P14）',
+      reactivateProbe?.archived === 'archived' && reactivateProbe?.status === 'active'
+        && reactivateProbe?.recalledCount === 1 && typeof reactivateProbe?.lastRecalledAt === 'number',
+      JSON.stringify(reactivateProbe),
+    )
+
     // 3c) 语义检索（v2 P13）：只读端点必须与注入面同源，且无匹配不兜底全量。
     const sparkSearchProbe = await evalJs(`fetch('/sparks/search?q=' + encodeURIComponent('真宿主验收') + '&limit=5').then(async (r) => ({ ok: r.ok, value: await r.json() }))`)
     const searchValue = sparkSearchProbe?.value?.value

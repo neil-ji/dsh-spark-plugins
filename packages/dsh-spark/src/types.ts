@@ -47,6 +47,31 @@ export function deriveTitle(content: string, max: number = 60): string {
   return trimmed.slice(0, max - 1) + '…'
 }
 
+/**
+ * 记一次召回（纯函数，v2 §4.5 P14）。
+ *
+ * **不动 `updatedAt`**：召回不是用户编辑，bump 时间戳会让「长期未触碰」的 prune
+ * 判定与惰性涌现的脏标记把召回误当成改动（一处时间戳三种语义 = 必然漂移）。
+ */
+export function applyRecall(record: SparkView, now: number): SparkView {
+  return { ...record, recalledCount: (record.recalledCount ?? 0) + 1, lastRecalledAt: now }
+}
+
+/**
+ * 面板排序（纯函数，v2 §6）：`lastRecalledAt` 倒序，空值退化到 `createdAt`。
+ *
+ * 刻意**不引入"火旺程度 / tier"**——排序需要的是时间戳，不是等级（原则 2 + 8）。
+ * 判据确定（同输入同输出），否则面板顺序会随读取顺序抖动。
+ */
+export function orderForPanel(sparks: readonly SparkView[]): SparkView[] {
+  const anchor = (spark: SparkView): number => spark.lastRecalledAt ?? spark.createdAt
+  return [...sparks].sort((a, b) => {
+    if (b.recalledCount !== a.recalledCount) return b.recalledCount - a.recalledCount
+    if (anchor(b) !== anchor(a)) return anchor(b) - anchor(a)
+    return a.id.localeCompare(b.id)
+  })
+}
+
 /** `resolveProvenance` 的父火花最小面（只需 origin + generation）。 */
 export interface ProvenanceParent {
   origin: SparkOrigin

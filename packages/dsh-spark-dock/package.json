@@ -1,6 +1,6 @@
 {
   "name": "dsh-spark-dock",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "DSH Spark Dock：宿主 web 的全局悬浮球 + 插件统一面板（shell.overlay 入口）",
   "type": "module",
   "main": "lib/index.js",

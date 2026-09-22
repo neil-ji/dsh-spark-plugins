@@ -23,7 +23,7 @@ import type { SparkRecordId, SparkStorage } from './types.ts'
 import { describeStorageError, ensureJsonlPath } from './jsonl-path.ts'
 
 /** 当前存储格式版本。老文件（无版本头）视为 1。 */
-export const SPARK_STORE_VERSION = 4
+export const SPARK_STORE_VERSION = 5
 
 const VERSION_KEY = '__sparkStore'
 
@@ -46,7 +46,7 @@ function sameFingerprint(a: Fingerprint | null, b: Fingerprint | null): boolean 
 }
 
 /**
- * 把一条 ≤v3 记录迁移成 v4（v2 §4.2 P11 + §4.3 P12）。
+ * 把一条 ≤v4 记录迁移成 v5（v2 §4.2 P11 + §4.3 P12 + §4.5 P14）。
  *
  * v1（status/resolvedAt）与 v2（inboxState 四值 + crystallized）都收敛到
  * `status: 'active' | 'archived'` + 墓碑。幂等（已是 v3 的记录原样返回）。
@@ -89,6 +89,10 @@ export function migrateSparkRecord(raw: unknown, now: number = Date.now()): Spar
   if (record.origin === undefined) record.origin = record.sourceAgentId !== null && record.sourceAgentId !== undefined ? 'agent' : 'human'
   if (record.derivedFrom === undefined) record.derivedFrom = []
   if (record.generation === undefined) record.generation = 0
+
+  // P14 召回计数回填：存量视为「从未被召回」（不猜历史，宁可偏保守）。
+  if (record.recalledCount === undefined) record.recalledCount = 0
+  if (record.lastRecalledAt === undefined) record.lastRecalledAt = null
   if (legacyState === 'dropped') {
     // dropped 与墓碑是同一意图的两级摩擦（设计原则 8）：并入墓碑，保留可恢复性。
     if (record.deletedAt === null || record.deletedAt === undefined) record.deletedAt = now

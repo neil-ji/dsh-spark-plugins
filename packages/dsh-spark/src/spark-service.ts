@@ -38,7 +38,7 @@ import { SparkMetaStore, defaultMetaPath, type SparkMeta } from './meta-store.ts
 import { ensureJsonlPath } from './jsonl-path.ts'
 import { registerSparkHttpRoutes } from './http.ts'
 import type { SparkChangedEvent, SparkRecordId, SparkStorage } from './types.ts'
-import { deriveTitle, resolveProvenance } from './types.ts'
+import { applyRecall, deriveTitle, orderForPanel, resolveProvenance } from './types.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -173,8 +173,8 @@ export class SparkService extends Service {
     let filtered = query.includeDeleted ? all : all.filter(r => r.deletedAt === null)
     if (query.status !== undefined) filtered = filtered.filter(r => r.status === query.status)
     if (query.scope !== undefined) filtered = filtered.filter(r => r.scope === query.scope)
-    filtered.sort((a, b) => b.createdAt - a.createdAt)
-    return filtered.slice(0, query.limit)
+    // 面板默认排序：lastRecalledAt 倒序（空值退化 createdAt）—— v2 §6，口径在 types.ts。
+    return orderForPanel(filtered).slice(0, query.limit)
   }
 
   /**
@@ -211,6 +211,42 @@ export class SparkService extends Service {
   /** 归档：收起来但仍保留在库里（≠ 删除）。 */
   async archive(id: SparkId, now: number = Date.now()): Promise<SparkView | null> {
     return this.patch(id, { status: 'archived' }, now)
+  }
+
+  /**
+   * 重新激活（v2 §4.5 P14）：把 archived 拉回 active，**并记一次召回**。
+   *
+   * 「被重新激活」本身就是一次真实的召回事件（人想起了它），所以计数与状态在同一
+   * 次读-改-写里落盘；对已经是 active 的记录调用也计数（用户又想起了它一次）。
+   */
+  async reactivate(id: SparkId, now: number = Date.now()): Promise<SparkView | null> {
+    await this.whenReady()
+    const current = await this.get(id)
+    if (current === null || current.deletedAt !== null) return null
+    const stateChanged = current.status !== 'active'
+    const next = await this.storage.update(id, record => ({
+      ...applyRecall(record, now),
+      ...(stateChanged ? { status: 'active' as const, stateChangedAt: now } : {}),
+    }))
+    if (next === null) return null
+    this.ctx.emit('sparks/changed', { operation: stateChanged ? 'state' : 'patch', id, record: next, at: now })
+    return next
+  }
+
+  /**
+   * 批量记召回（注入命中时调用，v2 §4.5）：被注入即算「被想起」，召回 ≠ 采纳。
+   * 逐条原子更新；单条失败只记日志，不让一次召回拖垮整个首步注入。
+   */
+  async markRecalled(ids: readonly SparkId[], now: number = Date.now()): Promise<void> {
+    await this.whenReady()
+    for (const id of ids) {
+      try {
+        const next = await this.storage.update(id, record => applyRecall(record, now))
+        if (next !== null) this.ctx.emit('sparks/changed', { operation: 'patch', id, record: next, at: now })
+      } catch (error) {
+        this.ctx.logger?.warn?.('spark: markRecalled failed for ' + id + ': ' + String(error))
+      }
+    }
   }
 
   /**
