@@ -2,8 +2,9 @@
  * Phase 6 ValenceService: amygdala-like emotional signal mining.
  *
  * Subscribes to DSH session events (user messages). When a message crosses
- * the intensity threshold, extracts latent preferences and persists them
- * as HippoMemo kind='preference' records (via ctx.memory.put).
+ * the intensity threshold, extracts latent preferences and captures them
+ * as sparks (v2 P10/E2 改道：不再写 HippoMemo——INV-F1 零直连，是否沉淀为
+ * 记忆由 Agent / 用户判断）。
  *
  * Phase 6 MVP: rule-based heuristics only, manual config of threshold.
  * Phase 6.5+: LLM-backed preference extraction, explicit decay config,
@@ -15,20 +16,14 @@ import type {} from '@deepseek-ai/dsh-host-webserver'
 import {
   detectIntensity,
   extractPreferences,
-  candidateToHippoPreference,
+  candidateToSparkInput,
   type PreferenceCandidate,
-  type HippoPreferenceInput,
 } from './valence.ts'
-
-/** Minimal structural type for the HippoMemo service (matches Phase 2). */
-interface HippoService {
-  put(input: HippoPreferenceInput): Promise<{ id: string }>
-}
 
 export interface ValenceConfig {
   /** Minimum intensity to trigger extraction. 0..1. Default 0.4. */
   intensityThreshold?: number
-  /** If true, persist extracted preferences via ctx.memory.put. Default true. */
+  /** If true, capture extracted preferences as sparks. Default true. */
   persistEnabled?: boolean
 }
 
@@ -37,8 +32,8 @@ export interface ValenceRunStats {
   persistEnabled: boolean
   /** How many messages were observed above the intensity threshold. */
   highIntensitySeen: number
-  /** How many preference records were persisted. */
-  preferencesPersisted: number
+  /** How many preference sparks were captured. */
+  sparksCaptured: number
 }
 
 interface AssistantLike { type: string; content: unknown }
@@ -60,12 +55,12 @@ function extractText(content: readonly AssistantLike[]): string {
 }
 
 export class ValenceService extends Service {
-  static inject = ['spark', 'memory'] as const
+  static inject = ['spark'] as const
 
   private readonly intensityThreshold: number
   private readonly persistEnabled: boolean
   private highIntensitySeen = 0
-  private preferencesPersisted = 0
+  private sparksCaptured = 0
   private unsubscribe: (() => void) | null = null
 
   constructor(ctx: Context, config: ValenceConfig = {}) {
@@ -94,25 +89,13 @@ export class ValenceService extends Service {
     const candidates = extractPreferences(text)
     if (candidates.length === 0) return
     if (!this.persistEnabled) return
-    const memory = (this.ctx as unknown as { memory?: HippoService }).memory
-    if (memory === undefined) return  // Hippo not installed; skip silently
-    const spark = (this.ctx as unknown as { spark?: { get: (id: string) => Promise<unknown> } }).spark
-    let workspacePath: string | null = null
-    if (spark !== undefined) {
-      try {
-        // We don't have the session ref here; workspacePath stays null.
-        // Phase 6.5: thread the session through ctx.on.
-      } catch (_error) {
-        // ignore
-      }
-    }
     for (const candidate of candidates) {
-      const input = candidateToHippoPreference(candidate, workspacePath)
+      const input = candidateToSparkInput(candidate, null)
       try {
-        await memory.put(input)
-        this.preferencesPersisted += 1
+        await this.ctx.spark.capture(input)
+        this.sparksCaptured += 1
       } catch (error) {
-        this.ctx.logger?.warn?.('valence: persist failed: ' + String(error))
+        this.ctx.logger?.warn?.('valence: capture failed: ' + String(error))
       }
     }
   }
@@ -123,7 +106,7 @@ export class ValenceService extends Service {
       intensityThreshold: this.intensityThreshold,
       persistEnabled: this.persistEnabled,
       highIntensitySeen: this.highIntensitySeen,
-      preferencesPersisted: this.preferencesPersisted,
+      sparksCaptured: this.sparksCaptured,
     }
   }
 

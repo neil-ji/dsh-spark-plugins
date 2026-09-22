@@ -5,10 +5,10 @@
  * It validates input with the wire schemas, persists via the storage backend,
  * and emits a `sparks/changed` cordis event after every mutation.
  *
- * 2026-09-14（设计 §4.1/§7）：收件箱状态由 `status: active|archived` 改为显式的
- * `inboxState: pending|crystallized|dropped|archived`，并新增墓碑软删除。
- * **所有原地更新必须走 `storage.update()`**（读改写在同一临界区）；本文件此前
- * 的 `crystallize` 自己 readAll + writeAll，是实测丢数据的直接缺口。
+ * 2026-09-21（v2 设计 P10/P11）：状态回退为 `status: 'active' | 'archived'` +
+ * 墓碑；spark → memory 的全部直连删除（解耦是纯减法，INV-F1：本插件永不写
+ * dsh-hippomemo；融合交给 Agent 自己调 memory_remember）。
+ * **所有原地更新必须走 `storage.update()`**（读改写在同一临界区）。
  */
 import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
@@ -20,13 +20,10 @@ import {
   sparkListQuerySchema,
   sparkPatchSchema,
   sparkViewSchema,
-  sparkCrystallizeSchema,
   type SparkView,
   type SparkCapture,
   type SparkPatch,
   type SparkListQuery,
-  type SparkCrystallize,
-  type SparkCrystallized,
   type SparkStats,
   type SparkId,
   type SparkGraph,
@@ -39,8 +36,8 @@ import { JsonlSparkStorage } from './storage.ts'
 import { SparkMetaStore, defaultMetaPath, type SparkMeta } from './meta-store.ts'
 import { ensureJsonlPath } from './jsonl-path.ts'
 import { registerSparkHttpRoutes } from './http.ts'
-import type { SparkChangedEvent, SparkRecordId, SparkStorage, HippoPutInput } from './types.ts'
-import { buildHippoInputFromSpark, deriveTitle } from './types.ts'
+import type { SparkChangedEvent, SparkRecordId, SparkStorage } from './types.ts'
+import { deriveTitle } from './types.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -71,11 +68,6 @@ function defaultFilePath(): string {
 
 function makeId(): SparkRecordId {
   return randomUUID() as SparkRecordId
-}
-
-/** Minimal structural type for the HippoMemo service we bridge into. */
-interface HippoService {
-  put(input: HippoPutInput): Promise<{ id: string }>
 }
 
 export class SparkService extends Service {
@@ -126,7 +118,7 @@ export class SparkService extends Service {
     this.httpRegistered = true
   }
 
-  /** Capture a new spark. 新捕获的火花一律是 `pending`（收件箱）。 */
+  /** Capture a new spark. 新捕获的火花一律是 `active`。 */
   async capture(input: unknown, now: number = Date.now()): Promise<SparkView> {
     await this.whenReady()
     const parsed: SparkCapture = sparkCaptureSchema.parse(input)
@@ -136,7 +128,7 @@ export class SparkService extends Service {
       content: parsed.content,
       scope: parsed.scope,
       workspacePath: parsed.workspacePath,
-      inboxState: 'pending',
+      status: 'active',
       tags: parsed.tags,
       sourceSessionId: parsed.sourceSessionId,
       sourceAgentId: parsed.sourceAgentId,
@@ -145,7 +137,6 @@ export class SparkService extends Service {
       updatedAt: now,
       stateChangedAt: now,
       deletedAt: null,
-      crystallized: null,
     })
     await this.storage.append(record)
     await this.enforceLimit()
@@ -173,7 +164,7 @@ export class SparkService extends Service {
     const query: SparkListQuery = sparkListQuerySchema.parse(input)
     const all = await this.storage.readAll()
     let filtered = query.includeDeleted ? all : all.filter(r => r.deletedAt === null)
-    if (query.inboxState !== undefined) filtered = filtered.filter(r => r.inboxState === query.inboxState)
+    if (query.status !== undefined) filtered = filtered.filter(r => r.status === query.status)
     if (query.scope !== undefined) filtered = filtered.filter(r => r.scope === query.scope)
     filtered.sort((a, b) => b.createdAt - a.createdAt)
     return filtered.slice(0, query.limit)
@@ -190,66 +181,16 @@ export class SparkService extends Service {
     const patch: SparkPatch = sparkPatchSchema.parse(input)
     const current = await this.get(id)
     if (current === null) return null
-    if (patch.inboxState === 'crystallized' && current.crystallized === null) {
-      throw new SparkStateError('crystallized is only reachable through spark_crystallize (it carries the hippo link)')
-    }
     const merged = await this.storage.patch(id, patch, now)
     if (merged === null) return null
-    const operation = patch.inboxState !== undefined && patch.inboxState !== current.inboxState
-      ? (patch.inboxState === 'crystallized' ? 'crystallize' : 'state')
-      : 'patch'
+    const operation = patch.status !== undefined && patch.status !== current.status ? 'state' : 'patch'
     this.ctx.emit('sparks/changed', { operation, id, record: merged, at: now })
     return merged
   }
 
-  /** 归档：收起来但仍保留在库里（≠ dropped）。 */
+  /** 归档：收起来但仍保留在库里（≠ 删除）。 */
   async archive(id: SparkId, now: number = Date.now()): Promise<SparkView | null> {
-    return this.patch(id, { inboxState: 'archived' }, now)
-  }
-
-  /** 丢弃：判定为无价值。与归档分开，收件箱的清理率统计才不会失真。 */
-  async drop(id: SparkId, now: number = Date.now()): Promise<SparkView | null> {
-    return this.patch(id, { inboxState: 'dropped' }, now)
-  }
-
-  /**
-   * Crystallize a spark into a HippoMemo memory record.
-   * Idempotent: a second call returns the existing hippoId without creating a
-   * duplicate. Requires dsh-hippomemo to be loaded (ctx.memory present).
-   */
-  async crystallize(id: SparkId, input: unknown = {}, now: number = Date.now()): Promise<{
-    spark: SparkView
-    record: { id: string; kind: SparkCrystallized['kind'] }
-  }> {
-    await this.whenReady()
-    const opts: SparkCrystallize = sparkCrystallizeSchema.parse(input)
-    const spark = await this.get(id)
-    if (spark === null || spark.deletedAt !== null) {
-      throw new SparkNotFoundError(id)
-    }
-    if (spark.crystallized !== null) {
-      const existing = spark.crystallized
-      return { spark, record: { id: existing.hippoId, kind: existing.kind } }
-    }
-    const memory = (this.ctx as unknown as { memory?: HippoService }).memory
-    if (memory === undefined) {
-      throw new SparkHippoUnavailableError('spark_crystallize requires HippoMemo (dsh-hippomemo) to be loaded')
-    }
-    const hippoInput = buildHippoInputFromSpark(spark, opts)
-    const record = await memory.put(hippoInput)
-    const crystallized: SparkCrystallized = { hippoId: record.id, kind: opts.kind, at: now }
-    // 读-改-写必须在 storage 的同一临界区内完成（旧实现自己 readAll + writeAll，
-    // 与并发 capture 交错时会用陈旧快照覆盖整个文件 —— 实测丢过 2 条）。
-    const next = await this.storage.update(id, current => ({
-      ...current,
-      crystallized,
-      inboxState: 'crystallized',
-      stateChangedAt: now,
-      updatedAt: now,
-    }))
-    if (next === null) throw new SparkNotFoundError(id)
-    this.ctx.emit('sparks/changed', { operation: 'crystallize', id, record: next, at: now })
-    return { spark: next, record: { id: record.id, kind: opts.kind } }
+    return this.patch(id, { status: 'archived' }, now)
   }
 
   /**
@@ -288,23 +229,21 @@ export class SparkService extends Service {
   }
 
   /**
-   * 收件箱统计（设计 §4.2）。`GET /sparks/stats`、首步注入、模块 header 计数共用。
+   * 统计。`GET /sparks/stats`、首步注入、模块 header 计数共用。
    * @param pendingProposals - 待决提议数；由调用方从 emerge 服务取（本服务不认识它）。
    */
   async stats(pendingProposals: number = 0): Promise<SparkStats> {
     await this.whenReady()
     const all = await this.storage.readAll()
     const live = all.filter(r => r.deletedAt === null)
-    const count = (state: SparkView['inboxState']): number => live.filter(r => r.inboxState === state).length
-    const pending = live.filter(r => r.inboxState === 'pending')
+    const count = (state: SparkView['status']): number => live.filter(r => r.status === state).length
+    const active = live.filter(r => r.status === 'active')
     return {
       total: live.length,
-      pending: count('pending'),
-      crystallized: count('crystallized'),
-      dropped: count('dropped'),
+      active: count('active'),
       archived: count('archived'),
       deleted: all.length - live.length,
-      oldestPendingAt: pending.length === 0 ? null : Math.min(...pending.map(r => r.createdAt)),
+      oldestActiveAt: active.length === 0 ? null : Math.min(...active.map(r => r.createdAt)),
       pendingProposals,
     }
   }
@@ -345,7 +284,7 @@ export class SparkService extends Service {
     await this.storage.purgeTombstones(this.tombstoneRetentionMs)
     const all = await this.storage.readAll()
     if (all.length <= this.maxRecords) return
-    const rank = (r: SparkView): number => (r.inboxState === 'archived' || r.inboxState === 'dropped' ? 1 : 0)
+    const rank = (r: SparkView): number => (r.status === 'archived' ? 1 : 0)
     const ordered = [...all].sort((a, b) => {
       if (rank(a) !== rank(b)) return rank(a) - rank(b)
       return b.createdAt - a.createdAt
@@ -362,21 +301,5 @@ export class SparkNotFoundError extends Error {
   readonly code = 'SPARK_NOT_FOUND'
   constructor(public readonly sparkId: SparkId) {
     super('spark not found: ' + sparkId)
-  }
-}
-
-/** Domain error: HippoMemo (dsh-hippomemo) is not loaded. */
-export class SparkHippoUnavailableError extends Error {
-  readonly code = 'SPARK_HIPPO_UNAVAILABLE'
-  constructor(message: string) {
-    super(message)
-  }
-}
-
-/** Domain error: the requested inbox-state transition is not allowed through this path. */
-export class SparkStateError extends Error {
-  readonly code = 'SPARK_STATE_INVALID'
-  constructor(message: string) {
-    super(message)
   }
 }

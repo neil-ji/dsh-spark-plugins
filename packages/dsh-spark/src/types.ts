@@ -7,9 +7,9 @@
  * 声明 —— 之前的版本在这里写着 "never cross the wire"，而它实际就是
  * SSE 的载荷格式，客户端只能手抄一遍且没有校验。
  */
-import type { SparkScope, SparkInboxState, SparkView, SparkCapture, SparkPatch, SparkId, SparkCrystallize, SparkCrystallized, SparkStats } from 'dsh-spark-wire'
+import type { SparkScope, SparkStatus, SparkView, SparkCapture, SparkPatch, SparkId, SparkStats } from 'dsh-spark-wire'
 
-export type { SparkScope, SparkInboxState, SparkView, SparkCapture, SparkPatch, SparkId, SparkCrystallized, SparkCrystallize, SparkStats }
+export type { SparkScope, SparkStatus, SparkView, SparkCapture, SparkPatch, SparkId, SparkStats }
 /** 火花变更事件（= `sparks/changed` 载荷，契约在 wire 包）。 */
 export type { SparkChangedEvent } from 'dsh-spark-wire'
 
@@ -45,46 +45,4 @@ export function deriveTitle(content: string, max: number = 60): string {
   if (trimmed.length === 0) return '(empty)'
   if (trimmed.length <= max) return trimmed
   return trimmed.slice(0, max - 1) + '…'
-}
-
-/**
- * Pure mapper: build a HippoMemo-style put input from a spark + crystallize opts.
- * The shape is intentionally minimal (no hard import of dsh-hippomemo) so the
- * spark plugin stays a peer of hippomemo, not a transitive dependency.
- */
-export interface HippoPutInput {
-  kind: SparkCrystallized['kind']
-  title: string
-  content: string
-  tags: string[]
-  scope: 'global' | 'workspace' | 'project'
-  workspacePath: string | null
-  globalProven: boolean
-  importance: number
-  sourceSessionId: string
-  sourceAgentId: string | null
-  /** Provenance: id of the originating spark (cognitive-layer Phase 2 reverse link). */
-  sourceSparkId: string
-}
-
-export function buildHippoInputFromSpark(spark: SparkView, opts: SparkCrystallize): HippoPutInput {
-  // Hippo has no session scope; fold both 'session' (caller choice) and
-  // 'session'-bound sparks into 'project'.
-  const scope: 'global' | 'workspace' | 'project' =
-    opts.scope !== undefined
-      ? (opts.scope === 'session' ? 'project' : opts.scope)
-      : spark.scope === 'global' ? 'global' : 'project'
-  return {
-    kind: opts.kind,
-    title: spark.title,
-    content: spark.content,
-    tags: spark.tags,
-    scope,
-    workspacePath: spark.workspacePath,
-    globalProven: opts.globalProven,
-    importance: opts.importance,
-    sourceSessionId: spark.sourceSessionId,
-    sourceAgentId: spark.sourceAgentId,
-    sourceSparkId: spark.id,
-  }
 }

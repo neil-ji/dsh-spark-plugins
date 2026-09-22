@@ -1,20 +1,18 @@
 /**
- * Spark module panes: 灵感收件箱（捕获 + 收件箱视图）/ 涌现提议。Graph 子页留占位
- * （后端暂无 graph 查询 API）。
+ * Spark module panes: 灵感（捕获 + 想法列表）/ 涌现提议 / Graph。
  *
  * 2026-09-21：脚本目录 pane 随脚本沉淀库迁到独立插件 `dsh-script-client`
  * （ADR-003 自注册模块），本文件不再持有任何脚本 UI。
  *
- * 2026-09-14 收件箱化（设计 docs/spark-inbox-design-2026-09-14.md §4.1/§8）：
- *  - 列表从「活跃 / 已归档」两态改为四级收件箱 + 墓碑视图，计数来自 `/sparks/stats`；
- *  - 动作按状态给：待处理→结晶/归档/丢弃，已沉淀→归档，归档/丢弃→移回收件箱，已删除→恢复；
- *  - 丢弃是破坏性动作，走 Modal 二次确认（UI-UX-SPEC §4.2 危险区口径）；
- *  - **文案全部走 locale 字典**（此前是硬编码中文，违反 AGENTS.md §3.4）。
+ * 2026-09-21 v2 收件箱回退（docs/spark-v2-design-2026-09-21.md §4.2/§6，P11/P16）：
+ *  - 状态回退 `active | archived` + 墓碑；筛选位 = 活跃 / 已归档 / 已删除；
+ *  - 结晶动作与徽标删除（spark → memory 零直连）；动作 = 归档 / 删除 / 重新激活；
+ *  - 文案朴素化，全部走 locale 字典。
  */
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Button, Card, Disclosure, Input, Modal, SegmentedControl, Textarea } from 'dsh-ui-kit'
 import { useFrames } from 'dsh-spark-plugin-kit/client'
-import type { SparkView, SparkInboxState, SparkStats, ProposalView } from 'dsh-spark-wire'
+import type { SparkView, SparkStatus, SparkStats, ProposalView } from 'dsh-spark-wire'
 import { api } from './sparkApi.ts'
 import { useApiResource } from './useApiResource.ts'
 import { SPARK_EVENTS_STREAM, type SparkEventChannel } from './remote.ts'
@@ -92,35 +90,31 @@ function Meter({ pct, tone }: { pct: number; tone?: 'good' | 'warn' | undefined 
   )
 }
 
-/* ─────────── 灵感收件箱：一条输入流 + 收件箱视图 ─────────── */
+/* ─────────── 灵感：一条输入流 + 想法列表 ─────────── */
 
-type InboxFilter = Extract<SparkInboxState, 'pending' | 'crystallized' | 'archived' | 'dropped'>
+type SparkFilter = Extract<SparkStatus, 'active' | 'archived'>
 
-const FILTERS: readonly { id: InboxFilter; key: 'filterPending' | 'filterCrystallized' | 'filterArchived' | 'filterDropped' }[] = [
-  { id: 'pending', key: 'filterPending' },
-  { id: 'crystallized', key: 'filterCrystallized' },
+const FILTERS: readonly { id: SparkFilter; key: 'filterActive' | 'filterArchived' }[] = [
+  { id: 'active', key: 'filterActive' },
   { id: 'archived', key: 'filterArchived' },
-  { id: 'dropped', key: 'filterDropped' },
 ]
 
-const EMPTY_KEYS: Record<InboxFilter, { text: 'emptyPending' | 'emptyCrystallized' | 'emptyArchived' | 'emptyDropped'; hint: 'emptyPendingHint' | 'emptyCrystallizedHint' | 'emptyArchivedHint' | 'emptyDroppedHint' }> = {
-  pending: { text: 'emptyPending', hint: 'emptyPendingHint' },
-  crystallized: { text: 'emptyCrystallized', hint: 'emptyCrystallizedHint' },
+const EMPTY_KEYS: Record<SparkFilter, { text: 'emptyActive' | 'emptyArchived'; hint: 'emptyActiveHint' | 'emptyArchivedHint' }> = {
+  active: { text: 'emptyActive', hint: 'emptyActiveHint' },
   archived: { text: 'emptyArchived', hint: 'emptyArchivedHint' },
-  dropped: { text: 'emptyDropped', hint: 'emptyDroppedHint' },
 }
 
-function countOf(stats: SparkStats | null, filter: InboxFilter): number | null {
+function countOf(stats: SparkStats | null, filter: SparkFilter): number | null {
   if (stats === null) return null
   return stats[filter]
 }
 
 export function SparksPane({ channel, t }: SparkPaneDeps): JSX.Element {
-  const [filter, setFilter] = useState<InboxFilter>('pending')
+  const [filter, setFilter] = useState<SparkFilter>('active')
   const [showDeleted, setShowDeleted] = useState(false)
   const stats = useApiResource<SparkStats>(() => api.stats(), [])
   const { data: sparks, error, reload } = useApiResource<SparkView[]>(
-    () => api.list({ inboxState: filter, includeDeleted: showDeleted, limit: 50 }),
+    () => api.list({ status: filter, includeDeleted: showDeleted, limit: 50 }),
     [filter, showDeleted],
   )
   const [draft, setDraft] = useState('')
@@ -129,7 +123,7 @@ export function SparksPane({ channel, t }: SparkPaneDeps): JSX.Element {
   const [busy, setBusy] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [captured, setCaptured] = useState(false)
-  const [confirmDrop, setConfirmDrop] = useState<SparkView | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<SparkView | null>(null)
   const capturedTimer = useRef(0)
 
   const reloadStats = stats.reload
@@ -150,7 +144,7 @@ export function SparksPane({ channel, t }: SparkPaneDeps): JSX.Element {
       await api.capture({ title, content: text, scope, tags: tagList })
       setDraft(''); setTags('')
       setCaptured(true)
-      setFilter('pending')
+      setFilter('active')
       window.clearTimeout(capturedTimer.current)
       capturedTimer.current = window.setTimeout(() => setCaptured(false), 2600)
       refresh()
@@ -172,23 +166,22 @@ export function SparksPane({ channel, t }: SparkPaneDeps): JSX.Element {
           一图两名。未处理计数的 live 通告保留为屏下状态区（读屏仍可感知，视觉零占位）；
           视觉上的 pending 数在 Card actions 的 pill 计数里。 */}
       <div role="status" aria-live="polite" className="dock-sr-only"
-        aria-label={t('inboxTitle') + ': ' + String(stats.data?.pending ?? 0) + ' ' + t('filterPending')}>
-        {t('inboxTitle')}: {String(stats.data?.pending ?? 0)} {t('filterPending')}
+        aria-label={t('inboxTitle') + ': ' + String(stats.data?.active ?? 0) + ' ' + t('filterActive')}>
+        {t('inboxTitle')}: {String(stats.data?.active ?? 0)} {t('filterActive')}
       </div>
 
       <Card
         title={t('inboxTitle')}
         actions={(
           <>
-            {/* 过滤器从 pill 组改 SegmentedControl（2026-09 用户裁决「与其他 Card
-                保持一致」——财务的窗口切换就是它）。「已删除」由开关并入第 5 个
-                互斥 tab，单选语义更干净。计数保留在 tab 文案里。 */}
+            {/* 过滤器 = SegmentedControl（与财务窗口切换同形制）。「已删除」由开关
+                并入互斥 tab，单选语义更干净。计数保留在 tab 文案里。 */}
             <SegmentedControl
               aria-label={t('inboxTitle')}
               value={showDeleted ? 'deleted' : filter}
               onChange={(value) => {
                 if (value === 'deleted') { setShowDeleted(true); return }
-                setShowDeleted(false); setFilter(value as InboxFilter)
+                setShowDeleted(false); setFilter(value as SparkFilter)
               }}
               options={[
                 ...FILTERS.map((entry) => {
@@ -214,7 +207,7 @@ export function SparksPane({ channel, t }: SparkPaneDeps): JSX.Element {
           ? <Empty text={t('loading')} loading />
           : sparks.length === 0
             ? <Empty text={t(emptyKeys.text)} hint={t(emptyKeys.hint)} />
-            : <SparkList sparks={sparks} reload={refresh} t={t} confirmDrop={setConfirmDrop} />}
+            : <SparkList sparks={sparks} reload={refresh} t={t} confirmDelete={setConfirmDelete} />}
       </Card>
 
       {/* 捕获表单升级为 ui-kit Card 形制（2026-09 用户裁决「与其他页面观感一致」）：
@@ -264,41 +257,39 @@ export function SparksPane({ channel, t }: SparkPaneDeps): JSX.Element {
       </Card>
 
       <Modal
-        open={confirmDrop !== null}
-        onClose={() => setConfirmDrop(null)}
-        title={t('dropConfirmTitle')}
+        open={confirmDelete !== null}
+        onClose={() => setConfirmDelete(null)}
+        title={t('deleteConfirmTitle')}
         closeLabel={t('cancel')}
         // 关闭钮的可访问名也走字典（ui-kit 只提供中文缺省值，见 ModalProps.closeAriaLabel）
         closeAriaLabel={t('closeDialog')}
         footer={(
           <>
-            <Button variant="ghost" size="sm" onClick={() => setConfirmDrop(null)}>{t('cancel')}</Button>
+            <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(null)}>{t('cancel')}</Button>
             <Button variant="danger" size="sm"
-              onClick={() => { const target = confirmDrop; setConfirmDrop(null); if (target !== null) void api.drop(target.id).then(refresh, refresh) }}>
+              onClick={() => { const target = confirmDelete; setConfirmDelete(null); if (target !== null) void api.drop(target.id).then(refresh, refresh) }}>
               {t('confirm')}
             </Button>
           </>
         )}
       >
-        <p>{t('dropConfirmBody')}</p>
-        {confirmDrop !== null && <p className="dock-hint">{confirmDrop.title}</p>}
+        <p>{t('deleteConfirmBody')}</p>
+        {confirmDelete !== null && <p className="dock-hint">{confirmDelete.title}</p>}
       </Modal>
     </div>
   )
 }
 
-const STATE_KEYS: Record<SparkView['inboxState'], 'statePending' | 'stateCrystallized' | 'stateDropped' | 'stateArchived'> = {
-  pending: 'statePending',
-  crystallized: 'stateCrystallized',
-  dropped: 'stateDropped',
+const STATE_KEYS: Record<SparkView['status'], 'stateActive' | 'stateArchived'> = {
+  active: 'stateActive',
   archived: 'stateArchived',
 }
 
-function SparkList({ sparks, reload, t, confirmDrop }: {
+function SparkList({ sparks, reload, t, confirmDelete }: {
   sparks: SparkView[]
   reload: () => void
   t: SparkT
-  confirmDrop: (spark: SparkView) => void
+  confirmDelete: (spark: SparkView) => void
 }): JSX.Element {
   const [busyId, setBusyId] = useState<string | null>(null)
   const run = async (id: string, fn: () => Promise<unknown>) => {
@@ -311,13 +302,11 @@ function SparkList({ sparks, reload, t, confirmDrop }: {
       {sparks.map((s) => {
         const deleted = s.deletedAt !== null
         return (
-          <div key={s.id} className={'dock-row' + (deleted || s.inboxState === 'archived' || s.inboxState === 'dropped' ? ' off' : '')}>
-            {s.crystallized !== null && <span className="dock-row-dot cryst" title={t('crystallizedBadge')} aria-label={t('crystallizedBadge')} />}
+          <div key={s.id} className={'dock-row' + (deleted || s.status === 'archived' ? ' off' : '')}>
             <div className="grow">
               <div className="ttl">{s.title}</div>
               <div className="meta">
-                {deleted ? t('stateDeleted') : t(STATE_KEYS[s.inboxState])} · {s.scope} · {timeAgo(s.updatedAt, t)}
-                {s.crystallized !== null && !deleted && <span className="cryst"> · {t('crystallizedBadge')}</span>}
+                {deleted ? t('stateDeleted') : t(STATE_KEYS[s.status])} · {s.scope} · {timeAgo(s.updatedAt, t)}
               </div>
             </div>
             {deleted
@@ -325,24 +314,20 @@ function SparkList({ sparks, reload, t, confirmDrop }: {
                 <RowAction label={t('actionRestore')} busyLabel={t('restoring')} busy={busyId === s.id}
                   onRun={() => run(s.id, async () => { await api.restore(s.id) })} />
               )
-              : s.inboxState === 'pending'
+              : s.status === 'active'
                 ? (
                   <>
-                    {/* 动作二选一（2026-09 用户裁决）：归档=逻辑删除与丢弃并存是给用户
-                        出选择题，心智负担重。归档动作移除，丢弃=物理删除且必走二次
-                        确认；「结晶」改为直白的「转为记忆」。 */}
-                    <RowAction label={t('actionCrystallize')} busyLabel={t('crystallizing')} busy={busyId === s.id}
-                      onRun={() => run(s.id, async () => { await api.crystallize(s.id) })} />
-                    <RowAction danger label={t('actionDrop')} busyLabel={t('dropping')} busy={busyId === s.id}
-                      onRun={async () => { confirmDrop(s) }} />
+                    {/* 动作（v2 §6）：归档（可恢复）/ 删除（物理删，走二次确认）。 */}
+                    <RowAction label={t('actionArchive')} busyLabel={t('archiving')} busy={busyId === s.id}
+                      onRun={() => run(s.id, async () => { await api.archive(s.id) })} />
+                    <RowAction danger label={t('actionDelete')} busyLabel={t('deleting')} busy={busyId === s.id}
+                      onRun={async () => { confirmDelete(s) }} />
                   </>
                 )
-                : s.inboxState === 'crystallized'
-                  ? null
-                  : (
-                    <RowAction label={t('actionToInbox')} busyLabel={t('toInboxing')} busy={busyId === s.id}
-                      onRun={() => run(s.id, async () => { await api.setInboxState(s.id, 'pending') })} />
-                  )}
+                : (
+                  <RowAction label={t('actionReactivate')} busyLabel={t('reactivating')} busy={busyId === s.id}
+                    onRun={() => run(s.id, async () => { await api.setStatus(s.id, 'active') })} />
+                )}
           </div>
         )
       })}

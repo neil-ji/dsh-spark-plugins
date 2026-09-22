@@ -1,5 +1,5 @@
 /**
- * Graph 子页：火花关联图（标签亲和 / 涌现提议关联 / 火花→记忆结晶谱系）。
+ * Graph 子页：火花关联图（标签亲和 / 涌现提议关联）—— 纯火花域（v2 P10/E5）。
  *
  * 分工：**口径全在宿主**（`dsh-spark/src/graph.ts` 的 buildSparkGraph），
  * 客户端只拿 nodes/edges 画图 —— 关联判定不在 UI 里重算（与窗口归因同一原则）。
@@ -8,8 +8,8 @@
  * 哈希决定）—— 同数据同画面，不用 Math.random（否则每次渲染抖动，也没法验收）。
  * 无第三方依赖：节点上限 60（宿主默认），迭代 260 次的代价可以忽略。
  *
- * 视觉：节点颜色取 ui-kit token（火花按收件箱态、记忆用 finance 绿点出"结晶"），
- * 边按语义分三档线型；悬浮/键盘聚焦出 tooltip 看全文标题。
+ * 视觉：节点颜色取 ui-kit token（按火花状态），边按语义分两档线型；
+ * 悬浮/键盘聚焦出 tooltip 看全文标题。
  */
 import { useMemo, useState } from 'react'
 import { Card } from 'dsh-ui-kit'
@@ -107,23 +107,20 @@ function layout(graph: SparkGraph): Placed[] {
     x: pos[i]!.x,
     y: pos[i]!.y,
     // 尺寸由宿主给的度决定：孤立点也看得见，枢纽点明显更大。
-    r: node.kind === 'memory' ? 7 : Math.min(18, 5 + node.degree * 1.1),
+    r: Math.min(18, 5 + node.degree * 1.1),
   }))
 }
 
-/** 边按语义分三档线型（与图例一一对应）。 */
+/** 边按语义分两档线型（与图例一一对应）。 */
 const EDGE_CLASS: Record<SparkGraph['edges'][number]['kind'], string> = {
-  crystallized: 'dock-graph-edge dock-graph-edge-crystallized',
   tag: 'dock-graph-edge dock-graph-edge-tag',
   proposal: 'dock-graph-edge dock-graph-edge-proposal',
 }
 
-/** 节点按类型/状态上色：记忆节点与已结晶火花同绿（结晶谱系两端同色系）。 */
+/** 节点按状态上色。 */
 function stateClass(node: SparkGraphNode): string {
-  if (node.kind === 'memory') return 'dock-graph-node-memory'
-  if (node.inboxState === 'crystallized') return 'dock-graph-node-crystallized'
-  if (node.inboxState === 'archived') return 'dock-graph-node-archived'
-  return 'dock-graph-node-pending'
+  if (node.status === 'archived') return 'dock-graph-node-archived'
+  return 'dock-graph-node-active'
 }
 
 export function GraphPane({ t }: { t: SparkT }): JSX.Element {
@@ -133,8 +130,7 @@ export function GraphPane({ t }: { t: SparkT }): JSX.Element {
   const placed = useMemo(() => (data === null ? [] : layout(data)), [data])
   const byId = useMemo(() => new Map(placed.map((node) => [node.id, node])), [placed])
 
-  const sparkCount = data === null ? 0 : data.nodes.filter((node) => node.kind === 'spark').length
-  const memoryCount = data === null ? 0 : data.nodes.filter((node) => node.kind === 'memory').length
+  const sparkCount = data === null ? 0 : data.nodes.length
   const edgeCount = data === null ? 0 : data.edges.length
 
   return (
@@ -143,7 +139,7 @@ export function GraphPane({ t }: { t: SparkT }): JSX.Element {
       actions={(
         <>
           <span className={'dock-hint dock-graph-summary'}>
-            {`${String(sparkCount)} ${t('graphUnitSparks')} · ${String(edgeCount)} ${t('graphUnitLinks')} · ${String(memoryCount)} ${t('graphUnitMemories')}`}
+            {`${String(sparkCount)} ${t('graphUnitSparks')} · ${String(edgeCount)} ${t('graphUnitLinks')}`}
           </span>
           <button className={'dock-pill dock-graph-refresh'} type="button" onClick={reload}>{t('graphRefresh')}</button>
         </>
@@ -183,7 +179,7 @@ export function GraphPane({ t }: { t: SparkT }): JSX.Element {
                 data-node={node.kind}
                 data-node-id={node.id}
                 tabIndex={0}
-                aria-label={node.label + (node.kind === 'memory' ? ' · ' + t('graphMemoryNode') : '')}
+                aria-label={node.label}
                 onMouseEnter={() => setActive(node.id)}
                 onMouseLeave={() => setActive((current) => (current === node.id ? null : current))}
                 onFocus={() => setActive(node.id)}
@@ -192,19 +188,17 @@ export function GraphPane({ t }: { t: SparkT }): JSX.Element {
                 <circle className={stateClass(node)} cx={node.x} cy={node.y} r={node.r} />
                 {active === node.id ? (
                   <text className={'dock-graph-tip'} x={node.x} y={node.y - node.r - 6} textAnchor="middle">
-                    {node.kind === 'memory' ? '◆ ' : ''}{node.label.slice(0, 34)}
+                    {node.label.slice(0, 34)}
                   </text>
                 ) : null}
               </g>
             ))}
           </svg>
           <ul className={'dock-graph-legend'}>
-            <li><i className={'dock-graph-dot dock-graph-dot-pending'} />{t('graphLegendPending')}</li>
-            <li><i className={'dock-graph-dot dock-graph-dot-crystallized'} />{t('graphLegendCrystallized')}</li>
-            <li><i className={'dock-graph-dot dock-graph-dot-memory'} />{t('graphLegendMemory')}</li>
+            <li><i className={'dock-graph-dot dock-graph-dot-active'} />{t('graphLegendActive')}</li>
+            <li><i className={'dock-graph-dot dock-graph-dot-archived'} />{t('graphLegendArchived')}</li>
             <li><i className={'dock-graph-line dock-graph-line-tag'} />{t('graphLegendTagEdge')}</li>
             <li><i className={'dock-graph-line dock-graph-line-proposal'} />{t('graphLegendProposalEdge')}</li>
-            <li><i className={'dock-graph-line dock-graph-line-crystallized'} />{t('graphLegendCrystallizedEdge')}</li>
           </ul>
           {data?.truncated === true ? <p className={'dock-hint dock-graph-empty'}>{t('graphTruncated')}</p> : null}
         </div>

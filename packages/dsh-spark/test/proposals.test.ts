@@ -14,7 +14,7 @@ function makeSpark(overrides: Partial<SparkView> = {}): SparkView {
     content: overrides.content ?? 'some content',
     scope: overrides.scope ?? 'project',
     workspacePath: overrides.workspacePath ?? null,
-    inboxState: overrides.inboxState ?? 'pending',
+    status: overrides.status ?? 'active',
     tags: overrides.tags ?? [],
     sourceSessionId: overrides.sourceSessionId ?? 'sess',
     sourceAgentId: overrides.sourceAgentId ?? null,
@@ -23,7 +23,6 @@ function makeSpark(overrides: Partial<SparkView> = {}): SparkView {
     updatedAt: overrides.updatedAt ?? now,
     stateChangedAt: overrides.stateChangedAt ?? null,
     deletedAt: overrides.deletedAt ?? null,
-    crystallized: overrides.crystallized ?? null,
   }
 }
 
@@ -94,11 +93,11 @@ test('cluster: 2 sparks (even with shared tags) do NOT produce cluster', () => {
   assert.equal(out.filter(c => c.type === 'cluster').length, 0)
 })
 
-test('prune: stale active spark (untouched > 14 days, not crystallized) produces prune proposal', () => {
+test('prune: stale active spark (untouched > 14 days) produces prune proposal', () => {
   const now = 1_700_000_000_000
   const longAgo = now - 30 * 86_400_000 // 30 days old
   const sparks = [
-    makeSpark({ id: 'a', title: 'old thought', updatedAt: longAgo, crystallized: null }),
+    makeSpark({ id: 'a', title: 'old thought', updatedAt: longAgo }),
   ]
   const out = generateProposals(sparks, DEFAULT_OPTS, now)
   const prunes = out.filter(c => c.type === 'prune')
@@ -108,11 +107,11 @@ test('prune: stale active spark (untouched > 14 days, not crystallized) produces
   assert.match(prunes[0]!.explanation, /天/)
 })
 
-test('prune: crystallized stale spark is NOT pruned', () => {
+test('archived stale spark is NOT pruned', () => {
   const now = 1_700_000_000_000
   const longAgo = now - 30 * 86_400_000
   const sparks = [
-    makeSpark({ id: 'a', updatedAt: longAgo, crystallized: { hippoId: 'mem-1', kind: 'insight', at: now } }),
+    makeSpark({ id: 'a', updatedAt: longAgo, status: 'archived' }),
   ]
   const out = generateProposals(sparks, DEFAULT_OPTS, now)
   assert.equal(out.filter(c => c.type === 'prune').length, 0)
@@ -127,64 +126,33 @@ test('prune: recent spark is NOT pruned', () => {
   assert.equal(out.filter(c => c.type === 'prune').length, 0)
 })
 
-test('archived / dropped / tombstoned sparks are filtered out before emergence', () => {
+test('archived / tombstoned sparks are filtered out before emergence', () => {
   const now = 1_700_000_000_000
   const title = 'alpha beta gamma delta'
-  for (const excluded of ['archived', 'dropped'] as const) {
-    const out = generateProposals([
-      makeSpark({ id: 'a', inboxState: 'pending', title }),
-      makeSpark({ id: 'b', inboxState: excluded, title }),
-    ], DEFAULT_OPTS, now)
-    assert.equal(out.filter(c => c.type === 'link').length, 0, excluded + ' must not pair')
-  }
-  // crystallized 仍可参与关联（已沉淀但语义上仍有联系价值）。
-  // 注意标题不能完全相同 —— link 规则显式排除 jaccard === 1（完全重复由 dedup 处理）。
-  const withCrystallized = generateProposals([
-    makeSpark({ id: 'a', inboxState: 'pending', title: 'alpha beta gamma delta' }),
-    makeSpark({ id: 'b', inboxState: 'crystallized', title: 'alpha beta gamma', crystallized: { hippoId: 'm1', kind: 'insight', at: now } }),
+  const out = generateProposals([
+    makeSpark({ id: 'a', title }),
+    makeSpark({ id: 'b', status: 'archived', title }),
   ], DEFAULT_OPTS, now)
-  assert.equal(withCrystallized.filter(c => c.type === 'link').length, 1, 'crystallized sparks still link')
+  assert.equal(out.filter(c => c.type === 'link').length, 0, 'archived must not pair')
   // 墓碑（软删除）不参与
   const withTombstone = generateProposals([
-    makeSpark({ id: 'a', inboxState: 'pending', title }),
-    makeSpark({ id: 'b', inboxState: 'pending', title, deletedAt: now }),
+    makeSpark({ id: 'a', title }),
+    makeSpark({ id: 'b', title, deletedAt: now }),
   ], DEFAULT_OPTS, now)
   assert.equal(withTombstone.filter(c => c.type === 'link').length, 0, 'tombstoned sparks must not pair')
 })
 
-test('dropped spark older than droppedPruneDays produces a physical-purge prune proposal', () => {
-  // 2026-09-16：之前 dropped 火花永远不参与涌现；现在它们在被丢弃后 ≥ max(7,
-  // pruneStaleDays/2) 天时会产生 prune 提议，让用户一键物理清除。
-  // 默认 pruneStaleDays=14 → droppedPruneDays=7。
-  const now = 1_700_000_000_000
-  const veryLongAgo = now - 14 * 86_400_000
-  const recent = now - 2 * 86_400_000
-  const sparks = [
-    makeSpark({ id: 'a', updatedAt: veryLongAgo, inboxState: 'dropped', title: 'old dropped' }),
-    makeSpark({ id: 'b', updatedAt: recent, inboxState: 'dropped', title: 'recent dropped' }),
-  ]
-  const out = generateProposals(sparks, DEFAULT_OPTS, now)
-  const aPrunes = out.filter(c => c.type === 'prune' && c.sparkIds.includes('a'))
-  assert.equal(aPrunes.length, 1, 'stale dropped spark should yield a purge prune proposal')
-  assert.equal(aPrunes[0]!.leverage, 'low')
-  assert.match(aPrunes[0]!.explanation, /\u5df2\u4e22\u5f03 \d+ \u5929/)
-  const bPrunes = out.filter(c => c.type === 'prune' && c.sparkIds.includes('b'))
-  assert.equal(bPrunes.length, 0, 'recent dropped must not yield prune')
-})
-
-test('prune: dropped old + pending active both yield separate prune proposals', () => {
-  // 两条 prune 路径互不冲突：一个针对活跃长未触碰，一个针对被丢长未清。
+test('prune: only active sparks participate (v2 P11: dropped 已并入墓碑)', () => {
   const now = 1_700_000_000_000
   const longAgo = now - 30 * 86_400_000
   const sparks = [
-    makeSpark({ id: 'pending-old', inboxState: 'pending', updatedAt: longAgo }),
-    makeSpark({ id: 'dropped-old', inboxState: 'dropped', updatedAt: longAgo }),
+    makeSpark({ id: 'active-old', updatedAt: longAgo }),
+    makeSpark({ id: 'archived-old', status: 'archived', updatedAt: longAgo }),
   ]
   const out = generateProposals(sparks, DEFAULT_OPTS, now)
   const prunes = out.filter(c => c.type === 'prune')
-  assert.equal(prunes.length, 2)
-  const ids = prunes.map(p => p.sparkIds[0]).sort()
-  assert.deepEqual(ids, ['dropped-old', 'pending-old'])
+  assert.equal(prunes.length, 1)
+  assert.equal(prunes[0]!.sparkIds[0], 'active-old')
 })
 
 test('mixed scenario: link + cluster + prune all fire together', () => {
@@ -194,7 +162,7 @@ test('mixed scenario: link + cluster + prune all fire together', () => {
     makeSpark({ id: 'a', title: 'cognitive filter design', tags: ['design', 'hippo'] }),
     makeSpark({ id: 'b', title: 'cognitive filter on design', tags: ['design', 'hippo'] }),
     makeSpark({ id: 'c', title: 'random unrelated', tags: ['design', 'hippo'] }),
-    makeSpark({ id: 'd', title: 'old to prune', updatedAt: longAgo, crystallized: null }),
+    makeSpark({ id: 'd', title: 'old to prune', updatedAt: longAgo }),
   ]
   const out = generateProposals(sparks, DEFAULT_OPTS, now)
   const link = out.filter(c => c.type === 'link')

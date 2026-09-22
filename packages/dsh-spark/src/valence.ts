@@ -6,8 +6,8 @@
  * detected, extracts the latent preference encoded in the message
  * (e.g. "you moron, why did you change file X" → preference: do not
  * modify file X without asking). The extracted preference is then
- * persisted as a HippoMemo kind='preference' record so it can
- * participate in the cognitive-filter recall.
+ * captured as a spark (v2 P10/E2 改道：不写 hippomemo，由 Agent / 用户
+ * 判断是否值得沉淀为记忆）。
  *
  * Pure heuristics — no LLM — keep the cost at zero per message. The
  * LLM-backed version (semantic preference extraction) is Phase 6.5.
@@ -163,34 +163,35 @@ export function extractPreferences(text: string): PreferenceCandidate[] {
 }
 
 /**
- * Compose a HippoMemo-style preference record from a candidate.
+ * Compose a spark-capture input from a candidate (v2 P10/E2 改道：不再直写
+ * hippomemo——挖到偏好候选只产出火花；是否沉淀为记忆，由 Agent / 用户判断）。
  * Title is short, content holds the source phrase for traceability.
  */
-export interface HippoPreferenceInput {
-  kind: 'preference'
+export interface ValenceSparkInput {
   title: string
   content: string
   tags: string[]
-  scope: 'global' | 'workspace' | 'project'
+  scope: 'project' | 'global'
   workspacePath: string | null
-  globalProven: boolean
-  importance: number
+  sourceSessionId: string
+  sourceAgentId: string | null
+  sourceTurn: number | null
 }
 
-export function candidateToHippoPreference(
+export function candidateToSparkInput(
   candidate: PreferenceCandidate,
   workspacePath: string | null = null,
-): HippoPreferenceInput {
+): ValenceSparkInput {
   const verbLabel = candidate.kind === 'do-not' ? "Don't" : candidate.kind === 'always' ? 'Always' : 'Never'
   return {
-    kind: 'preference',
-    title: verbLabel + ' ' + candidate.target,
+    title: '用户偏好：' + verbLabel + ' ' + candidate.target,
     content: candidate.source,
     tags: ['preference', 'valence-mined', candidate.kind],
-    scope: 'global',  // preference crystallizes to global (user-level) by default
+    scope: 'project', // 是否跨工作区成立交由后续判断（不再自动升 global）
     workspacePath,
-    globalProven: false,  // not yet seen cross-workspace
-    importance: 0.7,  // mined preferences start strong
+    sourceSessionId: 'valence-mining',
+    sourceAgentId: null,
+    sourceTurn: null,
   }
 }
 

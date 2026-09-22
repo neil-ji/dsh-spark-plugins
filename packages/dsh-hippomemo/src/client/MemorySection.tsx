@@ -685,11 +685,6 @@ function MemoryListPanel({ t, api, detailId, onDetail, embedded = false, kindPre
                 )}
                 trailing={(
                   <>
-                    {record.sourceSparkId !== undefined && record.sourceSparkId !== null && record.sourceSparkId.length > 0 ? (
-                      <span className='hippomemo-row-spark' title={t('sourceSparkHint')}>
-                        <IconBranch size={14} />
-                      </span>
-                    ) : null}
                     <Button size='sm' variant='ghost' title={t('edit')} aria-label={t('edit')}
                       className='hippomemo-icon-btn'
                       onClick={() => { onDetail(record.id); }}
@@ -806,7 +801,6 @@ function MemoryDetailModal({ api, t, id, refreshKey, onBack, onEdit, onDeleted }
       onDeleted(record.id);
     } finally { setDetailAction(undefined); }
   };
-  const hasSpark = record.sourceSparkId !== undefined && record.sourceSparkId !== null && record.sourceSparkId.length > 0;
   return (
     <Modal
       open={true} onClose={onBack}
@@ -861,17 +855,6 @@ function MemoryDetailModal({ api, t, id, refreshKey, onBack, onEdit, onDeleted }
         <div className='hippomemo-fact'><dt>{t('importanceLabel')}</dt><dd>{importanceText(t, record.importance)}</dd></div>
         <div className='hippomemo-fact'><dt>{t('revisionLabel')}</dt><dd>{record.revision}</dd></div>
         <div className='hippomemo-fact'><dt>{t('sourceSession')}</dt><dd>{record.sourceSessionId}</dd></div>
-        {hasSpark ? (
-          <div className='hippomemo-fact hippomemo-fact-spark'>
-            <dt>{t('sourceSpark')}</dt>
-            <dd>
-              <Pill className='hippomemo-source-spark-pill' title={t('sourceSparkHint')}>
-                <IconBranch size={12} /> {t('sourceSparkBadge')}: 
-                <code className='hippomemo-source-spark-id'>{(record.sourceSparkId ?? '').slice(0, 8)}</code>
-              </Pill>
-            </dd>
-          </div>
-        ) : null}
         <div className='hippomemo-fact'><dt>{t('createdAt')}</dt><dd>{formatDate(record.createdAt)}</dd></div>
         <div className='hippomemo-fact'><dt>{t('updatedAt')}</dt><dd>{formatDate(record.updatedAt)}</dd></div>
         {/* 计数带单位、没有日期就不写分隔符：原先恒出「0 · —」，用户读到的是
@@ -887,29 +870,13 @@ function MemoryDetailModal({ api, t, id, refreshKey, onBack, onEdit, onDeleted }
       </dl>
       <div className='hippomemo-lineage'>
         <h4 className='hippomemo-lineage-title'><IconBranch size={14} /> {t('modalLineage')}</h4>
-        {hasSpark ? (
-          <div className='hippomemo-lineage-row'>
-            <Pill className='hippomemo-lineage-node hippomemo-lineage-spark'>
-              {t('modalLineageSpark', { id: (record.sourceSparkId ?? '').slice(0, 8) })}
-            </Pill>
-            <span className='hippomemo-lineage-arrow'>──结晶──▶</span>
-            <Pill className='hippomemo-lineage-node hippomemo-lineage-crystal'>
-              {t('modalLineageCrystallize', { kind: record.kind, importance: importanceText(t, record.importance) })}
-            </Pill>
-            <span className='hippomemo-lineage-arrow'>──▶</span>
-            <Pill className='hippomemo-lineage-node hippomemo-lineage-hippo'>
-              {t('modalLineageMemory', { id: record.id.slice(0, 8) })}
-            </Pill>
-          </div>
-        ) : (
-          <div className='hippomemo-lineage-row'>
-            <Pill className='hippomemo-lineage-node hippomemo-lineage-crystal'>{t('modalLineageDirect')}</Pill>
-            <span className='hippomemo-lineage-arrow'>──▶</span>
-            <Pill className='hippomemo-lineage-node hippomemo-lineage-hippo'>
-              {t('modalLineageMemory', { id: record.id.slice(0, 8) })}
-            </Pill>
-          </div>
-        )}
+        <div className='hippomemo-lineage-row'>
+          <Pill className='hippomemo-lineage-node hippomemo-lineage-crystal'>{t('modalLineageDirect')}</Pill>
+          <span className='hippomemo-lineage-arrow'>──▶</span>
+          <Pill className='hippomemo-lineage-node hippomemo-lineage-hippo'>
+            {t('modalLineageMemory', { id: record.id.slice(0, 8) })}
+          </Pill>
+        </div>
       </div>
       {related.length > 0 ? (
         <div className='hippomemo-related'>

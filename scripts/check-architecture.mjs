@@ -649,7 +649,7 @@ export function findDomainVocabularyDrift(root) {
  */
 const CROSS_PLUGIN_RULES = [
   { pkg: 'packages/dsh-script', forbidden: [['ctx.spark', '火花服务'], ['ctx.memory', '记忆服务'], ["'dsh-spark'", '火花包'], ["'dsh-hippomemo'", '记忆包']] },
-  { pkg: 'packages/dsh-spark', forbidden: [['ctx.script', '脚本服务'], ["'dsh-script'", '脚本包'], ["'dsh-hippomemo'", '记忆包']] },
+  { pkg: 'packages/dsh-spark', forbidden: [['ctx.script', '脚本服务'], ['ctx.memory', '记忆服务'], ["'dsh-script'", '脚本包'], ["'dsh-hippomemo'", '记忆包']] },
   { pkg: 'packages/dsh-hippomemo', forbidden: [['ctx.script', '脚本服务'], ["'dsh-script'", '脚本包'], ["'dsh-spark'", '火花包']] },
 ]
 export function findCrossPluginRefs(root) {
@@ -666,6 +666,57 @@ export function findCrossPluginRefs(root) {
           code: 'cross-plugin-refs',
           detail: `${rel} 出现 ${label} 引用（\`${needle}\`）—— 跨插件只共用词汇，不共用运行时通道（docs/SCRIPT-LIBRARY-SPEC.md INV-1）`,
         })
+      }
+    }
+  }
+  return { violations, files }
+}
+
+/**
+ * 火花 v2 朴素文案（docs/spark-v2-design-2026-09-21.md §4.7 / AC-2）。
+ *
+ * 「收件箱 / 待处理 / 结晶」这批 v1 命名会把火花重新写成「记忆的进料口」。
+ * 用户可见的名词必须是通用词，隐喻不得进入契约与 locale —— 所以这条是
+ * **grep 闸门**而不是文档约定：违禁词出现在非注释源码里即失败。
+ *
+ * @param {string} root
+ */
+const SPARK_WORDING_SCOPES = [
+  'packages/dsh-spark/src',
+  'packages/dsh-spark-wire/src',
+  'packages/dsh-spark-dock/src/client/spark',
+  'packages/dsh-hippomemo/src/client',
+]
+const SPARK_WORDING_BANNED = [
+  [/crystalliz/i, 'crystallize 系命名（v1 结晶通道已删）'],
+  [/已转为记忆/, '「已转为记忆」（v1 结晶文案）'],
+  [/waiting for triage/, '队列语 waiting for triage'],
+  [/promote it with/, '队列语 promote it with'],
+  [/已丢弃/, '「已丢弃」（v2 P11：dropped 已并入墓碑）'],
+  [/待处理/, '「待处理」（收件箱队列语）'],
+]
+// 迁移代码必须能指认 v1/v2 的**旧数据字面量**（`'crystallized'` / `record.crystallized`），
+// 这不是用户可见命名而是数据兼容；逐行放行这三类引用，其余一律算违禁。
+const LEGACY_DATA_REF = /('crystallized'|-\.crystallized|\.crystallized\b|crystallized:)/
+
+export function findSparkLegacyWording(root) {
+  const violations = []
+  let files = 0
+  for (const scope of SPARK_WORDING_SCOPES) {
+    for (const file of walkSource(join(root, scope))) {
+      files += 1
+      const source = stripComments(readFileSync(file, 'utf8'))
+      const rel = posix(relative(root, file))
+      for (const line of source.split('\n')) {
+        for (const [pattern, label] of SPARK_WORDING_BANNED) {
+          if (!pattern.test(line)) continue
+          if (pattern.source.includes('crystalliz') && LEGACY_DATA_REF.test(line)) continue
+          violations.push({
+            code: 'spark-wording',
+            detail: `${rel} 出现违禁词：${label} —— 用户可见名词一律通用词（spark-v2-design §4.7 / P16）`,
+          })
+          break
+        }
       }
     }
   }
@@ -801,7 +852,7 @@ export function findPackagingGaps(root) {
 /* ──────────────────────────── CLI ──────────────────────────── */
 
 function parseArgs(argv) {
-  const options = { only: ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus', 'esmrequire', 'domainvocab', 'crossplugin', 'ratemetric', 'packaging'], json: false, strictLocations: false }
+  const options = { only: ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus', 'esmrequire', 'domainvocab', 'crossplugin', 'sparkwording', 'ratemetric', 'packaging'], json: false, strictLocations: false }
   for (const arg of argv) {
     if (arg === '--json') options.json = true
     else if (arg === '--strict-locations') options.strictLocations = true
@@ -811,8 +862,8 @@ function parseArgs(argv) {
 }
 
 export function runChecks(root, options = {}) {
-  const only = options.only ?? ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus', 'esmrequire', 'domainvocab', 'crossplugin', 'ratemetric', 'packaging']
-  const report = { orphans: null, boundaries: null, contracts: null, injects: null, products: null, windowbus: null, esmrequire: null, domainvocab: null, crossplugin: null, ratemetric: null, packaging: null, failures: 0, warnings: 0 }
+  const only = options.only ?? ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus', 'esmrequire', 'domainvocab', 'crossplugin', 'sparkwording', 'ratemetric', 'packaging']
+  const report = { orphans: null, boundaries: null, contracts: null, injects: null, products: null, windowbus: null, esmrequire: null, domainvocab: null, crossplugin: null, sparkwording: null, ratemetric: null, packaging: null, failures: 0, warnings: 0 }
   if (only.includes('orphans')) {
     const result = findOrphanPackages(root)
     report.orphans = result
@@ -863,6 +914,11 @@ export function runChecks(root, options = {}) {
     report.crossplugin = result
     report.failures += result.violations.length
   }
+  if (only.includes('sparkwording')) {
+    const result = findSparkLegacyWording(root)
+    report.sparkwording = result
+    report.failures += result.violations.length
+  }
   if (only.includes('ratemetric')) {
     const result = findRateDivisionSites(root)
     report.ratemetric = result
@@ -884,7 +940,7 @@ function main(argv) {
     process.exitCode = report.failures > 0 ? 1 : 0
     return
   }
-  console.log('══ 架构闸门（孤包 / 边界 / 契约 / 注入面 / 单产物 / 页内总线 / ESM 裸 require / 域词汇 / 跨插件 / 口径单源 / 打包入口） ══')
+  console.log('══ 架构闸门（孤包 / 边界 / 契约 / 注入面 / 单产物 / 页内总线 / ESM 裸 require / 域词汇 / 跨插件 / 火花朴素文案 / 口径单源 / 打包入口） ══')
   if (report.orphans !== null) {
     const { orphans, total, closureSize } = report.orphans
     if (orphans.length === 0) console.log(`  ok    workspace 孤包        0 个（${total} 个包全在 registry 闭包内，闭包 ${closureSize} 个）`)
@@ -933,6 +989,11 @@ function main(argv) {
   if (report.crossplugin !== null) {
     const { violations, files } = report.crossplugin
     if (violations.length === 0) console.log(`  ok    跨插件零引用        0 处（扫描 ${files} 个源文件：脚本/火花/记忆互不引用）`)
+    for (const violation of violations) console.log(`  FAIL  ${violation.code.padEnd(20)} ${violation.detail}`)
+  }
+  if (report.sparkwording !== null) {
+    const { violations, files } = report.sparkwording
+    if (violations.length === 0) console.log(`  ok    火花朴素文案        0 处违禁词（扫描 ${files} 个源文件，v2 P16）`)
     for (const violation of violations) console.log(`  FAIL  ${violation.code.padEnd(20)} ${violation.detail}`)
   }
   if (report.ratemetric !== null) {

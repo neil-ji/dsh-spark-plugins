@@ -32,8 +32,6 @@ export function startHippomemoAnnouncements(t: HippomemoAnnounceTranslate): () =
       publishAnnouncement({ mood: 'happy', text: t('announcePut'), src: 'HippoMemo · put' })
     } else if (event.operation === 'remove') {
       publishAnnouncement({ mood: 'alert', text: t('announceRemove'), src: 'HippoMemo · remove' })
-    } else if (event.operation === 'crystallize') {
-      publishAnnouncement({ mood: 'cheer', text: t('announceCrystallize'), src: 'HippoMemo · crystallize' })
     }
   })
 }

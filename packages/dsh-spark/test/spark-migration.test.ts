@@ -3,7 +3,7 @@
  *
  * 背景：真实环境实测丢过 2 条火花 —— 备份快照 4 条，重写后只剩 2 条，且幸存记录的
  * updatedAt 停在更早的时间，说明某个写入者手里的快照早于另外两条的创建时间。
- * 成因有两处：① crystallize 的 read→writeAll 不在同一个临界区；② 跨进程全量重写
+ * 成因有两处：① 旧 crystallize 的 read→writeAll 不在同一个临界区；② 跨进程全量重写
  * 用陈旧快照覆盖。这里把两处都变成可断言的失败模式。
  */
 import test from 'node:test'
@@ -28,7 +28,7 @@ function makeRecord(overrides: Partial<SparkView> = {}): SparkView {
     content: overrides.content ?? 'c',
     scope: overrides.scope ?? 'project',
     workspacePath: null,
-    inboxState: overrides.inboxState ?? 'pending',
+    status: overrides.status ?? 'active',
     tags: [],
     sourceSessionId: 'sess',
     sourceAgentId: null,
@@ -37,30 +37,42 @@ function makeRecord(overrides: Partial<SparkView> = {}): SparkView {
     updatedAt: overrides.updatedAt ?? NOW,
     stateChangedAt: overrides.stateChangedAt ?? null,
     deletedAt: overrides.deletedAt ?? null,
-    crystallized: overrides.crystallized ?? null,
   }
 }
 
-test('migrateSparkRecord: active + no crystallization -> pending', () => {
+test('migrateSparkRecord: v1 active -> status=active', () => {
   const out = migrateSparkRecord({ id: 'a', status: 'active', crystallized: null, updatedAt: 5, resolvedAt: null })!
-  assert.equal(out.inboxState, 'pending')
+  assert.equal(out.status, 'active')
   assert.equal(out.stateChangedAt, 5)
   assert.equal(out.deletedAt, null)
-  assert.equal('status' in out, false, 'legacy status must be dropped')
+  assert.equal('inboxState' in out, false, 'v2 inboxState must be dropped')
+  assert.equal('crystallized' in out, false)
   assert.equal('resolvedAt' in out, false)
 })
 
-test('migrateSparkRecord: active + crystallized -> crystallized; archived -> archived', () => {
+test('migrateSparkRecord: v1 active+crystallized -> archived; archived -> archived', () => {
   const crystal = migrateSparkRecord({ id: 'b', status: 'active', crystallized: { hippoId: 'm', kind: 'insight', at: 1 }, updatedAt: 7, resolvedAt: null })!
-  assert.equal(crystal.inboxState, 'crystallized')
+  assert.equal(crystal.status, 'archived')
   const archived = migrateSparkRecord({ id: 'c', status: 'archived', crystallized: null, updatedAt: 9, resolvedAt: 42 })!
-  assert.equal(archived.inboxState, 'archived')
+  assert.equal(archived.status, 'archived')
   assert.equal(archived.stateChangedAt, 42, 'resolvedAt wins as the state-change timestamp')
 })
 
-test('migrateSparkRecord: idempotent on an already-v2 record, null on junk', () => {
-  const v2 = makeRecord({ stateChangedAt: 3 })
-  assert.deepEqual(migrateSparkRecord(v2), v2)
+test('migrateSparkRecord: v2 pending -> active; dropped -> tombstone; crystallized -> archived', () => {
+  const pending = migrateSparkRecord({ id: 'd', inboxState: 'pending', updatedAt: 1 })!
+  assert.equal(pending.status, 'active')
+  assert.equal(pending.deletedAt, null)
+  const dropped = migrateSparkRecord({ id: 'e', inboxState: 'dropped', updatedAt: 1 }, 123)!
+  assert.equal(dropped.status, 'active')
+  assert.equal(dropped.deletedAt, 123, 'dropped folds into a recoverable tombstone')
+  const crystal = migrateSparkRecord({ id: 'f', inboxState: 'crystallized', updatedAt: 1 })!
+  assert.equal(crystal.status, 'archived')
+  assert.equal('crystallized' in crystal, false)
+})
+
+test('migrateSparkRecord: idempotent on an already-v3 record, null on junk', () => {
+  const v3 = makeRecord({ stateChangedAt: 3 })
+  assert.deepEqual(migrateSparkRecord(v3), v3)
   assert.equal(migrateSparkRecord(null), null)
   assert.equal(migrateSparkRecord({ title: 'no id' }), null)
 })
@@ -75,9 +87,9 @@ test('ensureVersion: upgrades a legacy file exactly once (idempotent)', async (t
   const storage = new JsonlSparkStorage(file)
   assert.equal(await storage.ensureVersion(), SPARK_STORE_VERSION)
   const afterFirst = await readFile(file, 'utf8')
-  assert.match(afterFirst, /^\{"__sparkStore":2\}/)
+  assert.match(afterFirst, /^\{"__sparkStore":3\}/)
   const migrated = (await storage.readAll())[0]!
-  assert.equal(migrated.inboxState, 'archived')
+  assert.equal(migrated.status, 'archived')
   assert.equal(migrated.stateChangedAt, NOW + 1)
 
   assert.equal(await storage.ensureVersion(), SPARK_STORE_VERSION)

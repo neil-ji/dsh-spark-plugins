@@ -420,17 +420,16 @@ export async function run(): Promise<{ checks: Check[] }> {
     check('spark: 空 title 也被拒（schema min(1)）', blank.ok === false && blank.error?.code === 'BAD_REQUEST', JSON.stringify(blank).slice(0, 160))
     const valid = store.capture({ title: 'verify', content: 'ok', sourceSessionId: 'sess-preview' })
     check('spark: 合法入参写入成功', valid.ok === true && valid.value?.sourceSessionId === 'sess-preview', JSON.stringify(valid).slice(0, 160))
-    // 2026-09-14 收件箱化：`status` 已被 `inboxState` 取代，非法枚举值必须被拒。
-    const badPatch = store.patch(valid.value.id, { inboxState: 'nonsense' })
-    check('spark: 非法 inboxState 被拒（schema 枚举）', badPatch.ok === false && badPatch.error?.code === 'BAD_REQUEST', JSON.stringify(badPatch).slice(0, 160))
-    // 旧字段 `status` 不再有任何语义：被 schema 剥离，绝不能静默改状态（否则老客户端
-    // 会在不知情的情况下把火花挪走）。这条断言就是"破坏性变更已生效"的护栏。
-    const legacyPatch = store.patch(valid.value.id, { status: 'archived' })
-    check('spark: 旧 status 字段被剥离而不是静默归档', legacyPatch.ok === true && legacyPatch.value?.inboxState === 'pending', JSON.stringify(legacyPatch).slice(0, 200))
-    const dropped = store.patch(valid.value.id, { inboxState: 'dropped' })
-    check('spark: inboxState 变更被接受并打点 stateChangedAt', dropped.ok === true && dropped.value?.inboxState === 'dropped' && typeof dropped.value?.stateChangedAt === 'number', JSON.stringify(dropped).slice(0, 200))
+    // 2026-09-21 v2 P11：状态回退 `status: 'active' | 'archived'`，非法枚举值必须被拒。
+    const badPatch = store.patch(valid.value.id, { status: 'nonsense' })
+    check('spark: 非法 status 被拒（schema 枚举）', badPatch.ok === false && badPatch.error?.code === 'BAD_REQUEST', JSON.stringify(badPatch).slice(0, 160))
+    // v1 的 `inboxState` 已无语义：被 schema 剥离，绝不能静默改状态。
+    const legacyPatch = store.patch(valid.value.id, { inboxState: 'archived' })
+    check('spark: 旧 inboxState 字段被剥离而不是静默归档', legacyPatch.ok === true && legacyPatch.value?.status === 'active', JSON.stringify(legacyPatch).slice(0, 200))
+    const archived = store.patch(valid.value.id, { status: 'archived' })
+    check('spark: status 变更被接受并打点 stateChangedAt', archived.ok === true && archived.value?.status === 'archived' && typeof archived.value?.stateChangedAt === 'number', JSON.stringify(archived).slice(0, 200))
     const stats = store.stats()
-    check('spark: /sparks/stats 形状与真宿主同源', stats.ok === true && typeof stats.value?.pending === 'number' && typeof stats.value?.pendingProposals === 'number', JSON.stringify(stats).slice(0, 220))
+    check('spark: /sparks/stats 形状与真宿主同源（v2）', stats.ok === true && typeof stats.value?.active === 'number' && typeof stats.value?.pendingProposals === 'number' && stats.value?.crystallized === undefined, JSON.stringify(stats).slice(0, 220))
   }
 
   /* ── W4 保真：inject 门（真宿主拒绝未声明服务的访问）── */

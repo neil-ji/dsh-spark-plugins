@@ -25,17 +25,13 @@ export const PREFERENCE_REVIEW_DECAY = 100 - PREFERENCE_DECAY_FLOOR
 /**
  * Heuristic for "is this preference user-declared or auto-mined": if the
  * record carries an explicit `updatedBy: 'human'` author tag it is always
- * manual; otherwise we treat an agent-written record that survived at least
- * one recall as 'auto' (spark's valence miner is the producer). Defaults to
+ * manual; otherwise we treat an agent-written record as 'auto'. Defaults to
  * 'manual' when uncertain so the UI never over-claims an automatic origin.
  */
 export function detectPreferenceSource(record: MemoryRecord): 'auto' | 'manual' {
   if (record.updatedBy === 'human') return 'manual'
   if (record.updatedBy === 'agent') return 'auto'
-  // 'system' defaults: sourceSparkId present → auto crystallised from a spark
-  return record.sourceSparkId !== undefined && record.sourceSparkId !== null && record.sourceSparkId.length > 0
-    ? 'auto'
-    : 'manual'
+  return 'manual'
 }
 
 /**

@@ -55,8 +55,7 @@ test('detectPreferenceSource: human 恒为手敲，agent 恒为自动挖', () =>
   assert.equal(detectPreferenceSource(makeRecord({ updatedBy: 'agent' })), 'auto')
 })
 
-test('detectPreferenceSource: system 默认按「有没有 spark 出身」判，不确定时偏向 manual', () => {
-  assert.equal(detectPreferenceSource(makeRecord({ updatedBy: 'system', sourceSparkId: 'spark-1' })), 'auto')
+test('detectPreferenceSource: system 不确定时偏向 manual（v2 P10/E4：不再看 spark 出身）', () => {
   assert.equal(detectPreferenceSource(makeRecord({ updatedBy: 'system' })), 'manual')
 })
 

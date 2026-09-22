@@ -3,9 +3,9 @@
  *
  * 目标（用户提的实验假设）：同一个模型在"写某类命令"上的训练缺口，会表现为
  * **相似的命令、跨会话重复遇到同样的错误**。把这个信号采出来，沉淀成
- *   ① 声明侧：hippomemo 的 `kind='constraint'` + `modelIds`（按模型门控，且进化引擎
- *      对 modelIds 记录豁免 probation/consolidation，见 memory-evolve.ts）；
- *   ② 程序侧：可以再写成 spark script（triggers = 命令模式），让修法可执行。
+ *   ① 声明侧：一条火花（v2 P10/E3 改道：不再直写 hippomemo——INV-F1 零直连；
+ *      是否值得成为按模型约束，由 Agent / 用户判断）；
+ *   ② 程序侧：可以再写成脚本（triggers = 命令模式），让修法可执行。
  *
  * **噪声防线**（不做这层挖出来的就是垃圾）：非零退出 ≠ 失败。
  * grep 无匹配、test -f、--version 探测、被强杀进程（本项目 AGENTS.md 明确：
@@ -206,11 +206,6 @@ export function resultText(message: unknown): { isError: boolean; text: string }
   return { isError, text: parts.join('\n') }
 }
 
-/** 结构化最小面：hippomemo 不在时静默跳过沉淀（插件是 peer，不是硬依赖）。 */
-interface MemoryLike {
-  put(input: Record<string, unknown>): Promise<{ id: string }>
-}
-
 /**
  * 会话事件订阅体：tool/call 记在途调用，tool/result 判定失败或自愈并落聚合表。
  * 只做增量更新，不做整体重扫（事件是高频路径）。
@@ -278,28 +273,27 @@ function extractCallId(message: unknown): string | undefined {
 }
 
 /**
- * 把达到门槛的失败沉淀成 hippomemo 的按模型约束（modelIds 门控）。
- * 只在 hippomemo 可用时做；不可用就留着 promotedAt = null，下次再试。
+ * 把达到门槛的失败沉淀成一条火花（v2 P10/E3 改道：不再直写 hippomemo）。
+ * 失败即产出，产出即留痕（promotedAt = 时间戳）；失败只记日志，下次再试。
  */
 async function promoteEligible(ctx: Context, meta: SparkMeta, minSessions: number, now: number): Promise<void> {
   const eligible = eligibleForPromotion(meta, minSessions)
   if (eligible.length === 0) return
-  const memory = (ctx as unknown as { memory?: MemoryLike }).memory
-  if (memory === undefined) return
   for (const entry of eligible) {
     try {
-      await memory.put({
-        kind: 'constraint',
+      await ctx.spark.capture({
         title: '命令坑（' + entry.modelKey + '）：' + entry.cmdPattern,
         content: 'Cross-session repeated failure for this model.'
           + ' command pattern: ' + entry.cmdPattern
           + ' / error signature: ' + entry.errSig
           + ' / seen in ' + String(entry.sessions.length) + ' sessions.'
-          + ' Per-model error notebook entry, mined automatically from tool results.',
+          + ' Mined automatically from tool results.',
         tags: ['command-pitfall', 'auto-mined'],
         scope: 'global',
-        modelIds: [entry.modelKey],
-        importance: 0.6,
+        workspacePath: null,
+        sourceSessionId: 'command-mining',
+        sourceAgentId: null,
+        sourceTurn: null,
       })
       await ctx.spark.updateMeta(current => {
         const key = failureKey(entry.modelKey, entry.cmdPattern, entry.errSig)
@@ -311,7 +305,7 @@ async function promoteEligible(ctx: Context, meta: SparkMeta, minSessions: numbe
         }
       })
     } catch (error) {
-      ctx.logger?.warn?.('spark-inbox: promote command pitfall failed: ' + String(error))
+      ctx.logger?.warn?.('spark-inbox: capture command pitfall failed: ' + String(error))
     }
   }
 }

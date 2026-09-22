@@ -300,7 +300,7 @@ try {
     })()`)
     check('气泡经 mux stream 到达（产品已无 SSE）', bubble !== null, JSON.stringify(bubble))
     if (bubble !== null) {
-      check('气泡文案与 a11y', bubble.text.includes('捕获了新火花') && bubble.role === 'status' && bubble.live === 'polite', JSON.stringify(bubble))
+      check('气泡文案与 a11y', bubble.text.includes('记下了新想法') && bubble.role === 'status' && bubble.live === 'polite', JSON.stringify(bubble))
     }
 
     // 2) 反向证明：SSE 端点确实不存在了（404 / 非 event-stream）
@@ -332,8 +332,9 @@ try {
     check(
       'GET /sparks/stats 返回收件箱计数（与 /sparks 同源）',
       statsProbe?.ok === true && statsValue !== undefined
-        && typeof statsValue.pending === 'number' && typeof statsValue.dropped === 'number'
-        && typeof statsValue.deleted === 'number' && typeof statsValue.pendingProposals === 'number',
+        && typeof statsValue.active === 'number' && typeof statsValue.archived === 'number'
+        && typeof statsValue.deleted === 'number' && typeof statsValue.pendingProposals === 'number'
+        && statsValue.crystallized === undefined && statsValue.dropped === undefined,
       JSON.stringify(statsProbe).slice(0, 220),
     )
     // 3b-2) 关联图谱（2026-09 补齐 Graph 子页）：契约与图算法不变量。
@@ -345,8 +346,8 @@ try {
     const graphEdges = Array.isArray(graphValue?.edges) ? graphValue.edges : []
     const nodeIds = new Set(graphNodes.map((n) => n.id))
     const endpointsOk = graphEdges.every((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
-    const idsOk = graphNodes.every((n) => n.kind === 'memory' ? n.id.startsWith('memory:') : n.id.startsWith('spark:'))
-    const kindsOk = graphEdges.every((e) => ['crystallized', 'tag', 'proposal'].includes(e.kind))
+    const idsOk = graphNodes.every((n) => n.id.startsWith('spark:'))
+    const kindsOk = graphEdges.every((e) => ['tag', 'proposal'].includes(e.kind))
     const degreeOk = graphNodes.every((n) => {
       const deg = graphEdges.filter((e) => e.source === n.id || e.target === n.id).length
       return n.degree === deg
@@ -401,26 +402,24 @@ try {
     check(
       'Graph 子页渲染关联图（SVG 节点/边/图例在场，共享标签产生边）',
       graphTab !== null && graphDom.hasSvg === true && graphDom.nodes > 0
-        && graphDom.edges > 0 && graphDom.legend >= 6,
+        && graphDom.edges > 0 && graphDom.legend >= 4,
       JSON.stringify(graphDom),
     )
 
     // 断言放在**面板文本**上而不是某个 CSS 选择器上：行内的动作钮与筛选位同类名，
     // 按类名取会取错（第一版就是这么误判的）。
-    // 2026-09 词表更新：筛选位改 SegmentedControl，且「结晶」→「转为记忆」（用户裁决
-    // 「结晶」不够直白）；「已删除」由开关并入第 5 个互斥位。
+    // 2026-09-21 v2 词表（P16 朴素命名）：筛选位 = 活跃 / 已归档 / 已删除（互斥位）。
     const inboxText = String(pane.text ?? '')
     check(
-      '收件箱筛选位可见（待处理/已转为记忆/已归档/已丢弃）',
-      ['待处理', '已转为记忆', '已归档', '已丢弃'].every((label) => inboxText.includes(label)),
+      '灵感筛选位可见（活跃/已归档/已删除）',
+      ['活跃', '已归档', '已删除'].every((label) => inboxText.includes(label)),
       inboxText.slice(0, 160),
     )
-    // 破坏性变更的可观测证据：旧 `status` 参数被忽略（返回全量），新 `inboxState` 才过滤。
-    // 注意**不要**断言 archived 子集为 0：验收轮自己会归档火花，沙箱数据是可变的
-    // （acc-20260917 的 QA 轮归档了 1 条，这条断言当轮就翻红 —— 断言要表达不变量，不是数据巧合）。
+    // 破坏性变更的可观测证据（v2 P11）：旧 `inboxState` 参数被忽略（返回全量），新 `status` 才过滤。
+    // 注意**不要**断言 archived 子集为 0：沙箱数据是可变的 —— 断言要表达不变量，不是数据巧合。
     const legacyFilter = await evalJs(`Promise.all([
-      fetch('/sparks?status=archived&limit=200').then((r) => r.json()),
       fetch('/sparks?inboxState=archived&limit=200').then((r) => r.json()),
+      fetch('/sparks?status=archived&limit=200').then((r) => r.json()),
       fetch('/sparks?limit=200').then((r) => r.json()),
     ]).then(([legacy, modern, all]) => ({
       legacy: legacy.value?.length ?? -1,
@@ -428,7 +427,7 @@ try {
       all: all.value?.length ?? -1,
     }))`)
     check(
-      '旧 status 查询参数已失效（status= 被忽略返回全量，只有 inboxState= 会过滤）',
+      '旧 inboxState 查询参数已失效（inboxState= 被忽略返回全量，只有 status= 会过滤）',
       legacyFilter?.legacy === legacyFilter?.all && legacyFilter?.modern >= 0 && legacyFilter?.modern < legacyFilter?.all,
       JSON.stringify(legacyFilter),
     )
@@ -887,7 +886,7 @@ try {
   })()`)
   check(
     'PCQA-014 空输入时禁用态给出原因文案（且与按钮 aria 关联）',
-    capture !== null && capture.disabled === true && capture.hint.includes('输入内容后可捕获'),
+    capture !== null && capture.disabled === true && capture.hint.includes('输入内容后可记录'),
     JSON.stringify(capture),
   )
 

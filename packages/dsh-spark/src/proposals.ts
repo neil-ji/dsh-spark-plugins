@@ -130,10 +130,10 @@ export function generateProposals(
   now: number = Date.now(),
 ): Omit<ProposalView, 'id' | 'status' | 'createdAt' | 'resolvedAt'>[] {
   const out: Omit<ProposalView, 'id' | 'status' | 'createdAt' | 'resolvedAt'>[] = []
-  // 候选 = 库里还"活着"的火花：pending（待处理）与 crystallized（已沉淀但仍可关联）。
-  // archived / dropped / 墓碑都不参与涌现（archived 是用户主动收起，dropped 是判定无价值）。
+  // 候选 = 库里还"活着"的火花：active（v2 P11：状态只有 active|archived）。
+  // archived / 墓碑都不参与涌现（archived 是用户主动收起）。
   const candidates = sparks
-    .filter(s => s.deletedAt === null && (s.inboxState === 'pending' || s.inboxState === 'crystallized'))
+    .filter(s => s.deletedAt === null && s.status === 'active')
     .slice(0, opts.candidateLimit)
 
   // link: pairs with high title-token Jaccard
@@ -163,45 +163,21 @@ export function generateProposals(
     }
   }
 
-  // prune: stale sparks worth physically removing (purge) — two flavours:
-  //   - pending + 未结晶 + 长期未触碰 → 已被遗忘，可以物理清除；
-  //   - dropped + 超过 droppedPruneDays 天未触碰 → 用户已判定无价值，
-  //     留在库里只会占空间；给一个更短的清理窗口，让用户主动决定清理。
-  // archived 不参与（用户主动收起，不该追问）；crystallized 不参与（已结晶有长期价值）。
+  // prune: 活跃火花长期未触碰 → 已被遗忘，可以物理清除（purge）。
+  // archived 不参与（用户主动收起，不该追问）。
   const pruneStaleCutoff = now - opts.pruneStaleDays * 86_400_000
-  const droppedPruneDays = Math.max(7, Math.floor(opts.pruneStaleDays / 2))
-  const droppedPruneCutoff = now - droppedPruneDays * 86_400_000
-
-  // 2026-09-16：之前「candidates」过滤掉了 inboxState !== 'pending' && !== 'crystallized'
-  // 的所有火花，导致 dropped 永远进不了涌现。事实上 dropped 是用户**已经判定无价值**
-  // 的状态，让它继续躺在库里毫无意义 —— 应该出 prune 提议让用户一键物理清除。
-  const allLive = sparks.filter(s => s.deletedAt === null)
 
   for (const s of candidates) {
-    // 仅 pending + 未结晶 + 长期未触碰 = 真正被遗忘的活跃火花
-    if (s.updatedAt < pruneStaleCutoff && s.crystallized === null) {
+    if (s.updatedAt < pruneStaleCutoff) {
       const days = Math.floor((now - s.updatedAt) / 86_400_000)
       out.push({
         type: 'prune' as ProposalType,
         sparkIds: [s.id],
-        explanation: '活跃但 ' + days + ' 天未触碰，未结晶',
+        explanation: '活跃但 ' + days + ' 天未触碰',
         confidence: Math.min(1, days / (opts.pruneStaleDays * 2)),
         leverage: 'low' as ProposalLeverage,
       })
     }
-  }
-
-  for (const s of allLive) {
-    if (s.inboxState !== 'dropped') continue
-    if (s.updatedAt >= droppedPruneCutoff) continue
-    const days = Math.floor((now - s.updatedAt) / 86_400_000)
-    out.push({
-      type: 'prune' as ProposalType,
-      sparkIds: [s.id],
-      explanation: '已丢弃 ' + days + ' 天，无价值 —— 是否物理清除以释放存储？',
-      confidence: Math.min(1, days / (droppedPruneDays * 2)),
-      leverage: 'low' as ProposalLeverage,
-    })
   }
 
   return out

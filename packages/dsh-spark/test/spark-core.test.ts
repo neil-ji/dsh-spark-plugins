@@ -1,8 +1,8 @@
 /**
- * Phase 1+2 tests for dsh-spark core: JSONL storage round-trip, atomic rewrite,
- * patch and remove semantics, plus crystallize-input mapping. The SparkService
- * class itself is exercised via the storage interface here; cordis integration
- * is covered by 3999 dogfood.
+ * Phase 1 tests for dsh-spark core: JSONL storage round-trip, atomic rewrite,
+ * patch and remove semantics. The SparkService class itself is exercised via
+ * the storage interface here; cordis integration is covered by real-host checks.
+ * (v2 P10：spark→memory 映射已随解耦删除，相关测试一并移除。)
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -12,7 +12,7 @@ import { join } from 'node:path'
 import { JsonlSparkStorage } from '../src/storage.ts'
 import { JsonlProposalStorage } from '../src/proposal-storage.ts'
 import { ensureJsonlPath } from '../src/jsonl-path.ts'
-import { buildHippoInputFromSpark, deriveTitle } from '../src/types.ts'
+import { deriveTitle } from '../src/types.ts'
 import type { SparkView } from 'dsh-spark-wire'
 
 function makeRecord(overrides: Partial<SparkView> = {}): SparkView {
@@ -23,7 +23,7 @@ function makeRecord(overrides: Partial<SparkView> = {}): SparkView {
     content: overrides.content ?? 'I should remember this',
     scope: overrides.scope ?? 'project',
     workspacePath: overrides.workspacePath ?? '/tmp/proj',
-    inboxState: overrides.inboxState ?? 'pending',
+    status: overrides.status ?? 'active',
     tags: overrides.tags ?? ['design', 'idea'],
     sourceSessionId: overrides.sourceSessionId ?? 'sess-1',
     sourceAgentId: overrides.sourceAgentId ?? 'agent-1',
@@ -32,7 +32,6 @@ function makeRecord(overrides: Partial<SparkView> = {}): SparkView {
     updatedAt: overrides.updatedAt ?? now,
     stateChangedAt: overrides.stateChangedAt ?? null,
     deletedAt: overrides.deletedAt ?? null,
-    crystallized: overrides.crystallized ?? null,
   }
 }
 
@@ -49,34 +48,31 @@ async function withTmpStorage(): Promise<{ storage: JsonlSparkStorage; file: str
 
 // ----- storage tests -----
 
-test('append + readAll round-trips records verbatim (incl. crystallized)', async (t) => {
+test('append + readAll round-trips records verbatim (incl. status)', async (t) => {
   const { storage, cleanup } = await withTmpStorage()
   t.after(cleanup)
   const a = makeRecord({ id: 'a' })
-  const b = makeRecord({ id: 'b', crystallized: { hippoId: 'mem-1', kind: 'insight', at: 1 } })
+  const b = makeRecord({ id: 'b', status: 'archived' })
   await storage.append(a)
   await storage.append(b)
   const all = await storage.readAll()
   assert.equal(all.length, 2)
-  assert.equal(all[0]!.crystallized, null)
-  assert.deepEqual(all[1]!.crystallized, { hippoId: 'mem-1', kind: 'insight', at: 1 })
+  assert.equal(all[0]!.status, 'active')
+  assert.equal(all[1]!.status, 'archived')
 })
 
-test('writeAll replaces the entire store (used by the v1->v2 migration)', async (t) => {
+test('writeAll replaces the entire store (used by migrations)', async (t) => {
   const { storage, cleanup } = await withTmpStorage()
   t.after(cleanup)
-  const now = 1_700_000_000_000
   await storage.append(makeRecord({ id: 'a' }))
   await storage.append(makeRecord({ id: 'b' }))
   await storage.writeAll([
-    makeRecord({ id: 'a', crystallized: { hippoId: 'mem-1', kind: 'fact', at: now } }),
-    makeRecord({ id: 'b', crystallized: { hippoId: 'mem-2', kind: 'preference', at: now } }),
+    makeRecord({ id: 'a', status: 'archived' }),
+    makeRecord({ id: 'b' }),
   ])
   const all = await storage.readAll()
   assert.equal(all.length, 2)
-  for (const r of all) {
-    assert.notEqual(r.crystallized, null, r.id + ' should be crystallized')
-  }
+  assert.equal(all.find(r => r.id === 'a')!.status, 'archived')
 })
 
 // ----- EISDIR regression: the file path must never be created as a directory -----
@@ -132,61 +128,6 @@ test('a NON-empty directory at the JSONL path is refused, never destroyed', asyn
   // The read path goes through the same guard, so the UI gets the actionable
   // message instead of Node's bare `EISDIR: illegal operation on a directory`.
   await assert.rejects(() => new JsonlSparkStorage(file).readAll(), assertRefused)
-})
-
-// ----- buildHippoInputFromSpark (pure mapper) -----
-
-test('buildHippoInputFromSpark: project spark + default opts', () => {
-  const spark = makeRecord({ scope: 'project' })
-  const out = buildHippoInputFromSpark(spark, { kind: 'insight', importance: 0.5, globalProven: false })
-  assert.equal(out.kind, 'insight')
-  assert.equal(out.title, spark.title)
-  assert.equal(out.content, spark.content)
-  assert.deepEqual(out.tags, spark.tags)
-  assert.equal(out.scope, 'project')
-  assert.equal(out.workspacePath, spark.workspacePath)
-  assert.equal(out.importance, 0.5)
-  assert.equal(out.globalProven, false)
-  assert.equal(out.sourceSessionId, spark.sourceSessionId)
-  assert.equal(out.sourceAgentId, spark.sourceAgentId)
-})
-
-test('buildHippoInputFromSpark: session-bound spark maps to project scope', () => {
-  const spark = makeRecord({ scope: 'session' })
-  const out = buildHippoInputFromSpark(spark, { kind: 'fact', importance: 0.7, globalProven: false })
-  assert.equal(out.scope, 'project', 'session must fold to project in hippo')
-})
-
-test('buildHippoInputFromSpark: opts.scope=session folds to project', () => {
-  const spark = makeRecord({ scope: 'project' })
-  const out = buildHippoInputFromSpark(spark, { kind: 'preference', importance: 0.9, scope: 'session', globalProven: false })
-  assert.equal(out.scope, 'project')
-})
-
-test('buildHippoInputFromSpark: opts.scope=global passes through and sets globalProven', () => {
-  const spark = makeRecord({ scope: 'global' })
-  const out = buildHippoInputFromSpark(spark, { kind: 'decision', importance: 0.6, scope: 'global', globalProven: true })
-  assert.equal(out.scope, 'global')
-  assert.equal(out.globalProven, true)
-})
-
-test('buildHippoInputFromSpark: spark.scope=global without opts.scope -> global', () => {
-  const spark = makeRecord({ scope: 'global' })
-  const out = buildHippoInputFromSpark(spark, { kind: 'insight', importance: 0.5, globalProven: false })
-  assert.equal(out.scope, 'global')
-})
-
-test('buildHippoInputFromSpark: preserves sourceSessionId + agentId for traceability', () => {
-  const spark = makeRecord({ sourceSessionId: 'sess-X', sourceAgentId: 'agent-Y' })
-  const out = buildHippoInputFromSpark(spark, { kind: 'constraint', importance: 1, globalProven: false })
-  assert.equal(out.sourceSessionId, 'sess-X')
-  assert.equal(out.sourceAgentId, 'agent-Y')
-})
-
-test('buildHippoInputFromSpark: threads spark.id as the Phase 2 reverse link', () => {
-  const spark = makeRecord({ id: 'sp-123' })
-  const out = buildHippoInputFromSpark(spark, { kind: 'insight', importance: 0.5, globalProven: false })
-  assert.equal(out.sourceSparkId, 'sp-123', 'hippo record will carry sourceSparkId for UI reverse link')
 })
 
 // ----- deriveTitle sanity -----
@@ -253,13 +194,12 @@ test('patch updates fields, bumps updatedAt, and stamps stateChangedAt on a stat
   const { storage, cleanup } = await withTmpStorage()
   t.after(cleanup)
   await storage.append(makeRecord({ id: 'a', title: 'old' }))
-  const next = await storage.patch('a', { title: 'new', inboxState: 'archived' }, 1_700_000_000_999)
+  const next = await storage.patch('a', { title: 'new', status: 'archived' }, 1_700_000_000_999)
   assert.ok(next !== null)
   assert.equal(next.title, 'new')
-  assert.equal(next.inboxState, 'archived')
+  assert.equal(next.status, 'archived')
   assert.equal(next.updatedAt, 1_700_000_000_999)
   assert.equal(next.stateChangedAt, 1_700_000_000_999)
-  assert.equal(next.crystallized, null, 'patch should not touch crystallized')
   const all = await storage.readAll()
   assert.equal(all.length, 1)
   assert.equal(all[0]!.title, 'new')

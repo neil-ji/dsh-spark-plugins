@@ -3,13 +3,13 @@
  *
  * 锁的是三件容易悄悄腐坏的事：
  *  1. 裁剪判据必须**确定**（同输入同输出）—— 否则图会随渲染抖动；
- *  2. 三类边的语义边界（结晶谱系 / 标签亲和阈值 / 提议关联），
+ *  2. 两类边的语义边界（标签亲和阈值 / 提议关联），
  *     尤其「共享标签数没到阈值就不连」这条阈值语义；
- *  3. 墓碑与 dropped 不参与（判过死刑的记录不该出现在图里）。
+ *  3. 墓碑不参与（v2 P10/E5：图是纯火花域，无记忆节点；P11：无 dropped）。
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildSparkGraph, memoryNodeId, selectGraphSparks, sparkNodeId } from '../src/graph.ts'
+import { buildSparkGraph, selectGraphSparks, sparkNodeId } from '../src/graph.ts'
 import type { ProposalView, SparkView } from 'dsh-spark-wire'
 
 const NOW = 1_700_000_000_000
@@ -21,7 +21,7 @@ function spark(overrides: Partial<SparkView> = {}): SparkView {
     content: overrides.content ?? 'body',
     scope: overrides.scope ?? 'project',
     workspacePath: overrides.workspacePath ?? '/tmp/proj',
-    inboxState: overrides.inboxState ?? 'pending',
+    status: overrides.status ?? 'active',
     tags: overrides.tags ?? [],
     sourceSessionId: overrides.sourceSessionId ?? 'sess',
     sourceAgentId: overrides.sourceAgentId ?? null,
@@ -30,7 +30,6 @@ function spark(overrides: Partial<SparkView> = {}): SparkView {
     updatedAt: overrides.updatedAt ?? NOW,
     stateChangedAt: overrides.stateChangedAt ?? null,
     deletedAt: overrides.deletedAt ?? null,
-    crystallized: overrides.crystallized ?? null,
   }
 }
 
@@ -48,37 +47,28 @@ function proposal(overrides: Partial<ProposalView> = {}): ProposalView {
   }
 }
 
-test('selectGraphSparks 排除墓碑与 dropped，并按状态→更新时间排序截断', () => {
+test('selectGraphSparks 排除墓碑，并按状态→更新时间排序截断', () => {
   const sparks = [
-    spark({ id: 'arch', inboxState: 'archived', updatedAt: NOW + 500 }),
+    spark({ id: 'arch', status: 'archived', updatedAt: NOW + 500 }),
     spark({ id: 'dead', deletedAt: NOW }),
-    spark({ id: 'gone', inboxState: 'dropped' }),
-    spark({ id: 'new1', inboxState: 'pending', updatedAt: NOW + 10 }),
-    spark({ id: 'new2', inboxState: 'pending', updatedAt: NOW + 20 }),
-    spark({ id: 'cryst', inboxState: 'crystallized', updatedAt: NOW + 999 }),
+    spark({ id: 'new1', updatedAt: NOW + 10 }),
+    spark({ id: 'new2', updatedAt: NOW + 20 }),
   ]
   const { picked, truncated } = selectGraphSparks(sparks, 3)
-  assert.deepEqual(picked.map(s => s.id), ['new2', 'new1', 'cryst'], '活跃度优先，其次新近')
-  assert.equal(truncated, true)
+  assert.deepEqual(picked.map(s => s.id), ['new2', 'new1', 'arch'], '活跃度优先，其次新近')
+  assert.equal(truncated, false, '墓碑先被过滤，3 条活记录未超限')
 
   const again = selectGraphSparks(sparks, 3)
   assert.deepEqual(again.picked.map(s => s.id), picked.map(s => s.id), '判据确定（同输入同输出）')
 })
 
-test('结晶谱系：结晶火花带出 memory 节点与一条 crystallized 边', () => {
-  const graph = buildSparkGraph(
-    [spark({ id: 's1', crystallized: { hippoId: 'h1', kind: 'insight', at: NOW } })],
-    [],
-    { now: NOW },
-  )
-  assert.deepEqual(graph.nodes.map(n => n.id).sort(), [memoryNodeId('h1'), sparkNodeId('s1')].sort())
-  const memory = graph.nodes.find(n => n.kind === 'memory')!
-  assert.equal(memory.label, 'a spark', '记忆节点沿用火花标题（不额外查 hippo）')
-  assert.equal(memory.inboxState, null)
-  assert.equal(graph.edges.length, 1)
-  assert.equal(graph.edges[0]!.kind, 'crystallized')
-  assert.equal(graph.edges[0]!.weight, 1)
-  assert.equal(graph.nodes.find(n => n.id === sparkNodeId('s1'))!.degree, 1, '度由宿主算好')
+test('纯火花域：图里只有 spark 节点（v2 P10/E5 删除记忆节点与 crystallized 边）', () => {
+  const graph = buildSparkGraph([spark({ id: 's1' })], [], { now: NOW })
+  for (const node of graph.nodes) {
+    assert.equal(node.kind, 'spark')
+    assert.ok(node.id.startsWith('spark:'))
+  }
+  assert.ok(graph.edges.every(e => e.kind === 'tag' || e.kind === 'proposal'))
 })
 
 test('标签亲和：共享数达到阈值才连，权重=共享标签数', () => {

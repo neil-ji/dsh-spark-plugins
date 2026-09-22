@@ -2,10 +2,10 @@
  * Minimal sparks API subset for the dock (fetch wrapper over the spark host's
  * `/sparks` `/proposals` routes；脚本 API 随脚本沉淀库迁到 `dsh-script-client`）。
  *
- * 2026-09-14：收件箱化 —— 列表按 `inboxState` 过滤（取代旧的 status=active|archived），
- * 新增 `/sparks/stats`（计数）与 `/sparks/:id/restore`（从墓碑恢复）。
+ * 2026-09-21（v2 P11）：状态回退为 `status: 'active' | 'archived'`；
+ * 列表按 `status` 过滤，新增 `/sparks/stats`（计数）与 `/sparks/:id/restore`（从墓碑恢复）。
  */
-import type { SparkView, SparkCapture, SparkInboxState, SparkStats, SparkGraph, ProposalView, ProposalStatus } from 'dsh-spark-wire'
+import type { SparkView, SparkCapture, SparkStatus, SparkStats, SparkGraph, ProposalView, ProposalStatus } from 'dsh-spark-wire'
 
 interface Envelope { ok: boolean; value?: unknown; error?: { code: string; message: string } }
 
@@ -24,7 +24,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 const SOURCE = 'spark-dock'
 
 export interface SparkListQuery {
-  inboxState?: SparkInboxState
+  status?: SparkStatus
   includeDeleted?: boolean
   limit?: number
 }
@@ -38,18 +38,16 @@ export interface DockSparksApi {
   /** 关联图谱（节点/边口径全在宿主，客户端只渲染）。 */
   graph(limit?: number): Promise<SparkGraph>
   capture(input: { title: string; content: string; scope: 'project' | 'global'; tags: string[] }): Promise<SparkView>
-  setInboxState(id: string, inboxState: SparkInboxState): Promise<SparkView>
+  setStatus(id: string, status: SparkStatus): Promise<SparkView>
   archive(id: string): Promise<SparkView>
   /** 丢弃＝物理删除（不可恢复）；二次确认由 UI 的 Modal 负责。 */
   drop(id: string): Promise<{ removed: boolean }>
   restore(id: string): Promise<SparkView>
-  crystallize(id: string): Promise<unknown>
   listProposals(query?: { status?: ProposalStatus; limit?: number }): Promise<ProposalView[]>
   resolveProposal(id: string, status: 'accepted' | 'dismissed'): Promise<ProposalView>
   reflect(): Promise<unknown>
 }
 
-/** `inboxState: 'crystallized'` 只能通过 crystallize 端点到达（它带 hippo 链接），API 层不再暴露。 */
 function enc(id: string): string {
   return encodeURIComponent(id)
 }
@@ -58,7 +56,7 @@ export function createDockSparksApi(): DockSparksApi {
   return {
     async list(query = {}) {
       const params = new URLSearchParams()
-      if (query.inboxState !== undefined) params.set('inboxState', query.inboxState)
+      if (query.status !== undefined) params.set('status', query.status)
       if (query.includeDeleted === true) params.set('includeDeleted', 'true')
       if (query.limit !== undefined) params.set('limit', String(query.limit))
       const qs = params.toString()
@@ -78,14 +76,14 @@ export function createDockSparksApi(): DockSparksApi {
       }
       return request<SparkView>('/sparks', { method: 'POST', body: JSON.stringify(body) })
     },
-    async setInboxState(id, inboxState) {
+    async setStatus(id, status) {
       return request<SparkView>('/sparks/' + enc(id), {
-        method: 'PATCH', body: JSON.stringify({ inboxState }),
+        method: 'PATCH', body: JSON.stringify({ status }),
       })
     },
     async archive(id) {
       return request<SparkView>('/sparks/' + enc(id), {
-        method: 'PATCH', body: JSON.stringify({ inboxState: 'archived' }),
+        method: 'PATCH', body: JSON.stringify({ status: 'archived' }),
       })
     },
     async drop(id) {
@@ -94,9 +92,6 @@ export function createDockSparksApi(): DockSparksApi {
     },
     async restore(id) {
       return request<SparkView>('/sparks/' + enc(id) + '/restore', { method: 'POST', body: '{}' })
-    },
-    async crystallize(id) {
-      return request('/sparks/' + enc(id) + '/crystallize', { method: 'POST', body: '{}' })
     },
     async listProposals(query = {}) {
       const params = new URLSearchParams()

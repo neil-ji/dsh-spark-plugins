@@ -6,7 +6,7 @@ import assert from 'node:assert/strict'
 import {
   detectIntensity,
   extractPreferences,
-  candidateToHippoPreference,
+  candidateToSparkInput,
   decayImportance,
 } from '../src/valence.ts'
 
@@ -75,16 +75,14 @@ test('extractPreferences: empty → []', () => {
   assert.deepEqual(extractPreferences(''), [])
 })
 
-test('candidateToHippoPreference: maps kind to title prefix', () => {
+test('candidateToSparkInput: maps kind to title prefix (v2 P10/E2：产出火花，不写记忆)', () => {
   const c = { kind: 'do-not' as const, target: 'build', source: "don't touch the build" }
-  const out = candidateToHippoPreference(c)
-  assert.equal(out.kind, 'preference')
+  const out = candidateToSparkInput(c)
   assert.match(out.title, /Don't.*build/)
   assert.equal(out.content, c.source)
   assert.deepEqual(out.tags, ['preference', 'valence-mined', 'do-not'])
-  assert.equal(out.scope, 'global')
-  assert.equal(out.importance, 0.7)
-  assert.equal(out.globalProven, false)
+  assert.equal(out.scope, 'project', '不再自动升 global——是否值得沉淀交由后续判断')
+  assert.equal(out.sourceSessionId, 'valence-mining')
 })
 
 test('decayImportance: never drops below 40%', () => {

@@ -36,31 +36,30 @@ const SPARKS = [
   {
     id: 'spk-preview-harness', title: '零 dsh 组件预览可以只靠 embed 产物跑起来',
     content: '四个包的 lib/embed.cjs 都是自包含的，唯一外部依赖是 react；宿主那一半用假 ctx 补上就够了。',
-    scope: 'project', workspacePath: WORKSPACE, inboxState: 'pending', tags: ['preview', 'embed', 'architecture'],
+    scope: 'project', workspacePath: WORKSPACE, status: 'active', tags: ['preview', 'embed', 'architecture'],
     sourceSessionId: 'sess-preview-001', sourceAgentId: 'agent-main', sourceTurn: 6,
-    createdAt: now - 3 * HOUR, updatedAt: now - 40 * 60_000, stateChangedAt: now - 3 * HOUR, deletedAt: null, crystallized: null,
+    createdAt: now - 3 * HOUR, updatedAt: now - 40 * 60_000, stateChangedAt: now - 3 * HOUR, deletedAt: null,
   },
   {
     id: 'spk-dock-overlay', title: 'dock 的悬浮球位置与开合状态都落在 localStorage',
     content: 'POS_KEY/OPEN_KEY/ACTIVE_KEY 三个键；拖拽阈值 4px，松手吸附最近角，双击复位。',
-    scope: 'project', workspacePath: WORKSPACE, inboxState: 'pending', tags: ['dock', 'ui'],
+    scope: 'project', workspacePath: WORKSPACE, status: 'active', tags: ['dock', 'ui'],
     sourceSessionId: 'sess-preview-002', sourceAgentId: null, sourceTurn: 3,
-    createdAt: now - 8 * HOUR, updatedAt: now - 8 * HOUR, stateChangedAt: now - 8 * HOUR, deletedAt: null, crystallized: null,
+    createdAt: now - 8 * HOUR, updatedAt: now - 8 * HOUR, stateChangedAt: now - 8 * HOUR, deletedAt: null,
   },
   {
     id: 'spk-fake-transport', title: '预览的假 transport 走页面内对象，只有两处是真 HTTP',
     content: 'hippomemo 与 spark 的 client 本来就是 fetch 封装，所以数据源放在预览服务器上更保真。',
-    scope: 'global', workspacePath: null, inboxState: 'pending', tags: ['preview', 'fixture'],
+    scope: 'global', workspacePath: null, status: 'active', tags: ['preview', 'fixture'],
     sourceSessionId: 'sess-preview-001', sourceAgentId: 'agent-main', sourceTurn: 9,
-    createdAt: now - 2 * DAY, updatedAt: now - DAY, stateChangedAt: now - 2 * DAY, deletedAt: null, crystallized: null,
+    createdAt: now - 2 * DAY, updatedAt: now - DAY, stateChangedAt: now - 2 * DAY, deletedAt: null,
   },
   {
     id: 'spk-archived-probe', title: '（已归档）用探针插件验证宿主端 HMR',
     content: 'root: ["packages/dsh-spark/lib"] 窄根约 18s ready；整棵仓库要 75s。',
-    scope: 'project', workspacePath: WORKSPACE, inboxState: 'archived', tags: ['dev-harness'],
+    scope: 'project', workspacePath: WORKSPACE, status: 'archived', tags: ['dev-harness'],
     sourceSessionId: 'sess-preview-003', sourceAgentId: null, sourceTurn: 1,
     createdAt: now - 5 * DAY, updatedAt: now - 4 * DAY, stateChangedAt: now - 4 * DAY, deletedAt: null,
-    crystallized: { hippoId: 'mem-dsh-home-isolation', kind: 'decision', at: now - 4 * DAY },
   },
 ]
 
@@ -236,12 +235,12 @@ export function createSparkStore() {
 
     list(params) {
       if (fail()) return { ok: false, error }
-      const inboxState = params.get('inboxState')
+      const status = params.get('status')
       const includeDeleted = params.get('includeDeleted') === 'true'
       const limit = Number(params.get('limit') ?? 100)
       let items = scenario === 'empty' ? [] : sparks
       if (!includeDeleted) items = items.filter((item) => item.deletedAt === null)
-      if (inboxState !== null) items = items.filter((item) => item.inboxState === inboxState)
+      if (status !== null) items = items.filter((item) => item.status === status)
       return { ok: true, value: items.slice(0, limit) }
     },
 
@@ -249,19 +248,17 @@ export function createSparkStore() {
     stats() {
       if (fail()) return { ok: false, error }
       const live = sparks.filter((item) => item.deletedAt === null)
-      const count = (state) => live.filter((item) => item.inboxState === state).length
-      const pending = live.filter((item) => item.inboxState === 'pending')
+      const count = (state) => live.filter((item) => item.status === state).length
+      const active = live.filter((item) => item.status === 'active')
       const pendingProposals = PROPOSALS.filter((item) => item.status === 'pending').length
       return {
         ok: true,
         value: {
           total: live.length,
-          pending: count('pending'),
-          crystallized: count('crystallized'),
-          dropped: count('dropped'),
+          active: count('active'),
           archived: count('archived'),
           deleted: sparks.length - live.length,
-          oldestPendingAt: pending.length === 0 ? null : Math.min(...pending.map((item) => item.createdAt)),
+          oldestActiveAt: active.length === 0 ? null : Math.min(...active.map((item) => item.createdAt)),
           pendingProposals: scenario === 'empty' ? 0 : pendingProposals,
         },
       }
@@ -281,12 +278,12 @@ export function createSparkStore() {
         content: value.content,
         scope: value.scope,
         workspacePath: value.workspacePath,
-        inboxState: 'pending',
+        status: 'active',
         tags: [...value.tags],
         sourceSessionId: value.sourceSessionId,
         sourceAgentId: value.sourceAgentId,
         sourceTurn: value.sourceTurn,
-        createdAt: Date.now(), updatedAt: Date.now(), stateChangedAt: Date.now(), deletedAt: null, crystallized: null,
+        createdAt: Date.now(), updatedAt: Date.now(), stateChangedAt: Date.now(), deletedAt: null,
       }
       sparks = [created, ...sparks]
       return { ok: true, value: created }
@@ -300,7 +297,7 @@ export function createSparkStore() {
       let updated = null
       sparks = sparks.map((item) => {
         if (item.id !== id) return item
-        const stateChanged = fields.inboxState !== undefined && fields.inboxState !== item.inboxState
+        const stateChanged = fields.status !== undefined && fields.status !== item.status
         updated = {
           ...item,
           ...fields,
@@ -336,26 +333,6 @@ export function createSparkStore() {
       return removed ? { ok: true, value: { removed } } : { ok: false, error: { code: 'not-found', message: id } }
     },
 
-    crystallize(id) {
-      if (fail()) return { ok: false, error }
-      const target = sparks.find((item) => item.id === id)
-      if (target === undefined) return { ok: false, error: { code: 'not-found', message: id } }
-      // 真宿主的 crystallize 会就地改写记录（inboxState + crystallized 链接）。
-      const now = Date.now()
-      let updated = null
-      sparks = sparks.map((item) => {
-        if (item.id !== id) return item
-        updated = {
-          ...item,
-          inboxState: 'crystallized',
-          stateChangedAt: now,
-          updatedAt: now,
-          crystallized: { hippoId: 'mem-' + id, kind: 'insight', at: now },
-        }
-        return updated
-      })
-      return { ok: true, value: { spark: updated, record: { id: 'mem-' + id, kind: 'insight' } } }
-    },
 
     proposals(params) {
       if (fail()) return { ok: false, error }

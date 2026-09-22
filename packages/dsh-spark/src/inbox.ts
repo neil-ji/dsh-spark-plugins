@@ -117,10 +117,10 @@ export function apply(ctx: Context, config: SparkInboxConfig = {}): void {
       // 2026-09-16 改为：始终注入；renderInboxReminder 内部按 stats 分支
       //   渲染 head / hint，仅 0+0+空无 hint 时返回 undefined。
       const stats = await ctx.spark.stats(await pendingProposalCount(ctx))
-      const pending = (stats.pending > 0 && maxItems !== 0)
-        ? await ctx.spark.list({ inboxState: 'pending', limit: maxItems })
+      const active = (stats.active > 0 && maxItems !== 0)
+        ? await ctx.spark.list({ status: 'active', limit: maxItems })
         : []
-      const reminder = renderInboxReminder(stats, pending, maxChars)
+      const reminder = renderInboxReminder(stats, active, maxChars)
       if (reminder !== undefined) out.push(reminder)
 
       // D：当前模型的已知命令坑（默认关；没有记录时不注入）。
@@ -184,44 +184,42 @@ async function pendingProposalCount(ctx: Context): Promise<number> {
 }
 
 /**
- * 渲染收件箱提醒（纯函数，可测）。
+ * 渲染想法池通报（纯函数，可测）。
  *
  * 首行刻意与 hippomemo 的 "The following durable memories were retrieved…" 区分开，
- * 否则模型分不清"语义召回的记忆"和"待处理的状态通报"。
+ * 否则模型分不清"语义召回的记忆"和"火花池的状态通报"。
  *
  * @returns 注入消息；无法在预算内渲染出任何内容时返回 undefined（宁可不注入）。
  */
 export function renderInboxReminder(
   stats: SparkStats,
-  pending: readonly SparkView[],
+  active: readonly SparkView[],
   maxChars: number,
 ): UserMessage | undefined {
-  // 2026-09-16：head 按是否空调整措辞。空收件箱时不再报"0 pending sparks"，
-  // 那是噪音；改用"inbox is empty"+ 主动钩子。
   let head: string
   let hint: string
-  if (stats.pending > 0) {
-    head = 'Spark inbox (dsh-spark): ' + String(stats.pending) + ' pending spark'
-      + (stats.pending === 1 ? '' : 's')
+  if (stats.active > 0) {
+    head = 'Sparks (dsh-spark): ' + String(stats.active) + ' active spark'
+      + (stats.active === 1 ? '' : 's')
       + (stats.pendingProposals > 0 ? ', ' + String(stats.pendingProposals) + ' pending emergence proposal'
         + (stats.pendingProposals === 1 ? '' : 's') : '')
       + '.'
-    hint = 'Pending sparks are waiting for triage. If the current conversation has produced a conclusion or a concrete next step for one of them, promote it with spark_crystallize (need: spark id + kind). Otherwise leave them for the user to handle in the Spark panel (entry: the floating ball at the bottom-right). This is a status notice, not an instruction.'
+    hint = 'These are ideas from earlier sessions — related ones are background worth building on. If the current turn produced a new idea, propose it with spark_capture. This is a status notice, not an instruction.'
   } else if (stats.pendingProposals > 0) {
-    head = 'Spark inbox (dsh-spark): empty. ' + String(stats.pendingProposals) + ' pending emergence proposal'
+    head = 'Sparks (dsh-spark): no active sparks. ' + String(stats.pendingProposals) + ' pending emergence proposal'
       + (stats.pendingProposals === 1 ? '' : 's') + '.'
     hint = 'Emergence has surfaced ' + String(stats.pendingProposals) + ' pending proposal'
       + (stats.pendingProposals === 1 ? '' : 's')
       + '. If one of them matches something the user has now decided, call the corresponding resolve endpoint via the Spark panel — but only when the user has confirmed intent. This is a status notice, not an instruction.'
   } else {
     // 空 + 空：主动钩子（无 head 也能定位，仍用一行表明来源）
-    head = 'Spark inbox (dsh-spark): empty.'
-    hint = 'Spark inbox is empty. If the current turn produced a fleeting insight, an implicit assumption, a TODO that did not make it into the plan, or any "this might matter later" thought, capture it now with spark_capture(title, content, tags). Do not capture concrete actionable work — that goes through the regular task tool. This is the only hook that keeps the inbox from going empty between sessions.'
+    head = 'Sparks (dsh-spark): no active sparks.'
+    hint = 'The idea pool is empty. If the current turn produced a fleeting insight, an implicit assumption, or any "this might matter later" thought, propose it now with spark_capture(title, content, tags). Do not capture concrete actionable work — that goes through the regular task tool. This is a status notice, not an instruction.'
   }
 
   const lines: string[] = []
   let budget = maxChars - head.length - hint.length - 64
-  for (const spark of pending) {
+  for (const spark of active) {
     const line = '- <spark id="' + spark.id + '">' + spark.title + '</spark>'
     if (line.length > budget) break
     lines.push(line)
@@ -232,7 +230,7 @@ export function renderInboxReminder(
     '<system-reminder>',
     head,
     hint,
-    ...(lines.length > 0 ? ['', 'Most recent pending sparks:', ...lines] : []),
+    ...(lines.length > 0 ? ['', 'Most recent active sparks:', ...lines] : []),
     '</system-reminder>',
   ].join('\n')
 
@@ -244,7 +242,7 @@ export function renderInboxReminder(
       kind: 'plugin',
       plugin: name,
       form: 'notice',
-      summary: String(stats.pending) + ' pending spark' + (stats.pending === 1 ? '' : 's')
+      summary: String(stats.active) + ' active spark' + (stats.active === 1 ? '' : 's')
         + (stats.pendingProposals > 0 ? ', ' + String(stats.pendingProposals) + ' pending proposals' : ''),
     },
   })

@@ -32,7 +32,7 @@ export interface MemoryRecord {
   sourceSessionId: string
   sourceAgentId?: string
   sourceTurn?: number
-  /** Provenance link to the spark this memory was crystallized from (cognitive-layer Phase 2 reverse link). Null/undefined for memories created directly. */
+  /** @deprecated v2 P10/E4: spark→memory reverse link retired; kept only for reading legacy records. */
   sourceSparkId?: string | null
   revision: number
   updatedBy: MemoryAuthor
@@ -114,7 +114,7 @@ export interface MemoryPutInput {
   sourceSessionId?: string
   sourceAgentId?: string
   sourceTurn?: number
-  /** Provenance link to the spark this memory was crystallized from. Set by spark_crystallize; not user-editable. */
+  /** @deprecated v2 P10/E4: spark→memory reverse link retired; kept only for reading legacy records. */
   sourceSparkId?: string | null
   updatedBy?: MemoryAuthor
   supersedes?: string | null

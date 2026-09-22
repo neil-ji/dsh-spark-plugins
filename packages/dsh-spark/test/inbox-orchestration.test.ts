@@ -17,16 +17,16 @@ type PreStepHandler = (payload: unknown, next: () => Promise<{ kind: string; mes
 
 interface FakeOptions {
   stats?: Partial<SparkStats>
-  pending?: SparkView[]
+  active?: SparkView[]
   modelKey?: string
   reflectResult?: { newProposals: unknown[] }
 }
 
 function makeSpark(id: string, title: string): SparkView {
   return {
-    id, title, content: 'c', scope: 'project', workspacePath: null, inboxState: 'pending', tags: [],
+    id, title, content: 'c', scope: 'project', workspacePath: null, status: 'active', tags: [],
     sourceSessionId: 's', sourceAgentId: null, sourceTurn: null,
-    createdAt: NOW, updatedAt: NOW, stateChangedAt: NOW, deletedAt: null, crystallized: null,
+    createdAt: NOW, updatedAt: NOW, stateChangedAt: NOW, deletedAt: null,
   }
 }
 
@@ -36,7 +36,7 @@ function makeCtx(options: FakeOptions = {}): { ctx: unknown; handlers: PreStepHa
   const calls = { reflect: 0, updateMeta: 0 }
   let meta: SparkMeta = emptyMeta()
   const stats: SparkStats = {
-    total: 0, pending: 0, crystallized: 0, dropped: 0, archived: 0, deleted: 0, oldestPendingAt: null, pendingProposals: 0,
+    total: 0, active: 0, archived: 0, deleted: 0, oldestActiveAt: null, pendingProposals: 0,
     ...options.stats,
   }
   const ctx = {
@@ -44,7 +44,7 @@ function makeCtx(options: FakeOptions = {}): { ctx: unknown; handlers: PreStepHa
     on: (event: string, handler: PreStepHandler) => { if (event === 'agent/pre-step') handlers.push(handler); return () => {} },
     spark: {
       stats: async () => stats,
-      list: async () => options.pending ?? [],
+      list: async () => options.active ?? [],
       countChangedSince: async () => 0,
       readMeta: async () => meta,
       updateMeta: async (mutate: (m: SparkMeta) => SparkMeta | null) => {
@@ -68,26 +68,25 @@ function assistantWithBash(command: string): unknown {
 const agent = { session: { id: 'sess-1', header: {} } }
 const baseDecision = { kind: 'enter', messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] as unknown[] }
 
-test('A: zero pending sparks and zero proposals still injects an active hook', async () => {
-  // 2026-09-16：空收件箱现在**也注入**——head = 'empty.' + hint 包含 spark_capture
-  // 主动钩子。这是把火花面板从坟场拉出来的关键路径：模型必须被告知面板是空的，
-  // 才会在合适的时机主动 capture。新行为取代之前的「0 不注入」零噪音纪律。
+test('A: zero active sparks and zero proposals still injects a capture hook', async () => {
+  // 空想法池**也注入**——hint 包含 spark_capture 主动钩子：模型必须被告知池是空的，
+  // 才会在合适的时机主动提出想法。
   const { ctx, handlers } = makeCtx()
   apply(ctx as never, { reflect: { enabled: false } })
   const out = await handlers[0]!( { agent, messages: [], step: 1 }, async () => ({ ...baseDecision }))
-  assert.equal(out.messages.length, baseDecision.messages.length + 1, 'empty inbox still injects active hook')
+  assert.equal(out.messages.length, baseDecision.messages.length + 1, 'empty pool still injects capture hook')
   const text = JSON.stringify(out.messages[out.messages.length - 1])
-  assert.match(text, /Spark inbox \(dsh-spark\): empty\./)
+  assert.match(text, /Sparks \(dsh-spark\): no active sparks\./)
   assert.match(text, /spark_capture/, 'hint must include the active capture hook')
 })
 
-test('A: pending sparks produce exactly one reminder, and only once per agent', async () => {
-  const { ctx, handlers } = makeCtx({ stats: { pending: 2 }, pending: [makeSpark('a', 'first'), makeSpark('b', 'second')] })
+test('A: active sparks produce exactly one notice, and only once per agent', async () => {
+  const { ctx, handlers } = makeCtx({ stats: { active: 2 }, active: [makeSpark('a', 'first'), makeSpark('b', 'second')] })
   apply(ctx as never, { reflect: { enabled: false } })
   const first = await handlers[0]!({ agent, messages: [], step: 1 }, async () => ({ ...baseDecision }))
   assert.equal(first.messages.length, baseDecision.messages.length + 1)
   const text = JSON.stringify(first.messages[first.messages.length - 1])
-  assert.match(text, /Spark inbox/)
+  assert.match(text, /Sparks \(dsh-spark\)/)
   assert.match(text, /first/)
   const second = await handlers[0]!({ agent, messages: [], step: 1 }, async () => ({ ...baseDecision }))
   assert.equal(second.messages.length, baseDecision.messages.length, 'per-agent once (WeakSet guard)')

@@ -9,7 +9,6 @@ export const zh = {
   /* 播报气泡文案（announce.ts，用户可见）。 */
   announcePut: '写入了一条记忆',
   announceRemove: '删除了一条记忆',
-  announceCrystallize: '结晶写入记忆库',
   /** 模块栏 tab 徽章的可访问名（{label} = 模块名，{n} = 待处理计数；连标点一起定）。 */
   intro: '统一查看和管理跨会话、跨工作区沉淀下来的共识、决策、事实、偏好与约束。',
   searchPlaceholder: '搜索记忆...',
@@ -59,9 +58,6 @@ export const zh = {
   importanceNormal: '一般',
   importanceLow: '次要',
   sourceSession: '来源会话',
-  sourceSpark: '来源火花',
-  sourceSparkBadge: '结晶于',
-  sourceSparkHint: '这条记忆由火花流的 spark 沉淀而来（认知层 Phase 2 反向链接）。在 dsh-spark 火花流面板里查看原文。',
   revisionLabel: '版本',
   createdAt: '创建时间',
   updatedAt: '更新时间',
@@ -251,8 +247,6 @@ export const zh = {
 
   // ---- v3 UI: 详情 modal ----
   modalLineage: '来源溯源',
-  modalLineageSpark: 'spark · {id}',
-  modalLineageCrystallize: 'kind={kind} · importance {importance}',
   modalLineageMemory: 'memory · {id}',
   modalLineageDirect: '直接写入',
   modalContent: '内容',
@@ -267,7 +261,6 @@ export const en: Record<keyof typeof zh, string> = {
   dockSub: 'Four brain regions · memory CRUD · human decisions · evolution engine',
   announcePut: 'A memory was written',
   announceRemove: 'A memory was removed',
-  announceCrystallize: 'A crystallized memory was stored',
   intro: 'Browse and manage durable consensus, decisions, facts, preferences, and constraints shared across sessions and workspaces.',
   searchPlaceholder: 'Search memories...',
   search: 'Search',
@@ -316,9 +309,6 @@ export const en: Record<keyof typeof zh, string> = {
   importanceNormal: 'Normal',
   importanceLow: 'Low',
   sourceSession: 'Source session',
-  sourceSpark: 'Source spark',
-  sourceSparkBadge: 'crystallized from',
-  sourceSparkHint: 'This memory was crystallized from a spark in dsh-spark (cognitive-layer Phase 2 reverse link). Open the spark in the dsh-spark UI to see the original.',
   revisionLabel: 'Revision',
   createdAt: 'Created',
   updatedAt: 'Updated',
@@ -497,8 +487,6 @@ export const en: Record<keyof typeof zh, string> = {
 
   // ---- v3 UI: detail modal ----
   modalLineage: 'Source lineage',
-  modalLineageSpark: 'spark · {id}',
-  modalLineageCrystallize: 'kind={kind} · importance {importance}',
   modalLineageMemory: 'memory · {id}',
   modalLineageDirect: 'direct write',
   modalContent: 'Content',

@@ -14,20 +14,14 @@ import type { TypertContribution } from '@deepseek-ai/dsh-typert-registry/types'
 
 export const sparkScopeSchema = z.enum(['session', 'project', 'global'])
 /**
- * 收件箱状态（2026-09-14 设计：docs/spark-inbox-design-2026-09-14.md §4.1）。
+ * 火花状态（v2 设计：docs/spark-v2-design-2026-09-21.md §4.2，P11）。
  *
- * 取代旧的 `status: 'active' | 'archived'` —— 旧的"待处理"只能靠
- * `status === 'active' && crystallized === null` 推导，同一个隐式规则要在
- * 面板、统计、注入三处各复写一遍。显式状态是单一真源。
+ * 回退为两个值 + 墓碑：`crystallized` 的唯一进入路径（spark_crystallize）已随 P10
+ * 删除，`dropped` 与墓碑 `deletedAt` 是同一意图的两级摩擦。显式枚举、不留推导规则
+ * （v1 P1 教训）：改状态只动这一处。
  */
-export const sparkInboxStateSchema = z.enum(['pending', 'crystallized', 'dropped', 'archived'])
+export const sparkStatusSchema = z.enum(['active', 'archived'])
 export const sparkIdSchema = z.string().min(1).max(64)
-
-export const sparkCrystallizedSchema = z.object({
-  hippoId: z.string().min(1),
-  kind: z.enum(['insight', 'decision', 'fact', 'preference', 'constraint']),
-  at: z.number().int().nonnegative(),
-})
 
 export const sparkViewSchema = z.object({
   id: sparkIdSchema,
@@ -35,18 +29,17 @@ export const sparkViewSchema = z.object({
   content: z.string().min(1).max(20_000),
   scope: sparkScopeSchema,
   workspacePath: z.string().nullable(),
-  inboxState: sparkInboxStateSchema,
+  status: sparkStatusSchema,
   tags: z.array(z.string().min(1).max(50)).max(32),
   sourceSessionId: z.string(),
   sourceAgentId: z.string().nullable(),
   sourceTurn: z.number().int().nonnegative().nullable(),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
-  /** 状态最后一次变更的时间（取代旧字段 resolvedAt —— 旧字段只在归档时打点，是个特例）。 */
+  /** 状态最后一次变更的时间。 */
   stateChangedAt: z.number().int().nonnegative().nullable().default(null),
   /** 墓碑：软删除时间。非 null 的记录默认不出现在列表里，可由 restore 复原。 */
   deletedAt: z.number().int().nonnegative().nullable().default(null),
-  crystallized: sparkCrystallizedSchema.nullable().default(null),
 })
 
 export const sparkCaptureSchema = z.object({
@@ -61,7 +54,7 @@ export const sparkCaptureSchema = z.object({
 })
 
 export const sparkListQuerySchema = z.object({
-  inboxState: sparkInboxStateSchema.optional(),
+  status: sparkStatusSchema.optional(),
   scope: sparkScopeSchema.optional(),
   /** 默认隐藏墓碑；true 时把软删除的记录也带出来（"最近删除"视图）。 */
   includeDeleted: z.boolean().default(false),
@@ -73,14 +66,7 @@ export const sparkPatchSchema = z.object({
   content: z.string().min(1).max(20_000).optional(),
   tags: z.array(z.string().min(1).max(50)).max(32).optional(),
   scope: sparkScopeSchema.optional(),
-  inboxState: sparkInboxStateSchema.optional(),
-})
-
-export const sparkCrystallizeSchema = z.object({
-  kind: z.enum(['insight', 'decision', 'fact', 'preference', 'constraint']).default('insight'),
-  importance: z.number().min(0).max(1).default(0.5),
-  scope: sparkScopeSchema.optional(),
-  globalProven: z.boolean().default(false),
+  status: sparkStatusSchema.optional(),
 })
 
 /**
@@ -90,14 +76,12 @@ export const sparkCrystallizeSchema = z.object({
  */
 export const sparkStatsSchema = z.object({
   total: z.number().int().nonnegative(),
-  pending: z.number().int().nonnegative(),
-  crystallized: z.number().int().nonnegative(),
-  dropped: z.number().int().nonnegative(),
+  active: z.number().int().nonnegative(),
   archived: z.number().int().nonnegative(),
   /** 墓碑（软删除）数量，默认不出现在列表里。 */
   deleted: z.number().int().nonnegative(),
-  /** 最老的待处理火花的创建时间；无待处理时为 null。 */
-  oldestPendingAt: z.number().int().nonnegative().nullable(),
+  /** 最老的活跃火花的创建时间；无活跃火花时为 null。 */
+  oldestActiveAt: z.number().int().nonnegative().nullable(),
   /** 待决提议数（来自 emerge 服务；不可用时为 0）。 */
   pendingProposals: z.number().int().nonnegative(),
 })
@@ -135,24 +119,23 @@ export const proposalListQuerySchema = z.object({
 })
 
 /**
- * 关联图谱（Graph 子页）：火花之间、火花与结晶记忆之间的边。
+ * 关联图谱（Graph 子页）：纯火花域（v2 P10/E5：记忆节点与 crystallized 边已删）。
  *
  * 单一来源：host 侧 `buildSparkGraph` 是唯一计算者，客户端只渲染 —— 关联口径
- * 不允许在 UI 里再算一遍（与窗口归因同一原则）。节点 id 带类型前缀
- * （`spark:<id>` / `memory:<hippoId>`），两类节点同图共存。
+ * 不允许在 UI 里再算一遍（与窗口归因同一原则）。节点 id 带类型前缀（`spark:<id>`）。
  */
-export const sparkGraphNodeKindSchema = z.enum(['spark', 'memory'])
+export const sparkGraphNodeKindSchema = z.enum(['spark'])
 
-/** 边的语义：crystallized=结晶谱系；tag=共享标签；proposal=涌现提议判定的关联。 */
-export const sparkGraphEdgeKindSchema = z.enum(['crystallized', 'tag', 'proposal'])
+/** 边的语义：tag=共享标签；proposal=涌现提议判定的关联。 */
+export const sparkGraphEdgeKindSchema = z.enum(['tag', 'proposal'])
 
 export const sparkGraphNodeSchema = z.object({
-  /** `spark:<sparkId>` 或 `memory:<hippoId>`。 */
+  /** `spark:<sparkId>`。 */
   id: z.string().min(1).max(120),
   kind: sparkGraphNodeKindSchema,
   label: z.string().min(1).max(200),
-  /** spark 节点专属；memory 节点为 null。 */
-  inboxState: sparkInboxStateSchema.nullable().default(null),
+  /** spark 节点专属。 */
+  status: sparkStatusSchema.nullable().default(null),
   scope: sparkScopeSchema.nullable().default(null),
   tags: z.array(z.string().min(1).max(50)).max(32).default([]),
   /** 节点度（连边数）—— 客户端据此定节点尺寸，不再自算。 */
@@ -163,7 +146,7 @@ export const sparkGraphEdgeSchema = z.object({
   source: z.string().min(1).max(120),
   target: z.string().min(1).max(120),
   kind: sparkGraphEdgeKindSchema,
-  /** 强度：tag=共享标签数；proposal=同现提议条数；crystallized=1。 */
+  /** 强度：tag=共享标签数；proposal=同现提议条数。 */
   weight: z.number().int().positive().default(1),
 })
 
@@ -189,15 +172,13 @@ export type SparkGraph = z.infer<typeof sparkGraphSchema>
 export type SparkGraphQuery = z.infer<typeof sparkGraphQuerySchema>
 
 export type SparkScope = z.infer<typeof sparkScopeSchema>
-export type SparkInboxState = z.infer<typeof sparkInboxStateSchema>
+export type SparkStatus = z.infer<typeof sparkStatusSchema>
 export type SparkId = z.infer<typeof sparkIdSchema>
 export type SparkView = z.infer<typeof sparkViewSchema>
 export type SparkCapture = z.infer<typeof sparkCaptureSchema>
 export type SparkListQuery = z.infer<typeof sparkListQuerySchema>
 export type SparkPatch = z.infer<typeof sparkPatchSchema>
-export type SparkCrystallized = z.infer<typeof sparkCrystallizedSchema>
 export type SparkStats = z.infer<typeof sparkStatsSchema>
-export type SparkCrystallize = z.infer<typeof sparkCrystallizeSchema>
 export type ProposalType = z.infer<typeof proposalTypeSchema>
 export type ProposalLeverage = z.infer<typeof proposalLeverageSchema>
 export type ProposalStatus = z.infer<typeof proposalStatusSchema>
@@ -222,7 +203,7 @@ export function errResult(code: string, message: string): SparkResult<never> {
 
 /** `sparks/changed` 的载荷：宿主每次火花变更后 emit。 */
 export const sparkChangedEventSchema = z.object({
-  operation: z.enum(['capture', 'patch', 'state', 'crystallize', 'delete', 'restore', 'purge']),
+  operation: z.enum(['capture', 'patch', 'state', 'delete', 'restore', 'purge']),
   id: sparkIdSchema,
   record: sparkViewSchema.nullable(),
   at: z.number().int().nonnegative(),

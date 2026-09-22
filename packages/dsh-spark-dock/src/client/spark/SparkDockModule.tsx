@@ -80,10 +80,8 @@ export function startSparkAnnouncements(channel: SparkEventChannel, t: SparkT): 
 function announceSparkChange(payload: SparkChangedEvent, t: SparkT): void {
   if (payload.operation === 'capture') {
     publishAnnouncement({ mood: 'happy', text: t('announceCapture'), src: 'Spark · capture' })
-  } else if (payload.operation === 'crystallize') {
-    publishAnnouncement({ mood: 'cheer', text: t('announceCrystallize'), src: 'Spark · crystallize' })
   } else if (payload.operation === 'delete') {
-    publishAnnouncement({ mood: 'think', text: t('announceDrop'), src: 'Spark · delete' })
+    publishAnnouncement({ mood: 'think', text: t('announceDelete'), src: 'Spark · delete' })
   } else if (payload.operation === 'restore') {
     publishAnnouncement({ mood: 'happy', text: t('announceRestore'), src: 'Spark · restore' })
   }
@@ -92,8 +90,8 @@ function announceSparkChange(payload: SparkChangedEvent, t: SparkT): void {
 /**
  * 注册 Spark 的 dock 模块。
  *
- * 2026-09-16 加徽章 + 动态 sub：模块内部维护一份 stats（订阅 `spark/events` 帧触发
- * reload），把 `pending + pendingProposals` 暴露给面板标题行的 sub（角标已退役）。
+ * 模块内部维护一份 stats（订阅 `spark/events` 帧触发 reload），把
+ * `active + pendingProposals` 暴露给面板标题行的 sub（角标已退役）。
  * 计数取自 `/sparks/stats`（与 SparksPane 同源），事件驱动刷新而非轮询。
  *
  * @param ctx - dock 的 client 根上下文。
@@ -101,14 +99,14 @@ function announceSparkChange(payload: SparkChangedEvent, t: SparkT): void {
  */
 export function registerSparkDockModule(ctx: ClientContext, inject: SparkModuleInject): void {
   // 模块内的 stats store：所有 tab 渲染都从这里读，确保 sub 与 tab 数字同源。
-  let pending = 0
+  let active = 0
   let pendingProposals = 0
   const loadStats = (): void => {
     fetch('/sparks/stats', { headers: { accept: 'application/json' } })
-      .then((res) => res.ok ? res.json() as Promise<{ ok: boolean; value?: { pending?: number; pendingProposals?: number } }> : null)
+      .then((res) => res.ok ? res.json() as Promise<{ ok: boolean; value?: { active?: number; pendingProposals?: number } }> : null)
       .then((body) => {
         if (body === null || body.ok !== true || body.value === undefined) return
-        pending = typeof body.value.pending === 'number' ? body.value.pending : 0
+        active = typeof body.value.active === 'number' ? body.value.active : 0
         pendingProposals = typeof body.value.pendingProposals === 'number' ? body.value.pendingProposals : 0
       })
       .catch(() => { /* 接口暂未注册视为 0 */ })
@@ -132,16 +130,15 @@ export function registerSparkDockModule(ctx: ClientContext, inject: SparkModuleI
     order: 10,
     label: () => inject.t('moduleLabel'),
     name: inject.t('moduleName'),
-    // 动态 sub：把待处理数拼到副标题里，让面板标题行也传达"有几条等你处理"。
-    // 0 条时回退到静态描述（不显示 N=0）。
+    // 动态 sub：把想法数拼到副标题里。0 条时回退到静态描述（不显示 N=0）。
     sub: (() => {
-      const total = pending + pendingProposals
+      const total = active + pendingProposals
       if (total === 0) return tm('moduleSub')
       return createElement('span', null,
         tm('moduleSub'),
         ' · ',
-        createElement('strong', { 'data-pending': String(pending), 'data-proposals': String(pendingProposals) },
-          tm('pendingLabel', { n: total })),
+        createElement('strong', { 'data-active': String(active), 'data-proposals': String(pendingProposals) },
+          tm('ideaCountLabel', { n: total })),
       )
     })(),
     icon: createElement(IconSparkles, { size: 14 }),

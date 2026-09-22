@@ -15,7 +15,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
 import type { SparkView, ProposalView } from 'dsh-spark-wire'
-import type { SparkService, SparkNotFoundError, SparkHippoUnavailableError } from './spark-service.ts'
+import type { SparkService, SparkNotFoundError } from './spark-service.ts'
 import type { EmergeService } from './emerge-service.ts'
 
 const PREFIX_SPARKS = '/sparks'
@@ -87,17 +87,6 @@ async function handleSparks(
       const body = await readJsonBody(req)
       const record = await service.capture(body)
       send(res, 200, okEnvelope(record))
-      return
-    }
-    if (req.method === 'POST' && /\/crystallize$/.test(sub)) {
-      const id = decodeURIComponent(sub.slice(1, -'/crystallize'.length))
-      const body = await readJsonBody(req).catch(() => ({}))
-      try {
-        const result = await service.crystallize(id as Parameters<typeof service.crystallize>[0], body)
-        send(res, 200, okEnvelope(result))
-      } catch (error) {
-        send(res, errorStatusFor(error), errorEnvelope(errorCodeOf(error), errorMessageOf(error)))
-      }
       return
     }
     if (req.method === 'POST' && /\/restore$/.test(sub)) {
@@ -191,12 +180,12 @@ async function handleProposals(
   }
 }
 
-const INBOX_STATES = ['pending', 'crystallized', 'dropped', 'archived'] as const
+const SPARK_STATUSES = ['active', 'archived'] as const
 
 function queryFromUrl(url: URL): Record<string, unknown> {
   const query: Record<string, unknown> = {}
-  const inboxState = url.searchParams.get('inboxState')
-  if (inboxState !== null && (INBOX_STATES as readonly string[]).includes(inboxState)) query.inboxState = inboxState
+  const status = url.searchParams.get('status')
+  if (status !== null && (SPARK_STATUSES as readonly string[]).includes(status)) query.status = status
   const scope = url.searchParams.get('scope')
   if (scope === 'session' || scope === 'project' || scope === 'global') query.scope = scope
   if (url.searchParams.get('includeDeleted') === 'true') query.includeDeleted = true
@@ -291,24 +280,10 @@ function errorStatusFor(error: unknown): number {
   if (error instanceof Object && 'code' in error) {
     const code = (error as { code: unknown }).code
     if (code === 'SPARK_NOT_FOUND') return 404
-    if (code === 'SPARK_HIPPO_UNAVAILABLE') return 412
-    if (code === 'SPARK_STATE_INVALID') return 409
     if (code === 'SPARK_STORE_CONFLICT') return 409
   }
   return 400
 }
 
-function errorCodeOf(error: unknown): string {
-  if (error instanceof Object && 'code' in error) {
-    const code = (error as { code: unknown }).code
-    if (typeof code === 'string') return code
-  }
-  return 'BAD_REQUEST'
-}
-
-function errorMessageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
-
 /** Reserved types for future phases. */
-type _Reserved = SparkView | ProposalView | SparkNotFoundError | SparkHippoUnavailableError
+type _Reserved = SparkView | ProposalView | SparkNotFoundError

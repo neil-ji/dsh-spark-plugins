@@ -23,7 +23,7 @@ import type { SparkRecordId, SparkStorage } from './types.ts'
 import { describeStorageError, ensureJsonlPath } from './jsonl-path.ts'
 
 /** 当前存储格式版本。老文件（无版本头）视为 1。 */
-export const SPARK_STORE_VERSION = 2
+export const SPARK_STORE_VERSION = 3
 
 const VERSION_KEY = '__sparkStore'
 
@@ -46,39 +46,55 @@ function sameFingerprint(a: Fingerprint | null, b: Fingerprint | null): boolean 
 }
 
 /**
- * 把一条 v1 记录迁移成 v2：`status` → `inboxState`，`resolvedAt` → `stateChangedAt`，
- * 补 `deletedAt`。幂等（已是 v2 的记录原样返回）。
+ * 把一条 v1/v2 记录迁移成 v3（v2 设计 §4.2，P11）。
  *
- * 迁移映射（设计 §4.1）：
- *   status==='active'   && crystallized===null -> pending
- *   status==='active'   && crystallized!==null -> crystallized
- *   status==='archived'                        -> archived
+ * v1（status/resolvedAt）与 v2（inboxState 四值 + crystallized）都收敛到
+ * `status: 'active' | 'archived'` + 墓碑。幂等（已是 v3 的记录原样返回）。
+ *
+ * 迁移映射（设计 §4.2）：
+ *   pending / v1 active      -> status='active'
+ *   archived                 -> status='archived'
+ *   dropped                  -> deletedAt=<迁移时刻>（墓碑，可恢复）
+ *   crystallized / v1 active+crystallized -> status='archived'
+ *   删除字段：inboxState / status(v1) / crystallized / resolvedAt
  *
  * @returns 迁移后的记录；不是合法记录时返回 null。
  */
-export function migrateSparkRecord(raw: unknown): SparkView | null {
+export function migrateSparkRecord(raw: unknown, now: number = Date.now()): SparkView | null {
   if (raw === null || typeof raw !== 'object') return null
   const record = { ...(raw as Record<string, unknown>) }
   if (typeof record.id !== 'string' || record.id.length === 0) return null
 
-  if (typeof record.inboxState !== 'string') {
-    const legacyStatus = record.status
+  // 推导旧状态：优先 v2 的 inboxState，退化到 v1 的 status+crystallized。
+  let legacyState: string
+  if (typeof record.inboxState === 'string') {
+    legacyState = record.inboxState
+  } else if (record.status === 'archived') {
+    legacyState = 'archived'
+  } else {
     const crystallized = record.crystallized
-    record.inboxState = legacyStatus === 'archived'
-      ? 'archived'
-      : (crystallized !== null && crystallized !== undefined ? 'crystallized' : 'pending')
+    legacyState = crystallized !== null && crystallized !== undefined ? 'crystallized' : 'pending'
   }
+
+  delete record.inboxState
   delete record.status
+  delete record.crystallized
+  const legacyResolvedAt = record.resolvedAt
+  delete record.resolvedAt
+
+  record.status = legacyState === 'archived' || legacyState === 'crystallized' ? 'archived' : 'active'
+  if (legacyState === 'dropped') {
+    // dropped 与墓碑是同一意图的两级摩擦（设计原则 8）：并入墓碑，保留可恢复性。
+    if (record.deletedAt === null || record.deletedAt === undefined) record.deletedAt = now
+  }
 
   if (record.stateChangedAt === undefined || record.stateChangedAt === null) {
-    if (typeof record.resolvedAt === 'number') record.stateChangedAt = record.resolvedAt
+    if (typeof legacyResolvedAt === 'number') record.stateChangedAt = legacyResolvedAt
     else if (typeof record.updatedAt === 'number') record.stateChangedAt = record.updatedAt
     else record.stateChangedAt = null
   }
-  delete record.resolvedAt
 
   if (record.deletedAt === undefined) record.deletedAt = null
-  if (record.inboxState === 'crystallized' && (record.crystallized === undefined)) record.crystallized = null
 
   return record as unknown as SparkView
 }
@@ -306,15 +322,15 @@ export class JsonlSparkStorage implements SparkStorage {
 }
 
 function applyPatch(current: SparkView, patch: SparkPatch, now: number): SparkView {
-  const nextState = patch.inboxState
-  const stateChanged = nextState !== undefined && nextState !== current.inboxState
+  const nextState = patch.status
+  const stateChanged = nextState !== undefined && nextState !== current.status
   return {
     ...current,
     ...(patch.title !== undefined ? { title: patch.title } : {}),
     ...(patch.content !== undefined ? { content: patch.content } : {}),
     ...(patch.tags !== undefined ? { tags: patch.tags } : {}),
     ...(patch.scope !== undefined ? { scope: patch.scope } : {}),
-    ...(nextState !== undefined ? { inboxState: nextState } : {}),
+    ...(nextState !== undefined ? { status: nextState } : {}),
     ...(stateChanged ? { stateChangedAt: now } : {}),
     updatedAt: now,
   }

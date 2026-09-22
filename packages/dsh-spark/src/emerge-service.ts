@@ -126,13 +126,8 @@ export class EmergeService extends Service {
 
   private async doReflect(input: unknown, now: number): Promise<EmergeRunResult> {
     const opts: ReflectRequest = reflectRequestSchema.parse(input)
-    // 涌现的素材 = 待处理 + 已沉淀（archived/dropped/墓碑不参与）。
-    const limit = opts.candidateLimit * 2
-    const [pending, crystallized] = await Promise.all([
-      this.ctx.spark.list({ inboxState: 'pending', limit }),
-      this.ctx.spark.list({ inboxState: 'crystallized', limit }),
-    ])
-    const sparks = [...pending, ...crystallized]
+    // 涌现的素材 = 活跃火花（archived / 墓碑不参与；v2 P11：状态只有 active|archived）。
+    const sparks = await this.ctx.spark.list({ status: 'active', limit: opts.candidateLimit * 2 })
     const candidates = generateProposals(sparks as SparkView[], opts, now)
     const existing = await this.storage.readAll()
     const pendingKeys = new Set(

@@ -469,12 +469,6 @@ async function handleSpark(req, res, url) {
   }
   if (path.startsWith('/sparks/')) {
     const rest = path.slice('/sparks/'.length)
-    if (rest.endsWith('/crystallize') && method === 'POST') {
-      const id = decodeURIComponent(rest.slice(0, -'/crystallize'.length))
-      const result = spark.crystallize(id)
-      if (result.ok === true) broadcastSpark('/sparks/events', { operation: 'crystallize', id, at: Date.now() })
-      return json(res, result.ok === true ? 200 : statusFor(result.error), result)
-    }
     if (rest.endsWith('/restore') && method === 'POST') {
       const id = decodeURIComponent(rest.slice(0, -'/restore'.length))
       const result = spark.restore(id)

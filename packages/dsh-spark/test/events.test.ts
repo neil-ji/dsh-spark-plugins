@@ -34,7 +34,7 @@ const sparkChange: SparkChangedEvent = {
     content: 'c',
     scope: 'project',
     workspacePath: null,
-    inboxState: 'pending',
+    status: 'active',
     tags: [],
     sourceSessionId: 'sess-1',
     sourceAgentId: null,
@@ -43,7 +43,6 @@ const sparkChange: SparkChangedEvent = {
     updatedAt: NOW,
     stateChangedAt: NOW,
     deletedAt: null,
-    crystallized: null,
   },
   at: NOW,
 }

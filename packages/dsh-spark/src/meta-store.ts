@@ -28,7 +28,7 @@ export interface CommandFailureEntry {
   sessions: string[]
   firstSeenAt: number
   lastSeenAt: number
-  /** 已经沉淀过（写进 hippomemo / 生成脚本）的时间；null = 还没沉淀。 */
+  /** 已经产出过（产出为一条火花）的时间；null = 还没产出。 */
   promotedAt: number | null
   /** 自愈：之后同一模式成功过，计数清零并标记。 */
   healedAt: number | null
