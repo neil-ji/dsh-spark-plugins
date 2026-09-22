@@ -40,6 +40,7 @@ import { registerSparkHttpRoutes } from './http.ts'
 import type { SparkChangedEvent, SparkRecordId, SparkStorage } from './types.ts'
 import { applyRecall, isExpiredDerived, newSparkView, orderForPanel } from './types.ts'
 import { DEFAULT_DERIVE_TTL_DAYS } from './derive-service.ts'
+import type { ValenceConfig } from './valence.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -59,6 +60,13 @@ export interface SparkConfig {
   deriveTtlDays?: number
   /** 调度元数据 sidecar 路径（B/D 档的落点）；默认与 sparks.jsonl 同目录。 */
   metaPath?: string
+  /**
+   * valence 挖掘（Phase 6）。**默认开启**——它是产品定位的一部分
+   * （v2 L2「Agent 是平等的提出者」），不是可选实验。
+   * 四道防线（D1 只认真人话语 / D2 闸门与抽取同一条话语 / D3 provenance 显式 /
+   * D4 跨会话去重）见 `valence-service.ts` 顶部。
+   */
+  valence?: ValenceConfig
 }
 
 const DEFAULT_MAX_RECORDS = 5000

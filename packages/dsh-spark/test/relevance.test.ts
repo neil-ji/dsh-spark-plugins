@@ -4,10 +4,17 @@
  * 锁三件事：① tokenize/jaccard 是**召回与涌现共用的单一真源**（口径漂移只有用户
  * 能发现）；② selectRelevant 的排序判据确定（同输入同输出）；③ 阈值语义 ——
  * 不相关的候选必须被挡掉，否则注入面会被噪声淹没（召回 ≠ 多注入）。
+ *
+ * 2026-09-23（F6）增补：`substanceTokens` / `boilerplateTokens` / `jaccardWithout`
+ * 的性质锁 —— 模板 token 抑制必须**在健康池上是 no-op**、只在被模板淹没时生效。
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { jaccard, selectRelevant, tokenize } from '../src/relevance.ts'
+import {
+  jaccard, selectRelevant, tokenize,
+  substanceTokens, boilerplateTokens, jaccardWithout,
+  MIN_DOCS_FOR_BOILERPLATE,
+} from '../src/relevance.ts'
 import type { SparkView } from 'dsh-spark-wire'
 
 const NOW = 1_700_000_000_000
@@ -117,4 +124,65 @@ test('selectRelevant: minScore=0 也不返回零重合候选（不是全量兜�
 test('selectRelevant: 墓碑由调用方过滤（本函数不做生命周期判断）', () => {
   const pool = [spark({ id: 'dead', title: 'dock overlay', deletedAt: NOW })]
   assert.equal(selectRelevant(pool, 'dock overlay', {}).length, 1, '纯函数只管相似度，生命周期归 service')
+})
+
+// ---- 2026-09-23（F6）：实质面 + 池级模板抑制 ----
+
+/** 实库挖掘集合的真实形状：同一模板前缀、目标词互不相同。 */
+const MINED_TARGETS = [
+  'override system', 'follow instructions', '在两处维护内容', '并行', '引入依赖',
+  '手改', '真启动', '攒到最后一次性提交', '用 shell', 'cheerlead', 'fabricate',
+]
+function minedTemplatePool(): string[][] {
+  return MINED_TARGETS.map(t => tokenize(`用户偏好：Don't ${t}`))
+}
+
+test('substanceTokens: 只取标题+正文，**不含 tags**（tags 是 cluster 的证据，link 不该重复计）', () => {
+  const tokens = substanceTokens({ title: 'alpha beta', content: 'gamma' })
+  assert.deepEqual(tokens, tokenize('alpha beta').concat(tokenize('gamma')))
+  assert.ok(!tokens.includes('preference'), 'tags 不得进入实质面：' + JSON.stringify(tokens))
+})
+
+test('boilerplateTokens: 健康池上是 no-op（实测真实池抑制 0 个 token）', () => {
+  const docs = [
+    ['认知', '认知层', '记忆', '回路'],
+    ['财务', '额度', '预测', '月费'],
+    ['多模态', '记忆', 'caption', 'store'],
+    ['救援', '定位', '商业', '判断'],
+    ['竞品', '失败', '分类', '市场'],
+    ['衍生', '火花', '引擎', '联想'],
+  ]
+  assert.equal(boilerplateTokens(docs).size, 0, '主题各异的池里不该有任何 token 被判为模板')
+})
+
+test('boilerplateTokens: 被模板淹没的池里，模板前缀 token 被识别出来', () => {
+  // 池的形状照抄实库：标题模板相同（「用户偏好：Don't …」）、**目标词各不相同**
+  // ——这正是真实挖掘集合的样子（并行 / 手改 / 引入依赖 / 真启动 / follow instructions…）。
+  const bp = boilerplateTokens(minedTemplatePool())
+  for (const t of ['用户', '户偏', '偏好', 'don', 't']) {
+    assert.ok(bp.has(t), '模板 token 应被抑制: ' + t)
+  }
+  for (const t of ['并行', '手改', '真启动']) {
+    assert.ok(!bp.has(t), '真正的内容 token 不该被抑制: ' + t)
+  }
+})
+
+test('boilerplateTokens: 池小于 minDocs 时返回空集（N=2 的池不能永远不比中）', () => {
+  const docs = [['a', 'b'], ['a', 'b']]
+  assert.equal(boilerplateTokens(docs).size, 0)
+  assert.equal(boilerplateTokens(docs, { minDocs: 2 }).size, 2, '下限调低才生效')
+  assert.equal(MIN_DOCS_FOR_BOILERPLATE, 5)
+})
+
+test('jaccardWithout: 剔除模板 token 后，模板化标题的真实相似度归零', () => {
+  const a = tokenize("用户偏好：Don't 并行")
+  const b = tokenize("用户偏好：Don't 手改")
+  assert.ok(jaccard(a, b) >= 0.5, '原口径下这两条「很像」：' + jaccard(a, b))
+  assert.equal(jaccardWithout(a, b, boilerplateTokens(minedTemplatePool())), 0, '剥掉模板前缀后它们毫无关系')
+})
+
+test('jaccardWithout: excluded 为空时退化为普通 jaccard', () => {
+  const a = tokenize('alpha beta gamma')
+  const b = tokenize('alpha beta delta')
+  assert.equal(jaccardWithout(a, b, new Set()), jaccard(a, b))
 })

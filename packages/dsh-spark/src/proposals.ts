@@ -15,8 +15,11 @@
  */
 import { randomUUID } from 'node:crypto'
 import type { ProposalView, ProposalType, ProposalLeverage, ReflectRequest, SparkView } from 'dsh-spark-wire'
-// 相似度口径单源（v2 §4.4）：召回与涌共用同一份 tokenize / jaccard。
-import { jaccard, tokenize } from './relevance.ts'
+// 相似度口径单源（v2 §4.4）：召回与涌现共用同一份 tokenize / jaccard。
+// 2026-09-23（F6 挖掘管线修复）：link 改判**实质面**（标题+正文，不含 tags）并
+// 剔除**池级模板 token** —— 原先只比标题，于是「用户偏好：Don't X」这类模板标题
+// 让任意两条都互相「像」（实测 148 条 link 提议中 146 条剥掉前缀后真实相似度 0.00）。
+import { boilerplateTokens, jaccardWithout, substanceTokens } from './relevance.ts'
 
 /** Find all unordered pairs (i, j) with i < j. */
 function pairs<T>(arr: readonly T[]): Array<[T, T]> {
@@ -99,17 +102,24 @@ export function generateProposals(
     .filter(s => s.deletedAt === null && s.status === 'active')
     .slice(0, opts.candidateLimit)
 
-  // link: pairs with high title-token Jaccard
-  for (const [a, b] of pairs(candidates)) {
-    const j = jaccard(tokenize(a.title), tokenize(b.title))
-    if (j >= opts.linkThreshold && j < 1) {
-      out.push({
-        type: 'link' as ProposalType,
-        sparkIds: [a.id, b.id],
-        explanation: '标题 token 重叠 ' + Math.round(j * 100) + '%：' + truncate(a.title) + ' / ' + truncate(b.title),
-        confidence: j,
-        leverage: 'medium' as ProposalLeverage,
-      })
+  // link：**实质面**（标题+正文）相似度，且剔除池级模板 token（见 relevance.ts）。
+  // tags 不参与 —— 那是下面 cluster 的职责，两边都算等于同一份证据计两次。
+  const substance = candidates.map(s => substanceTokens(s))
+  const boilerplate = boilerplateTokens(substance)
+  for (let i = 0; i < candidates.length; i++) {
+    for (let j = i + 1; j < candidates.length; j++) {
+      const a = candidates[i]!
+      const b = candidates[j]!
+      const score = jaccardWithout(substance[i]!, substance[j]!, boilerplate)
+      if (score >= opts.linkThreshold && score < 1) {
+        out.push({
+          type: 'link' as ProposalType,
+          sparkIds: [a.id, b.id],
+          explanation: '实质面 token 重叠 ' + Math.round(score * 100) + '%：' + truncate(a.title) + ' / ' + truncate(b.title),
+          confidence: score,
+          leverage: 'medium' as ProposalLeverage,
+        })
+      }
     }
   }
 

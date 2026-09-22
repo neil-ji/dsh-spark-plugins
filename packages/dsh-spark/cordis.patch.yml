@@ -7,6 +7,15 @@
       name: 'dsh-spark'
       config:
         tombstoneRetentionDays: 30
+        # valence 挖掘（Phase 6）：**默认开启**——它属于产品定位（v2 L2「Agent 是
+        # 平等的提出者」），不是可选实验；与 commandMining 默认关的理由不同。
+        # 四道防线见 valence-service.ts 顶部：D1 只认 source.kind==='user' 的真人话语、
+        # D2 长度闸+强度闸作用于同一条话语、D3 provenance 显式标 agent、
+        # D4 跨会话实质面去重。这里只暴露阈值旋钮，默认值即上线的值。
+        valence:
+          enabled: true
+          intensityThreshold: 0.4
+          maxUtteranceChars: 2000
 
     # 会话编排层（设计 §5）：把收件箱状态注入会话首步。
     # 在此之前 spark_capture 只写不读 —— 没有这一步，火花面板就是坟场。

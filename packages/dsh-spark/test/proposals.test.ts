@@ -186,4 +186,49 @@ test('newProposalId returns a non-empty string', () => {
   assert.equal(typeof id, 'string')
   assert.ok(id.length > 0)
 })
+
+// ---- 2026-09-23（F6 挖掘管线修复）：link 判据的回归 ----
+
+/**
+ * 实库的病历：18 条 valence 挖掘火花，标题同一模板前缀「用户偏好：Don't 」、
+ * 目标词互不相同、tags 完全相同。旧口径（只比标题 token）让**任意两条**都拿到
+ * 0.50~0.71 的 Jaccard —— 实库 154 条 pending 提议里 148 条是这种伪 link，
+ * 其中 146 条剥掉模板前缀后真实相似度是 0.00。
+ */
+test('link 回归（F6）：模板化池不再产生成片的伪 link（曾经 148/153 对全部命中）', () => {
+  const TARGETS = [
+    'override system', 'follow instructions', '在两处维护内容', '并行', '引入依赖', '手改',
+    '真启动', '攒到最后一次性提交', '用 shell', 'cheerlead', 'fabricate', 'disclosed',
+  ]
+  const sparks = TARGETS.map((t, i) => makeSpark({
+    id: 'v' + String(i),
+    title: `用户偏好：Don't ${t}`,
+    content: `do not ${t}`,
+    tags: ['preference', 'valence-mined', 'do-not'],
+  }))
+  const now = 1_700_000_000_000
+  const links = generateProposals(sparks, DEFAULT_OPTS, now).filter(c => c.type === 'link')
+  assert.equal(links.length, 0, '模板前缀 + 同一组 tags 不该算「两条火花像」：' + String(links.length) + ' 条')
+})
+
+/**
+ * 反向锁：模板抑制不能把功能治死。健康的、主题各异的池子上必须**行为不变** ——
+ * 真正相近的两条仍然要成 link。
+ */
+test('link 回归（F6）：健康池上模板抑制是 no-op，真正相近的两条仍成 link', () => {
+  const now = 1_700_000_000_000
+  const sparks = [
+    makeSpark({ id: 'a', title: 'hippomemo 多模态记忆 caption 渐进路线', content: '多模态记忆先 caption 再入库' }),
+    makeSpark({ id: 'b', title: 'hippomemo 多模态记忆 caption 存储路线', content: '多模态记忆先 caption 再存储' }),
+    makeSpark({ id: 'c', title: '财务插件额度预测', content: '月费不变才能做额度预测' }),
+    makeSpark({ id: 'd', title: 'macOS 救援定位下修', content: '窄缝不是市场，是 runbook 授权' }),
+    makeSpark({ id: 'e', title: '竞品失败分类即市场规模尺', content: '读在位者免费工具的错误枚举' }),
+    makeSpark({ id: 'f', title: '火花衍生引擎反自噬', content: '标题相似度去重防止复述' }),
+  ]
+  const links = generateProposals(sparks, DEFAULT_OPTS, now).filter(c => c.type === 'link')
+  assert.ok(
+    links.some(l => l.sparkIds.includes('a') && l.sparkIds.includes('b')),
+    'a/b（caption 两条）必须被检出：' + JSON.stringify(links.map(l => [l.sparkIds, Math.round(l.confidence * 100)])),
+  )
+})
 console.log('proposals tests loaded');

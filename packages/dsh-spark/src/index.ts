@@ -30,10 +30,21 @@ export {
 export type { DerivationPair, DerivedCandidate } from './derive.ts'
 export { ValenceService } from './valence-service.ts'
 export type { ValenceConfig, ValenceRunStats } from './valence-service.ts'
+export {
+  detectIntensity, extractPreferences, candidateToSparkInput, decayImportance,
+  minePreferences, isRealUserMessage, buildDedupPool, isDuplicateOfPool,
+  DEFAULT_INTENSITY_THRESHOLD, DEFAULT_MAX_UTTERANCE_CHARS,
+} from './valence.ts'
+export type {
+  PreferenceCandidate, ValenceMiningResult, ValenceSkipReason, ValenceDedupPool,
+} from './valence.ts'
 export { JsonlSparkStorage, SparkStoreConflictError, migrateSparkRecord, SPARK_STORE_VERSION } from './storage.ts'
 export { renderInboxReminder, renderRelatedReminder, lastUserText } from './inbox.ts'
-export { tokenize, jaccard, selectRelevant } from './relevance.ts'
-export type { RelevantSpark, SelectRelevantOptions } from './relevance.ts'
+export {
+  tokenize, jaccard, selectRelevant, substanceTokens, boilerplateTokens, jaccardWithout,
+  MIN_DOCS_FOR_BOILERPLATE, DEFAULT_BOILERPLATE_DF_RATIO,
+} from './relevance.ts'
+export type { RelevantSpark, SelectRelevantOptions, BoilerplateOptions } from './relevance.ts'
 export { shouldReflect } from './reflect-scheduler.ts'
 export { SparkMetaStore, defaultMetaPath, emptyMeta, parseMeta } from './meta-store.ts'
 export type { SparkMeta, CommandFailureEntry } from './meta-store.ts'
@@ -70,7 +81,8 @@ export function apply(ctx: Context, config: SparkConfig = {}): void {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const _emerge = new EmergeService(ctx)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const _valence = new ValenceService(ctx)
+  // 配置面透传（valence 默认开启；见 SparkConfig.valence）。
+  const _valence = new ValenceService(ctx, config.valence ?? {})
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const _derive = new DeriveService(ctx)
   // 统一事件通道（ADR-001）：cordis 事件 → spark.events() stream 方法。
