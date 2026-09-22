@@ -215,6 +215,28 @@ mock remote 是普通对象，于是「预览全绿、真宿主事件流整条�
 - Windows 本机：CDP / undici 收尾不要 `process.exit()`（libuv 断言 0xC0000409 会把全绿
   变非零退出），显式 `ws.close()` + `process.exitCode` 自然排空。
 - 平台版本 pin 由 `bump-dsh-pins.mjs` / `check-dsh-upgrade.mjs` 管理，不要手改。
+- **profile patch 的 live reload 只认「追加」，不认「截断重写」**：`cat > cordis.patch.yml`
+  这种先截断再写的改法，会让 loader 先收到一次「读到半截文件」的事件；那次解析失败后
+  它**不会**再读完整文件 —— 表现为「patch 明明改了、`--dump-config` 也看得到，但
+  运行中的宿主没反应」。改 profile 层要么用 `>>` 追加（后一条 patch 按顺序覆盖前一条，
+  `disabled: false` 即恢复），要么改写后**再追加一行注释**把事件顶出去。范本：
+  `~/.dsh/logs/toggle-web-plugins.sh`（`on` / `off` 都实现为 append；2026-09-23 实测）。
+  配套的坑：**热重载不会重新 import 插件的 lib**（ESM 模块缓存；HMR 的 root 只覆盖
+  patch 文件）。换了 lib 只能靠**重启宿主**生效 —— 用 off→on 去验证换过的 lib，量到的
+  是旧代码（2026-09-23 实测踩中：真机换 lib 后 off→on 仍烧 104%，同一份数据换成
+  全新进程只有 1.8%）。
+- **派生缓存不得在每次 `session/event` 后整段作废、并在读取时全量重扫会话日志**：
+  检查点必须在**读日志之前**查，命中就不要打开日志。事故形态（2026-09-23 真机）：
+  `dsh-spark-finance` 的 `readProjection` / `backfillFinanceHourly` 先
+  `inspectPersistenceSession`（`open` + `read` 完整日志）再 `cachedSnapshot`，于是
+  **每轮对话**后账本作废重算都对全部会话全量解码 —— 3080 实库 301 个会话 / 1.2G，
+  宿主持续 145%~232% CPU 约 30s、事件循环被堵、Web UI 卡死。它最毒的地方是
+  **归因假象**：CPU profile 里热点全在官方解码链（`parseJson` 占 24.9% 单核），
+  本仓代码只有 0.04%，于是常规的「谁在烧」读法看不见我们，却是我们点着的。
+  未 fork 会话的缓存身份只凭 `list()` 的 header 就能算出（inherited cut 恒为 0），
+  范本见 `dsh-finance` 的 `listedSnapshotInheritedCut`；闸门 `check:architecture`
+  的 `readorder` 段逐函数拦截，确需「先读再判」时写
+  `// arch-gate-allow: persistence-read-order <理由>`。
 
 ---
 
@@ -223,6 +245,8 @@ mock remote 是普通对象，于是「预览全绿、真宿主事件流整条�
 - [ ] `pnpm -r build` → `pnpm -r typecheck` → `pnpm -r test` 全绿（顺序执行）
 - [ ] `pnpm check:all` 全 PASS；动了发布输入的 commit 都带 bump
 - [ ] `pnpm preview:verify` 全过；UI 改动另跑 `pnpm check:contrast`
+- [ ] 动了会话持久化读取 / 派生缓存路径：`check:architecture` 的 `readorder` 段 PASS
+      （同一函数内「检查点查询」必须排在「读完整会话日志」之前）
 - [ ] 动了 host / 注册面 / stream：`pnpm sandbox:install`（自带启动冒烟必须过）+ 重启宿主
       + real-host-check 退出码 0，且断言了注册面（不止看渲染）
 - [ ] commit 符合 Conventional Commits；评审项关闭口径写清

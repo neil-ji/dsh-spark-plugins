@@ -849,10 +849,130 @@ export function findPackagingGaps(root) {
   return { violations, checked }
 }
 
+/* ──────── 8. 检查点必须先于会话全量读取（2026-09-23 真机 CPU 事故） ──────── */
+
+/** 登记在册的「读取完整会话日志」调用（新增读取入口时在此登记）。 */
+const SESSION_FULL_READ_CALLS = ['inspectPersistenceSession(']
+/** 检查点查询调用：同一函数体里必须先出现其中之一，才允许上面的全量读取。 */
+const SESSION_CHECKPOINT_CALLS = ['cachedSnapshot(']
+
+/**
+ * 读取**完整会话日志**之前，必须先查检查点（投影缓存）。
+ *
+ * 为什么单列一道：`dsh-spark-finance` 的 `backfillFinanceHourly` 原先对每个
+ * 会话先 `inspectPersistenceSession`（`open` + `read` 完整日志），之后才拿
+ * `cachedSnapshot` 判断要不要冷折 —— 检查点形同虚设。真机（3080 实库，301 个
+ * 会话 / 1.2G）实测：宿主持续 145%~232% CPU 约 30s、事件循环被堵、Web UI 卡死；
+ * CPU profile 里 `parseJson` 占 24.9% 单核（官方会话解码链），而本仓代码仅
+ * 0.04% —— 热点不在我们代码里，却是我们点着的，所以「谁在烧」的常规归因看不见它。
+ *
+ * 判据（刻意做成顺序检查而不是语义分析）：同一个函数体里，登记在
+ * {@link SESSION_FULL_READ_CALLS} 的全量读取调用**不得出现在**任何
+ * {@link SESSION_CHECKPOINT_CALLS} 检查点查询之前。检查点命中就不该打开日志。
+ *
+ * 新增读取入口时在下面的清单里登记，闸门才会看管；确实必须先读再判（例如身份
+ * 只有存储 handle 知道）时，在读取所在函数的任意位置写一行
+ * `// arch-gate-allow: persistence-read-order <理由>`。
+ *
+ * 实现细节：**等长去注释**（注释字符换成空格，见 {@link blankComments}）让
+ * 「代码」与「原文」两把尺子索引对齐 —— 顺序判据看去注释后的代码（避免注释里
+ * 提到 `cachedSnapshot` 就放行），豁免标记看原文（注释在去注释版里是空的）。
+ *
+ * @param {string} root
+ */
+export function findPersistenceReadOrder(root) {
+  const packages = readWorkspacePackages(root)
+  const violations = []
+  let files = 0
+  for (const [name, record] of packages) {
+    for (const file of walkSource(join(record.dir, 'src'))) {
+      files += 1
+      const raw = readFileSync(file, 'utf8')
+      const code = blankComments(raw)
+      /**
+       * 函数体起点：`function NAME(` 与 `const NAME = (` / `const NAME = (…) =>`。
+       * 刻意不匹配类方法签名 —— 那条正则会把 `readProjection({…` 这类**调用**也
+       * 当成函数起点，于是"同一函数内"被切碎（2026-09-23 实测误报）。
+       */
+      const functionStart = /(?:^|\n)[ \t]*(?:export[ \t]+)?(?:async[ \t]+)?(?:function[ \t]+([A-Za-z0-9_$]+)|const[ \t]+([A-Za-z0-9_$]+)[ \t]*=[ \t]*(?:async[ \t]*)?\()/g
+      const starts = []
+      for (const match of code.matchAll(functionStart)) {
+        starts.push({ index: match.index + (match[0].startsWith('\n') ? 1 : 0), name: match[1] ?? match[2] ?? '(匿名)' })
+      }
+      const enclosingStart = (index) => {
+        let found = { index: 0, name: '(top-level)' }
+        for (const start of starts) {
+          if (start.index > index) break
+          found = start
+        }
+        return found
+      }
+      for (const readCall of SESSION_FULL_READ_CALLS) {
+        let cursor = code.indexOf(readCall)
+        while (cursor >= 0) {
+          const position = cursor
+          cursor = code.indexOf(readCall, position + readCall.length)
+          // 函数**定义**本身不是调用：`function inspectPersistenceSession(` 放过。
+          if (/(?:export[ \t]+)?(?:async[ \t]+)?function[ \t]+$/.test(code.slice(Math.max(0, position - 60), position))) continue
+          const start = enclosingStart(position)
+          const beforeCode = code.slice(start.index, position)
+          const beforeRaw = raw.slice(start.index, position)
+          if (beforeRaw.includes('arch-gate-allow: persistence-read-order')) continue
+          if (SESSION_CHECKPOINT_CALLS.some(call => beforeCode.includes(call))) continue
+          violations.push({
+            pkg: name,
+            file: posix(relative(root, file)),
+            code: 'read-before-checkpoint',
+            detail: `${name} 的 ${start.name}() 在检查点查询之前就读取完整会话日志（${readCall.replace('(', '')}）——`
+              + `先 ${SESSION_CHECKPOINT_CALLS.map(call => call.replace('(', '')).join(' / ')} 命中即不打开日志；`
+              + `确需先读请加 arch-gate-allow 注释`,
+          })
+        }
+      }
+    }
+  }
+  return { violations, files }
+}
+
+/**
+ * 注释字符等长替换为空格（字符串内的 `//` 也会被抹掉，但对本闸门的判据无害）。
+ *
+ * 为什么不复用 {@link stripComments}：那道闸门把注释整段删掉、索引随之漂移，
+ * 而本闸门要同时读「去注释的代码」与「带注释的原文」，需要两把尺子逐字符对齐。
+ *
+ * @param {string} source
+ */
+export function blankComments(source) {
+  let out = ''
+  let index = 0
+  while (index < source.length) {
+    const pair = source.slice(index, index + 2)
+    if (pair === '//') {
+      while (index < source.length && source[index] !== '\n') {
+        out += ' '
+        index += 1
+      }
+      continue
+    }
+    if (pair === '/*') {
+      while (index < source.length && source.slice(index, index + 2) !== '*/') {
+        out += source[index] === '\n' ? '\n' : ' '
+        index += 1
+      }
+      out += '  '
+      index += 2
+      continue
+    }
+    out += source[index]
+    index += 1
+  }
+  return out
+}
+
 /* ──────────────────────────── CLI ──────────────────────────── */
 
 function parseArgs(argv) {
-  const options = { only: ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus', 'esmrequire', 'domainvocab', 'crossplugin', 'sparkwording', 'ratemetric', 'packaging'], json: false, strictLocations: false }
+  const options = { only: ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus', 'esmrequire', 'domainvocab', 'crossplugin', 'sparkwording', 'ratemetric', 'packaging', 'readorder'], json: false, strictLocations: false }
   for (const arg of argv) {
     if (arg === '--json') options.json = true
     else if (arg === '--strict-locations') options.strictLocations = true
@@ -862,8 +982,8 @@ function parseArgs(argv) {
 }
 
 export function runChecks(root, options = {}) {
-  const only = options.only ?? ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus', 'esmrequire', 'domainvocab', 'crossplugin', 'sparkwording', 'ratemetric', 'packaging']
-  const report = { orphans: null, boundaries: null, contracts: null, injects: null, products: null, windowbus: null, esmrequire: null, domainvocab: null, crossplugin: null, sparkwording: null, ratemetric: null, packaging: null, failures: 0, warnings: 0 }
+  const only = options.only ?? ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus', 'esmrequire', 'domainvocab', 'crossplugin', 'sparkwording', 'ratemetric', 'packaging', 'readorder']
+  const report = { orphans: null, boundaries: null, contracts: null, injects: null, products: null, windowbus: null, esmrequire: null, domainvocab: null, crossplugin: null, sparkwording: null, ratemetric: null, packaging: null, readorder: null, failures: 0, warnings: 0 }
   if (only.includes('orphans')) {
     const result = findOrphanPackages(root)
     report.orphans = result
@@ -929,6 +1049,11 @@ export function runChecks(root, options = {}) {
     report.packaging = result
     report.failures += result.violations.length
   }
+  if (only.includes('readorder')) {
+    const result = findPersistenceReadOrder(root)
+    report.readorder = result
+    report.failures += result.violations.length
+  }
   return report
 }
 
@@ -940,7 +1065,7 @@ function main(argv) {
     process.exitCode = report.failures > 0 ? 1 : 0
     return
   }
-  console.log('══ 架构闸门（孤包 / 边界 / 契约 / 注入面 / 单产物 / 页内总线 / ESM 裸 require / 域词汇 / 跨插件 / 火花朴素文案 / 口径单源 / 打包入口） ══')
+  console.log('══ 架构闸门（孤包 / 边界 / 契约 / 注入面 / 单产物 / 页内总线 / ESM 裸 require / 域词汇 / 跨插件 / 火花朴素文案 / 口径单源 / 打包入口 / 检查点先于会话读取） ══')
   if (report.orphans !== null) {
     const { orphans, total, closureSize } = report.orphans
     if (orphans.length === 0) console.log(`  ok    workspace 孤包        0 个（${total} 个包全在 registry 闭包内，闭包 ${closureSize} 个）`)
@@ -1005,6 +1130,11 @@ function main(argv) {
     const { violations, checked } = report.packaging
     if (violations.length === 0) console.log(`  ok    打包清单 vs 入口    ${checked} 个入口/loader 行都被 files 覆盖`)
     for (const violation of violations) console.log(`  FAIL  ${violation.code.padEnd(20)} ${violation.detail}`)
+  }
+  if (report.readorder !== null) {
+    const { violations, files } = report.readorder
+    if (violations.length === 0) console.log(`  ok    检查点先于读取    ${files} 个源文件里全量会话读取都在检查点查询之后`)
+    for (const violation of violations) console.log(`  FAIL  ${violation.code.padEnd(20)} ${violation.detail}（${violation.file}）`)
   }
   const verdict = report.failures > 0 ? 'FAIL' : 'PASS'
   console.log(`\n合计：硬失败 ${report.failures} 处 · 告警 ${report.warnings} 处\n结果：${verdict}`)
