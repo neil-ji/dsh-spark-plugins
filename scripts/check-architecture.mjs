@@ -724,6 +724,60 @@ export function findSparkLegacyWording(root) {
 }
 
 /**
+ * 写入面判据双侧存在（dsh-spark v2 §4.9 / P19）。
+ *
+ * 判据只写在设计文档里等于没写。2026-09-23 实测：§4.7 早已把「火花=想法」写进表格，
+ * F1/F6 也把工具描述从「记忆草稿」改了口，但三周内池子仍然长成 **15/21 条带证据的
+ * 结论**（09-23 一天写入 12 条 = 全池 57%），3 条与记忆库撞车，其中 1 条已被记忆明确
+ * 修正却仍在每个会话首步作为「想法」注入。改措辞必要但不充分——**缺的是判据的位置**：
+ * 它只在设计文档（人读）里，不在两个写入工具（模型读）里。
+ *
+ * 所以这条闸门**不断言某个词没出现**，而是断言判据在**两侧写入面都在场**：火花侧与
+ * 记忆侧各自携带同一条判据短语，并各自指认对方是正解。缺任何一侧即失败——这正是本次
+ * 漂移的成因，也是防止复发的唯一机械化手段。
+ *
+ * 注意：记忆侧文本里提到 `spark_capture` 是**提示词层**的正解指向，不是运行时通道，
+ * 因此不违反跨插件零引用（AC-1 查的是 `ctx.spark` / 包名 / 对方服务符号）；它也不违背
+ * 「二者的关联交由 Agent 判断」——恰恰是把那个判断所缺的判据交给模型。
+ *
+ * @param {string} root
+ */
+export const BUCKET_CRITERION_TOKEN = 'tested against reality'
+const BUCKET_CRITERION_SURFACES = [
+  { file: 'packages/dsh-spark/src/tool.ts', needs: [BUCKET_CRITERION_TOKEN, 'memory_remember'], label: '火花侧工具描述/指引' },
+  { file: 'packages/dsh-spark/src/inbox.ts', needs: [BUCKET_CRITERION_TOKEN], label: '火花侧首步注入' },
+  { file: 'packages/dsh-hippomemo/src/tool.ts', needs: [BUCKET_CRITERION_TOKEN, 'spark_capture'], label: '记忆侧工具描述/指引' },
+]
+
+export function findBucketCriterionGaps(root) {
+  const violations = []
+  let files = 0
+  for (const surface of BUCKET_CRITERION_SURFACES) {
+    const full = join(root, surface.file)
+    if (!existsSync(full)) {
+      violations.push({
+        code: 'bucket-criterion',
+        file: surface.file,
+        detail: `${surface.file} 不存在 —— ${surface.label} 必须承载写入面判据（spark-v2-design §4.9）`,
+      })
+      continue
+    }
+    files += 1
+    // 判据必须落在**字符串字面量**里（模型读得到的文本），注释不算。
+    const source = stripComments(readFileSync(full, 'utf8'))
+    for (const needle of surface.needs) {
+      if (source.includes(needle)) continue
+      violations.push({
+        code: 'bucket-criterion',
+        file: surface.file,
+        detail: `${surface.file} 缺少判据要素 \`${needle}\` —— ${surface.label} 必须与另一侧成对携带「是否已被现实检验」的判据与正解指向（spark-v2-design §4.9 / P19）`,
+      })
+    }
+  }
+  return { violations, files }
+}
+
+/**
  * 成功率口径单源（Spec INV-7 / D10）。
  *
  * 「成功率」这类**业务口径**一旦被多处重算，就会出现「宿主按一套算、UI 按另一套算」的
@@ -972,7 +1026,7 @@ export function blankComments(source) {
 /* ──────────────────────────── CLI ──────────────────────────── */
 
 function parseArgs(argv) {
-  const options = { only: ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus', 'esmrequire', 'domainvocab', 'crossplugin', 'sparkwording', 'ratemetric', 'packaging', 'readorder'], json: false, strictLocations: false }
+  const options = { only: ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus', 'esmrequire', 'domainvocab', 'crossplugin', 'sparkwording', 'bucketcriteria', 'ratemetric', 'packaging', 'readorder'], json: false, strictLocations: false }
   for (const arg of argv) {
     if (arg === '--json') options.json = true
     else if (arg === '--strict-locations') options.strictLocations = true
@@ -982,8 +1036,8 @@ function parseArgs(argv) {
 }
 
 export function runChecks(root, options = {}) {
-  const only = options.only ?? ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus', 'esmrequire', 'domainvocab', 'crossplugin', 'sparkwording', 'ratemetric', 'packaging', 'readorder']
-  const report = { orphans: null, boundaries: null, contracts: null, injects: null, products: null, windowbus: null, esmrequire: null, domainvocab: null, crossplugin: null, sparkwording: null, ratemetric: null, packaging: null, readorder: null, failures: 0, warnings: 0 }
+  const only = options.only ?? ['orphans', 'boundaries', 'contracts', 'injects', 'products', 'windowbus', 'esmrequire', 'domainvocab', 'crossplugin', 'sparkwording', 'bucketcriteria', 'ratemetric', 'packaging', 'readorder']
+  const report = { orphans: null, boundaries: null, contracts: null, injects: null, products: null, windowbus: null, esmrequire: null, domainvocab: null, crossplugin: null, sparkwording: null, bucketcriteria: null, ratemetric: null, packaging: null, readorder: null, failures: 0, warnings: 0 }
   if (only.includes('orphans')) {
     const result = findOrphanPackages(root)
     report.orphans = result
@@ -1039,6 +1093,11 @@ export function runChecks(root, options = {}) {
     report.sparkwording = result
     report.failures += result.violations.length
   }
+  if (only.includes('bucketcriteria')) {
+    const result = findBucketCriterionGaps(root)
+    report.bucketcriteria = result
+    report.failures += result.violations.length
+  }
   if (only.includes('ratemetric')) {
     const result = findRateDivisionSites(root)
     report.ratemetric = result
@@ -1065,7 +1124,7 @@ function main(argv) {
     process.exitCode = report.failures > 0 ? 1 : 0
     return
   }
-  console.log('══ 架构闸门（孤包 / 边界 / 契约 / 注入面 / 单产物 / 页内总线 / ESM 裸 require / 域词汇 / 跨插件 / 火花朴素文案 / 口径单源 / 打包入口 / 检查点先于会话读取） ══')
+  console.log('══ 架构闸门（孤包 / 边界 / 契约 / 注入面 / 单产物 / 页内总线 / ESM 裸 require / 域词汇 / 跨插件 / 火花朴素文案 / 写入面判据双侧 / 口径单源 / 打包入口 / 检查点先于会话读取） ══')
   if (report.orphans !== null) {
     const { orphans, total, closureSize } = report.orphans
     if (orphans.length === 0) console.log(`  ok    workspace 孤包        0 个（${total} 个包全在 registry 闭包内，闭包 ${closureSize} 个）`)
@@ -1119,6 +1178,11 @@ function main(argv) {
   if (report.sparkwording !== null) {
     const { violations, files } = report.sparkwording
     if (violations.length === 0) console.log(`  ok    火花朴素文案        0 处违禁词（扫描 ${files} 个源文件，v2 P16）`)
+    for (const violation of violations) console.log(`  FAIL  ${violation.code.padEnd(20)} ${violation.detail}`)
+  }
+  if (report.bucketcriteria !== null) {
+    const { violations, files } = report.bucketcriteria
+    if (violations.length === 0) console.log(`  ok    写入面判据双侧      ${files} 个写入面都带「是否已被现实检验」判据与正解指向（v2 P19）`)
     for (const violation of violations) console.log(`  FAIL  ${violation.code.padEnd(20)} ${violation.detail}`)
   }
   if (report.ratemetric !== null) {

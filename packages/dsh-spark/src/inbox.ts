@@ -11,6 +11,11 @@
  *   - spark-inbox：收件箱**计数 + 最近未处理条目**（不是召回，是状态通报）
  * 因此两者的提醒首行必须可区分，模型才分得清两类背景。
  *
+ * 2026-09-23（v2 §4.9 / P19）：两段 hint 都显式写出**写入面判据**（尚未被现实检验）
+ * 与正解指向（已检验 → memory_remember）。注入面同时是**文体教科书**——实测 09-23
+ * 最近 3 条标题恰好全是结论体，每个新会话开局读到的「火花长什么样」就是它们，
+ * 于是判断标准被示例反向污染。判据必须在注入文本里明说，不能靠示例自我纠偏。
+ *
  * 设计上的三条纪律：
  *   ① 计数为 0 时**不注入**（零噪音）；
  *   ② 每 agent 会话只注入一次；
@@ -242,7 +247,7 @@ export function renderInboxReminder(
       + (stats.pendingProposals > 0 ? ', ' + String(stats.pendingProposals) + ' pending emergence proposal'
         + (stats.pendingProposals === 1 ? '' : 's') : '')
       + '.'
-    hint = 'These are ideas from earlier sessions — related ones are background worth building on. If the current turn produced a new idea, propose it with spark_capture. This is a status notice, not an instruction.'
+    hint = 'These are ideas from earlier sessions — related ones are background worth building on. A new idea is one not yet tested against reality (spark_capture); a finding already tested against reality belongs in memory_remember. This is a status notice, not an instruction.'
   } else if (stats.pendingProposals > 0) {
     head = 'Sparks (dsh-spark): no active sparks. ' + String(stats.pendingProposals) + ' pending emergence proposal'
       + (stats.pendingProposals === 1 ? '' : 's') + '.'
@@ -252,7 +257,7 @@ export function renderInboxReminder(
   } else {
     // 空 + 空：主动钩子（无 head 也能定位，仍用一行表明来源）
     head = 'Sparks (dsh-spark): no active sparks.'
-    hint = 'The idea pool is empty. If the current turn produced a fleeting insight, an implicit assumption, or any "this might matter later" thought, propose it now with spark_capture(title, content, tags). Do not capture concrete actionable work — that goes through the regular task tool. This is a status notice, not an instruction.'
+    hint = 'The idea pool is empty. If this turn produced an idea that has not yet been tested against reality — a possibility, an implicit assumption, or any "this might matter later" thought — propose it now with spark_capture(title, content, tags); something already tested against reality belongs in memory_remember. Do not capture concrete actionable work — that goes through the regular task tool. This is a status notice, not an instruction.'
   }
 
   const lines: string[] = []

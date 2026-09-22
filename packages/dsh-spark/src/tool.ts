@@ -6,6 +6,12 @@
  * spark → memory 的直连已删——火花值得成为信念时，Agent 自己调 hippomemo 的
  * memory_remember（该工具已存在，不加包装）。
  *
+ * 2026-09-23（v2 §4.9，P19）：**写入面必须携带判据**。实测证明只把判据写在设计文档里
+ * 无效——F1/F6 把描述从「记忆草稿」改口之后，三周内池子仍长成 15/21 条带证据的结论
+ * （09-23 一天写入 12 条，全池 57%），其中 3 条与记忆库撞车、1 条已被记忆明确修正却
+ * 仍在注入。所以 GUIDANCE 与工具描述都显式写出判据（尚未被现实检验）与正解
+ * （已检验 → memory_remember），并由闸门 `bucketcriteria` 断言两侧写入面都在场。
+ *
  * 2026-09-21：脚本三件套（spark_to_script / spark_invoke_script /
  * spark_record_script_result）随脚本沉淀库迁出到独立插件 `dsh-script`
  * （见 docs/SCRIPT-LIBRARY-SPEC.md）。
@@ -27,6 +33,10 @@ const TEXT_OUTPUT = {
 const GUIDANCE = [
   'Sparks are ideas — not drafts of anything else. The spark store is where an idea stays alive until it is useful. Treat proposing ideas as a first-class contribution.',
   'spark_capture: propose an idea. Do this when the user asks for ideas, and when you notice the current conversation could branch somewhere it has not gone yet. This is not a logging duty.',
+  // 写入面判据（v2 §4.9 / P19）：判据只写在设计文档里等于没写。
+  // 判据是**已被现实检验 vs 尚未被现实检验**，且必须与记忆侧成对出现。
+  'An idea is a claim that has NOT yet been tested against reality: a hunch, a possibility, an "if this, then maybe that". The tell is evidence — you can never cite evidence for an idea, while a conclusion always comes with some. If you measured it, ran the experiment, or a source confirmed it, it has been tested against reality and belongs in durable memory (memory_remember), not here.',
+  'Timing is the trap: ideas surface at the start of a session or off to the side, while the end-of-session summary produces conclusions. Do not let spark_capture become an end-of-session reflex — when you sum up what a turn established, ask first whether it is a finding (memory) or an idea (spark).',
   'Ideas beget ideas: use spark_search to find related sparks, then capture the combination; spark_derive runs a whole round of mechanical recombination when you want many candidates at once. Association, analogy and recombination across distant sparks are explicitly wanted.',
   'Emergence is YOUR judgement, not the plugin\'s: when a pile of small sparks has quietly added up to something qualitatively new (a pattern, a principle, a concept that none of them states), write it down yourself and name its sources with derivedFrom. Do not wait for a threshold, and do not treat a summary of the pile as the new thing.',
   'Prefer association over summary. A spark that merely restates an existing spark is noise.',
@@ -44,7 +54,7 @@ export function registerSparkTools(ctx: Context): void {
 
   ctx.tools.register(defineTool({
     name: 'spark_capture',
-    description: 'Propose one idea (free-form inspiration, association, or hunch that surfaced mid-conversation). The spark store is where an idea stays alive until it is useful — it is not a todo list and not durable memory. Use this when you (the agent) or the user wants an idea kept, without turning it into an immediate task.',
+    description: 'Propose one idea — an idea being a claim that has NOT yet been tested against reality (free-form inspiration, association, or hunch that surfaced mid-conversation). The spark store is where an idea stays alive until it is useful — it is not a todo list, and it is not durable memory: if you measured it, ran the experiment, or a source confirmed it, it has been tested against reality and belongs in memory_remember instead. Use this when you (the agent) or the user wants an idea kept, without turning it into an immediate task.',
     parameters: {
       title: { type: 'string', required: true, description: 'Short title (<= 60 chars). Auto-derived from content if omitted.' },
       content: { type: 'string', required: true, description: 'The full thought. Can be a sentence or two.' },

@@ -337,7 +337,7 @@ until it is useful. Treat proposing ideas as a first-class contribution.
 
 ### 4.8 P18 — 挖掘管线的**准入面**：只挖真人说的话（F7）
 
-> 编号说明：本节用本文档自己的期序列（F0–F7）。**F6 = 术语与语义修正**（上文）；
+> 编号说明：本节用本文档自己的期序列（F0–F8）。**F6 = 术语与语义修正**（上文）；
 > `docs/architecture-acceptance-*` 里的 F* 是另一套架构评审编号，互不相干。
 
 **触发**：2026-09-23 实测 3080 实库 —— 54 条火花里 **40 条**来自 valence 挖掘，其中
@@ -405,6 +405,60 @@ until it is useful. Treat proposing ideas as a first-class contribution.
 - 4 个**从未被任何闸门执行**的测试文件接进 `test` 脚本（`relevance` / `derive` /
   `derive-service` / `graph`）—— 它们是 `test/*.test.ts` 而根 `vitest.config.ts` 只收
   `packages/*/tests/**/*.spec.ts`，**F5 的编排测试一直在裸奔**。spark 包测试 124 → 171。
+
+### 4.9 P19 — 写入面判据：两个桶的**准入判据必须双侧在场**（F8）
+
+**触发（2026-09-23，用户实测观察）**：用户指出「火花条目看起来不是创意，更像是记忆」。
+核对真实库（`~/.dsh/storages/sparks.jsonl`，21 条记录）证实，且比「像」更严重：
+
+| 事实 | 实测 |
+|---|---|
+| 来源失衡 | `origin` = human **3** / agent **18**；human 那 3 条里 2 条是 09-06 冒烟残渣，**唯一真创意只有「额度预测」一条** |
+| 形态即结论 | **15/21** 条正文带「实测 / 实证 / 结论 / 验证 / 调研」字样 —— 创意给不出证据，**带证据的就是已被检验的结论** |
+| 不是渐变是换挡 | 09-06~09-18 共 3 条、09-20 1 条、09-21 5 条，而 **09-23 一天写入 12 条（全池 57%）**，其中没有一条是「未被检验的设想」 |
+| 与记忆撞车 | 3 条与 HippoMemo 罕见词重合。最硬的一条：「用户必须在场」**01:01 写入火花、01:14 被记忆明确修正**（记忆正文首句即「【修正一条早期判断】…把它当定位卖点是错的」），却仍以 `active` 身份注入每个新会话；「认知层缺 memory→spark 下行」对应的记忆正是**推翻它的那条决定** |
+| 召回机制空转 | 全库 `recalledCount` 全为 0 —— 结论不需要被重新想起，「再想起率」对它们恒空转 |
+
+**根因不是措辞，是判据的位置。** §3 的对照表早已写明判据（火花 = **尚未被现实检验** /
+记忆 = **已被检验**），§2.4 也已把本病命名为「提示词把火花写成记忆草稿」，F1/F6 据此改了
+`spark_capture` 的描述。但三周内漂移**复发**，因为判据只写在**本文档（人读）**里，没写进
+**两个写入工具（模型读）**里：模型能读到的三处只有一句**单侧否定**（`not durable memory`），
+记忆侧连反向那一半都没有。
+
+两个放大器：
+
+1. **时机错配**：创意出现在会话**开头与旁枝**，结论出现在**收尾**；而 `spark_capture`
+   天然被当成收尾动作（「这轮学到了什么，留下来」）。这不是语义混淆，是**桶与调用时机错配**。
+2. **注入面在当文体教科书**：首步注入的是「最近 N 条标题」，而最近 3 条恰好全是结论体 →
+   每个新会话开局读到的「火花长什么样」就是它们，**判断标准被示例反向污染**。
+   （v1 只注入计数是坟场，F3 才改成注入标题，所以**不能退回**；正解是让池子内容与判据本身恢复正确。）
+
+**设计决定（F8）**
+
+1. **判据双侧在场**：火花侧（`tool.ts` 的 GUIDANCE + `spark_capture` 描述 + `inbox.ts`
+   两段 hint）与记忆侧（`packages/dsh-hippomemo/src/tool.ts` 的 GUIDANCE +
+   `memory_remember` 描述）**各自携带同一条判据短语，并指认对方是正解**。
+   判据短语统一为 `tested against reality`（尚未被现实检验 vs 已被现实检验），
+   判据的**自测形态**是「能否出示证据」—— 创意拿不出证据，结论总带着证据。
+2. **记忆侧提到 `spark_capture` 不违反 AC-1**：那是**提示词层**的正解指向，不是运行时通道
+   （AC-1 查的是 `ctx.spark` / 包名 / 服务符号）。它也不违背决定一 —— 恰恰是把决定一
+   交给模型的那个判断**所缺的判据**补上。
+3. **补时机纪律**：GUIDANCE 明写「不要让它变成收尾反射」——收尾产出的是结论，正是最该
+   自问「这是发现还是想法」的时刻。
+4. **机械化防复发（闸门 `bucketcriteria`）**：`check-architecture.mjs` 新增
+   `findBucketCriterionGaps`，断言三个写入面都在场且各带正解指向。它**不断言某个词没出现**
+   （那是 `sparkwording` 的形态），而是断言判据**存在**；判据只写在注释里也不算
+   （`stripComments` 之后匹配），因为模型读不到注释。
+5. **存量处置**：22 条记录 → 12 条结论型经 `memory_remember` 迁入 HippoMemo
+   （「平台方失败分类」与「读在位者错误枚举」两条同一原则**合并为一条记忆**）、
+   18 条置 `archived`（经插件自己的 `JsonlSparkStorage.patch`，**非手改 JSON**；
+   `migrateSparkRecord` 回环 22/22 PASS）、**4 条留 active**（额度预测 /
+   多模态 caption-then-store / Jev 作判断层方向 / 双桶写入判据双侧出现）。
+   备份与映射见 `~/.dsh/storages/.spark-cleanup-backup-20260923-0430-4th/CLEANUP-README.txt`，
+   可原样回滚。
+
+**推论（跳出本仓库）**：这是「双桶写入」的通病 —— 只要写入面有两个桶（创意/记忆、
+草稿/成品、笔记/任务），判据就必须**双侧**出现；**单侧否定句约束不住写入行为**。
 
 ---
 
@@ -545,6 +599,7 @@ LLM 重组（可选注入 ctx.inject(['llm'])；缺失 → 本轮不生成，不
 | **F6** | **术语与语义修正**：整理/衍生/涌现三分 + origin⊥derivedFrom + 反自噬只作用于机器生成 + TTL 只作用于机器生成（D1–D4） | F1–F5 | ✅ 2026-09-21（UI 正名「整理」；`spark_capture` 增 `derivedFrom` 自述来源；preview capture 改吃真源 `resolveProvenance`） |
 | **F5** | 衍生引擎（P15 + P17） | F2/F3 | ✅ 2026-09-21（spark 0.8.0；纯逻辑在 `src/derive.ts`、IO 在 `derive-service.ts`；LLM 面用 try/catch 结构读、缺失即 `skipped`；`POST /sparks/derive` 带 `dryRun` 作为零成本断言面；过期清理复用 `spark-inbox` 首步那一趟，**无定时器**；存储 v5→v6 回填 `expiresAt=null`） |
 | **F7** | **挖掘管线准入面（§4.8 P18）**：D1 只认 `source.kind==='user'` + D2 闸门与抽取同一条话语 + D3 provenance 显式 + D4 跨会话实质面去重 + D5 link 剔模板（详见 §4.8） | F1–F6 | ✅ 2026-09-23（commit 98a39b6；spark 0.9.0→**0.10.0**；新纯函数 `minePreferences` / `isRealUserMessage` / `buildDedupPool` / `isDuplicateOfPool` / `substanceTokens` / `boilerplateTokens` / `jaccardWithout`；配置面 `valence{enabled,intensityThreshold,maxUtteranceChars}` **默认开启**；spark 包测试 124→171） |
+| **F8** | **写入面判据双侧在场（§4.9 P19）**：火花侧 + 记忆侧各带「是否已被现实检验」判据与正解指向；补时机纪律；新增闸门 `bucketcriteria` | F1–F7 | ✅ 2026-09-23（spark 0.10.0→**0.11.0** / hippomemo 0.4.0→**0.5.0**；存量 12 条结论型迁 HippoMemo、18 条归档、4 条留 active；`findBucketCriterionGaps` + 2 条闸门回归单测） |
 
 **排序依据**：**先拆桥并改对窗户上的字（F1）→ 再让 agent 看得见旧想法（F3）→ 最后才让它生想法（F5）。**
 反过来做的话，F5 会产出一堆没人看得见、也辨不出真假的机器文本。
@@ -583,6 +638,7 @@ node dev-harness/real-host-check.mjs                 # 退出码 0
 | AC-8（F7） | **挖掘只吃真人话语**：`source.kind !== 'user'` 的 `user/message` 一条都不落库（白名单，非黑名单） | 纯函数单测 + **装配**单测（真 cordis Context 驱动 `session/event`） |
 | AC-9（F7） | **模板抑制在健康池上是 no-op**：剔除挖掘记录后的池抑制 0 个 token、link 判定逐对零变化；只有被模板淹没的池才收敛 | 单测（双向：模板池 → 0 条 link；健康池 → 真对仍成 link） |
 | AC-10（F7） | **挖掘产物不是人类原创**：`candidateToSparkInput` 必带 `origin: 'agent'` | 单测 |
+| AC-11（F8） | **写入面判据双侧在场**：火花侧（`tool.ts` GUIDANCE+描述、`inbox.ts` 两段 hint）与记忆侧（`memory_remember` 描述+GUIDANCE）都带 `tested against reality` 且各指认对方为解；**判据只写在注释里不算** | **闸门脚本**（`bucketcriteria`）+ 单测（含「任一侧退回单侧否定句」反向用例） |
 
 ### 9.3 成功指标（KPI 反转）
 
@@ -615,7 +671,7 @@ node dev-harness/real-host-check.mjs                 # 退出码 0
 
 ---
 
-## 11. 开放问题（P10–P18，需拍板）
+## 11. 开放问题（P10–P19，需拍板）
 
 | 编号 | 问题 | 我的倾向 |
 |---|---|---|
@@ -628,6 +684,7 @@ node dev-harness/real-host-check.mjs                 # 退出码 0
 | **P16** | 命名回退的范围 | ✅ **已拍板并落地（F1）**：提示词 + 工具描述 + 注入 hint + 面板 locale 同批交付；AC-2 `sparkwording` 闸门守线 |
 | **P17** | L3 的 LLM 面是否必需 | ✅ **已拍板并落地（F5）**：可选（`ctx.llm` / `ctx.agentDefaultModel` 结构读，缺失 → `skipped`，不报错）；沿用 hippomemo evolve 先例 |
 | **P18** | valence 挖掘的**准入面**：是否默认开启、以及"只挖真人话语"的判据形态 | ✅ **已拍板并落地（F7，§4.8）**：**默认开启**（它属于 L2「Agent 是平等的提出者」的产品定位，与 `commandMining` 默认关的理由不同）；准入判据取**结构性白名单** `source.kind === 'user'`（merge-extensible 类型，不用枚举注入类型）；去重阈值复用 derive 的 0.85 而不另立 |
+| **P19** | **人工写入面的准入判据**：火花与记忆的判据写在哪、以及如何防止「措辞改了仍然漂移」 | ✅ **已拍板并落地（F8，§4.9）**：判据**双侧在场**（火花侧 + 记忆侧各带 `tested against reality` 与正解指向），不靠单侧否定句；闸门 `bucketcriteria` 断言其存在（注释不算）；存量按「结论迁记忆、想法留池」分流 |
 
 ---
 

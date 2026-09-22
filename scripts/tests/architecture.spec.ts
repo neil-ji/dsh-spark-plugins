@@ -15,7 +15,9 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   ALLOWED_EDGES,
+  BUCKET_CRITERION_TOKEN,
   extractStringLiterals,
+  findBucketCriterionGaps,
   findCrossPluginRefs,
   findRateDivisionSites,
   findPackagingGaps,
@@ -382,6 +384,51 @@ describe('成功率口径单源（Spec INV-7 / D10）', () => {
       // 注释里提到这条除法不算违规（定义文件的说明文字就是这种）
       write('packages/dsh-y/src/dup.ts', '// successCount / invocationCount 是定义文件的事\n')
       expect(findRateDivisionSites(dir).violations.map((v) => v.file)).toEqual(['packages/dsh-x-client/src/pane.tsx'])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('写入面判据双侧存在（dsh-spark v2 §4.9 / P19）', () => {
+  const failing = (root: string): string[] =>
+    [...new Set(findBucketCriterionGaps(root).violations.map((v) => v.file))].sort()
+
+  it('真实仓库：火花侧（工具描述 + 首步注入）与记忆侧都带判据与正解指向', () => {
+    const { violations, files } = findBucketCriterionGaps(ROOT)
+    expect(violations).toEqual([])
+    expect(files).toBe(3)
+  })
+
+  it('闸门会红：任一侧退回「单侧否定句」，或判据只写在注释里', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dsh-bucket-gate-'))
+    try {
+      const write = (rel: string, body: string): void => {
+        const full = join(dir, rel)
+        mkdirSync(dirname(full), { recursive: true })
+        writeFileSync(full, body)
+      }
+      write('packages/dsh-spark/src/tool.ts', `const G = ['an idea is not yet ${BUCKET_CRITERION_TOKEN}; else memory_remember']\n`)
+      write('packages/dsh-spark/src/inbox.ts', `const h = 'not yet ${BUCKET_CRITERION_TOKEN}'\n`)
+      write('packages/dsh-hippomemo/src/tool.ts', `const G = ['already ${BUCKET_CRITERION_TOKEN}; else spark_capture']\n`)
+      expect(findBucketCriterionGaps(dir).violations).toEqual([])
+
+      // 记忆侧退回本次漂移的原始形态：只有一句否定，没有判据也没有正解
+      write('packages/dsh-hippomemo/src/tool.ts', `const G = ['it is not durable memory']\n`)
+      expect(failing(dir)).toEqual(['packages/dsh-hippomemo/src/tool.ts'])
+
+      // 判据只写在注释里不算 —— 模型读不到注释
+      write('packages/dsh-hippomemo/src/tool.ts', `// already ${BUCKET_CRITERION_TOKEN}; otherwise use spark_capture\nconst G = ['x']\n`)
+      expect(failing(dir)).toEqual(['packages/dsh-hippomemo/src/tool.ts'])
+
+      // 火花侧缺「已检验 → memory_remember」的正解指向同样失败
+      write('packages/dsh-hippomemo/src/tool.ts', `const G = ['already ${BUCKET_CRITERION_TOKEN}; else spark_capture']\n`)
+      write('packages/dsh-spark/src/tool.ts', `const G = ['not yet ${BUCKET_CRITERION_TOKEN}']\n`)
+      expect(failing(dir)).toEqual(['packages/dsh-spark/src/tool.ts'])
+
+      // 写入面文件整个消失也必须报（不能静默跳过）
+      rmSync(join(dir, 'packages/dsh-spark/src/inbox.ts'))
+      expect(failing(dir)).toEqual(['packages/dsh-spark/src/inbox.ts', 'packages/dsh-spark/src/tool.ts'])
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
